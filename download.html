@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#4f63e9">
+  <link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml">
+  <title>秋招投递管理器｜下载中心</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #e4e8f2;
+      --primary: #4f63e9;
+      --primary-dark: #3e50cd;
+      --soft: #f4f6ff;
+      --green: #138a62;
+      --shadow: 0 18px 50px rgba(33, 47, 93, .12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at 10% 10%, #e8edff 0, transparent 34%),
+        radial-gradient(circle at 90% 0, #e6fff5 0, transparent 28%),
+        #f8f9fd;
+    }
+    a { color: inherit; }
+    .page { width: min(1040px, calc(100% - 32px)); margin: 0 auto; padding: 64px 0 48px; }
+    .hero { text-align: center; margin-bottom: 34px; }
+    .logo {
+      display: inline-grid;
+      place-items: center;
+      width: 72px;
+      height: 72px;
+      margin-bottom: 18px;
+      border-radius: 22px;
+      color: white;
+      font-size: 34px;
+      font-weight: 800;
+      background: linear-gradient(145deg, #596cef, #35b98a);
+      box-shadow: var(--shadow);
+    }
+    h1 { margin: 0; font-size: clamp(30px, 5vw, 46px); letter-spacing: -.04em; }
+    .subtitle { max-width: 660px; margin: 14px auto 0; color: var(--muted); font-size: 17px; line-height: 1.8; }
+    .privacy {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 8px 13px;
+      border-radius: 999px;
+      color: var(--green);
+      background: #eaf9f3;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .card {
+      display: flex;
+      min-height: 280px;
+      flex-direction: column;
+      padding: 26px;
+      border: 1px solid rgba(220, 225, 239, .9);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, .92);
+      box-shadow: var(--shadow);
+    }
+    .card.primary { border-color: #bfc8ff; background: linear-gradient(180deg, #f2f4ff, #fff); }
+    .number {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      margin-bottom: 18px;
+      border-radius: 14px;
+      color: var(--primary);
+      background: var(--soft);
+      font-weight: 800;
+    }
+    .card.primary .number { color: white; background: var(--primary); }
+    h2 { margin: 0 0 9px; font-size: 22px; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.7; }
+    .meta { margin-top: 10px !important; font-size: 13px; }
+    .button {
+      display: block;
+      margin-top: auto;
+      padding: 13px 16px;
+      border: 1px solid #cfd5e7;
+      border-radius: 14px;
+      text-align: center;
+      text-decoration: none;
+      font-weight: 800;
+      transition: transform .15s ease, background .15s ease;
+    }
+    .button:hover { transform: translateY(-2px); background: #f6f7fb; }
+    .primary .button { color: white; border-color: var(--primary); background: var(--primary); }
+    .primary .button:hover { background: var(--primary-dark); }
+    .guide {
+      margin-top: 24px;
+      padding: 24px 26px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: white;
+    }
+    .guide h3 { margin: 0 0 12px; font-size: 18px; }
+    .guide-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .guide p { margin: 0; color: var(--muted); line-height: 1.75; }
+    .text-link { color: var(--primary); font-weight: 700; }
+    footer { margin-top: 24px; color: #8991a3; text-align: center; font-size: 13px; line-height: 1.7; }
+    @media (max-width: 800px) {
+      .page { padding-top: 36px; }
+      .cards { grid-template-columns: 1fr; }
+      .card { min-height: 230px; }
+      .guide-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div class="logo" aria-hidden="true">秋</div>
+      <h1>秋招投递管理器</h1>
+      <p class="subtitle">请选择一种使用方式。第一次使用推荐直接打开在线版，不需要注册，也不需要配置数据库。</p>
+      <div class="privacy">✓ 每个人的数据独立保存在自己的浏览器</div>
+    </header>
+
+    <section class="cards" aria-label="使用与下载入口">
+      <article class="card primary">
+        <div class="number">1</div>
+        <h2>直接在线使用</h2>
+        <p>最简单的方式。电脑和手机都能打开，手机还可以添加到主屏幕。</p>
+        <p class="meta">推荐大多数用户选择</p>
+        <a class="button" href="./index.html">打开网页版</a>
+      </article>
+
+      <article class="card">
+        <div class="number">2</div>
+        <h2>下载电脑离线版</h2>
+        <p>适合希望断网也能使用的人。下载后先解压，再双击文件夹中的 index.html。</p>
+        <p class="meta">版本 v3.0.0 · 约 6 MB</p>
+        <a class="button" href="./downloads/秋招投递管理器-电脑离线版-v3.0.0.zip" download>下载离线版</a>
+      </article>
+
+      <article class="card">
+        <div class="number">3</div>
+        <h2>下载一键收录插件</h2>
+        <p>安装到电脑 Chrome 或 Edge，用于识别招聘页面。手机浏览器不能安装插件。</p>
+        <p class="meta">插件 v1.4.2 · 安装前需解压</p>
+        <a class="button" href="./downloads/秋招一键收录插件-v1.4.2.zip" download>下载浏览器插件</a>
+      </article>
+    </section>
+
+    <section class="guide">
+      <h3>安装时只需要记住</h3>
+      <div class="guide-grid">
+        <p><strong>手机：</strong>iPhone 用 Safari 打开网页版后“添加到主屏幕”；Android 用 Chrome 选择“安装应用”。</p>
+        <p><strong>插件：</strong>ZIP 必须先解压，再到扩展程序页面选择“加载已解压的扩展程序”。</p>
+      </div>
+      <p style="margin-top:14px"><a class="text-link" href="./docs/安装与使用教程.md">查看完整安装与使用教程 →</a></p>
+    </section>
+
+    <footer>
+      网页 v3.0.0 · 插件 v1.4.2<br>
+      电脑和手机的数据不会自动同步，换设备请使用“导出数据”和“导入备份文件”。
+    </footer>
+  </main>
+</body>
+</html>
