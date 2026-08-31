@@ -1,2 +1,2 @@
-62a6b5d16fc862c185087fa440c7421033dc98d3a65c6410db461d0572fcafac  downloads/秋招投递管理器-电脑离线版-v3.0.0.zip
+e5eee3a2b165e9af7371d18d55140b62876e62a9027d2a516376990c464b9750  downloads/秋招投递管理器-电脑离线版-v3.0.0.zip
 752fcb6c61a81e475bbb9fca82ee4e8dfec184141eac4c48dc298fa07ec2b9d1  downloads/秋招一键收录插件-v1.4.2.zip
