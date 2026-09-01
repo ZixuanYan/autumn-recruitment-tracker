@@ -532,14 +532,14 @@
   <dialog id="syncDialog">
     <div class="modal-head"><h2>云同步（GitHub Gist）</h2><button class="close-btn" id="closeSyncDialog" type="button" aria-label="关闭">×</button></div>
     <div class="form-body">
-      <p class="capture-note">开启后，投递记录会自动同步到你 GitHub 账号下的私有 Gist；手机和电脑填同一个令牌，数据即可互通。设置口令后，数据先在本机加密再上传，GitHub 只保存密文。</p>
+      <p class="capture-note">开启后，投递记录会自动同步到你 GitHub 账号下的私有 Gist；手机和电脑填同一个令牌，数据即可互通。设置口令后，数据先在本机加密再上传，GitHub 只保存密文；不同口令对应不同数据空间，互不覆盖，可随时切换。</p>
       <div class="form-grid">
         <div class="field full"><label for="syncTokenInput">GitHub 访问令牌 <span class="required">*</span></label><input class="control" id="syncTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_… 或 github_pat_…" maxlength="255"><div class="hint">令牌只保存在本机浏览器，不会发给 GitHub 以外的任何服务；生成方法见下方说明。</div></div>
-        <div class="field full"><label for="syncPassphraseInput">同步口令（推荐设置）</label><input class="control" id="syncPassphraseInput" type="password" autocomplete="off" placeholder="加密口令，所有设备需一致" maxlength="100"><div class="hint">设置后云端只保存密文；忘记口令时可用某台设备的数据覆盖云端来恢复。</div></div>
+        <div class="field full"><label for="syncPassphraseInput">同步口令（推荐设置）</label><input class="control" id="syncPassphraseInput" type="password" autocomplete="off" placeholder="加密口令，所有设备需一致" maxlength="100"><div class="hint">设置后云端只保存密文；不同口令是独立数据空间，换口令不会覆盖原有数据。</div></div>
       </div>
       <div class="safety-summary">
         <div class="safety-row"><div><div class="safety-label">同步状态</div><div class="safety-detail" id="syncStateDetail">未开启</div></div><div class="safety-state warning" id="syncStateBadge">未配置</div></div>
-        <div class="safety-row"><div><div class="safety-label">同步方式</div><div class="safety-detail">按记录合并：两台设备同时改动时保留较新的修改；删除会同步到所有设备</div></div><div class="safety-state">自动</div></div>
+        <div class="safety-row"><div><div class="safety-label">同步方式</div><div class="safety-detail">按记录合并，改动保留较新版本；不同口令是独立数据空间，可切换且互不覆盖</div></div><div class="safety-state">自动</div></div>
       </div>
       <div class="capture-status" id="syncStatus" role="status" aria-live="polite">填写令牌后点击“保存并同步”即可开启。</div>
       <details class="sync-fallback">
@@ -587,7 +587,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '3.1.0';
+      const APP_VERSION = '3.2.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -923,6 +923,47 @@
         return new TextDecoder().decode(plain);
       }
 
+      // 口令指纹：同一口令始终指向同一个数据空间文件，不同口令互不覆盖、可切换
+      async function passphraseFingerprint(passphrase) {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`autumnRecruitmentTracker.fp.v1:${passphrase}`));
+        return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('').slice(0, 16);
+      }
+
+      async function vaultFileName(passphrase) {
+        return passphrase ? `vault-${await passphraseFingerprint(passphrase)}.json` : 'vault-plain.json';
+      }
+
+      function isTrackerGist(gist) {
+        return Object.keys(gist?.files || {}).some(name => name === GIST_FILENAME || /^vault-/.test(name));
+      }
+
+      // 区分云端状态：当前口令的空间 / 旧版单文件 / 是否存在其他口令的空间
+      function classifyGistFiles(files, vaultName) {
+        const names = Object.keys(files || {});
+        return {
+          vaultContent: files?.[vaultName]?.content || '',
+          legacyContent: names.includes(GIST_FILENAME) ? (files[GIST_FILENAME].content || '') : '',
+          hasOtherVaults: names.some(name => name !== vaultName && name !== GIST_FILENAME && /^vault-/.test(name))
+        };
+      }
+
+      async function parseSyncPayload(rawContent, passphrase) {
+        let parsed = JSON.parse(rawContent);
+        if (parsed && parsed.enc) {
+          if (!passphrase) throw new Error('云端数据已加密，请先填写同步口令');
+          if (!(self.crypto && crypto.subtle)) throw new Error('当前环境不支持解密，请改用 https 访问');
+          try {
+            parsed = JSON.parse(await decryptSyncText(parsed, passphrase));
+          } catch (_) {
+            throw new Error('同步口令不正确，无法解密云端数据');
+          }
+        }
+        return {
+          records: Array.isArray(parsed?.records) ? parsed.records : [],
+          tombstones: Array.isArray(parsed?.tombstones) ? parsed.tombstones : []
+        };
+      }
+
       async function gistRequest(path, options = {}) {
         const response = await fetch(`${GIST_API}${path}`, {
           method: options.method || 'GET',
@@ -945,11 +986,11 @@
       async function resolveSyncGist() {
         if (syncConfig.gistId) {
           const gist = await gistRequest(`/gists/${syncConfig.gistId}`, { allowNotFound: true });
-          if (gist && gist.files && gist.files[GIST_FILENAME]) return syncConfig.gistId;
+          if (gist && isTrackerGist(gist)) return syncConfig.gistId;
           syncConfig.gistId = '';
         }
         const owned = await gistRequest('/gists?per_page=100');
-        const found = (Array.isArray(owned) ? owned : []).find(gist => gist.files && gist.files[GIST_FILENAME]);
+        const found = (Array.isArray(owned) ? owned : []).find(isTrackerGist);
         if (found) {
           syncConfig.gistId = found.id;
           saveSyncConfig();
@@ -960,7 +1001,7 @@
           body: JSON.stringify({
             description: '秋招投递管理器云同步数据（自动创建，请勿删除）',
             public: false,
-            files: { [GIST_FILENAME]: { content: '{}' } }
+            files: { [await vaultFileName(syncConfig.passphrase)]: { content: '{}' } }
           })
         });
         syncConfig.gistId = created?.id || '';
@@ -969,18 +1010,21 @@
         return syncConfig.gistId;
       }
 
-      async function pushSyncState() {
+      async function pushSyncState(dropLegacy = false) {
         const envelope = { ...createEnvelope(records), tombstones };
         let payload = envelope;
         if (syncConfig.passphrase) {
           if (!(self.crypto && crypto.subtle)) throw new Error('当前环境不支持加密，请清空同步口令或改用 https 访问');
           payload = await encryptSyncText(JSON.stringify(envelope), syncConfig.passphrase);
         }
+        const vaultName = await vaultFileName(syncConfig.passphrase);
+        const files = { [vaultName]: { content: JSON.stringify(payload) } };
+        if (dropLegacy) files[GIST_FILENAME] = { content: null };
         await gistRequest(`/gists/${syncConfig.gistId}`, {
           method: 'PATCH',
           body: JSON.stringify({
             description: '秋招投递管理器云同步数据（自动创建，请勿删除）',
-            files: { [GIST_FILENAME]: { content: JSON.stringify(payload) } }
+            files
           })
         });
       }
@@ -996,24 +1040,27 @@
         try {
           await resolveSyncGist();
           const gist = await gistRequest(`/gists/${syncConfig.gistId}`, { allowNotFound: true });
-          if (!gist || !gist.files || !gist.files[GIST_FILENAME]) throw new Error('云端数据文件缺失，请断开后重新配置');
-          const rawContent = gist.files[GIST_FILENAME].content || '';
+          if (!gist || !gist.files) throw new Error('云端数据读取失败，请稍后重试');
+          const vaultName = await vaultFileName(syncConfig.passphrase);
+          const cloud = classifyGistFiles(gist.files, vaultName);
           let remote = null;
-          if (rawContent.trim() && rawContent.trim() !== '{}') {
-            let parsed = JSON.parse(rawContent);
-            if (parsed && parsed.enc) {
-              if (!syncConfig.passphrase) throw new Error('云端数据已加密，请先填写同步口令');
-              if (!(self.crypto && crypto.subtle)) throw new Error('当前环境不支持解密，请改用 https 访问');
-              try {
-                parsed = JSON.parse(await decryptSyncText(parsed, syncConfig.passphrase));
-              } catch (_) {
-                throw new Error('同步口令不正确，无法解密云端数据');
-              }
+          let migrateLegacy = false;
+          if (cloud.vaultContent.trim() && cloud.vaultContent.trim() !== '{}') {
+            remote = await parseSyncPayload(cloud.vaultContent, syncConfig.passphrase);
+          } else if (cloud.legacyContent.trim() && cloud.legacyContent.trim() !== '{}') {
+            // 旧版单文件格式：能用当前口令读取则迁移到独立数据空间，读不动说明属于其他口令
+            try {
+              remote = await parseSyncPayload(cloud.legacyContent, syncConfig.passphrase);
+              migrateLegacy = true;
+            } catch (_) {
+              remote = null;
             }
-            remote = {
-              records: Array.isArray(parsed?.records) ? parsed.records : [],
-              tombstones: Array.isArray(parsed?.tombstones) ? parsed.tombstones : []
-            };
+          }
+          if (!remote && (cloud.hasOtherVaults || (cloud.legacyContent.trim() && cloud.legacyContent.trim() !== '{}'))) {
+            // 云端已有其他口令的数据空间，但当前口令没有匹配的空间（可能口令输错）
+            if (trigger !== 'manual') throw new Error('云端没有与此口令匹配的数据空间，请在云同步设置中确认口令');
+            const createNew = confirm('云端没有与此口令匹配的数据空间（口令可能不正确）。\n\n可以用当前设备的数据新建一个独立空间，云端原有数据不会被改动，之后可随时换回原口令。是否新建？');
+            if (!createNew) throw new Error('已取消：云端没有与此口令匹配的数据空间');
           }
           const { mergedRecords, mergedTombstones } = mergeSyncState(remote);
           const localChanged = !sameRecordSet(mergedRecords, records) || !sameTombstoneSet(mergedTombstones, tombstones);
@@ -1025,25 +1072,13 @@
             render();
           }
           const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones);
-          if (remoteChanged) await pushSyncState();
+          if (remoteChanged) await pushSyncState(migrateLegacy);
           syncConfig.lastSyncAt = new Date().toISOString();
           saveSyncConfig();
           renderSyncStatus();
           if (trigger === 'manual') showToast(localChanged ? '云同步完成，已合并云端更新' : '云同步完成，各设备数据一致');
         } catch (error) {
-          let message = error instanceof TypeError ? '无法连接 GitHub，请检查网络' : error.message;
-          if (trigger === 'manual' && message.includes('口令') && confirm('云端数据无法用当前口令解密。\n\n确定用这台设备的数据覆盖云端吗？忘记原口令时可以这样做。')) {
-            try {
-              await pushSyncState();
-              syncConfig.lastSyncAt = new Date().toISOString();
-              saveSyncConfig();
-              renderSyncStatus();
-              showToast('已用本机数据覆盖云端');
-              return;
-            } catch (overwriteError) {
-              message = overwriteError instanceof TypeError ? '无法连接 GitHub，请检查网络' : overwriteError.message;
-            }
-          }
+          const message = error instanceof TypeError ? '无法连接 GitHub，请检查网络' : error.message;
           renderSyncStatus('error', message);
           if (trigger === 'manual') showToast(`云同步失败：${message}`);
           else console.warn('自动云同步失败', error);
@@ -1117,12 +1152,13 @@
         const passphrase = $('#syncPassphraseInput').value.trim();
         if (!token) return showToast('请先填写 GitHub 访问令牌');
         if (token.length < 20) return showToast('令牌看起来不完整，请复制完整的令牌');
-        if (token !== syncConfig.token || passphrase !== syncConfig.passphrase) {
+        // 换口令 = 切换数据空间，云端数据互不覆盖；只有换令牌才重新查找 Gist
+        if (token !== syncConfig.token) {
           syncConfig.token = token;
-          syncConfig.passphrase = passphrase;
           syncConfig.gistId = '';
           syncConfig.lastSyncAt = '';
         }
+        syncConfig.passphrase = passphrase;
         saveSyncConfig();
         renderSyncStatus();
         showToast('设置已保存，开始同步');

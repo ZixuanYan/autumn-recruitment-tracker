@@ -18,5 +18,5 @@ https://songxue0614-lgtm.github.io/autumn-recruitment-tracker/
 docs/安装与使用教程.md
 docs/数据保存与迁移.md
 
-版本：网页 v3.1.0｜插件 v1.4.2
+版本：网页 v3.2.0｜插件 v1.4.2
 数据存储标识：autumnRecruitmentTracker.records.v1
