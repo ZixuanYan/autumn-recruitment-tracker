@@ -244,6 +244,7 @@
     .sync-fallback { margin-top: 17px; padding-top: 17px; border-top: 1px solid var(--line); }
     .sync-fallback summary { cursor: pointer; color: var(--primary-dark); font-size: 13px; font-weight: 700; }
     .sync-fallback textarea { margin-top: 11px; min-height: 112px; }
+    .sync-help-list { margin: 11px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.6; display: grid; gap: 5px; }
 
     .toast { position: fixed; z-index: 20; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; background: #202a40; color: #fff; border-radius: 11px; padding: 11px 17px; box-shadow: 0 10px 30px rgba(20, 29, 54, .2); transition: .22s ease; font-size: 14px; }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -346,8 +347,9 @@
         <a class="nav-item" href="#upcoming"><span class="nav-icon">□</span><span>未来安排</span></a>
         <button class="nav-item" id="sideScreenshotBtn" type="button"><span class="nav-icon">▣</span><span>截图识别</span></button>
         <button class="nav-item" id="sideSafetyBtn" type="button"><span class="nav-icon">◇</span><span>数据安全</span></button>
+        <button class="nav-item" id="sideSyncBtn" type="button"><span class="nav-icon">☁</span><span>云同步</span></button>
       </nav>
-      <div class="sidebar-footer"><strong>数据保存在本机</strong>无需账号，不上传投递记录</div>
+      <div class="sidebar-footer" id="sideDataNotice"><strong>数据保存在本机</strong>无需账号，不上传投递记录</div>
     </aside>
 
     <main class="shell">
@@ -358,6 +360,7 @@
         <p class="subtitle">今天也别忘了跟进重要机会</p>
       </div>
       <div class="top-actions">
+        <button class="btn" id="syncBtn" type="button" title="云同步"><span class="icon">☁</span>云同步</button>
         <button class="btn" id="exportBtn" type="button" title="导出数据"><span class="icon">⇩</span>导出数据</button>
         <button class="btn" id="safetyBtn" type="button" title="数据安全"><span class="icon">◇</span>数据安全</button>
         <button class="btn" id="captureUrlBtn" type="button" title="识别投递网址"><span class="icon">⌁</span>识别投递网址</button>
@@ -526,6 +529,36 @@
     <div class="modal-actions"><button class="btn" id="doneSafetyDialog" type="button">完成</button></div>
   </dialog>
 
+  <dialog id="syncDialog">
+    <div class="modal-head"><h2>云同步（GitHub Gist）</h2><button class="close-btn" id="closeSyncDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">开启后，投递记录会自动同步到你 GitHub 账号下的私有 Gist；手机和电脑填同一个令牌，数据即可互通。设置口令后，数据先在本机加密再上传，GitHub 只保存密文。</p>
+      <div class="form-grid">
+        <div class="field full"><label for="syncTokenInput">GitHub 访问令牌 <span class="required">*</span></label><input class="control" id="syncTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_… 或 github_pat_…" maxlength="255"><div class="hint">令牌只保存在本机浏览器，不会发给 GitHub 以外的任何服务；生成方法见下方说明。</div></div>
+        <div class="field full"><label for="syncPassphraseInput">同步口令（推荐设置）</label><input class="control" id="syncPassphraseInput" type="password" autocomplete="off" placeholder="加密口令，所有设备需一致" maxlength="100"><div class="hint">设置后云端只保存密文；忘记口令时可用某台设备的数据覆盖云端来恢复。</div></div>
+      </div>
+      <div class="safety-summary">
+        <div class="safety-row"><div><div class="safety-label">同步状态</div><div class="safety-detail" id="syncStateDetail">未开启</div></div><div class="safety-state warning" id="syncStateBadge">未配置</div></div>
+        <div class="safety-row"><div><div class="safety-label">同步方式</div><div class="safety-detail">按记录合并：两台设备同时改动时保留较新的修改；删除会同步到所有设备</div></div><div class="safety-state">自动</div></div>
+      </div>
+      <div class="capture-status" id="syncStatus" role="status" aria-live="polite">填写令牌后点击“保存并同步”即可开启。</div>
+      <details class="sync-fallback">
+        <summary>怎么生成访问令牌？</summary>
+        <ol class="sync-help-list">
+          <li>电脑登录 GitHub → 右上角头像 → Settings。</li>
+          <li>最底部 Developer settings → Personal access tokens → Tokens (classic)。</li>
+          <li>Generate new token (classic)：只需勾选 <strong>gist</strong> 一个权限，生成后立即复制令牌（页面关闭后无法再查看）。</li>
+          <li>回到本页粘贴令牌，设置口令后点击“保存并同步”；另一台设备重复同样操作即可互通。</li>
+        </ol>
+      </details>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="disconnectSyncBtn" type="button">断开</button>
+      <button class="btn" id="cancelSyncDialog" type="button">取消</button>
+      <button class="btn btn-primary" id="saveSyncBtn" type="button">保存并同步</button>
+    </div>
+  </dialog>
+
   <dialog id="installDialog">
     <div class="modal-head"><h2>安装到手机桌面</h2><button class="close-btn" id="closeInstallDialog" type="button" aria-label="关闭">×</button></div>
     <div class="form-body">
@@ -554,8 +587,13 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '3.0.0';
+      const APP_VERSION = '3.1.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
+      const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
+      const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
+      const GIST_API = 'https://api.github.com';
+      const GIST_FILENAME = 'qiuzhao-tracker-data.json';
+      const TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
       const $ = (selector) => document.querySelector(selector);
       const els = {
         total: $('#totalCount'), today: $('#todayCount'), active: $('#activeCount'), week: $('#weekCount'), offer: $('#offerCount'),
@@ -582,6 +620,10 @@
       let ocrCandidates = [];
       let ocrWorker = null;
       let ocrRunning = false;
+      let syncConfig = loadSyncConfig();
+      let tombstones = loadTombstones();
+      let syncBusy = false;
+      let syncPushTimer = null;
 
       function dateOffset(days, hour = 10, minute = 0) {
         const d = new Date();
@@ -764,6 +806,341 @@
         return [...new Map(parsed.map(job => [job.id, job])).values()];
       }
 
+      // ===== 云同步（可选）：把投递记录同步到自己的 GitHub 私有 Gist，实现跨设备修改 =====
+      function loadSyncConfig() {
+        const empty = { token: '', passphrase: '', gistId: '', lastSyncAt: '' };
+        try {
+          const parsed = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null');
+          if (!parsed || typeof parsed !== 'object') return empty;
+          return {
+            token: String(parsed.token || ''),
+            passphrase: String(parsed.passphrase || ''),
+            gistId: String(parsed.gistId || ''),
+            lastSyncAt: String(parsed.lastSyncAt || '')
+          };
+        } catch (_) {
+          return empty;
+        }
+      }
+
+      function saveSyncConfig() {
+        try { localStorage.setItem(SYNC_KEY, JSON.stringify(syncConfig)); } catch (error) { console.warn('云同步配置保存失败', error); }
+      }
+
+      function loadTombstones() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(TOMBSTONE_KEY) || '[]');
+          return Array.isArray(parsed) ? parsed.filter(item => item && item.id && Number(item.deletedAt) > 0) : [];
+        } catch (_) {
+          return [];
+        }
+      }
+
+      function pruneTombstones(list) {
+        const limit = Date.now() - TOMBSTONE_TTL_MS;
+        return list.filter(item => Number(item.deletedAt) > limit);
+      }
+
+      function saveTombstones() {
+        try { localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(tombstones)); } catch (error) { console.warn('删除标记保存失败', error); }
+      }
+
+      // 跨设备删除同步：被删记录留下墓碑，合并时只有晚于墓碑更新的记录才会“复活”
+      function markDeleted(ids) {
+        if (!ids.length) return;
+        const map = new Map(tombstones.map(item => [item.id, item]));
+        const now = Date.now();
+        ids.forEach(id => map.set(id, { id, deletedAt: now }));
+        tombstones = pruneTombstones([...map.values()]);
+        saveTombstones();
+      }
+
+      function sameRecordSet(left, right) {
+        if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+        const map = new Map(right.map(item => [item.id, item]));
+        return left.every(item => {
+          const other = map.get(item.id);
+          return other && other.updatedAt === item.updatedAt && other.stage === item.stage
+            && other.company === item.company && other.position === item.position;
+        });
+      }
+
+      function sameTombstoneSet(left, right) {
+        if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+        const map = new Map(right.map(item => [item.id, Number(item.deletedAt)]));
+        return left.every(item => map.get(item.id) === Number(item.deletedAt));
+      }
+
+      // LWW 合并：同一条记录保留 updatedAt 更新的版本；墓碑晚于记录则保持删除，否则记录复活
+      function mergeSyncState(remote) {
+        const remoteRecords = (remote?.records || []).map(normalizeRecord);
+        const remoteTombstones = (remote?.tombstones || []).filter(item => item && item.id && Number(item.deletedAt) > 0);
+        const localById = new Map(records.map(item => [item.id, item]));
+        const remoteById = new Map(remoteRecords.map(item => [item.id, item]));
+        const stoneById = new Map();
+        [...tombstones, ...remoteTombstones].forEach(item => {
+          const prev = stoneById.get(item.id);
+          if (!prev || Number(item.deletedAt) > Number(prev.deletedAt)) stoneById.set(item.id, item);
+        });
+        const mergedRecords = [];
+        new Set([...localById.keys(), ...remoteById.keys()]).forEach(id => {
+          const newest = [localById.get(id), remoteById.get(id)].filter(Boolean).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+          const stone = stoneById.get(id);
+          if (stone && Number(stone.deletedAt) >= Number(newest.updatedAt || 0)) return;
+          if (stone) stoneById.delete(id);
+          mergedRecords.push(newest);
+        });
+        const mergedTombstones = pruneTombstones([...stoneById.values()]);
+        return { mergedRecords, mergedTombstones };
+      }
+
+      function bytesToBase64(bytes) {
+        let binary = '';
+        bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+        return btoa(binary);
+      }
+
+      function base64ToBytes(value) {
+        return Uint8Array.from(atob(value), char => char.charCodeAt(0));
+      }
+
+      async function deriveSyncKey(passphrase, salt) {
+        const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+        return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 120000, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      }
+
+      async function encryptSyncText(text, passphrase) {
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const key = await deriveSyncKey(passphrase, salt);
+        const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text)));
+        return { v: 1, enc: 'AES-GCM-PBKDF2', salt: bytesToBase64(salt), iv: bytesToBase64(iv), data: bytesToBase64(cipher) };
+      }
+
+      async function decryptSyncText(payload, passphrase) {
+        const key = await deriveSyncKey(passphrase, base64ToBytes(payload.salt));
+        const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(payload.iv) }, key, base64ToBytes(payload.data));
+        return new TextDecoder().decode(plain);
+      }
+
+      async function gistRequest(path, options = {}) {
+        const response = await fetch(`${GIST_API}${path}`, {
+          method: options.method || 'GET',
+          headers: {
+            Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${syncConfig.token}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+            ...(options.body ? { 'Content-Type': 'application/json' } : {})
+          },
+          body: options.body
+        });
+        if (response.status === 404 && options.allowNotFound) return null;
+        if (response.status === 401) throw new Error('访问令牌无效或已过期，请重新生成');
+        if (response.status === 404) throw new Error('云端数据不存在，可能 Gist 已被删除');
+        if (response.status === 403) throw new Error(response.headers.get('x-ratelimit-remaining') === '0' ? 'GitHub 接口调用太频繁，请几分钟后再试' : 'GitHub 拒绝了请求，请确认令牌已勾选 gist 权限');
+        if (!response.ok) throw new Error(`GitHub 接口异常（${response.status}）`);
+        return response.json().catch(() => null);
+      }
+
+      async function resolveSyncGist() {
+        if (syncConfig.gistId) {
+          const gist = await gistRequest(`/gists/${syncConfig.gistId}`, { allowNotFound: true });
+          if (gist && gist.files && gist.files[GIST_FILENAME]) return syncConfig.gistId;
+          syncConfig.gistId = '';
+        }
+        const owned = await gistRequest('/gists?per_page=100');
+        const found = (Array.isArray(owned) ? owned : []).find(gist => gist.files && gist.files[GIST_FILENAME]);
+        if (found) {
+          syncConfig.gistId = found.id;
+          saveSyncConfig();
+          return syncConfig.gistId;
+        }
+        const created = await gistRequest('/gists', {
+          method: 'POST',
+          body: JSON.stringify({
+            description: '秋招投递管理器云同步数据（自动创建，请勿删除）',
+            public: false,
+            files: { [GIST_FILENAME]: { content: '{}' } }
+          })
+        });
+        syncConfig.gistId = created?.id || '';
+        if (!syncConfig.gistId) throw new Error('创建云同步 Gist 失败');
+        saveSyncConfig();
+        return syncConfig.gistId;
+      }
+
+      async function pushSyncState() {
+        const envelope = { ...createEnvelope(records), tombstones };
+        let payload = envelope;
+        if (syncConfig.passphrase) {
+          if (!(self.crypto && crypto.subtle)) throw new Error('当前环境不支持加密，请清空同步口令或改用 https 访问');
+          payload = await encryptSyncText(JSON.stringify(envelope), syncConfig.passphrase);
+        }
+        await gistRequest(`/gists/${syncConfig.gistId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            description: '秋招投递管理器云同步数据（自动创建，请勿删除）',
+            files: { [GIST_FILENAME]: { content: JSON.stringify(payload) } }
+          })
+        });
+      }
+
+      async function syncNow(trigger = 'manual') {
+        if (syncBusy) return;
+        if (!syncConfig.token) {
+          if (trigger === 'manual') openSyncDialog();
+          return;
+        }
+        syncBusy = true;
+        renderSyncStatus('syncing');
+        try {
+          await resolveSyncGist();
+          const gist = await gistRequest(`/gists/${syncConfig.gistId}`, { allowNotFound: true });
+          if (!gist || !gist.files || !gist.files[GIST_FILENAME]) throw new Error('云端数据文件缺失，请断开后重新配置');
+          const rawContent = gist.files[GIST_FILENAME].content || '';
+          let remote = null;
+          if (rawContent.trim() && rawContent.trim() !== '{}') {
+            let parsed = JSON.parse(rawContent);
+            if (parsed && parsed.enc) {
+              if (!syncConfig.passphrase) throw new Error('云端数据已加密，请先填写同步口令');
+              if (!(self.crypto && crypto.subtle)) throw new Error('当前环境不支持解密，请改用 https 访问');
+              try {
+                parsed = JSON.parse(await decryptSyncText(parsed, syncConfig.passphrase));
+              } catch (_) {
+                throw new Error('同步口令不正确，无法解密云端数据');
+              }
+            }
+            remote = {
+              records: Array.isArray(parsed?.records) ? parsed.records : [],
+              tombstones: Array.isArray(parsed?.tombstones) ? parsed.tombstones : []
+            };
+          }
+          const { mergedRecords, mergedTombstones } = mergeSyncState(remote);
+          const localChanged = !sameRecordSet(mergedRecords, records) || !sameTombstoneSet(mergedTombstones, tombstones);
+          if (localChanged) {
+            records = mergedRecords;
+            tombstones = mergedTombstones;
+            saveTombstones();
+            saveRecords();
+            render();
+          }
+          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones);
+          if (remoteChanged) await pushSyncState();
+          syncConfig.lastSyncAt = new Date().toISOString();
+          saveSyncConfig();
+          renderSyncStatus();
+          if (trigger === 'manual') showToast(localChanged ? '云同步完成，已合并云端更新' : '云同步完成，各设备数据一致');
+        } catch (error) {
+          let message = error instanceof TypeError ? '无法连接 GitHub，请检查网络' : error.message;
+          if (trigger === 'manual' && message.includes('口令') && confirm('云端数据无法用当前口令解密。\n\n确定用这台设备的数据覆盖云端吗？忘记原口令时可以这样做。')) {
+            try {
+              await pushSyncState();
+              syncConfig.lastSyncAt = new Date().toISOString();
+              saveSyncConfig();
+              renderSyncStatus();
+              showToast('已用本机数据覆盖云端');
+              return;
+            } catch (overwriteError) {
+              message = overwriteError instanceof TypeError ? '无法连接 GitHub，请检查网络' : overwriteError.message;
+            }
+          }
+          renderSyncStatus('error', message);
+          if (trigger === 'manual') showToast(`云同步失败：${message}`);
+          else console.warn('自动云同步失败', error);
+        } finally {
+          syncBusy = false;
+        }
+      }
+
+      function scheduleSyncPush() {
+        if (!syncConfig.token || syncBusy) return;
+        clearTimeout(syncPushTimer);
+        syncPushTimer = setTimeout(() => syncNow('auto'), 4000);
+      }
+
+      function initializeCloudSync() {
+        renderSyncStatus();
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState !== 'visible' || !syncConfig.token || syncBusy) return;
+          const last = new Date(syncConfig.lastSyncAt || 0).getTime();
+          if (Number.isNaN(last) || Date.now() - last > 5 * 60 * 1000) syncNow('auto');
+        });
+        if (syncConfig.token) setTimeout(() => syncNow('auto'), 1500);
+      }
+
+      function openSyncDialog() {
+        $('#syncTokenInput').value = syncConfig.token;
+        $('#syncPassphraseInput').value = syncConfig.passphrase;
+        renderSyncStatus();
+        $('#syncDialog').showModal();
+      }
+
+      function renderSyncStatus(state, message) {
+        const badge = $('#syncStateBadge');
+        const detail = $('#syncStateDetail');
+        if (!badge || !detail) return;
+        const status = $('#syncStatus');
+        const notice = $('#sideDataNotice');
+        if (!syncConfig.token) {
+          badge.textContent = '未配置';
+          badge.className = 'safety-state warning';
+          detail.textContent = '填写访问令牌后即可开启跨设备同步';
+          if (notice) notice.innerHTML = '<strong>数据保存在本机</strong>无需账号，不上传投递记录';
+          if (status) status.textContent = '填写令牌后点击“保存并同步”即可开启。';
+          return;
+        }
+        if (notice) notice.innerHTML = `<strong>云同步已开启</strong>GitHub 私有 Gist${syncConfig.passphrase ? '，数据加密后上传' : ''}`;
+        if (state === 'syncing') {
+          badge.textContent = '同步中';
+          badge.className = 'safety-state';
+          detail.textContent = '正在与 GitHub 同步…';
+          if (status) status.textContent = '正在同步，请稍候…';
+          return;
+        }
+        if (state === 'error') {
+          badge.textContent = '同步失败';
+          badge.className = 'safety-state warning';
+          detail.textContent = message || '上次同步未完成';
+          if (status) status.textContent = `同步失败：${message || '未知错误'}`;
+          return;
+        }
+        badge.textContent = '已开启';
+        badge.className = 'safety-state';
+        detail.textContent = syncConfig.lastSyncAt
+          ? `上次同步 ${formatClock(syncConfig.lastSyncAt)} · 共 ${records.length} 条记录`
+          : '已保存设置，尚未完成首次同步';
+        if (status) status.textContent = syncConfig.lastSyncAt ? `上次同步：${formatClock(syncConfig.lastSyncAt)}` : '设置已保存，点击“保存并同步”完成首次同步。';
+      }
+
+      async function saveSyncSettings() {
+        const token = $('#syncTokenInput').value.trim();
+        const passphrase = $('#syncPassphraseInput').value.trim();
+        if (!token) return showToast('请先填写 GitHub 访问令牌');
+        if (token.length < 20) return showToast('令牌看起来不完整，请复制完整的令牌');
+        if (token !== syncConfig.token || passphrase !== syncConfig.passphrase) {
+          syncConfig.token = token;
+          syncConfig.passphrase = passphrase;
+          syncConfig.gistId = '';
+          syncConfig.lastSyncAt = '';
+        }
+        saveSyncConfig();
+        renderSyncStatus();
+        showToast('设置已保存，开始同步');
+        await syncNow('manual');
+      }
+
+      function disconnectSync() {
+        if (!syncConfig.token) return showToast('当前没有开启云同步');
+        if (!confirm('断开后本机不再自动同步；云端 Gist 与数据会保留。\n确定断开吗？')) return;
+        clearTimeout(syncPushTimer);
+        syncConfig = { token: '', passphrase: '', gistId: '', lastSyncAt: '' };
+        saveSyncConfig();
+        $('#syncTokenInput').value = '';
+        $('#syncPassphraseInput').value = '';
+        renderSyncStatus();
+        showToast('已断开云同步，数据仍保存在本机');
+      }
+
       function saveRecords(message) {
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
@@ -772,6 +1149,7 @@
           persistenceQueue = persistenceQueue
             .then(() => persistSafetyLayers(envelope))
             .catch(error => console.warn('附加备份未完成', error));
+          scheduleSyncPush();
         } catch (error) {
           alert('浏览器未能保存数据。请检查是否禁用了本地存储，或换一个浏览器重试。');
         }
@@ -992,6 +1370,8 @@
           if (!Array.isArray(incoming) || incoming.some(item => !item || typeof item !== 'object')) throw new Error('文件中没有有效记录');
           if (!confirm(`备份中有 ${incoming.length} 条记录。\n\n继续后将替换当前 ${records.length} 条记录，系统会先下载一份“导入前备份”。是否继续？`)) return;
           downloadPayload(createEnvelope(records), `秋招投递-导入前备份-${localDateInput(new Date())}.json`);
+          const importedIds = new Set(incoming.map(item => String(item.id || '')));
+          markDeleted(records.filter(item => !importedIds.has(item.id)).map(item => item.id));
           records = incoming.map(normalizeRecord);
           saveRecords(`已导入并保护 ${records.length} 条记录`);
           render();
@@ -1012,8 +1392,10 @@
           }
           if (!confirm(`将恢复 ${formatClock(previous.savedAt)} 的快照，共 ${previous.records.length} 条记录。\n系统会先下载当前数据备份。是否继续？`)) return;
           downloadPayload(createEnvelope(records), `秋招投递-恢复前备份-${localDateInput(new Date())}.json`);
+          const snapshotIds = new Set(previous.records.map(item => String(item.id || '')));
+          markDeleted(records.filter(item => !snapshotIds.has(item.id)).map(item => item.id));
           records = previous.records.map(normalizeRecord);
-          saveRecords(`已恢复 ${records.length} 条记录`);
+          saveRecords(`已恢复 ${previous.records.length} 条记录`);
           render();
           updateSafetyStatus();
         } catch (error) {
@@ -1744,6 +2126,7 @@
         if (button.dataset.action === 'delete') {
           if (!confirm(`确定删除「${record.company} · ${record.position}」吗？\n删除后无法撤销。`)) return;
           records = records.filter(item => item.id !== record.id);
+          markDeleted([record.id]);
           saveRecords('记录已删除并自动保存');
           render();
           return;
@@ -1920,11 +2303,19 @@
       $('#importBtn').addEventListener('click', () => $('#importFileInput').click());
       $('#importFileInput').addEventListener('change', importBackupFile);
       $('#restoreSnapshotBtn').addEventListener('click', restorePreviousSnapshot);
+      $('#syncBtn').addEventListener('click', openSyncDialog);
+      $('#sideSyncBtn').addEventListener('click', openSyncDialog);
+      $('#closeSyncDialog').addEventListener('click', () => $('#syncDialog').close());
+      $('#cancelSyncDialog').addEventListener('click', () => $('#syncDialog').close());
+      $('#syncDialog').addEventListener('click', event => { if (event.target === $('#syncDialog')) $('#syncDialog').close(); });
+      $('#saveSyncBtn').addEventListener('click', saveSyncSettings);
+      $('#disconnectSyncBtn').addEventListener('click', disconnectSync);
       $('#closeInstallDialog').addEventListener('click', () => $('#installDialog').close());
       $('#doneInstallDialog').addEventListener('click', () => $('#installDialog').close());
       $('#installDialog').addEventListener('click', event => { if (event.target === $('#installDialog')) $('#installDialog').close(); });
       initializeDataSafety();
       initializeMobileApp();
+      initializeCloudSync();
       consumeQuickCapture();
     })();
   </script>
