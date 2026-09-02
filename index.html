@@ -587,7 +587,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '3.2.0';
+      const APP_VERSION = '3.3.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1736,8 +1736,27 @@
         }, 25000);
       }
 
+      // 桥接消息源：原配“一键收录插件”与本插件（秋招求职与简历助手）共存，两者都认
+      const BRIDGE_SOURCES = ['AUTUMN_JOB_CAPTURE', 'AUTUMN_JOB_ASSISTANT'];
       function handleCaptureMessage(event) {
-        if (event.source !== window || event.data?.source !== 'AUTUMN_JOB_CAPTURE') return;
+        if (event.source !== window || !BRIDGE_SOURCES.includes(event.data?.source)) return;
+        if (event.data.type === 'CAPTURE_SUBMIT') {
+          // 秋招求职与简历助手插件推送的已收录岗位：走人工确认弹窗，保存后自动快照与云同步
+          const submitted = event.data.record || {};
+          const seed = normalizeRecord({
+            company: submitted.company,
+            position: submitted.position,
+            city: submitted.city,
+            applicationDate: submitted.applicationDate || '',
+            stage: STAGES.includes(submitted.stage) ? submitted.stage : '已投递',
+            applicationUrl: submitted.applicationUrl,
+            recentSchedule: submitted.recentSchedule || '',
+            nextAction: submitted.nextAction || ''
+          });
+          openDialog(null, seed);
+          showToast('插件已推送岗位，请检查信息后保存');
+          return;
+        }
         if (event.data.type === 'CAPTURE_READY') {
           bridgeReady = true;
           clearTimeout(bridgeCheckTimer);
