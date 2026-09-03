@@ -254,6 +254,28 @@
     .install-guide strong { display: block; font-size: 13px; }
     .install-guide span:last-child { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
 
+    /* 我的简历编辑器 */
+    #resume { scroll-margin-top: 72px; }
+    .resume-layout { padding: 20px 22px 22px; display: grid; gap: 18px; }
+    .resume-section-block { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+    .resume-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
+    .resume-block-head h3 { margin: 0; font-size: 15px; }
+    .resume-block-head .btn-small { min-height: 30px; font-size: 12px; }
+    .resume-block-body { padding: 14px 16px; display: grid; gap: 10px; }
+    .kv-row { display: grid; grid-template-columns: minmax(120px, 200px) minmax(0, 1fr) 34px; gap: 9px; align-items: center; }
+    .kv-row .control { min-height: 38px; }
+    .kv-del-btn { width: 34px; min-height: 38px; border: 0; border-radius: 9px; background: var(--red-soft); color: var(--red); font-size: 13px; cursor: pointer; }
+    .kv-del-btn:hover { background: #ffe1e1; }
+    .exp-item-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); padding: 13px 14px; }
+    .exp-item-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+    .exp-item-header h4 { margin: 0; font-size: 13.5px; color: var(--primary-dark); }
+    .exp-fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+    .exp-fields-grid .full-w { grid-column: 1 / -1; }
+    .exp-fields-grid label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .exp-fields-grid .control { min-height: 38px; }
+    .resume-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .resume-privacy-note { margin: 0; padding: 12px 14px; border-radius: 11px; background: var(--primary-soft); color: var(--primary-dark); font-size: 13px; }
+
     @media (max-width: 1100px) {
       .app-layout { grid-template-columns: 210px minmax(0, 1fr); }
       .dashboard { grid-template-columns: 1fr; }
@@ -344,6 +366,7 @@
         <a class="nav-item is-active" href="#overview"><span class="nav-icon">⌂</span><span>总览</span></a>
         <a class="nav-item" href="#jobPool"><span class="nav-icon">⌕</span><span>岗位库</span></a>
         <a class="nav-item" href="#records"><span class="nav-icon">▤</span><span>投递记录</span></a>
+        <a class="nav-item" href="#resume"><span class="nav-icon">✎</span><span>我的简历</span></a>
         <a class="nav-item" href="#upcoming"><span class="nav-icon">□</span><span>未来安排</span></a>
         <button class="nav-item" id="sideScreenshotBtn" type="button"><span class="nav-icon">▣</span><span>截图识别</span></button>
         <button class="nav-item" id="sideSafetyBtn" type="button"><span class="nav-icon">◇</span><span>数据安全</span></button>
@@ -402,6 +425,50 @@
         <div class="job-sync-meta" id="jobSyncMeta">尚未同步岗位</div>
       </div>
       <div class="job-list" id="jobList"></div>
+    </section>
+
+    <section class="panel" id="resume" aria-labelledby="resumeTitle">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title" id="resumeTitle">我的简历</h2>
+          <div class="panel-caption">在此维护个人资料与多段经历；保存后自动下发给浏览器插件供网申填表，并随云同步加密上传</div>
+        </div>
+        <div class="resume-actions">
+          <input id="resumeFileInput" type="file" accept=".json,application/json" hidden>
+          <button class="btn btn-small" id="resumeImportBtn" type="button">导入 JSON</button>
+          <button class="btn btn-small" id="resumeExportBtn" type="button">导出 JSON</button>
+          <button class="btn btn-small btn-danger" id="resumeResetBtn" type="button">重置</button>
+          <button class="btn btn-small btn-primary" id="saveResumeBtn" type="button">保存简历</button>
+        </div>
+      </div>
+      <div class="resume-layout">
+        <p class="resume-privacy-note">简历含身份证、手机等敏感信息：开启云同步并设置口令后，简历与投递记录一起加密上传（GitHub 只保存密文）；不开启云同步时仅保存在本机浏览器。</p>
+
+        <div class="resume-section-block">
+          <div class="resume-block-head"><h3>优先信息（填表优先匹配）</h3><button class="btn btn-soft btn-small" data-action="add-kv" data-section="优先信息" type="button">＋ 添加字段</button></div>
+          <div class="resume-block-body" id="kv-优先信息"></div>
+        </div>
+        <div class="resume-section-block">
+          <div class="resume-block-head"><h3>基本信息</h3><button class="btn btn-soft btn-small" data-action="add-kv" data-section="基本信息" type="button">＋ 添加字段</button></div>
+          <div class="resume-block-body" id="kv-基本信息"></div>
+        </div>
+        <div class="resume-section-block">
+          <div class="resume-block-head"><h3>教育经历</h3><button class="btn btn-soft btn-small" data-action="add-exp" data-section="教育经历" type="button">＋ 添加教育经历</button></div>
+          <div class="resume-block-body" id="exp-教育经历"></div>
+        </div>
+        <div class="resume-section-block">
+          <div class="resume-block-head"><h3>实习经历</h3><button class="btn btn-soft btn-small" data-action="add-exp" data-section="实习经历" type="button">＋ 添加实习经历</button></div>
+          <div class="resume-block-body" id="exp-实习经历"></div>
+        </div>
+        <div class="resume-section-block">
+          <div class="resume-block-head"><h3>项目经历</h3><button class="btn btn-soft btn-small" data-action="add-exp" data-section="项目经历" type="button">＋ 添加项目经历</button></div>
+          <div class="resume-block-body" id="exp-项目经历"></div>
+        </div>
+        <div class="resume-section-block">
+          <div class="resume-block-head"><h3>竞赛与技能</h3><button class="btn btn-soft btn-small" data-action="add-kv" data-section="竞赛与技能" type="button">＋ 添加字段</button></div>
+          <div class="resume-block-body" id="kv-竞赛与技能"></div>
+        </div>
+      </div>
     </section>
 
     <div class="dashboard">
@@ -583,11 +650,27 @@
       const STAGES = ['待投递', '已投递', '笔试', '一面', '二面', 'HR面', 'Offer', '已结束'];
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
+      const RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
+      const RESUME_META_KEY = 'autumnRecruitmentTracker.resumeMeta.v1';
+      // 简历默认骨架（全空，不预置任何个人信息；须在 loadResumeData 调用前声明）
+      const DEFAULT_RESUME = {
+        "优先信息": { "身份证": "", "手机": "", "邮箱": "", "微信号": "", "现居地": "", "求职意向": "" },
+        "基本信息": { "姓名": "", "性别": "", "出生年月": "", "政治面貌": "", "籍贯": "", "紧急联系人": "", "自我评价": "" },
+        "教育经历": [
+          { "_rowName": "教育经历 1", "学校": "", "学院": "", "专业": "", "学历": "", "开始时间": "", "结束时间": "", "专业排名": "" },
+          { "_rowName": "教育经历 2", "学校": "", "学院": "", "专业": "", "学历": "", "开始时间": "", "结束时间": "", "专业排名": "" }
+        ],
+        "实习经历": [ { "_rowName": "实习经历 1", "单位": "", "部门": "", "岗位": "", "开始": "", "结束": "", "证明人": "", "岗位职责": "" } ],
+        "项目经历": [ { "_rowName": "项目经历 1", "项目名称": "", "角色": "", "开始": "", "结束": "", "主要工作": "", "技术栈": "" } ],
+        "竞赛与技能": { "英语水平": "", "专业技能": "", "学术竞赛": "" }
+      };
+      const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
+      const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const JOB_POOL_KEY = 'autumnRecruitmentTracker.jobPool.v1';
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '3.3.0';
+      const APP_VERSION = '3.4.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -603,6 +686,8 @@
       };
       let primaryLoadState = 'unknown';
       let records = loadRecords();
+      let resume = loadResumeData();
+      let resumeSavedAt = loadResumeMeta();
       let jobs = loadJobs();
       let jobPoolUpdatedAt = loadJobPoolMeta();
       let editingId = null;
@@ -1063,6 +1148,15 @@
             if (!createNew) throw new Error('已取消：云端没有与此口令匹配的数据空间');
           }
           const { mergedRecords, mergedTombstones } = mergeSyncState(remote);
+          // 简历整体 LWW：云端版本更新且非空则采用，随云同步拉取后同时下发插件
+          if (remote && Number(remote.resumeSavedAt) > resumeSavedAt && remote.resume && !isResumeEmpty(remote.resume)) {
+            resume = { ...DEFAULT_RESUME, ...remote.resume };
+            resumeSavedAt = Number(remote.resumeSavedAt);
+            localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(resume));
+            localStorage.setItem(RESUME_META_KEY, JSON.stringify({ savedAt: resumeSavedAt }));
+            renderResumeEditor();
+            pushResumeToPlugin();
+          }
           const localChanged = !sameRecordSet(mergedRecords, records) || !sameTombstoneSet(mergedTombstones, tombstones);
           if (localChanged) {
             records = mergedRecords;
@@ -1071,7 +1165,9 @@
             saveRecords();
             render();
           }
-          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones);
+          // 本地简历更新（或云端无简历而本地非空）时随下次推送上传
+          const resumeNeedsPush = !isResumeEmpty(resume) && resumeSavedAt > Number(remote?.resumeSavedAt || 0);
+          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones) || resumeNeedsPush;
           if (remoteChanged) await pushSyncState(migrateLegacy);
           syncConfig.lastSyncAt = new Date().toISOString();
           saveSyncConfig();
@@ -1191,13 +1287,174 @@
         }
       }
 
+      // ================= 我的简历：加载 / 渲染 / 收集（编辑器从插件移植，存储键与插件一致） =================
+      // DEFAULT_RESUME / RESUME_*_SECTIONS 定义见顶部常量区（避免 TDZ）
+
+      function loadResumeData() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(RESUME_STORAGE_KEY) || 'null');
+          if (parsed && typeof parsed === 'object') return { ...DEFAULT_RESUME, ...parsed };
+        } catch (error) { console.warn('简历读取失败', error); }
+        return JSON.parse(JSON.stringify(DEFAULT_RESUME));
+      }
+
+      function loadResumeMeta() {
+        try { return Number(JSON.parse(localStorage.getItem(RESUME_META_KEY) || '{}').savedAt) || 0; }
+        catch (_) { return 0; }
+      }
+
+      function isResumeEmpty(data) {
+        if (!data) return true;
+        // _rowName 是结构性标签（如“教育经历 1”）而非内容，不计入判空
+        const kvEmpty = RESUME_KV_SECTIONS.every(sec => !Object.values(data[sec] || {}).some(Boolean));
+        const expEmpty = RESUME_EXP_SECTIONS.every(sec => !Array.isArray(data[sec]) || !data[sec].some(item => Object.entries(item).some(([k, v]) => k !== '_rowName' && Boolean(v))));
+        return kvEmpty && expEmpty;
+      }
+
+      function renderResumeEditor() {
+        RESUME_KV_SECTIONS.forEach(sec => {
+          const container = document.getElementById(`kv-${sec}`);
+          if (!container) return;
+          const data = resume[sec] || {};
+          container.innerHTML = Object.entries(data).map(([k, v]) => `
+            <div class="kv-row" data-section="${sec}">
+              <input type="text" class="control kv-key" value="${escapeHtml(k)}" placeholder="字段名称">
+              <input type="text" class="control kv-val" value="${escapeHtml(v)}" placeholder="内容值">
+              <button type="button" class="kv-del-btn" data-action="del-kv" title="删除字段">✕</button>
+            </div>
+          `).join('');
+        });
+        RESUME_EXP_SECTIONS.forEach(sec => {
+          const container = document.getElementById(`exp-${sec}`);
+          if (!container) return;
+          const list = Array.isArray(resume[sec]) ? resume[sec] : [];
+          container.innerHTML = list.map((item, idx) => `
+            <div class="exp-item-card" data-section="${sec}" data-index="${idx}">
+              <div class="exp-item-header">
+                <h4>#${idx + 1} ${escapeHtml(item._rowName || '经历')}</h4>
+                <button type="button" class="btn btn-danger btn-small" data-action="del-exp">删除此条</button>
+              </div>
+              <div class="exp-fields-grid">
+                <div>
+                  <label>经历标签</label>
+                  <input type="text" class="control exp-field" data-key="_rowName" value="${escapeHtml(item._rowName || '')}" placeholder="例如：硕士 / 腾讯">
+                </div>
+                ${Object.entries(item).filter(([k]) => k !== '_rowName').map(([k, v]) => {
+                  const isLongText = ['主要工作', '岗位职责', '自我评价', '项目职责'].includes(k);
+                  return `
+                    <div class="${isLongText ? 'full-w' : ''}">
+                      <label>${escapeHtml(k)}</label>
+                      ${isLongText
+                        ? `<textarea class="control exp-field" data-key="${escapeHtml(k)}" rows="3">${escapeHtml(v)}</textarea>`
+                        : `<input type="text" class="control exp-field" data-key="${escapeHtml(k)}" value="${escapeHtml(v)}">`
+                      }
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `).join('');
+        });
+      }
+
+      function addKvField(sec) {
+        const container = document.getElementById(`kv-${sec}`);
+        if (!container) return;
+        const row = document.createElement('div');
+        row.className = 'kv-row';
+        row.setAttribute('data-section', sec);
+        row.innerHTML = `
+          <input type="text" class="control kv-key" placeholder="新字段名称">
+          <input type="text" class="control kv-val" placeholder="内容值">
+          <button type="button" class="kv-del-btn" data-action="del-kv" title="删除字段">✕</button>
+        `;
+        container.appendChild(row);
+        row.querySelector('.kv-key')?.focus();
+      }
+
+      function addExperienceRow(sec) {
+        const container = document.getElementById(`exp-${sec}`);
+        if (!container) return;
+        const presets = {
+          '教育经历': [['_rowName', '教育经历'], ['学校', ''], ['学院', ''], ['专业', ''], ['学历', ''], ['开始时间', ''], ['结束时间', '']],
+          '实习经历': [['_rowName', '实习经历'], ['单位', ''], ['部门', ''], ['岗位', ''], ['开始', ''], ['结束', ''], ['岗位职责', '长文本']],
+          '项目经历': [['_rowName', '项目经历'], ['项目名称', ''], ['角色', ''], ['开始', ''], ['结束', ''], ['主要工作', '长文本']]
+        }[sec] || [];
+        const card = document.createElement('div');
+        card.className = 'exp-item-card';
+        card.setAttribute('data-section', sec);
+        const count = container.querySelectorAll('.exp-item-card').length + 1;
+        card.innerHTML = `
+          <div class="exp-item-header">
+            <h4>#${count} 新增经历</h4>
+            <button type="button" class="btn btn-danger btn-small" data-action="del-exp">删除此条</button>
+          </div>
+          <div class="exp-fields-grid">
+            ${presets.map(([k, hint]) => k === '_rowName'
+              ? `<div><label>经历标签</label><input type="text" class="control exp-field" data-key="_rowName" value="${escapeHtml(hint || '')}" placeholder="例如：硕士 / 腾讯"></div>`
+              : hint === '长文本'
+                ? `<div class="full-w"><label>${escapeHtml(k)}</label><textarea class="control exp-field" data-key="${escapeHtml(k)}" rows="3" placeholder="详细描述..."></textarea></div>`
+                : `<div><label>${escapeHtml(k)}</label><input type="text" class="control exp-field" data-key="${escapeHtml(k)}" placeholder="填写内容..."></div>`
+            ).join('')}
+          </div>
+        `;
+        container.appendChild(card);
+        card.querySelector('.exp-field')?.focus();
+      }
+
+      function collectResumeFromDom() {
+        const updated = {};
+        RESUME_KV_SECTIONS.forEach(sec => {
+          updated[sec] = {};
+          document.querySelectorAll(`#kv-${sec} .kv-row`).forEach(row => {
+            const k = row.querySelector('.kv-key')?.value.trim();
+            const v = row.querySelector('.kv-val')?.value.trim();
+            if (k) updated[sec][k] = v || '';
+          });
+        });
+        RESUME_EXP_SECTIONS.forEach(sec => {
+          updated[sec] = [];
+          document.querySelectorAll(`#exp-${sec} .exp-item-card`).forEach(card => {
+            const item = {};
+            card.querySelectorAll('.exp-field').forEach(field => {
+              const k = field.getAttribute('data-key');
+              if (k) item[k] = field.value.trim();
+            });
+            if (Object.keys(item).length > 1 || item._rowName) updated[sec].push(item);
+          });
+        });
+        return updated;
+      }
+
+      // B3 桥接下发：把最新简历推给同页面的插件 content script（06-bridge 监听 RESUME_PUSH）
+      function pushResumeToPlugin() {
+        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'RESUME_PUSH', resume }, '*');
+      }
+
+      function persistResume() {
+        localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(resume));
+        resumeSavedAt = Date.now();
+        localStorage.setItem(RESUME_META_KEY, JSON.stringify({ savedAt: resumeSavedAt }));
+        pushResumeToPlugin();
+        scheduleSyncPush();
+      }
+
+      async function collectAndSaveResume() {
+        resume = collectResumeFromDom();
+        persistResume();
+        renderResumeEditor();
+        showToast('简历已保存，已下发浏览器插件并纳入云同步');
+      }
+
       function createEnvelope(sourceRecords = records) {
         return {
           schemaVersion: SCHEMA_VERSION,
           appVersion: APP_VERSION,
           savedAt: new Date().toISOString(),
           recordCount: sourceRecords.length,
-          records: sourceRecords.map(record => ({ ...record }))
+          records: sourceRecords.map(record => ({ ...record })),
+          resume: JSON.parse(JSON.stringify(resume)),
+          resumeSavedAt
         };
       }
 
@@ -1409,6 +1666,15 @@
           const importedIds = new Set(incoming.map(item => String(item.id || '')));
           markDeleted(records.filter(item => !importedIds.has(item.id)).map(item => item.id));
           records = incoming.map(normalizeRecord);
+          // 备份携带简历时一并导入（整体替换，随云同步上传并下发插件）
+          if (parsed && parsed.resume && typeof parsed.resume === 'object' && !Array.isArray(parsed.resume)) {
+            resume = { ...DEFAULT_RESUME, ...parsed.resume };
+            resumeSavedAt = Number(parsed.resumeSavedAt) || Date.now();
+            localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(resume));
+            localStorage.setItem(RESUME_META_KEY, JSON.stringify({ savedAt: resumeSavedAt }));
+            renderResumeEditor();
+            pushResumeToPlugin();
+          }
           saveRecords(`已导入并保护 ${records.length} 条记录`);
           render();
           updateSafetyStatus();
@@ -2276,6 +2542,67 @@
 
       populateSelects();
       render();
+      renderResumeEditor();
+
+      // ================= 我的简历：事件绑定（事件委托处理动态按钮） =================
+      document.addEventListener('click', (event) => {
+        const btn = event.target.closest('button[data-action]');
+        if (!btn) return;
+        const action = btn.getAttribute('data-action');
+        const sec = btn.getAttribute('data-section');
+        if (action === 'add-kv') {
+          event.preventDefault();
+          addKvField(sec);
+        } else if (action === 'add-exp') {
+          event.preventDefault();
+          addExperienceRow(sec);
+        } else if (action === 'del-kv') {
+          event.preventDefault();
+          btn.closest('.kv-row')?.remove();
+        } else if (action === 'del-exp') {
+          event.preventDefault();
+          const card = btn.closest('.exp-item-card');
+          const parent = card?.parentElement;
+          card?.remove();
+          if (parent) {
+            parent.querySelectorAll('.exp-item-card').forEach((c, idx) => {
+              const h4 = c.querySelector('.exp-item-header h4');
+              const tag = c.querySelector('.exp-field[data-key="_rowName"]')?.value || '经历';
+              if (h4) h4.textContent = `#${idx + 1} ${tag}`;
+            });
+          }
+        }
+      });
+      $('#saveResumeBtn').addEventListener('click', collectAndSaveResume);
+      $('#resumeExportBtn').addEventListener('click', () => {
+        downloadPayload({ appVersion: APP_VERSION, exportedAt: new Date().toISOString(), resume: JSON.parse(JSON.stringify(resume)) }, `我的简历-${localDateInput(new Date())}.json`);
+        showToast('简历 JSON 已导出');
+      });
+      $('#resumeImportBtn').addEventListener('click', () => $('#resumeFileInput').click());
+      $('#resumeFileInput').addEventListener('change', async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+          const parsed = JSON.parse(await file.text());
+          const incoming = parsed?.resume && typeof parsed.resume === 'object' ? parsed.resume : parsed;
+          if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) throw new Error('格式无效');
+          resume = { ...DEFAULT_RESUME, ...incoming };
+          persistResume();
+          renderResumeEditor();
+          showToast('简历导入成功，已下发插件并纳入云同步');
+        } catch (error) {
+          alert(`导入失败：${error.message || '不是有效的简历 JSON 文件。'}`);
+        }
+      });
+      $('#resumeResetBtn').addEventListener('click', () => {
+        if (!confirm('确定要清空简历全部内容并恢复默认结构吗？')) return;
+        resume = JSON.parse(JSON.stringify(DEFAULT_RESUME));
+        persistResume();
+        renderResumeEditor();
+        showToast('简历已重置为默认结构');
+      });
+
       $('#addBtn').addEventListener('click', () => openDialog());
       $('#captureUrlBtn').addEventListener('click', openCaptureDialog);
       $('#captureScreenshotBtn').addEventListener('click', openScreenshotDialog);
@@ -2371,6 +2698,11 @@
       initializeDataSafety();
       initializeMobileApp();
       initializeCloudSync();
+      // 简历下发：本地非空简历推给同页插件（content script 注入时机不确定，重试覆盖）
+      if (!isResumeEmpty(resume)) {
+        setTimeout(pushResumeToPlugin, 1000);
+        setTimeout(pushResumeToPlugin, 3000);
+      }
       consumeQuickCapture();
     })();
   </script>
