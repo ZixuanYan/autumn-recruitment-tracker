@@ -15,23 +15,34 @@
   <title>秋招投递管理</title>
   <style>
     :root {
-      --bg: #f6f8fc;
-      --surface: #ffffff;
-      --surface-soft: #f8faff;
-      --ink: #172033;
-      --muted: #697386;
-      --line: #e5eaf3;
-      --primary: #5367e9;
-      --primary-dark: #4053cb;
-      --primary-soft: #eef0ff;
-      --green: #24a475;
-      --green-soft: #e9f8f2;
-      --amber: #d38a18;
-      --amber-soft: #fff5df;
-      --red: #d95050;
-      --red-soft: #fff0f0;
-      --shadow: 0 8px 28px rgba(33, 45, 75, .07);
-      --radius: 18px;
+      /* 金九银十·档案印章令牌：暖纸为底，墨为骨，金/朱/银为印 */
+      --paper: #fbfaf6;
+      --bg: #fbfaf6;
+      --surface: #fffefb;
+      --surface-soft: #f6f3ea;
+      --ink: #262523;
+      --muted: #5c574d;
+      --line: #e7e2d5;
+      --gold: #9c6d1f;
+      --gold-dark: #7d5514;
+      --gold-soft: #f5ecda;
+      --seal: #c7381f;
+      --seal-soft: #fbede6;
+      --silver: #5e7382;
+      --silver-soft: #edf1f3;
+      --primary: #9c6d1f;
+      --primary-dark: #7d5514;
+      --primary-soft: #f5ecda;
+      --green: #3d7a4f;
+      --green-soft: #ebf3ea;
+      --amber: #9c6d1f;
+      --amber-soft: #f5ecda;
+      --red: #c7381f;
+      --red-soft: #fbede6;
+      --shadow: 0 6px 22px rgba(66, 58, 38, .06);
+      --radius: 14px;
+      --font-display: "Songti SC", "STSong", "Noto Serif SC", "SimSun", serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     }
 
     * { box-sizing: border-box; }
@@ -39,7 +50,7 @@
     body {
       margin: 0;
       min-width: 320px;
-      background: var(--bg);
+      background: var(--paper);
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       line-height: 1.5;
@@ -47,63 +58,66 @@
     button, input, select, textarea { font: inherit; }
     button { cursor: pointer; }
     button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-      outline: 3px solid rgba(83, 103, 233, .22);
+      outline: 3px solid rgba(156, 109, 31, .28);
       outline-offset: 2px;
     }
 
-    .app-layout { display: grid; grid-template-columns: 238px minmax(0, 1fr); min-height: 100vh; }
+    .app-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
     .app-sidebar {
-      position: sticky; top: 0; z-index: 8; display: flex; flex-direction: column; height: 100vh; padding: 24px 16px 18px;
-      background: rgba(255, 255, 255, .96); border-right: 1px solid var(--line); box-shadow: 8px 0 30px rgba(33, 45, 75, .035);
+      position: sticky; top: 0; z-index: 8; display: flex; flex-direction: column; height: 100vh; padding: 24px 14px 18px;
+      background: var(--surface); border-right: 1px solid var(--line);
     }
-    .sidebar-brand { display: flex; align-items: center; gap: 11px; padding: 0 8px 24px; }
-    .sidebar-brand .brand-mark { width: 42px; height: 42px; border-radius: 13px; font-size: 20px; flex: 0 0 auto; }
-    .sidebar-title { font-size: 16px; font-weight: 780; white-space: nowrap; }
-    .sidebar-subtitle { margin-top: 1px; color: var(--muted); font-size: 11px; }
-    .sidebar-nav { display: grid; gap: 7px; }
+    .sidebar-brand { display: flex; align-items: center; gap: 11px; padding: 0 8px 22px; }
+    .sidebar-brand .brand-mark {
+      display: grid; place-items: center; width: 42px; height: 42px; border-radius: 6px; font-size: 20px; flex: 0 0 auto;
+      color: var(--paper); background: var(--ink);
+    }
+    .sidebar-title { font-size: 17px; font-weight: 780; white-space: nowrap; font-family: var(--font-display); letter-spacing: .02em; }
+    .sidebar-subtitle { margin-top: 2px; color: var(--muted); font-size: 11px; letter-spacing: .06em; }
+    .nav-group-label { margin: 14px 10px 7px; color: var(--muted); font-size: 11px; font-weight: 760; letter-spacing: .18em; }
+    .sidebar-nav { display: grid; gap: 5px; }
     .nav-item {
-      display: flex; align-items: center; gap: 11px; width: 100%; min-height: 45px; padding: 0 13px; border: 0; border-radius: 11px;
-      color: #59657a; background: transparent; text-decoration: none; font-size: 14px; font-weight: 680; text-align: left; transition: .18s ease;
+      display: flex; align-items: center; gap: 11px; width: 100%; min-height: 42px; padding: 0 12px; border: 0; border-radius: 8px;
+      color: var(--muted); background: transparent; text-decoration: none; font-size: 14px; font-weight: 640; text-align: left; transition: .16s ease;
     }
-    .nav-item:hover { color: var(--primary-dark); background: #f3f5ff; }
-    .nav-item.is-active { color: var(--primary-dark); background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
-    .nav-icon { display: grid; place-items: center; width: 23px; color: currentColor; font-size: 17px; flex: 0 0 auto; }
-    .sidebar-footer { margin-top: auto; padding: 14px 12px; border-radius: 12px; background: var(--green-soft); color: #23765a; font-size: 12px; }
+    .nav-item:hover { color: var(--gold-dark); background: var(--surface-soft); }
+    .nav-item.is-active { color: var(--gold-dark); background: var(--gold-soft); box-shadow: inset 3px 0 0 var(--gold); }
+    .nav-icon { display: grid; place-items: center; width: 22px; color: currentColor; font-size: 16px; flex: 0 0 auto; }
+    .sidebar-footer { margin-top: auto; padding: 13px 12px; border-radius: 10px; background: var(--silver-soft); color: var(--silver); font-size: 12px; border: 1px solid var(--line); }
     .sidebar-footer strong { display: block; margin-bottom: 2px; font-size: 13px; }
     .shell { min-width: 0; width: 100%; max-width: 1540px; margin: 0 auto; padding: 30px 28px 48px; }
-    #overview, #jobPool, #records, #upcoming { scroll-margin-top: 72px; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 26px; }
     .brand { display: flex; align-items: center; gap: 14px; }
     .brand-mark {
-      display: grid; place-items: center; width: 48px; height: 48px; border-radius: 15px;
-      color: #fff; background: linear-gradient(145deg, #7182f2, #4659d9); box-shadow: 0 8px 18px rgba(83, 103, 233, .25);
+      display: grid; place-items: center; width: 48px; height: 48px; border-radius: 8px;
+      color: var(--paper); background: var(--ink); box-shadow: 0 6px 14px rgba(38, 37, 35, .18);
       font-size: 23px;
     }
-    h1 { margin: 0; font-size: 25px; letter-spacing: -.02em; }
-    .page-kicker { margin-bottom: 2px; color: var(--primary); font-size: 12px; font-weight: 760; letter-spacing: .08em; }
-    .subtitle { margin: 3px 0 0; color: var(--muted); font-size: 14px; }
+    h1 { margin: 0; font-size: 26px; letter-spacing: .01em; font-family: var(--font-display); font-weight: 780; }
+    .page-kicker { margin-bottom: 3px; color: var(--gold); font-size: 11px; font-weight: 780; letter-spacing: .22em; font-family: var(--font-mono); }
+    .subtitle { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
     .top-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
     .btn {
-      border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 11px;
-      min-height: 42px; padding: 0 15px; font-weight: 650; transition: .18s ease;
+      border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 9px;
+      min-height: 42px; padding: 0 15px; font-weight: 660; transition: .16s ease;
     }
-    .btn:hover { transform: translateY(-1px); border-color: #ccd3e2; box-shadow: 0 5px 14px rgba(33, 45, 75, .08); }
-    .btn-primary { border-color: var(--primary); background: var(--primary); color: #fff; }
-    .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
-    .btn-soft { background: var(--primary-soft); color: var(--primary-dark); border-color: transparent; }
-    .btn-danger { color: var(--red); background: var(--red-soft); border-color: transparent; }
-    .btn-small { min-height: 34px; padding: 0 11px; border-radius: 9px; font-size: 13px; }
+    .btn:hover { transform: translateY(-1px); border-color: #d5cdb8; box-shadow: 0 4px 12px rgba(66, 58, 38, .08); }
+    .btn-primary { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+    .btn-primary:hover { background: #3a3835; border-color: #3a3835; }
+    .btn-soft { background: var(--gold-soft); color: var(--gold-dark); border-color: transparent; }
+    .btn-danger { color: var(--seal); background: var(--seal-soft); border-color: transparent; }
+    .btn-small { min-height: 34px; padding: 0 11px; border-radius: 8px; font-size: 13px; }
     .icon { margin-right: 6px; }
 
-    .stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
-    .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
-    .stat-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 14px; }
-    .stat-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; background: var(--primary-soft); color: var(--primary); }
-    .stat-card:nth-child(2) .stat-icon { background: #fff1e7; color: #d66f25; }
-    .stat-card:nth-child(3) .stat-icon { background: #edf8ff; color: #2988bf; }
-    .stat-card:nth-child(4) .stat-icon { background: var(--amber-soft); color: var(--amber); }
-    .stat-card:nth-child(5) .stat-icon { background: var(--green-soft); color: var(--green); }
-    .stat-number { font-size: 32px; font-weight: 760; margin-top: 10px; letter-spacing: -.03em; }
+    .stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+    .stat-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; letter-spacing: .04em; }
+    .stat-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 7px; background: var(--gold-soft); color: var(--gold-dark); font-size: 15px; }
+    .stat-card:nth-child(2) .stat-icon { background: var(--silver-soft); color: var(--silver); }
+    .stat-card:nth-child(3) .stat-icon { background: var(--silver-soft); color: var(--silver); }
+    .stat-card:nth-child(4) .stat-icon { background: var(--gold-soft); color: var(--gold-dark); }
+    .stat-card:nth-child(5) .stat-icon { background: var(--seal-soft); color: var(--seal); }
+    .stat-number { font-size: 33px; font-weight: 700; margin-top: 10px; letter-spacing: -.02em; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     .dashboard { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
     .main-column { min-width: 0; }
@@ -128,28 +142,44 @@
     .search-glyph { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: #8a94a8; pointer-events: none; }
 
     .table-scroll { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; min-width: 980px; }
-    th { padding: 13px 15px; color: var(--muted); font-size: 12px; font-weight: 700; text-align: left; background: #fafbfe; white-space: nowrap; }
-    td { padding: 16px 15px; border-top: 1px solid var(--line); vertical-align: middle; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1020px; }
+    th { padding: 12px 14px; color: var(--muted); font-size: 11px; font-weight: 760; letter-spacing: .1em; text-align: left; background: var(--surface-soft); white-space: nowrap; }
+    td { padding: 15px 14px; border-top: 1px solid var(--line); vertical-align: middle; font-size: 14px; }
     tbody tr { transition: background .15s ease; }
-    tbody tr:hover { background: #fbfcff; }
+    tbody tr:hover { background: #faf8f1; }
+    tbody tr[data-is-offer="true"] { box-shadow: inset 3px 0 0 var(--gold); }
+    .record-no { color: var(--muted); font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
     .company { font-weight: 720; }
     .company-link { color: inherit; text-decoration: none; }
-    .company-link:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+    .company-link:hover { color: var(--gold-dark); text-decoration: underline; text-underline-offset: 3px; }
     .position { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    td[data-label="投递日期"] { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
     .schedule { max-width: 190px; }
     .schedule-time { font-weight: 650; }
     .schedule-text, .next-action { color: var(--muted); font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
     .overdue { color: var(--red); }
-    .badge { display: inline-flex; align-items: center; min-height: 28px; padding: 3px 10px; border: 1px solid var(--stage-border, transparent); border-radius: 8px; background: var(--stage-soft, var(--primary-soft)); color: var(--stage-color, var(--primary-dark)); font-size: 12px; font-weight: 760; white-space: nowrap; }
-    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"] { --stage-color: #657084; --stage-soft: #f0f2f5; --stage-border: #d9dee7; }
-    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"] { --stage-color: #356fd6; --stage-soft: #edf4ff; --stage-border: #cadcff; }
-    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"] { --stage-color: #b87812; --stage-soft: #fff5df; --stage-border: #f1dba9; }
-    .stage-cell[data-stage="一面"], .badge[data-stage="一面"] { --stage-color: #16869f; --stage-soft: #eaf8fb; --stage-border: #bfe5ec; }
-    .stage-cell[data-stage="二面"], .badge[data-stage="二面"] { --stage-color: #6c52bd; --stage-soft: #f2efff; --stage-border: #d9d0fa; }
-    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"] { --stage-color: #b54889; --stage-soft: #fff0f8; --stage-border: #f0c9df; }
-    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"] { --stage-color: #17825b; --stage-soft: #e9f8f2; --stage-border: #bde7d5; }
-    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"] { --stage-color: #b94747; --stage-soft: #fff0f0; --stage-border: #f0c8c8; }
+    .badge {
+      display: inline-flex; align-items: center; justify-content: center; min-height: 26px; padding: 2px 9px;
+      border: 1.5px solid var(--stage-border, var(--gold)); border-radius: 5px;
+      background: var(--stage-soft, var(--gold-soft)); color: var(--stage-color, var(--gold-dark));
+      font-size: 12px; font-weight: 760; letter-spacing: .12em; white-space: nowrap;
+      transform: rotate(-3deg); font-family: var(--font-display);
+    }
+    /* 阶段印章映射：从银十到金九 —— 投递前期银青，面试期柿金，Offer 鎏金朱章 */
+    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"] { --stage-color: #5c574d; --stage-soft: transparent; --stage-border: #5c574d; }
+    .badge[data-stage="待投递"] { border-style: dashed; }
+    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"] { --stage-color: #5e7382; --stage-soft: #edf1f3; --stage-border: #5e7382; }
+    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"] { --stage-color: #5e7382; --stage-soft: #edf1f3; --stage-border: #5e7382; }
+    .stage-cell[data-stage="一面"], .badge[data-stage="一面"] { --stage-color: #9c6d1f; --stage-soft: #f5ecda; --stage-border: #9c6d1f; }
+    .stage-cell[data-stage="二面"], .badge[data-stage="二面"] { --stage-color: #9c6d1f; --stage-soft: #f5ecda; --stage-border: #9c6d1f; }
+    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"] { --stage-color: #9c6d1f; --stage-soft: #f5ecda; --stage-border: #9c6d1f; }
+    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"] { --stage-color: #9c6d1f; --stage-soft: #c7381f; --stage-border: #c7381f; }
+    .badge[data-stage="Offer"] { color: #f5ecda; background: var(--seal); border-color: var(--seal); box-shadow: 0 0 0 1px var(--seal-soft), inset 0 0 0 2px rgba(245, 236, 218, .55); }
+    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"] { --stage-color: #8b867c; --stage-soft: #f1efe8; --stage-border: #b5b0a4; }
+    .badge[data-stage="已结束"] { opacity: .68; }
+    .stage-cell { border-radius: 10px; }
+    .stage-cell[data-stage="待投递"] { border-style: dashed; background: transparent; }
+    .stage-cell[data-stage="Offer"] { border-width: 2px; }
     .row-actions { display: flex; gap: 7px; white-space: nowrap; }
     .text-button { min-height: 30px; padding: 3px 6px; background: transparent; border: 0; color: var(--muted); font-size: 13px; border-radius: 7px; }
     .text-button:hover { color: var(--primary); background: var(--primary-soft); }
@@ -173,7 +203,7 @@
     dialog::backdrop { background: rgba(24, 31, 49, .48); backdrop-filter: blur(2px); }
     .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 21px 24px; border-bottom: 1px solid var(--line); }
     .modal-head h2 { margin: 0; font-size: 20px; }
-    .close-btn { width: 36px; height: 36px; border: 0; border-radius: 10px; background: #f3f5f9; color: var(--muted); font-size: 20px; }
+    .close-btn { width: 36px; height: 36px; border: 0; border-radius: 10px; background: var(--surface-soft); color: var(--muted); font-size: 20px; }
     .form-body { padding: 22px 24px 8px; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 17px; }
     .field { min-width: 0; }
@@ -187,16 +217,16 @@
     .capture-status { min-height: 24px; margin-top: 10px; color: var(--muted); font-size: 13px; }
     .capture-status.success { color: var(--green); }
     .capture-status.error { color: var(--red); }
-    .ocr-dropzone { display: grid; place-items: center; min-height: 178px; padding: 22px; border: 2px dashed #cfd6e6; border-radius: 15px; background: var(--surface-soft); text-align: center; transition: .18s ease; }
+    .ocr-dropzone { display: grid; place-items: center; min-height: 178px; padding: 22px; border: 2px dashed #d5cdb8; border-radius: 15px; background: var(--surface-soft); text-align: center; transition: .18s ease; }
     .ocr-dropzone.is-dragging { border-color: var(--primary); background: var(--primary-soft); }
     .ocr-dropzone.has-image { display: block; padding: 12px; }
     .ocr-dropzone-icon { margin-bottom: 7px; color: var(--primary); font-size: 32px; }
     .ocr-dropzone-title { font-weight: 730; }
     .ocr-dropzone-help { margin-top: 4px; color: var(--muted); font-size: 13px; }
-    .ocr-preview { display: block; width: 100%; max-height: 290px; border-radius: 10px; object-fit: contain; background: #eef1f7; }
+    .ocr-preview { display: block; width: 100%; max-height: 290px; border-radius: 10px; object-fit: contain; background: var(--surface-soft); }
     .ocr-preview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
     .ocr-preview-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
-    .ocr-preview-card img { display: block; width: 100%; height: 92px; object-fit: cover; background: #eef1f7; }
+    .ocr-preview-card img { display: block; width: 100%; height: 92px; object-fit: cover; background: var(--surface-soft); }
     .ocr-preview-name { padding: 6px 8px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
     .ocr-results { display: grid; gap: 9px; max-height: 280px; margin-top: 13px; overflow: auto; }
     .ocr-result-card { padding: 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); }
@@ -205,9 +235,9 @@
     .ocr-result-check { width: 17px; height: 17px; accent-color: var(--primary); }
     .ocr-raw { margin: 8px 0 0 32px; color: var(--muted); font-size: 12px; }
     .ocr-raw summary { cursor: pointer; color: var(--primary); font-weight: 650; }
-    .ocr-raw pre { max-height: 120px; margin: 7px 0 0; padding: 9px; overflow: auto; border-radius: 8px; background: #fff; color: #566078; font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
-    .ocr-progress { height: 8px; margin-top: 13px; overflow: hidden; border-radius: 999px; background: #e9edf5; }
-    .ocr-progress-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7182f2, #5367e9); transition: width .2s ease; }
+    .ocr-raw pre { max-height: 120px; margin: 7px 0 0; padding: 9px; overflow: auto; border-radius: 8px; background: #fff; color: var(--muted); font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+    .ocr-progress { height: 8px; margin-top: 13px; overflow: hidden; border-radius: 999px; background: var(--surface-soft); }
+    .ocr-progress-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #b5852f, #9c6d1f); transition: width .2s ease; }
     .safety-summary { display: grid; gap: 10px; margin-bottom: 18px; }
     .safety-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); }
     .safety-label { font-weight: 700; }
@@ -227,11 +257,11 @@
     .job-sync-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
     .job-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 18px 22px 22px; }
     .job-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fff; transition: .18s ease; }
-    .job-card:hover { transform: translateY(-1px); border-color: #cfd6e7; box-shadow: 0 8px 20px rgba(33, 45, 75, .07); }
+    .job-card:hover { transform: translateY(-1px); border-color: #d5cdb8; box-shadow: 0 8px 20px rgba(66, 58, 38, .07); }
     .job-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .job-company { min-width: 0; font-weight: 760; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .job-city { flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; background: #edf8ff; color: #287ea9; font-size: 11px; font-weight: 700; }
-    .job-position { min-height: 42px; margin-top: 7px; color: #3c475b; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
+    .job-city { flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; background: var(--silver-soft); color: var(--silver); font-size: 11px; font-weight: 700; }
+    .job-position { min-height: 42px; margin-top: 7px; color: var(--muted); font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
     .job-extra { min-height: 19px; margin-top: 7px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
     .job-card-actions { display: flex; gap: 8px; margin-top: 13px; }
     .job-card-actions .btn { flex: 1; }
@@ -254,27 +284,85 @@
     .install-guide strong { display: block; font-size: 13px; }
     .install-guide span:last-child { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
 
-    /* 我的简历编辑器 */
-    #resume { scroll-margin-top: 72px; }
-    .resume-layout { padding: 20px 22px 22px; display: grid; gap: 18px; }
-    .resume-section-block { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
-    .resume-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
-    .resume-block-head h3 { margin: 0; font-size: 15px; }
-    .resume-block-head .btn-small { min-height: 30px; font-size: 12px; }
-    .resume-block-body { padding: 14px 16px; display: grid; gap: 10px; }
+    /* ================= 视图路由 ================= */
+    .view { display: grid; gap: 20px; align-content: start; }
+    .view.is-entering { animation: view-in .18s ease-out; }
+    @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* ================= 简历编辑器增强 ================= */
+    .resume-layout { padding: 20px 22px 22px; display: grid; gap: 16px; }
+    .resume-progress { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    .resume-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .resume-progress-title { font-weight: 720; font-size: 14px; }
+    .resume-progress-value { font-family: var(--font-mono); font-size: 13px; color: var(--gold-dark); font-variant-numeric: tabular-nums; }
+    .resume-progress-bar { height: 7px; border-radius: 999px; background: var(--surface-soft); overflow: hidden; }
+    .resume-progress-fill { height: 100%; border-radius: inherit; background: var(--gold); transition: width .3s ease; }
+    .resume-progress-hint { color: var(--muted); font-size: 12px; }
+    .resume-section-block { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+    .resume-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
+    .resume-block-head h3 { margin: 0; font-size: 15px; font-family: var(--font-display); letter-spacing: .03em; }
+    .resume-block-meta { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .resume-block-count { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .resume-block-head .btn-small { min-height: 29px; font-size: 12px; }
+    .resume-block-body { padding: 13px 15px; display: grid; gap: 10px; }
     .kv-row { display: grid; grid-template-columns: minmax(120px, 200px) minmax(0, 1fr) 34px; gap: 9px; align-items: center; }
     .kv-row .control { min-height: 38px; }
-    .kv-del-btn { width: 34px; min-height: 38px; border: 0; border-radius: 9px; background: var(--red-soft); color: var(--red); font-size: 13px; cursor: pointer; }
-    .kv-del-btn:hover { background: #ffe1e1; }
-    .exp-item-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); padding: 13px 14px; }
-    .exp-item-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
-    .exp-item-header h4 { margin: 0; font-size: 13.5px; color: var(--primary-dark); }
+    .kv-del-btn { width: 34px; min-height: 38px; border: 0; border-radius: 8px; background: var(--seal-soft); color: var(--seal); font-size: 13px; cursor: pointer; }
+    .kv-del-btn:hover { background: #f6ded4; }
+    .exp-item-card { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); padding: 12px 14px; }
+    .exp-item-card.is-collapsed .exp-fields-grid, .exp-item-card.is-collapsed .exp-card-footer { display: none; }
+    .exp-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
+    .exp-item-header h4 { margin: 0; font-size: 13.5px; color: var(--gold-dark); font-weight: 720; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+    .exp-item-header h4::before { content: "▸ "; color: var(--muted); font-size: 12px; }
+    .exp-item-card:not(.is-collapsed) .exp-item-header h4::before { content: "▾ "; }
+    .exp-card-tools { display: flex; gap: 5px; }
+    .exp-card-tools .text-button { min-height: 27px; padding: 2px 7px; font-size: 12px; }
     .exp-fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
     .exp-fields-grid .full-w { grid-column: 1 / -1; }
     .exp-fields-grid label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; font-weight: 700; }
     .exp-fields-grid .control { min-height: 38px; }
-    .resume-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-    .resume-privacy-note { margin: 0; padding: 12px 14px; border-radius: 11px; background: var(--primary-soft); color: var(--primary-dark); font-size: 13px; }
+    .exp-card-footer { margin-top: 11px; padding-top: 10px; border-top: 1px dashed var(--line); display: flex; justify-content: flex-start; }
+    .resume-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .resume-privacy-note { margin: 0; padding: 12px 14px; border-radius: 11px; background: var(--gold-soft); color: var(--gold-dark); font-size: 13px; }
+    .resume-empty-hint { padding: 26px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    /* 字段库弹层 */
+    .field-library-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-height: 320px; overflow: auto; padding: 2px; }
+    .field-library-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 40px; padding: 0 11px;
+      border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink);
+      font-size: 13px; font-weight: 620; text-align: left; transition: .14s ease;
+    }
+    .field-library-item:hover { border-color: var(--gold); background: var(--gold-soft); }
+    .field-library-item.is-added { opacity: .42; cursor: default; }
+    .field-library-item.is-added:hover { border-color: var(--line); background: var(--surface); }
+    .field-library-type { font-size: 10px; color: var(--muted); font-family: var(--font-mono); letter-spacing: .06em; }
+
+    /* ================= 盖章动效（全站唯一动效重点） ================= */
+    .stamp-overlay {
+      position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+      pointer-events: none;
+    }
+    .stamp-seal {
+      padding: 14px 34px; border: 3px solid var(--seal); border-radius: 10px; color: var(--seal);
+      background: rgba(251, 250, 246, .92); box-shadow: inset 0 0 0 2px var(--seal), 0 10px 34px rgba(199, 56, 31, .22);
+      font-family: var(--font-display); font-size: 42px; font-weight: 800; letter-spacing: .3em; text-indent: .3em;
+      transform: rotate(-3deg);
+      animation: stamp-slam .34s cubic-bezier(.2, 1.4, .4, 1) both, stamp-fade .5s ease .55s forwards;
+    }
+    @keyframes stamp-slam {
+      0% { transform: rotate(-8deg) scale(1.6); opacity: 0; }
+      55% { opacity: 1; }
+      100% { transform: rotate(-3deg) scale(1); opacity: 1; }
+    }
+    @keyframes stamp-fade { to { opacity: 0; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+      html { scroll-behavior: auto; }
+      .view.is-entering { animation: none; }
+      .stamp-seal { animation: none; }
+    }
 
     @media (max-width: 1100px) {
       .app-layout { grid-template-columns: 210px minmax(0, 1fr); }
@@ -360,14 +448,16 @@
     <aside class="app-sidebar" aria-label="主导航">
       <div class="sidebar-brand">
         <div class="brand-mark" aria-hidden="true">↗</div>
-        <div><div class="sidebar-title">秋招投递管理</div><div class="sidebar-subtitle">让每次投递都有迹可循</div></div>
+        <div><div class="sidebar-title">秋招投递管理</div><div class="sidebar-subtitle">从银十到金九 有迹可循</div></div>
       </div>
       <nav class="sidebar-nav">
-        <a class="nav-item is-active" href="#overview"><span class="nav-icon">⌂</span><span>总览</span></a>
-        <a class="nav-item" href="#jobPool"><span class="nav-icon">⌕</span><span>岗位库</span></a>
-        <a class="nav-item" href="#records"><span class="nav-icon">▤</span><span>投递记录</span></a>
-        <a class="nav-item" href="#resume"><span class="nav-icon">✎</span><span>我的简历</span></a>
-        <a class="nav-item" href="#upcoming"><span class="nav-icon">□</span><span>未来安排</span></a>
+        <div class="nav-group-label">台账</div>
+        <a class="nav-item is-active" data-route="overview" href="#/overview"><span class="nav-icon">⌂</span><span>总览</span></a>
+        <a class="nav-item" data-route="jobPool" href="#/jobPool"><span class="nav-icon">⌕</span><span>岗位库</span></a>
+        <a class="nav-item" data-route="records" href="#/records"><span class="nav-icon">▤</span><span>投递记录</span></a>
+        <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon">✎</span><span>我的简历</span></a>
+        <a class="nav-item" data-route="upcoming" href="#/upcoming"><span class="nav-icon">□</span><span>未来安排</span></a>
+        <div class="nav-group-label">工具</div>
         <button class="nav-item" id="sideScreenshotBtn" type="button"><span class="nav-icon">▣</span><span>截图识别</span></button>
         <button class="nav-item" id="sideSafetyBtn" type="button"><span class="nav-icon">◇</span><span>数据安全</span></button>
         <button class="nav-item" id="sideSyncBtn" type="button"><span class="nav-icon">☁</span><span>云同步</span></button>
@@ -378,9 +468,9 @@
     <main class="shell">
     <header class="topbar">
       <div>
-        <div class="page-kicker">DASHBOARD</div>
-        <h1>投递总览</h1>
-        <p class="subtitle">今天也别忘了跟进重要机会</p>
+        <div class="page-kicker" id="viewKicker">DASHBOARD</div>
+        <h1 id="viewTitle">投递总览</h1>
+        <p class="subtitle" id="viewSubtitle">今天也别忘了跟进重要机会</p>
       </div>
       <div class="top-actions">
         <button class="btn" id="syncBtn" type="button" title="云同步"><span class="icon">☁</span>云同步</button>
@@ -393,6 +483,7 @@
       </div>
     </header>
 
+    <div class="view" data-view="overview">
     <section class="stats" id="overview" aria-label="投递概览">
       <article class="stat-card"><div class="stat-top"><span>投递总数</span><span class="stat-icon">▤</span></div><div class="stat-number" id="totalCount">0</div></article>
       <article class="stat-card"><div class="stat-top"><span>今日投递</span><span class="stat-icon">＋</span></div><div class="stat-number" id="todayCount">0</div></article>
@@ -407,7 +498,8 @@
       </div>
       <div class="stage-grid" id="stageGrid"></div>
     </section>
-
+    </div>
+<div class="view" data-view="jobPool" hidden>
     <section class="panel job-pool" id="jobPool" aria-labelledby="jobPoolTitle">
       <div class="panel-head job-pool-head">
         <div>
@@ -426,12 +518,13 @@
       </div>
       <div class="job-list" id="jobList"></div>
     </section>
-
+    </div>
+<div class="view" data-view="resume" hidden>
     <section class="panel" id="resume" aria-labelledby="resumeTitle">
       <div class="panel-head">
         <div>
           <h2 class="panel-title" id="resumeTitle">我的简历</h2>
-          <div class="panel-caption">在此维护个人资料与多段经历；保存后自动下发给浏览器插件供网申填表，并随云同步加密上传</div>
+          <div class="panel-caption">字段名即插件填表匹配名——使用常用名（手机 / 邮箱 / 学校）匹配效果最好；保存后自动下发给浏览器插件并随云同步加密上传</div>
         </div>
         <div class="resume-actions">
           <input id="resumeFileInput" type="file" accept=".json,application/json" hidden>
@@ -442,37 +535,44 @@
         </div>
       </div>
       <div class="resume-layout">
+        <div class="resume-progress">
+          <div class="resume-progress-head">
+            <span class="resume-progress-title">简历完成度</span>
+            <span class="resume-progress-value" id="resumeProgressValue">0%</span>
+          </div>
+          <div class="resume-progress-bar"><div class="resume-progress-fill" id="resumeProgressFill" style="width: 0%"></div></div>
+          <div class="resume-progress-hint">按已填字段占全部字段的比例估算；优先信息和基本信息填满后，填表命中率最高。</div>
+        </div>
         <p class="resume-privacy-note">简历含身份证、手机等敏感信息：开启云同步并设置口令后，简历与投递记录一起加密上传（GitHub 只保存密文）；不开启云同步时仅保存在本机浏览器。</p>
 
         <div class="resume-section-block">
-          <div class="resume-block-head"><h3>优先信息（填表优先匹配）</h3><button class="btn btn-soft btn-small" data-action="add-kv" data-section="优先信息" type="button">＋ 添加字段</button></div>
+          <div class="resume-block-head"><h3>优先信息（填表优先匹配）</h3><div class="resume-block-meta"><span class="resume-block-count" data-section="优先信息">—</span><button class="btn btn-soft btn-small" data-action="open-lib" data-section="优先信息" type="button">＋ 字段库</button><button class="btn btn-small" data-action="add-kv" data-section="优先信息" type="button">自定义</button></div></div>
           <div class="resume-block-body" id="kv-优先信息"></div>
         </div>
         <div class="resume-section-block">
-          <div class="resume-block-head"><h3>基本信息</h3><button class="btn btn-soft btn-small" data-action="add-kv" data-section="基本信息" type="button">＋ 添加字段</button></div>
+          <div class="resume-block-head"><h3>基本信息</h3><div class="resume-block-meta"><span class="resume-block-count" data-section="基本信息">—</span><button class="btn btn-soft btn-small" data-action="open-lib" data-section="基本信息" type="button">＋ 字段库</button><button class="btn btn-small" data-action="add-kv" data-section="基本信息" type="button">自定义</button></div></div>
           <div class="resume-block-body" id="kv-基本信息"></div>
         </div>
         <div class="resume-section-block">
-          <div class="resume-block-head"><h3>教育经历</h3><button class="btn btn-soft btn-small" data-action="add-exp" data-section="教育经历" type="button">＋ 添加教育经历</button></div>
+          <div class="resume-block-head"><h3>教育经历</h3><div class="resume-block-meta"><span class="resume-block-count" data-section="教育经历">—</span><button class="btn btn-primary btn-small" data-action="add-exp" data-section="教育经历" type="button">＋ 添加教育经历</button><button class="btn btn-soft btn-small" data-action="open-lib" data-section="教育经历" type="button">＋ 字段库</button></div></div>
           <div class="resume-block-body" id="exp-教育经历"></div>
         </div>
         <div class="resume-section-block">
-          <div class="resume-block-head"><h3>实习经历</h3><button class="btn btn-soft btn-small" data-action="add-exp" data-section="实习经历" type="button">＋ 添加实习经历</button></div>
+          <div class="resume-block-head"><h3>实习经历</h3><div class="resume-block-meta"><span class="resume-block-count" data-section="实习经历">—</span><button class="btn btn-primary btn-small" data-action="add-exp" data-section="实习经历" type="button">＋ 添加实习经历</button><button class="btn btn-soft btn-small" data-action="open-lib" data-section="实习经历" type="button">＋ 字段库</button></div></div>
           <div class="resume-block-body" id="exp-实习经历"></div>
         </div>
         <div class="resume-section-block">
-          <div class="resume-block-head"><h3>项目经历</h3><button class="btn btn-soft btn-small" data-action="add-exp" data-section="项目经历" type="button">＋ 添加项目经历</button></div>
+          <div class="resume-block-head"><h3>项目经历</h3><div class="resume-block-meta"><span class="resume-block-count" data-section="项目经历">—</span><button class="btn btn-primary btn-small" data-action="add-exp" data-section="项目经历" type="button">＋ 添加项目经历</button><button class="btn btn-soft btn-small" data-action="open-lib" data-section="项目经历" type="button">＋ 字段库</button></div></div>
           <div class="resume-block-body" id="exp-项目经历"></div>
         </div>
         <div class="resume-section-block">
-          <div class="resume-block-head"><h3>竞赛与技能</h3><button class="btn btn-soft btn-small" data-action="add-kv" data-section="竞赛与技能" type="button">＋ 添加字段</button></div>
+          <div class="resume-block-head"><h3>竞赛与技能</h3><div class="resume-block-meta"><span class="resume-block-count" data-section="竞赛与技能">—</span><button class="btn btn-soft btn-small" data-action="open-lib" data-section="竞赛与技能" type="button">＋ 字段库</button><button class="btn btn-small" data-action="add-kv" data-section="竞赛与技能" type="button">自定义</button></div></div>
           <div class="resume-block-body" id="kv-竞赛与技能"></div>
         </div>
       </div>
     </section>
-
-    <div class="dashboard">
-      <section class="main-column">
+    </div>
+<div class="view" data-view="records" hidden>
         <div class="panel" id="records">
           <div class="panel-head">
             <div><h2 class="panel-title">投递记录</h2><div class="panel-caption" id="resultCaption">共 0 条记录</div></div>
@@ -489,14 +589,15 @@
           </div>
           <div class="table-scroll">
             <table>
-              <thead><tr><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
+              <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
               <tbody id="recordBody"></tbody>
             </table>
           </div>
           <div class="empty" id="emptyState" hidden><div class="empty-icon">⌕</div><div>没有找到符合条件的记录</div></div>
         </div>
       </section>
-
+    </div>
+<div class="view" data-view="upcoming" hidden>
       <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
         <div class="panel-head"><div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">接下来最需要关注的 4 项</div></div></div>
         <div class="schedule-list" id="upcomingList"></div>
@@ -639,6 +740,19 @@
     <div class="modal-actions"><button class="btn btn-primary" id="doneInstallDialog" type="button">知道了</button></div>
   </dialog>
 
+  <dialog id="fieldLibraryDialog">
+    <div class="modal-head"><h2 id="fieldLibraryTitle">添加字段</h2><button class="close-btn" id="closeFieldLibraryDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">点击字段即添加到当前区块；已添加的字段会置灰。找不到想要的？用「自定义字段」自由命名。</p>
+      <div class="field-library-grid" id="fieldLibraryGrid"></div>
+      <div class="capture-status" id="fieldLibraryStatus"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="fieldLibraryCustomBtn" type="button">自定义字段</button>
+      <button class="btn btn-primary" id="doneFieldLibraryDialog" type="button">完成</button>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="./ocr/tesseract.min.js"></script>
@@ -670,7 +784,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '3.4.0';
+      const APP_VERSION = '3.5.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1311,6 +1425,106 @@
         return kvEmpty && expEmpty;
       }
 
+      // ================= 字段模板库：覆盖网申高频字段（名称即插件填表匹配名） =================
+      const FIELD_LIBRARY = {
+        '优先信息': [
+          ['手机', 'text'], ['邮箱', 'text'], ['身份证', 'text'], ['证件类型', 'text'], ['微信号', 'text'],
+          ['现居地', 'text'], ['求职意向', 'text'], ['期望薪资', 'text'], ['到岗时间', 'text'], ['政治面貌', 'text']
+        ],
+        '基本信息': [
+          ['姓名', 'text'], ['性别', 'text'], ['出生日期', 'date'], ['民族', 'text'], ['籍贯', 'text'],
+          ['婚姻状况', 'text'], ['身高', 'text'], ['体重', 'text'], ['健康状况', 'text'], ['邮编', 'text'],
+          ['通讯地址', 'text'], ['紧急联系人', 'text'], ['紧急联系电话', 'text'], ['自我评价', 'longtext']
+        ],
+        '教育经历': [
+          ['学校', 'text'], ['学院', 'text'], ['专业', 'text'], ['学历', 'text'], ['学位', 'text'],
+          ['开始时间', 'date'], ['结束时间', 'date'], ['GPA', 'text'], ['专业排名', 'text'], ['导师', 'text'],
+          ['核心课程', 'longtext'], ['荣誉奖项', 'longtext'], ['辅修专业', 'text'], ['培养方式', 'text']
+        ],
+        '实习经历': [
+          ['单位', 'text'], ['部门', 'text'], ['岗位', 'text'], ['业务条线', 'text'], ['直属导师', 'text'],
+          ['开始', 'date'], ['结束', 'date'], ['是否转正', 'text'], ['证明人', 'text'],
+          ['岗位职责', 'longtext'], ['量化成果', 'longtext'], ['技术栈', 'text']
+        ],
+        '项目经历': [
+          ['项目名称', 'text'], ['项目背景', 'longtext'], ['担任角色', 'text'], ['开始', 'date'], ['结束', 'date'],
+          ['主要工作', 'longtext'], ['难点与攻克', 'longtext'], ['量化成果', 'longtext'],
+          ['协作规模', 'text'], ['技术栈', 'text'], ['项目链接', 'url']
+        ],
+        '竞赛与技能': [
+          ['英语水平', 'text'], ['计算机等级', 'text'], ['专业技能', 'longtext'], ['学术竞赛', 'longtext'],
+          ['论文发表', 'longtext'], ['专利', 'text'], ['兴趣特长', 'text']
+        ]
+      };
+
+      // 字段类型不入库，渲染时按字段名推断（保存后仍是纯 key/value，插件 flatmap 零影响）
+      function inferFieldType(name) {
+        if (/时间|日期/.test(name)) return 'date';
+        if (/链接|网址/.test(name)) return 'url';
+        if (/职责|描述|评价|成果|工作|背景|课程|奖项|竞赛|论文/.test(name)) return 'longtext';
+        return 'text';
+      }
+
+      function expFieldHtml(key, value, presetType) {
+        const type = presetType || inferFieldType(key);
+        const val = escapeHtml(String(value ?? ''));
+        const keyAttr = escapeHtml(key);
+        if (type === 'longtext') {
+          return `<div class="full-w"><label>${keyAttr}</label><textarea class="control exp-field" data-key="${keyAttr}" rows="3" placeholder="填写内容...">${val}</textarea></div>`;
+        }
+        if (type === 'date') {
+          return `<div><label>${keyAttr}</label><input type="date" class="control exp-field" data-key="${keyAttr}" value="${val}"></div>`;
+        }
+        if (type === 'url') {
+          return `<div class="full-w"><label>${keyAttr}</label><input type="url" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="https://..."></div>`;
+        }
+        return `<div><label>${keyAttr}</label><input type="text" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="填写内容..."></div>`;
+      }
+
+      function expSummary(item) {
+        return escapeHtml(item['学校'] || item['单位'] || item['项目名称'] || item['_rowName'] || '经历');
+      }
+
+      function renumberExpCards(container) {
+        container.querySelectorAll('.exp-item-card').forEach((card, idx) => {
+          const getValue = key => card.querySelector(`.exp-field[data-key="${CSS.escape(key)}"]`)?.value || '';
+          const tag = getValue('_rowName') || '经历';
+          const summary = getValue('学校') || getValue('单位') || getValue('项目名称') || tag;
+          const h4 = card.querySelector('.exp-item-header h4');
+          if (h4) h4.textContent = `#${idx + 1} ${tag} · ${summary}`;
+        });
+      }
+
+      function countSectionFields(sec) {
+        if (RESUME_KV_SECTIONS.includes(sec)) {
+          const entries = Object.entries(resume[sec] || {});
+          return { filled: entries.filter(([, v]) => String(v || '').trim()).length, total: entries.length };
+        }
+        const list = Array.isArray(resume[sec]) ? resume[sec] : [];
+        let filled = 0, total = 0;
+        list.forEach(item => Object.entries(item).forEach(([k, v]) => {
+          if (k === '_rowName') return;
+          total += 1;
+          if (String(v || '').trim()) filled += 1;
+        }));
+        return { filled, total };
+      }
+
+      function updateResumeCompletion() {
+        let filled = 0, total = 0;
+        [...RESUME_KV_SECTIONS, ...RESUME_EXP_SECTIONS].forEach(sec => {
+          const stat = countSectionFields(sec);
+          filled += stat.filled; total += stat.total;
+          const countEl = document.querySelector(`.resume-block-count[data-section="${sec}"]`);
+          if (countEl) countEl.textContent = stat.total ? `${stat.filled}/${stat.total}` : '—';
+        });
+        const pct = total ? Math.round((filled / total) * 100) : 0;
+        const valueEl = $('#resumeProgressValue');
+        const fillEl = $('#resumeProgressFill');
+        if (valueEl) valueEl.textContent = `${pct}%`;
+        if (fillEl) fillEl.style.width = `${pct}%`;
+      }
+
       function renderResumeEditor() {
         RESUME_KV_SECTIONS.forEach(sec => {
           const container = document.getElementById(`kv-${sec}`);
@@ -1322,84 +1536,143 @@
               <input type="text" class="control kv-val" value="${escapeHtml(v)}" placeholder="内容值">
               <button type="button" class="kv-del-btn" data-action="del-kv" title="删除字段">✕</button>
             </div>
-          `).join('');
+          `).join('') || '<div class="resume-empty-hint">从字段库添加常用字段，或直接自定义输入</div>';
         });
         RESUME_EXP_SECTIONS.forEach(sec => {
           const container = document.getElementById(`exp-${sec}`);
           if (!container) return;
           const list = Array.isArray(resume[sec]) ? resume[sec] : [];
           container.innerHTML = list.map((item, idx) => `
-            <div class="exp-item-card" data-section="${sec}" data-index="${idx}">
+            <div class="exp-item-card" data-section="${sec}">
               <div class="exp-item-header">
-                <h4>#${idx + 1} ${escapeHtml(item._rowName || '经历')}</h4>
-                <button type="button" class="btn btn-danger btn-small" data-action="del-exp">删除此条</button>
+                <h4 data-action="toggle-exp" title="点击折叠 / 展开">#${idx + 1} ${escapeHtml(item._rowName || '经历')} · ${expSummary(item)}</h4>
+                <div class="exp-card-tools">
+                  <button type="button" class="text-button" data-action="move-exp-up" title="上移">上移</button>
+                  <button type="button" class="text-button" data-action="move-exp-down" title="下移">下移</button>
+                  <button type="button" class="text-button" data-action="dup-exp" title="复制此段">复制</button>
+                  <button type="button" class="text-button danger" data-action="del-exp">删除</button>
+                </div>
               </div>
               <div class="exp-fields-grid">
                 <div>
                   <label>经历标签</label>
                   <input type="text" class="control exp-field" data-key="_rowName" value="${escapeHtml(item._rowName || '')}" placeholder="例如：硕士 / 腾讯">
                 </div>
-                ${Object.entries(item).filter(([k]) => k !== '_rowName').map(([k, v]) => {
-                  const isLongText = ['主要工作', '岗位职责', '自我评价', '项目职责'].includes(k);
-                  return `
-                    <div class="${isLongText ? 'full-w' : ''}">
-                      <label>${escapeHtml(k)}</label>
-                      ${isLongText
-                        ? `<textarea class="control exp-field" data-key="${escapeHtml(k)}" rows="3">${escapeHtml(v)}</textarea>`
-                        : `<input type="text" class="control exp-field" data-key="${escapeHtml(k)}" value="${escapeHtml(v)}">`
-                      }
-                    </div>
-                  `;
-                }).join('')}
+                ${Object.entries(item).filter(([k]) => k !== '_rowName').map(([k, v]) => expFieldHtml(k, v)).join('')}
+              </div>
+              <div class="exp-card-footer">
+                <button type="button" class="btn btn-soft btn-small" data-action="open-lib" data-section="${sec}" data-exp-card>＋ 添加字段（本段）</button>
               </div>
             </div>
-          `).join('');
+          `).join('') || '<div class="resume-empty-hint">还没有经历，点上方「＋ 添加经历」开始</div>';
         });
+        updateResumeCompletion();
       }
 
-      function addKvField(sec) {
+      function addKvField(sec, presetKey) {
         const container = document.getElementById(`kv-${sec}`);
         if (!container) return;
+        const hint = container.querySelector('.resume-empty-hint');
+        if (hint) hint.remove();
         const row = document.createElement('div');
         row.className = 'kv-row';
         row.setAttribute('data-section', sec);
         row.innerHTML = `
-          <input type="text" class="control kv-key" placeholder="新字段名称">
+          <input type="text" class="control kv-key" value="${escapeHtml(presetKey || '')}" placeholder="新字段名称">
           <input type="text" class="control kv-val" placeholder="内容值">
           <button type="button" class="kv-del-btn" data-action="del-kv" title="删除字段">✕</button>
         `;
         container.appendChild(row);
-        row.querySelector('.kv-key')?.focus();
+        const keyInput = row.querySelector('.kv-key');
+        if (!presetKey) keyInput?.focus();
+        else row.querySelector('.kv-val')?.focus();
       }
 
       function addExperienceRow(sec) {
         const container = document.getElementById(`exp-${sec}`);
         if (!container) return;
+        const hint = container.querySelector('.resume-empty-hint');
+        if (hint) hint.remove();
         const presets = {
-          '教育经历': [['_rowName', '教育经历'], ['学校', ''], ['学院', ''], ['专业', ''], ['学历', ''], ['开始时间', ''], ['结束时间', '']],
-          '实习经历': [['_rowName', '实习经历'], ['单位', ''], ['部门', ''], ['岗位', ''], ['开始', ''], ['结束', ''], ['岗位职责', '长文本']],
-          '项目经历': [['_rowName', '项目经历'], ['项目名称', ''], ['角色', ''], ['开始', ''], ['结束', ''], ['主要工作', '长文本']]
+          '教育经历': [['学校', 'text'], ['学院', 'text'], ['专业', 'text'], ['学历', 'text'], ['开始时间', 'date'], ['结束时间', 'date']],
+          '实习经历': [['_rowName', 'text'], ['单位', 'text'], ['岗位', 'text'], ['开始', 'date'], ['结束', 'date'], ['岗位职责', 'longtext']],
+          '项目经历': [['_rowName', 'text'], ['项目名称', 'text'], ['担任角色', 'text'], ['开始', 'date'], ['结束', 'date'], ['主要工作', 'longtext']]
         }[sec] || [];
+        const rowNamePreset = sec === '教育经历' ? '教育经历' : '';
         const card = document.createElement('div');
         card.className = 'exp-item-card';
         card.setAttribute('data-section', sec);
         const count = container.querySelectorAll('.exp-item-card').length + 1;
         card.innerHTML = `
           <div class="exp-item-header">
-            <h4>#${count} 新增经历</h4>
-            <button type="button" class="btn btn-danger btn-small" data-action="del-exp">删除此条</button>
+            <h4 data-action="toggle-exp" title="点击折叠 / 展开">#${count} 新增${sec.replace('经历', '')}经历</h4>
+            <div class="exp-card-tools">
+              <button type="button" class="text-button" data-action="move-exp-up" title="上移">上移</button>
+              <button type="button" class="text-button" data-action="move-exp-down" title="下移">下移</button>
+              <button type="button" class="text-button" data-action="dup-exp" title="复制此段">复制</button>
+              <button type="button" class="text-button danger" data-action="del-exp">删除</button>
+            </div>
           </div>
           <div class="exp-fields-grid">
-            ${presets.map(([k, hint]) => k === '_rowName'
-              ? `<div><label>经历标签</label><input type="text" class="control exp-field" data-key="_rowName" value="${escapeHtml(hint || '')}" placeholder="例如：硕士 / 腾讯"></div>`
-              : hint === '长文本'
-                ? `<div class="full-w"><label>${escapeHtml(k)}</label><textarea class="control exp-field" data-key="${escapeHtml(k)}" rows="3" placeholder="详细描述..."></textarea></div>`
-                : `<div><label>${escapeHtml(k)}</label><input type="text" class="control exp-field" data-key="${escapeHtml(k)}" placeholder="填写内容..."></div>`
-            ).join('')}
+            <div>
+              <label>经历标签</label>
+              <input type="text" class="control exp-field" data-key="_rowName" value="${rowNamePreset}" placeholder="例如：硕士 / 腾讯">
+            </div>
+            ${presets.map(([k, t]) => expFieldHtml(k, '', t)).join('')}
+          </div>
+          <div class="exp-card-footer">
+            <button type="button" class="btn btn-soft btn-small" data-action="open-lib" data-section="${sec}" data-exp-card>＋ 添加字段（本段）</button>
           </div>
         `;
         container.appendChild(card);
         card.querySelector('.exp-field')?.focus();
+      }
+
+      // ================= 字段库弹层 =================
+      let fieldLibraryContext = null; // { section, expCard? }
+
+      function openFieldLibrary(section, expCard) {
+        fieldLibraryContext = { section, expCard: expCard || null };
+        const title = $('#fieldLibraryTitle');
+        if (title) title.textContent = `添加字段 · ${section}`;
+        renderFieldLibrary();
+        $('#fieldLibraryDialog').showModal();
+      }
+
+      function renderFieldLibrary() {
+        const grid = $('#fieldLibraryGrid');
+        if (!fieldLibraryContext || !grid) return;
+        const { section, expCard } = fieldLibraryContext;
+        const existing = new Set();
+        if (expCard) {
+          expCard.querySelectorAll('.exp-field').forEach(f => existing.add(f.getAttribute('data-key')));
+        } else {
+          document.querySelectorAll(`#kv-${section} .kv-key`).forEach(input => {
+            if (input.value.trim()) existing.add(input.value.trim());
+          });
+        }
+        const items = FIELD_LIBRARY[section] || [];
+        grid.innerHTML = items.map(([name, type]) => `
+          <button type="button" class="field-library-item ${existing.has(name) ? 'is-added' : ''}" data-field="${escapeHtml(name)}" ${existing.has(name) ? 'disabled' : ''}>
+            <span>${escapeHtml(name)}</span><span class="field-library-type">${type}</span>
+          </button>
+        `).join('') || '<div class="resume-empty-hint">该区块暂无预设，请使用自定义字段</div>';
+        const status = $('#fieldLibraryStatus');
+        if (status) status.textContent = expCard ? '字段将添加到当前这段经历' : `字段将添加到「${section}」区块`;
+      }
+
+      function applyFieldFromLibrary(name, type) {
+        if (!fieldLibraryContext) return;
+        const { section, expCard } = fieldLibraryContext;
+        if (expCard) {
+          expCard.classList.remove('is-collapsed');
+          const gridEl = expCard.querySelector('.exp-fields-grid');
+          gridEl.insertAdjacentHTML('beforeend', expFieldHtml(name, '', type));
+          expCard.querySelector(`.exp-field[data-key="${CSS.escape(name)}"]`)?.focus();
+        } else {
+          addKvField(section, name);
+        }
+        renderFieldLibrary();
       }
 
       function collectResumeFromDom() {
@@ -1833,6 +2106,11 @@
       function renderTable() {
         const visible = getVisibleRecords();
         els.caption.textContent = visible.length === records.length ? `共 ${records.length} 条记录` : `显示 ${visible.length} 条，共 ${records.length} 条`;
+        // 台账编号：按 updatedAt 从新到旧稳定编号（编辑不会重排，新增排最前）
+        const recordNo = new Map(
+          [...records].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || String(a.id).localeCompare(String(b.id)))
+            .map((record, index) => [record.id, String(index + 1).padStart(4, '0')])
+        );
         els.body.innerHTML = visible.map(record => {
           const scheduleDate = parseLocal(record.scheduleAt);
           const overdue = scheduleDate && scheduleDate < new Date() && !['Offer', '已结束'].includes(record.stage);
@@ -1840,7 +2118,8 @@
           const companyHtml = record.applicationUrl
             ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
             : escapeHtml(record.company);
-          return `<tr>
+          return `<tr data-is-offer="${record.stage === 'Offer'}">
+            <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
             <td data-label="公司 / 岗位"><div class="company">${companyHtml}</div><div class="position">${escapeHtml(record.position)}</div></td>
             <td data-label="城市">${escapeHtml(record.city)}</td>
             <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
@@ -1875,6 +2154,60 @@
             <div><div class="side-company">${escapeHtml(record.company)} · ${escapeHtml(record.position)}</div><div class="side-detail">${escapeHtml(record.recentSchedule || record.nextAction || '待处理安排')}</div><div class="side-time">${escapeHtml(formatDateTime(record.scheduleAt))}</div></div>
           </article>`;
         }).join('');
+      }
+
+      // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
+      const VIEW_META = {
+        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '从银十到金九，看每一次投递落在哪一步' },
+        jobPool: { kicker: 'JOB POOL', title: '岗位库', subtitle: '从每日更新的招聘文档发现岗位，确认后再加入台账' },
+        records: { kicker: 'LEDGER', title: '投递台账', subtitle: '每一条投递一行记录，推进阶段即盖章' },
+        resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
+        upcoming: { kicker: 'SCHEDULE', title: '未来安排', subtitle: '接下来最需要关注的四件事' }
+      };
+      const ROUTE_ALIASES = { overview: 'overview', jobPool: 'jobPool', records: 'records', resume: 'resume', upcoming: 'upcoming', jobpool: 'jobPool' };
+
+      function parseRoute() {
+        // 兼容 #/view 路由形式与旧 #view 锚点形式（井号后斜杠可选）
+        const raw = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
+        return ROUTE_ALIASES[raw] || 'overview';
+      }
+
+      function switchView(name) {
+        const route = VIEW_META[name] ? name : 'overview';
+        document.querySelectorAll('.view[data-view]').forEach(view => {
+          const active = view.dataset.view === route;
+          view.hidden = !active;
+          view.classList.remove('is-entering');
+          if (active) {
+            void view.offsetWidth; // 重置动画
+            view.classList.add('is-entering');
+          }
+        });
+        document.querySelectorAll('.nav-item[data-route]').forEach(item => {
+          item.classList.toggle('is-active', item.dataset.route === route);
+        });
+        const meta = VIEW_META[route];
+        if (meta) {
+          const kicker = $('#viewKicker'), title = $('#viewTitle'), subtitle = $('#viewSubtitle');
+          if (kicker) kicker.textContent = meta.kicker;
+          if (title) title.textContent = meta.title;
+          if (subtitle) subtitle.textContent = meta.subtitle;
+          document.title = `${meta.title} · 秋招投递管理`;
+        }
+        if (location.hash !== `#/${route}`) {
+          history.replaceState(null, '', `#/${route}`);
+        }
+        window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+      }
+
+      function initializeRouter() {
+        // 旧锚点（#records 等，含插件桥接 location.hash 赋值场景）重定向到路由形式
+        const legacy = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
+        if (legacy && !location.hash.startsWith('#/') && ROUTE_ALIASES[legacy]) {
+          history.replaceState(null, '', `#/${ROUTE_ALIASES[legacy]}`);
+        }
+        window.addEventListener('hashchange', () => switchView(parseRoute()));
+        switchView(parseRoute());
       }
 
       function populateSelects() {
@@ -1967,7 +2300,7 @@
         }
         saveJobs(parsed, `已导入 ${parsed.length} 条岗位`);
         closeJobSyncDialog();
-        location.hash = '#jobPool';
+        location.hash = '#/jobPool';
       }
 
       function closeCaptureDialog() {
@@ -2048,7 +2381,7 @@
           }
           saveJobs(parsed, `同步完成：识别到 ${parsed.length} 条岗位`);
           closeJobSyncDialog();
-          location.hash = '#jobPool';
+          location.hash = '#/jobPool';
           return;
         }
         if (event.data.type === 'SYNC_JOBS_ERROR') {
@@ -2183,7 +2516,7 @@
         saveJobs(selected);
         const added = jobs.length - before;
         closeScreenshotDialog();
-        location.hash = '#jobPool';
+        location.hash = '#/jobPool';
         showToast(`已加入岗位库 ${added} 条${selected.length > added ? `，自动合并重复 ${selected.length - added} 条` : ''}`);
       }
 
@@ -2457,8 +2790,9 @@
           const next = STAGES[Math.min(current + 1, STAGES.length - 1)];
           record.stage = next;
           record.updatedAt = Date.now();
-          saveRecords(`已推进到「${next}」并自动保存`);
+          saveRecords(next === 'Offer' ? '已盖章：Offer' : `已推进到「${next}」并自动保存`);
           render();
+          if (next === 'Offer') playOfferStamp();
         }
       }
 
@@ -2466,6 +2800,15 @@
         const date = localDateInput(new Date());
         downloadPayload(createEnvelope(records), `秋招投递记录-${date}.json`);
         showToast(`已导出 ${records.length} 条记录，原数据未改变`);
+      }
+
+      // 盖章动效：Offer 到手，印章砸落（prefers-reduced-motion 下由 CSS 直接跳过）
+      function playOfferStamp() {
+        const overlay = document.createElement('div');
+        overlay.className = 'stamp-overlay';
+        overlay.innerHTML = '<div class="stamp-seal">OFFER</div>';
+        document.body.appendChild(overlay);
+        setTimeout(() => overlay.remove(), 1200);
       }
 
       function showToast(message) {
@@ -2540,39 +2883,85 @@
         }
       }
 
+      initializeRouter();
       populateSelects();
       render();
       renderResumeEditor();
 
       // ================= 我的简历：事件绑定（事件委托处理动态按钮） =================
       document.addEventListener('click', (event) => {
-        const btn = event.target.closest('button[data-action]');
-        if (!btn) return;
-        const action = btn.getAttribute('data-action');
-        const sec = btn.getAttribute('data-section');
+        const target = event.target.closest('[data-action]');
+        if (!target) return;
+        const action = target.getAttribute('data-action');
+        const sec = target.getAttribute('data-section') || target.closest('.exp-item-card')?.getAttribute('data-section');
+        const card = target.closest('.exp-item-card');
         if (action === 'add-kv') {
           event.preventDefault();
           addKvField(sec);
         } else if (action === 'add-exp') {
           event.preventDefault();
           addExperienceRow(sec);
+        } else if (action === 'open-lib') {
+          event.preventDefault();
+          openFieldLibrary(sec, card);
+        } else if (action === 'toggle-exp') {
+          card?.classList.toggle('is-collapsed');
+        } else if (action === 'move-exp-up' || action === 'move-exp-down') {
+          event.preventDefault();
+          if (!card?.parentElement) return;
+          const siblings = [...card.parentElement.querySelectorAll('.exp-item-card')];
+          const at = siblings.indexOf(card);
+          const swapWith = action === 'move-exp-up' ? at - 1 : at + 1;
+          if (swapWith < 0 || swapWith >= siblings.length) return;
+          card.parentElement.insertBefore(card, action === 'move-exp-up' ? siblings[swapWith] : siblings[swapWith].nextSibling);
+          renumberExpCards(card.parentElement);
+        } else if (action === 'dup-exp') {
+          event.preventDefault();
+          if (!card?.parentElement) return;
+          const clone = card.cloneNode(true);
+          clone.classList.remove('is-collapsed');
+          card.parentElement.insertBefore(clone, card.nextSibling);
+          renumberExpCards(card.parentElement);
+          showToast('已复制此段经历，记得修改内容后保存');
         } else if (action === 'del-kv') {
           event.preventDefault();
-          btn.closest('.kv-row')?.remove();
+          const row = target.closest('.kv-row');
+          const container = row?.parentElement;
+          row?.remove();
+          if (container && !container.querySelector('.kv-row')) {
+            container.innerHTML = '<div class="resume-empty-hint">从字段库添加常用字段，或直接自定义输入</div>';
+          }
         } else if (action === 'del-exp') {
           event.preventDefault();
-          const card = btn.closest('.exp-item-card');
           const parent = card?.parentElement;
           card?.remove();
           if (parent) {
-            parent.querySelectorAll('.exp-item-card').forEach((c, idx) => {
-              const h4 = c.querySelector('.exp-item-header h4');
-              const tag = c.querySelector('.exp-field[data-key="_rowName"]')?.value || '经历';
-              if (h4) h4.textContent = `#${idx + 1} ${tag}`;
-            });
+            renumberExpCards(parent);
+            if (!parent.querySelector('.exp-item-card')) {
+              parent.innerHTML = '<div class="resume-empty-hint">还没有经历，点上方「＋ 添加经历」开始</div>';
+            }
           }
         }
       });
+      // 字段库弹层
+      $('#fieldLibraryGrid').addEventListener('click', (event) => {
+        const item = event.target.closest('.field-library-item[data-field]');
+        if (!item || item.classList.contains('is-added')) return;
+        const name = item.getAttribute('data-field');
+        const type = item.querySelector('.field-library-type')?.textContent || '';
+        applyFieldFromLibrary(name, type);
+      });
+      $('#fieldLibraryCustomBtn').addEventListener('click', () => {
+        if (!fieldLibraryContext) return;
+        const name = prompt('自定义字段名称（保存后即成为插件填表匹配名）：');
+        if (!name || !name.trim()) return;
+        const trimmed = name.trim();
+        $('#fieldLibraryDialog').close();
+        applyFieldFromLibrary(trimmed, inferFieldType(trimmed));
+      });
+      $('#closeFieldLibraryDialog').addEventListener('click', () => $('#fieldLibraryDialog').close());
+      $('#doneFieldLibraryDialog').addEventListener('click', () => $('#fieldLibraryDialog').close());
+      $('#fieldLibraryDialog').addEventListener('click', event => { if (event.target === $('#fieldLibraryDialog')) $('#fieldLibraryDialog').close(); });
       $('#saveResumeBtn').addEventListener('click', collectAndSaveResume);
       $('#resumeExportBtn').addEventListener('click', () => {
         downloadPayload({ appVersion: APP_VERSION, exportedAt: new Date().toISOString(), resume: JSON.parse(JSON.stringify(resume)) }, `我的简历-${localDateInput(new Date())}.json`);
@@ -2624,12 +3013,7 @@
       $('#safetyBtn').addEventListener('click', openSafetyDialog);
       $('#sideSafetyBtn').addEventListener('click', openSafetyDialog);
       $('#exportBtn').addEventListener('click', exportData);
-      document.querySelectorAll('.nav-item[href]').forEach(link => {
-        link.addEventListener('click', () => {
-          document.querySelectorAll('.nav-item[href]').forEach(item => item.classList.remove('is-active'));
-          link.classList.add('is-active');
-        });
-      });
+      // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
       $('#closeDialog').addEventListener('click', closeDialog);
       $('#cancelDialog').addEventListener('click', closeDialog);
       els.form.addEventListener('submit', submitForm);
