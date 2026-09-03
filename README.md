@@ -4,13 +4,13 @@
 
 ## 普通用户请从这里开始
 
-**[打开简洁下载中心](https://songxue0614-lgtm.github.io/autumn-recruitment-tracker/download.html)**
+**[打开简洁下载中心](https://zixuanyan.github.io/autumn-recruitment-tracker/download.html)**
 
 下载中心只有三个选择：在线使用、下载电脑离线版、下载浏览器插件。普通使用者不需要理解仓库里的技术文件。
 
 ## 立即使用
 
-**在线网页版：** [打开秋招投递管理器](https://songxue0614-lgtm.github.io/autumn-recruitment-tracker/)
+**在线网页版：** [打开秋招投递管理器](https://zixuanyan.github.io/autumn-recruitment-tracker/)
 
 - 电脑：推荐使用 Chrome、Edge 或 Safari 直接打开。
 - iPhone：使用 Safari 打开后，点击“分享” → “添加到主屏幕”。

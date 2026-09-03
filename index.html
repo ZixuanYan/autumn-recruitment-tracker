@@ -799,6 +799,8 @@
     (() => {
       'use strict';
 
+      // 单一事实源提醒：STAGES 与下方 DEFAULT_RESUME 是与扩展端 autumn-job-assistant-tracker
+      // （common/constants.js、common/default-resume.js）的跨端约定，两处必须保持一致，改一处需同步另一处。
       const STAGES = ['待投递', '已投递', '笔试', '一面', '二面', 'HR面', 'Offer', '已结束'];
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
@@ -845,6 +847,7 @@
       let editingId = null;
       let toastTimer;
       let bridgeReady = false;
+      let hasLegacyCapturePlugin = false; // 仅旧版 AUTUMN_JOB_CAPTURE 插件支持“识别投递网址 / 一键同步腾讯文档”
       let bridgeCheckTimer;
       let captureTimer;
       let jobSyncTimer;
@@ -861,6 +864,7 @@
       let tombstones = loadTombstones();
       let syncBusy = false;
       let syncPushTimer = null;
+      let cachedSnapshotCount = null; // 快照计数缓存，避免每次渲染都全量读 IndexedDB
 
       function dateOffset(days, hour = 10, minute = 0) {
         const d = new Date();
@@ -1825,6 +1829,17 @@
         });
       }
 
+      // 快照计数缓存刷新：仅在首次渲染或无法确定时全量读取，平时由 saveBrowserSnapshot 写入时维护
+      async function refreshSnapshotCount() {
+        try {
+          const snapshots = await dbGetAll('snapshots');
+          cachedSnapshotCount = Math.min(snapshots.length, 25);
+        } catch (_) {
+          cachedSnapshotCount = null;
+        }
+        return cachedSnapshotCount;
+      }
+
       async function saveBrowserSnapshot(envelope) {
         const previous = await dbGet('state', 'latest');
         await dbPut('state', envelope, 'latest');
@@ -1839,6 +1854,7 @@
         });
         const oldKeys = keys.sort().reverse().slice(25);
         await Promise.all(oldKeys.map(key => dbDelete('snapshots', key)));
+        cachedSnapshotCount = Math.min(keys.length, 25); // 写入后即时更新缓存
       }
 
       async function filePermission(handle, request = false) {
@@ -1889,13 +1905,13 @@
         const snapshotState = $('#snapshotState');
         const fileState = $('#fileBackupState');
         if (!snapshotState || !fileState) return;
-        try {
-          const snapshots = await dbGetAll('snapshots');
-          snapshotState.textContent = `${Math.min(snapshots.length, 25)} 个快照`;
-          snapshotState.className = 'safety-state';
-        } catch (_) {
+        const count = cachedSnapshotCount == null ? await refreshSnapshotCount() : cachedSnapshotCount;
+        if (count == null) {
           snapshotState.textContent = '当前不可用';
           snapshotState.className = 'safety-state warning';
+        } else {
+          snapshotState.textContent = `${count} 个快照`;
+          snapshotState.className = 'safety-state';
         }
         if (!backupFileHandle) {
           fileState.textContent = '尚未设置';
@@ -2051,17 +2067,22 @@
           const matchesText = !keyword || `${record.company} ${record.position}`.toLocaleLowerCase('zh-CN').includes(keyword);
           return matchesText && (stage === 'all' || record.stage === stage);
         });
-        const farFuture = Number.MAX_SAFE_INTEGER;
         filtered.sort((a, b) => {
           if (els.sort.value === 'applied-desc') return (b.applicationDate || '').localeCompare(a.applicationDate || '');
           if (els.sort.value === 'updated-desc') return b.updatedAt - a.updatedAt;
           if (els.sort.value === 'company') return a.company.localeCompare(b.company, 'zh-CN');
-          const aTime = parseLocal(a.scheduleAt)?.getTime() ?? farFuture;
-          const bTime = parseLocal(b.scheduleAt)?.getTime() ?? farFuture;
+          // 默认「最近安排优先」：分层比较，避免用 Number.MAX_SAFE_INTEGER 相加超过 2^53 丢精度
+          // tier 0 = 未来安排（按时间升序，最近的最靠前）；tier 1 = 无安排（居中）；tier 2 = 已过期（置底）
           const now = Date.now();
-          const aRank = aTime >= now ? aTime : farFuture - 2 + aTime;
-          const bRank = bTime >= now ? bTime : farFuture - 2 + bTime;
-          return aRank - bRank;
+          const rankOf = (rec) => {
+            const t = parseLocal(rec.scheduleAt)?.getTime();
+            if (t == null) return { tier: 1, time: 0 };
+            return t >= now ? { tier: 0, time: t } : { tier: 2, time: t };
+          };
+          const ra = rankOf(a), rb = rankOf(b);
+          if (ra.tier !== rb.tier) return ra.tier - rb.tier;
+          if (ra.tier === 1) return 0;
+          return ra.time - rb.time;
         });
         return filtered;
       }
@@ -2222,13 +2243,13 @@
         }
         const safetyBadge = $('#toolSafetyBadge');
         if (safetyBadge) {
-          try {
-            const snapshots = await dbGetAll('snapshots');
-            safetyBadge.textContent = `${Math.min(snapshots.length, 25)} 个快照`;
-            safetyBadge.className = snapshots.length ? 'tool-status ok' : 'tool-status';
-          } catch (_) {
+          const count = cachedSnapshotCount == null ? await refreshSnapshotCount() : cachedSnapshotCount;
+          if (count == null) {
             safetyBadge.textContent = '当前不可用';
             safetyBadge.className = 'tool-status warning';
+          } else {
+            safetyBadge.textContent = `${count} 个快照`;
+            safetyBadge.className = count ? 'tool-status ok' : 'tool-status';
           }
         }
       }
@@ -2297,6 +2318,13 @@
         requestAnimationFrame(() => $('#company').focus());
       }
 
+      // 旧版“一键收录插件”(AUTUMN_JOB_CAPTURE) 才支持“识别投递网址”；新版秋招求职与简历助手不回应 CAPTURE_PING。
+      // 未探测到旧插件时隐藏网址识别入口（记录改用“新增投递 / 截图识别 / 侧边栏一键收录”）。
+      function applyLegacyCaptureUI() {
+        const captureUrlBtn = $('#captureUrlBtn');
+        if (captureUrlBtn) captureUrlBtn.hidden = !hasLegacyCapturePlugin;
+      }
+
       function openCaptureDialog() {
         $('#captureForm').reset();
         const status = $('#captureStatus');
@@ -2317,13 +2345,31 @@
 
       function openJobSyncDialog() {
         const status = $('#jobSyncStatus');
+        const steps = document.querySelector('#jobSyncDialog .sync-steps');
+        const fallback = document.querySelector('#jobSyncDialog .sync-fallback');
+        $('#jobPasteInput').value = '';
+        clearTimeout(bridgeCheckTimer);
+
+        // 无旧版同步插件：降级为“粘贴导入”模式（隐藏插件步骤、展开粘贴区、禁用一键同步）
+        if (!hasLegacyCapturePlugin) {
+          bridgeReady = false;
+          if (steps) steps.hidden = true;
+          if (fallback) fallback.open = true;
+          $('#startJobSyncBtn').disabled = true;
+          status.className = 'capture-status';
+          status.textContent = '未检测到同步插件，可直接在下方粘贴腾讯文档的表格内容导入。';
+          $('#jobSyncDialog').showModal();
+          return;
+        }
+
+        // 有旧版插件：维持原有一键同步流程
+        if (steps) steps.hidden = false;
+        if (fallback) fallback.open = false;
         status.className = 'capture-status';
         status.textContent = '正在检查一键收录插件…';
-        $('#jobPasteInput').value = '';
         $('#startJobSyncBtn').disabled = false;
         bridgeReady = false;
         window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_PING', url: location.href.split('?')[0].split('#')[0] }, '*');
-        clearTimeout(bridgeCheckTimer);
         bridgeCheckTimer = setTimeout(() => {
           if (!bridgeReady) {
             status.className = 'capture-status error';
@@ -2420,11 +2466,32 @@
             recentSchedule: submitted.recentSchedule || '',
             nextAction: submitted.nextAction || ''
           });
+          // 入库前查重（与“岗位库→记为已投递”同规则）：同链接或同公司同岗位命中则改为编辑既有记录，
+          // 避免插件重复推送产生重复台账
+          const existing = records.find(r =>
+            (seed.applicationUrl && r.applicationUrl === seed.applicationUrl) ||
+            (seed.company && seed.position && r.company === seed.company && r.position === seed.position)
+          );
+          if (existing) {
+            const merged = { ...existing };
+            ['city', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction'].forEach(key => {
+              if (seed[key] && !merged[key]) merged[key] = seed[key];
+            });
+            if (STAGES.indexOf(seed.stage) > STAGES.indexOf(merged.stage)) merged.stage = seed.stage;
+            openDialog(merged);
+            showToast('检测到重复投递，已为你打开更新（不会新增重复记录）');
+            return;
+          }
           openDialog(null, seed);
           showToast('插件已推送岗位，请检查信息后保存');
           return;
         }
         if (event.data.type === 'CAPTURE_READY') {
+          // CAPTURE_READY 仅由旧版 AUTUMN_JOB_CAPTURE 插件回应，据此确认其存在并恢复相关入口
+          if (event.data.source === 'AUTUMN_JOB_CAPTURE') {
+            hasLegacyCapturePlugin = true;
+            applyLegacyCaptureUI();
+          }
           bridgeReady = true;
           clearTimeout(bridgeCheckTimer);
           const status = $('#captureStatus');
@@ -3129,6 +3196,13 @@
       $('#screenshotDialog').addEventListener('cancel', event => { event.preventDefault(); closeScreenshotDialog(); });
       window.addEventListener('message', handleCaptureMessage);
       window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_REGISTER_TRACKER', url: location.href.split('?')[0].split('#')[0] }, '*');
+      // 探测旧版一键收录插件：先按当前状态设置入口可见性（默认隐藏网址识别），
+      // 若旧插件随后回 CAPTURE_READY（content script 注入有先后），handleCaptureMessage 会重新显示入口。
+      applyLegacyCaptureUI();
+      [300, 1200].forEach(delay => setTimeout(() => {
+        if (hasLegacyCapturePlugin) return;
+        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_PING', url: location.href.split('?')[0].split('#')[0] }, '*');
+      }, delay));
       $('#closeSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());
       $('#doneSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());
       $('#safetyDialog').addEventListener('click', event => { if (event.target === $('#safetyDialog')) $('#safetyDialog').close(); });
