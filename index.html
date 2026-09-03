@@ -74,8 +74,7 @@
     }
     .sidebar-title { font-size: 17px; font-weight: 780; white-space: nowrap; font-family: var(--font-display); letter-spacing: .02em; }
     .sidebar-subtitle { margin-top: 2px; color: var(--muted); font-size: 11px; letter-spacing: .06em; }
-    .nav-group-label { margin: 14px 10px 7px; color: var(--muted); font-size: 11px; font-weight: 760; letter-spacing: .18em; }
-    .sidebar-nav { display: grid; gap: 5px; }
+    .sidebar-nav { display: grid; gap: 7px; margin-top: 6px; }
     .nav-item {
       display: flex; align-items: center; gap: 11px; width: 100%; min-height: 42px; padding: 0 12px; border: 0; border-radius: 8px;
       color: var(--muted); background: transparent; text-decoration: none; font-size: 14px; font-weight: 640; text-align: left; transition: .16s ease;
@@ -121,6 +120,19 @@
 
     .dashboard { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
     .main-column { min-width: 0; }
+
+    /* 工具页卡片 */
+    .tools-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 20px 22px 22px; }
+    .tool-card { display: flex; flex-direction: column; gap: 11px; min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: .18s ease; }
+    .tool-card:hover { transform: translateY(-1px); border-color: #d5cdb8; box-shadow: 0 8px 20px rgba(66, 58, 38, .07); }
+    .tool-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .tool-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 9px; background: var(--gold-soft); color: var(--gold-dark); font-size: 19px; }
+    .tool-card h3 { margin: 0; font-size: 16px; font-family: var(--font-display); }
+    .tool-card p { margin: 0; flex: 1; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .tool-status { padding: 3px 10px; border-radius: 999px; background: var(--silver-soft); color: var(--silver); font-size: 11px; font-weight: 720; white-space: nowrap; }
+    .tool-status.ok { background: var(--gold-soft); color: var(--gold-dark); }
+    .tool-status.warning { background: var(--seal-soft); color: var(--seal); }
+    .tool-card .btn { justify-content: center; }
     .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
     .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 22px; border-bottom: 1px solid var(--line); }
     .panel-title { margin: 0; font-size: 17px; }
@@ -368,6 +380,7 @@
       .app-layout { grid-template-columns: 210px minmax(0, 1fr); }
       .dashboard { grid-template-columns: 1fr; }
       .side-panel { position: static; }
+      .tools-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .schedule-list { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: 22px; }
       .job-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -384,6 +397,7 @@
     }
     @media (max-width: 780px) {
       .shell { padding: 20px 15px 36px; }
+      .tools-grid { grid-template-columns: 1fr; }
       .topbar { align-items: flex-start; }
       .top-actions .btn { font-size: 0; width: 44px; padding: 0; }
       .top-actions .btn .icon { margin: 0; font-size: 17px; }
@@ -451,16 +465,10 @@
         <div><div class="sidebar-title">秋招投递管理</div><div class="sidebar-subtitle">从银十到金九 有迹可循</div></div>
       </div>
       <nav class="sidebar-nav">
-        <div class="nav-group-label">台账</div>
         <a class="nav-item is-active" data-route="overview" href="#/overview"><span class="nav-icon">⌂</span><span>总览</span></a>
         <a class="nav-item" data-route="jobPool" href="#/jobPool"><span class="nav-icon">⌕</span><span>岗位库</span></a>
-        <a class="nav-item" data-route="records" href="#/records"><span class="nav-icon">▤</span><span>投递记录</span></a>
         <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon">✎</span><span>我的简历</span></a>
-        <a class="nav-item" data-route="upcoming" href="#/upcoming"><span class="nav-icon">□</span><span>未来安排</span></a>
-        <div class="nav-group-label">工具</div>
-        <button class="nav-item" id="sideScreenshotBtn" type="button"><span class="nav-icon">▣</span><span>截图识别</span></button>
-        <button class="nav-item" id="sideSafetyBtn" type="button"><span class="nav-icon">◇</span><span>数据安全</span></button>
-        <button class="nav-item" id="sideSyncBtn" type="button"><span class="nav-icon">☁</span><span>云同步</span></button>
+        <a class="nav-item" data-route="tools" href="#/tools"><span class="nav-icon">⚙</span><span>工具</span></a>
       </nav>
       <div class="sidebar-footer" id="sideDataNotice"><strong>数据保存在本机</strong>无需账号，不上传投递记录</div>
     </aside>
@@ -498,6 +506,37 @@
       </div>
       <div class="stage-grid" id="stageGrid"></div>
     </section>
+
+    <div class="dashboard">
+      <section class="main-column">
+        <section class="panel" id="records">
+          <div class="panel-head">
+            <div><h2 class="panel-title">投递记录</h2><div class="panel-caption" id="resultCaption">共 0 条记录</div></div>
+          </div>
+          <div class="filters">
+            <div class="search-wrap"><span class="search-glyph">⌕</span><input class="control" id="searchInput" type="search" placeholder="搜索公司或岗位" aria-label="搜索公司或岗位"></div>
+            <select class="control" id="stageFilter" aria-label="按阶段筛选"><option value="all">全部阶段</option></select>
+            <select class="control" id="sortSelect" aria-label="排序方式">
+              <option value="schedule">最近安排优先</option>
+              <option value="applied-desc">投递日期：从新到旧</option>
+              <option value="updated-desc">最近更新优先</option>
+              <option value="company">公司名称排序</option>
+            </select>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
+              <tbody id="recordBody"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="emptyState" hidden><div class="empty-icon">⌕</div><div>没有找到符合条件的记录</div></div>
+        </section>
+      </section>
+      <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
+        <div class="panel-head"><div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">接下来最需要关注的 4 项</div></div></div>
+        <div class="schedule-list" id="upcomingList"></div>
+      </aside>
+    </div>
     </div>
 <div class="view" data-view="jobPool" hidden>
     <section class="panel job-pool" id="jobPool" aria-labelledby="jobPoolTitle">
@@ -572,36 +611,35 @@
       </div>
     </section>
     </div>
-<div class="view" data-view="records" hidden>
-        <div class="panel" id="records">
-          <div class="panel-head">
-            <div><h2 class="panel-title">投递记录</h2><div class="panel-caption" id="resultCaption">共 0 条记录</div></div>
-          </div>
-          <div class="filters">
-            <div class="search-wrap"><span class="search-glyph">⌕</span><input class="control" id="searchInput" type="search" placeholder="搜索公司或岗位" aria-label="搜索公司或岗位"></div>
-            <select class="control" id="stageFilter" aria-label="按阶段筛选"><option value="all">全部阶段</option></select>
-            <select class="control" id="sortSelect" aria-label="排序方式">
-              <option value="schedule">最近安排优先</option>
-              <option value="applied-desc">投递日期：从新到旧</option>
-              <option value="updated-desc">最近更新优先</option>
-              <option value="company">公司名称排序</option>
-            </select>
-          </div>
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
-              <tbody id="recordBody"></tbody>
-            </table>
-          </div>
-          <div class="empty" id="emptyState" hidden><div class="empty-icon">⌕</div><div>没有找到符合条件的记录</div></div>
+<div class="view" data-view="tools" hidden>
+    <section class="panel" id="tools" aria-labelledby="toolsTitle">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title" id="toolsTitle">工具</h2>
+          <div class="panel-caption">截图识别、数据安全与云同步集中在这里；顶栏按钮在任何页面都能直接打开</div>
         </div>
-      </section>
-    </div>
-<div class="view" data-view="upcoming" hidden>
-      <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
-        <div class="panel-head"><div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">接下来最需要关注的 4 项</div></div></div>
-        <div class="schedule-list" id="upcomingList"></div>
-      </aside>
+      </div>
+      <div class="tools-grid">
+        <article class="tool-card">
+          <div class="tool-card-top"><span class="tool-icon">▣</span><span class="tool-status" id="toolOcrBadge">离线可用</span></div>
+          <h3>截图识别</h3>
+          <p>上传招聘海报、官网或公众号截图，在本机完成文字识别，提取公司、岗位、城市后确认入账。</p>
+          <button class="btn" id="toolScreenshotBtn" type="button">打开截图识别</button>
+        </article>
+        <article class="tool-card">
+          <div class="tool-card-top"><span class="tool-icon">◇</span><span class="tool-status" id="toolSafetyBadge">—</span></div>
+          <h3>数据安全</h3>
+          <p>自动保留最近快照，可随时回滚误操作；支持导出完整 JSON 备份，换设备不丢数据。</p>
+          <button class="btn" id="toolSafetyBtn" type="button">打开数据安全</button>
+        </article>
+        <article class="tool-card">
+          <div class="tool-card-top"><span class="tool-icon">☁</span><span class="tool-status" id="toolSyncBadge">未开启</span></div>
+          <h3>云同步</h3>
+          <p>把投递记录与简历同步到自己的 GitHub 私有 Gist：手机、电脑与浏览器插件跨设备互通。</p>
+          <button class="btn" id="toolSyncBtn" type="button">打开云同步</button>
+        </article>
+      </div>
+    </section>
     </div>
     </main>
   </div>
@@ -784,7 +822,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '3.5.0';
+      const APP_VERSION = '3.6.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1321,6 +1359,7 @@
       }
 
       function renderSyncStatus(state, message) {
+        renderToolCards(); // 同步状态变化时同步刷新工具页卡片徽标（fire-and-forget，覆盖下方所有分支）
         const badge = $('#syncStateBadge');
         const detail = $('#syncStateDetail');
         if (!badge || !detail) return;
@@ -2158,13 +2197,41 @@
 
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
       const VIEW_META = {
-        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '从银十到金九，看每一次投递落在哪一步' },
+        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、台账与未来安排——从银十到金九，每一步都在这里' },
         jobPool: { kicker: 'JOB POOL', title: '岗位库', subtitle: '从每日更新的招聘文档发现岗位，确认后再加入台账' },
-        records: { kicker: 'LEDGER', title: '投递台账', subtitle: '每一条投递一行记录，推进阶段即盖章' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
-        upcoming: { kicker: 'SCHEDULE', title: '未来安排', subtitle: '接下来最需要关注的四件事' }
+        tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' }
       };
-      const ROUTE_ALIASES = { overview: 'overview', jobPool: 'jobPool', records: 'records', resume: 'resume', upcoming: 'upcoming', jobpool: 'jobPool' };
+      // 旧路由 records / upcoming 已并入总览，重定向兼容旧书签
+      const ROUTE_ALIASES = { overview: 'overview', jobPool: 'jobPool', jobpool: 'jobPool', resume: 'resume', tools: 'tools', records: 'overview', upcoming: 'overview' };
+
+      // ================= 工具页卡片状态：云同步连接情况与快照数量 =================
+      async function renderToolCards() {
+        const syncBadge = $('#toolSyncBadge');
+        if (syncBadge) {
+          if (!syncConfig.token) {
+            syncBadge.textContent = '未开启';
+            syncBadge.className = 'tool-status warning';
+          } else if (syncConfig.gistId) {
+            syncBadge.textContent = syncConfig.lastSyncAt ? `已连接 · 上次同步 ${formatClock(syncConfig.lastSyncAt)}` : '已连接 · 待首次同步';
+            syncBadge.className = 'tool-status ok';
+          } else {
+            syncBadge.textContent = '令牌已填写';
+            syncBadge.className = 'tool-status';
+          }
+        }
+        const safetyBadge = $('#toolSafetyBadge');
+        if (safetyBadge) {
+          try {
+            const snapshots = await dbGetAll('snapshots');
+            safetyBadge.textContent = `${Math.min(snapshots.length, 25)} 个快照`;
+            safetyBadge.className = snapshots.length ? 'tool-status ok' : 'tool-status';
+          } catch (_) {
+            safetyBadge.textContent = '当前不可用';
+            safetyBadge.className = 'tool-status warning';
+          }
+        }
+      }
 
       function parseRoute() {
         // 兼容 #/view 路由形式与旧 #view 锚点形式（井号后斜杠可选）
@@ -2197,6 +2264,7 @@
         if (location.hash !== `#/${route}`) {
           history.replaceState(null, '', `#/${route}`);
         }
+        if (route === 'tools') renderToolCards();
         window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
       }
 
@@ -2996,7 +3064,7 @@
       $('#captureUrlBtn').addEventListener('click', openCaptureDialog);
       $('#captureScreenshotBtn').addEventListener('click', openScreenshotDialog);
       $('#installAppBtn').addEventListener('click', requestAppInstall);
-      $('#sideScreenshotBtn').addEventListener('click', openScreenshotDialog);
+      $('#toolScreenshotBtn').addEventListener('click', openScreenshotDialog);
       $('#syncJobsBtn').addEventListener('click', openJobSyncDialog);
       $('#jobSearchInput').addEventListener('input', renderJobPool);
       $('#jobList').addEventListener('click', handleJobAction);
@@ -3011,7 +3079,7 @@
         showToast('岗位库已清空，投递记录未改变');
       });
       $('#safetyBtn').addEventListener('click', openSafetyDialog);
-      $('#sideSafetyBtn').addEventListener('click', openSafetyDialog);
+      $('#toolSafetyBtn').addEventListener('click', openSafetyDialog);
       $('#exportBtn').addEventListener('click', exportData);
       // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
       $('#closeDialog').addEventListener('click', closeDialog);
@@ -3070,7 +3138,7 @@
       $('#importFileInput').addEventListener('change', importBackupFile);
       $('#restoreSnapshotBtn').addEventListener('click', restorePreviousSnapshot);
       $('#syncBtn').addEventListener('click', openSyncDialog);
-      $('#sideSyncBtn').addEventListener('click', openSyncDialog);
+      $('#toolSyncBtn').addEventListener('click', openSyncDialog);
       $('#closeSyncDialog').addEventListener('click', () => $('#syncDialog').close());
       $('#cancelSyncDialog').addEventListener('click', () => $('#syncDialog').close());
       $('#syncDialog').addEventListener('click', event => { if (event.target === $('#syncDialog')) $('#syncDialog').close(); });
