@@ -290,6 +290,14 @@
 
     .toast { position: fixed; z-index: 20; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; background: #202a40; color: #fff; border-radius: 11px; padding: 11px 17px; box-shadow: 0 10px 30px rgba(20, 29, 54, .2); transition: .22s ease; font-size: 14px; }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.has-action { pointer-events: auto; }
+    .toast-action { margin-left: 12px; padding: 3px 11px; border: 1px solid rgba(255, 255, 255, .5); border-radius: 7px; background: transparent; color: #fff; font-size: 13px; cursor: pointer; }
+    .toast-action:hover { background: rgba(255, 255, 255, .16); }
+    tbody tr.row-flash { animation: row-flash 1s ease-out; }
+    @keyframes row-flash { 0% { background: var(--gold-soft); } 100% { background: transparent; } }
+    .btn.danger { background: var(--seal); border-color: var(--seal); color: #fff; }
+    .btn.danger:hover { background: #b23a1f; border-color: #b23a1f; }
+    #confirmMessage { white-space: pre-line; }
     .install-guide { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
     .install-guide li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; padding: 12px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
     .install-step { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 8px; color: #fff; background: var(--primary); font-size: 12px; font-weight: 800; }
@@ -298,6 +306,7 @@
 
     /* ================= 视图路由 ================= */
     .view { display: grid; gap: 20px; align-content: start; }
+    .view[hidden] { display: none; } /* 关键：作者样式的 display 会覆盖 [hidden] 的 UA display:none，必须显式补回，否则四视图会同时堆叠 */
     .view.is-entering { animation: view-in .18s ease-out; }
     @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
@@ -481,11 +490,8 @@
         <p class="subtitle" id="viewSubtitle">今天也别忘了跟进重要机会</p>
       </div>
       <div class="top-actions">
-        <button class="btn" id="syncBtn" type="button" title="云同步"><span class="icon">☁</span>云同步</button>
         <button class="btn" id="exportBtn" type="button" title="导出数据"><span class="icon">⇩</span>导出数据</button>
-        <button class="btn" id="safetyBtn" type="button" title="数据安全"><span class="icon">◇</span>数据安全</button>
         <button class="btn" id="captureUrlBtn" type="button" title="识别投递网址"><span class="icon">⌁</span>识别投递网址</button>
-        <button class="btn" id="captureScreenshotBtn" type="button" title="截图识别"><span class="icon">▣</span>截图识别</button>
         <button class="btn" id="installAppBtn" type="button" title="安装到手机" hidden><span class="icon">⇧</span>安装到手机</button>
         <button class="btn btn-primary" id="addBtn" type="button" title="新增投递"><span class="icon">＋</span>新增投递</button>
       </div>
@@ -543,7 +549,7 @@
       <div class="panel-head job-pool-head">
         <div>
           <h2 class="panel-title" id="jobPoolTitle">岗位库</h2>
-          <div class="panel-caption">从每日更新的腾讯招聘文档发现岗位，确认投递后再加入管理记录</div>
+          <div class="panel-caption">候选池：收集还没投的岗位（可同步/粘贴腾讯文档，或用工具页「截图识别导入岗位」）；确认要投时点「记为已投递」进入总览台账</div>
           <a class="job-source" href="https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&amp;viewId=vKWCWH" target="_blank" rel="noopener noreferrer">查看岗位来源 ↗</a>
         </div>
         <div class="job-pool-actions">
@@ -616,13 +622,13 @@
       <div class="panel-head">
         <div>
           <h2 class="panel-title" id="toolsTitle">工具</h2>
-          <div class="panel-caption">截图识别、数据安全与云同步集中在这里；顶栏按钮在任何页面都能直接打开</div>
+          <div class="panel-caption">截图识别、数据安全与云同步统一收在这里；顶栏不再重复放置，避免同一功能两个入口</div>
         </div>
       </div>
       <div class="tools-grid">
         <article class="tool-card">
           <div class="tool-card-top"><span class="tool-icon">▣</span><span class="tool-status" id="toolOcrBadge">离线可用</span></div>
-          <h3>截图识别</h3>
+          <h3>截图识别导入岗位</h3>
           <p>上传招聘海报、官网或公众号截图，在本机完成文字识别，提取公司、岗位、城市后确认入账。</p>
           <button class="btn" id="toolScreenshotBtn" type="button">打开截图识别</button>
         </article>
@@ -662,6 +668,12 @@
       </div>
       <div class="modal-actions"><button class="btn" id="cancelDialog" type="button">取消</button><button class="btn btn-primary" type="submit">保存记录</button></div>
     </form>
+  </dialog>
+
+  <dialog id="confirmDialog">
+    <div class="modal-head"><h2 id="confirmTitle">请确认</h2></div>
+    <div class="form-body"><p class="capture-note" id="confirmMessage"></p></div>
+    <div class="modal-actions"><button class="btn" id="confirmCancelBtn" type="button">取消</button><button class="btn btn-primary" id="confirmOkBtn" type="button">确定</button></div>
   </dialog>
 
   <dialog id="captureDialog">
@@ -1096,6 +1108,14 @@
         saveTombstones();
       }
 
+      // 撤销删除：撤回墓碑，避免这次删除被云同步传播到其它设备
+      function unmarkDeleted(ids) {
+        if (!ids.length) return;
+        const set = new Set(ids);
+        tombstones = tombstones.filter(item => !set.has(item.id));
+        saveTombstones();
+      }
+
       function sameRecordSet(left, right) {
         if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
         const map = new Map(right.map(item => [item.id, item]));
@@ -1220,7 +1240,17 @@
         if (response.status === 401) throw new Error('访问令牌无效或已过期，请重新生成');
         if (response.status === 404) throw new Error('云端数据不存在，可能 Gist 已被删除');
         if (response.status === 403) throw new Error(response.headers.get('x-ratelimit-remaining') === '0' ? 'GitHub 接口调用太频繁，请几分钟后再试' : 'GitHub 拒绝了请求，请确认令牌已勾选 gist 权限');
-        if (!response.ok) throw new Error(`GitHub 接口异常（${response.status}）`);
+        if (!response.ok) {
+          // 读出 GitHub 的校验详情（尤其 422），否则只能看到状态码、无法定位非法字段
+          let detail = '';
+          try {
+            const errBody = await response.json();
+            const first = Array.isArray(errBody?.errors) ? errBody.errors[0] : null;
+            if (first) detail = `：${first.message || first.code || ''}${first.field ? `（字段 ${first.field}）` : ''}`;
+            else if (errBody?.message) detail = `：${errBody.message}`;
+          } catch (_) {}
+          throw new Error(`GitHub 接口异常（${response.status}）${detail}`);
+        }
         return response.json().catch(() => null);
       }
 
@@ -1260,7 +1290,7 @@
         }
         const vaultName = await vaultFileName(syncConfig.passphrase);
         const files = { [vaultName]: { content: JSON.stringify(payload) } };
-        if (dropLegacy) files[GIST_FILENAME] = { content: null };
+        if (dropLegacy) files[GIST_FILENAME] = null; // GitHub 删除文件的正确写法是“整个文件置 null”；写成 {content:null} 会被当成空内容→422 Validation Failed
         await gistRequest(`/gists/${syncConfig.gistId}`, {
           method: 'PATCH',
           body: JSON.stringify({
@@ -1300,7 +1330,7 @@
           if (!remote && (cloud.hasOtherVaults || (cloud.legacyContent.trim() && cloud.legacyContent.trim() !== '{}'))) {
             // 云端已有其他口令的数据空间，但当前口令没有匹配的空间（可能口令输错）
             if (trigger !== 'manual') throw new Error('云端没有与此口令匹配的数据空间，请在云同步设置中确认口令');
-            const createNew = confirm('云端没有与此口令匹配的数据空间（口令可能不正确）。\n\n可以用当前设备的数据新建一个独立空间，云端原有数据不会被改动，之后可随时换回原口令。是否新建？');
+            const createNew = await confirmInApp('云端没有与此口令匹配的数据空间（口令可能不正确）。\n\n可以用当前设备的数据新建一个独立空间，云端原有数据不会被改动，之后可随时换回原口令。是否新建？', { title: '云同步', confirmText: '新建空间' });
             if (!createNew) throw new Error('已取消：云端没有与此口令匹配的数据空间');
           }
           const { mergedRecords, mergedTombstones } = mergeSyncState(remote);
@@ -1418,9 +1448,9 @@
         await syncNow('manual');
       }
 
-      function disconnectSync() {
+      async function disconnectSync() {
         if (!syncConfig.token) return showToast('当前没有开启云同步');
-        if (!confirm('断开后本机不再自动同步；云端 Gist 与数据会保留。\n确定断开吗？')) return;
+        if (!await confirmInApp('断开后本机不再自动同步；云端 Gist 与数据会保留。\n确定断开吗？', { title: '断开云同步', danger: true, confirmText: '断开' })) return;
         clearTimeout(syncPushTimer);
         syncConfig = { token: '', passphrase: '', gistId: '', lastSyncAt: '' };
         saveSyncConfig();
@@ -1989,7 +2019,7 @@
           const parsed = JSON.parse(await file.text());
           const incoming = Array.isArray(parsed) ? parsed : parsed.records;
           if (!Array.isArray(incoming) || incoming.some(item => !item || typeof item !== 'object')) throw new Error('文件中没有有效记录');
-          if (!confirm(`备份中有 ${incoming.length} 条记录。\n\n继续后将替换当前 ${records.length} 条记录，系统会先下载一份“导入前备份”。是否继续？`)) return;
+          if (!await confirmInApp(`备份中有 ${incoming.length} 条记录。\n\n继续后将替换当前 ${records.length} 条记录，系统会先下载一份“导入前备份”。是否继续？`, { title: '导入备份', danger: true, confirmText: '继续导入' })) return;
           downloadPayload(createEnvelope(records), `秋招投递-导入前备份-${localDateInput(new Date())}.json`);
           const importedIds = new Set(incoming.map(item => String(item.id || '')));
           markDeleted(records.filter(item => !importedIds.has(item.id)).map(item => item.id));
@@ -2020,7 +2050,7 @@
             alert('暂时没有与当前数据不同的历史快照。');
             return;
           }
-          if (!confirm(`将恢复 ${formatClock(previous.savedAt)} 的快照，共 ${previous.records.length} 条记录。\n系统会先下载当前数据备份。是否继续？`)) return;
+          if (!await confirmInApp(`将恢复 ${formatClock(previous.savedAt)} 的快照，共 ${previous.records.length} 条记录。\n系统会先下载当前数据备份。是否继续？`, { title: '恢复快照', danger: true, confirmText: '恢复' })) return;
           downloadPayload(createEnvelope(records), `秋招投递-恢复前备份-${localDateInput(new Date())}.json`);
           const snapshotIds = new Set(previous.records.map(item => String(item.id || '')));
           markDeleted(records.filter(item => !snapshotIds.has(item.id)).map(item => item.id));
@@ -2103,7 +2133,7 @@
           ? `本地岗位 ${jobs.length} 条 · 最近同步 ${formatClock(jobPoolUpdatedAt)}${visible.length !== jobs.length ? ` · 找到 ${visible.length} 条` : ''}`
           : '尚未同步岗位';
         if (!shown.length) {
-          $('#jobList').innerHTML = `<div class="job-empty">${jobs.length ? '没有找到符合条件的岗位' : '点击“同步腾讯文档”，建立你的本地岗位库'}</div>`;
+          $('#jobList').innerHTML = `<div class="job-empty">${jobs.length ? '没有找到符合条件的岗位' : '岗位库是待投候选池：点右上「同步腾讯文档」粘贴导入，或用「工具 → 截图识别导入岗位」；确认要投时点「记为已投递」进入总览台账'}</div>`;
           return;
         }
         $('#jobList').innerHTML = shown.map(job => {
@@ -2165,7 +2195,7 @@
 
       function renderTable() {
         const visible = getVisibleRecords();
-        els.caption.textContent = visible.length === records.length ? `共 ${records.length} 条记录` : `显示 ${visible.length} 条，共 ${records.length} 条`;
+        els.caption.textContent = visible.length === records.length ? `已投台账 · 共 ${records.length} 条记录` : `已投台账 · 显示 ${visible.length} 条，共 ${records.length} 条`;
         // 台账编号：按 updatedAt 从新到旧稳定编号（编辑不会重排，新增排最前）
         const recordNo = new Map(
           [...records].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || String(a.id).localeCompare(String(b.id)))
@@ -2178,7 +2208,7 @@
           const companyHtml = record.applicationUrl
             ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
             : escapeHtml(record.company);
-          return `<tr data-is-offer="${record.stage === 'Offer'}">
+          return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}">
             <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
             <td data-label="公司 / 岗位"><div class="company">${companyHtml}</div><div class="position">${escapeHtml(record.position)}</div></td>
             <td data-label="城市">${escapeHtml(record.city)}</td>
@@ -2904,20 +2934,26 @@
         }
         closeDialog();
         render();
+        flashRow(normalized.id);
       }
 
-      function handleTableAction(event) {
+      let lastDeleted = null; // 仅最近一次删除可撤销
+
+      async function handleTableAction(event) {
         const button = event.target.closest('button[data-action]');
         if (!button) return;
         const record = records.find(item => item.id === button.dataset.id);
         if (!record) return;
         if (button.dataset.action === 'edit') return openDialog(record);
         if (button.dataset.action === 'delete') {
-          if (!confirm(`确定删除「${record.company} · ${record.position}」吗？\n删除后无法撤销。`)) return;
+          if (!await confirmInApp(`确定删除「${record.company} · ${record.position}」吗？`, { title: '删除投递记录', danger: true, confirmText: '删除' })) return;
+          const index = records.findIndex(item => item.id === record.id);
           records = records.filter(item => item.id !== record.id);
           markDeleted([record.id]);
-          saveRecords('记录已删除并自动保存');
+          saveRecords();
           render();
+          lastDeleted = { record, index };
+          showToast(`已删除「${record.company} · ${record.position}」`, { actionLabel: '撤销', duration: 6000, onAction: undoDelete });
           return;
         }
         if (button.dataset.action === 'advance') {
@@ -2927,8 +2963,32 @@
           record.updatedAt = Date.now();
           saveRecords(next === 'Offer' ? '已盖章：Offer' : `已推进到「${next}」并自动保存`);
           render();
+          flashRow(record.id);
           if (next === 'Offer') playOfferStamp();
         }
+      }
+
+      // 撤销最近一次删除：撤回墓碑 + 按原位置插回 + 重渲染高亮
+      function undoDelete() {
+        if (!lastDeleted) return;
+        const { record, index } = lastDeleted;
+        lastDeleted = null;
+        unmarkDeleted([record.id]);
+        records.splice(Math.max(0, Math.min(index, records.length)), 0, record);
+        saveRecords();
+        render();
+        flashRow(record.id);
+        showToast('已撤销删除，记录已恢复');
+      }
+
+      // 变更行高亮：推进/编辑/撤销后给对应行一次性高亮，让“改了哪行”一目了然
+      function flashRow(id) {
+        const row = els.body.querySelector(`tr[data-id="${CSS.escape(String(id))}"]`);
+        if (!row) return;
+        row.classList.remove('row-flash');
+        void row.offsetWidth;
+        row.classList.add('row-flash');
+        setTimeout(() => row.classList.remove('row-flash'), 1000);
       }
 
       function exportData() {
@@ -2946,11 +3006,45 @@
         setTimeout(() => overlay.remove(), 1200);
       }
 
-      function showToast(message) {
+      function showToast(message, options = {}) {
         clearTimeout(toastTimer);
-        els.toast.textContent = message;
+        els.toast.textContent = '';
+        els.toast.classList.toggle('has-action', !!options.actionLabel);
+        const span = document.createElement('span');
+        span.textContent = message;
+        els.toast.appendChild(span);
+        if (options.actionLabel) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'toast-action';
+          btn.textContent = options.actionLabel;
+          btn.addEventListener('click', () => {
+            els.toast.classList.remove('show', 'has-action');
+            if (options.onAction) options.onAction();
+          });
+          els.toast.appendChild(btn);
+        }
         els.toast.classList.add('show');
-        toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2400);
+        const duration = options.duration || 2400;
+        toastTimer = setTimeout(() => els.toast.classList.remove('show', 'has-action'), duration);
+      }
+
+      // 应用内确认框：替代原生 confirm()，风格统一、可 danger 样式化；Esc/点遮罩/取消均为 false
+      let confirmResolve = null;
+      let confirmResult = false;
+      function confirmInApp(message, options = {}) {
+        const dialog = $('#confirmDialog');
+        if (!dialog || typeof dialog.showModal !== 'function') return Promise.resolve(window.confirm(message));
+        $('#confirmMessage').textContent = message;
+        $('#confirmTitle').textContent = options.title || '请确认';
+        const okBtn = $('#confirmOkBtn');
+        okBtn.textContent = options.confirmText || '确定';
+        okBtn.classList.toggle('danger', !!options.danger);
+        confirmResult = false;
+        return new Promise(resolve => {
+          confirmResolve = resolve;
+          dialog.showModal();
+        });
       }
 
       let deferredInstallPrompt = null;
@@ -3119,8 +3213,8 @@
           alert(`导入失败：${error.message || '不是有效的简历 JSON 文件。'}`);
         }
       });
-      $('#resumeResetBtn').addEventListener('click', () => {
-        if (!confirm('确定要清空简历全部内容并恢复默认结构吗？')) return;
+      $('#resumeResetBtn').addEventListener('click', async () => {
+        if (!await confirmInApp('确定要清空简历全部内容并恢复默认结构吗？', { title: '重置简历', danger: true, confirmText: '清空并重置' })) return;
         resume = JSON.parse(JSON.stringify(DEFAULT_RESUME));
         persistResume();
         renderResumeEditor();
@@ -3129,15 +3223,14 @@
 
       $('#addBtn').addEventListener('click', () => openDialog());
       $('#captureUrlBtn').addEventListener('click', openCaptureDialog);
-      $('#captureScreenshotBtn').addEventListener('click', openScreenshotDialog);
       $('#installAppBtn').addEventListener('click', requestAppInstall);
       $('#toolScreenshotBtn').addEventListener('click', openScreenshotDialog);
       $('#syncJobsBtn').addEventListener('click', openJobSyncDialog);
       $('#jobSearchInput').addEventListener('input', renderJobPool);
       $('#jobList').addEventListener('click', handleJobAction);
-      $('#clearJobPoolBtn').addEventListener('click', () => {
+      $('#clearJobPoolBtn').addEventListener('click', async () => {
         if (!jobs.length) return showToast('岗位库目前是空的');
-        if (!confirm(`确定清空本地岗位库中的 ${jobs.length} 条岗位吗？\n你的正式投递记录不会受到影响。`)) return;
+        if (!await confirmInApp(`确定清空本地岗位库中的 ${jobs.length} 条岗位吗？\n你的正式投递记录不会受到影响。`, { title: '清空岗位库', danger: true, confirmText: '清空' })) return;
         jobs = [];
         jobPoolUpdatedAt = '';
         localStorage.removeItem(JOB_POOL_KEY);
@@ -3145,7 +3238,6 @@
         renderJobPool();
         showToast('岗位库已清空，投递记录未改变');
       });
-      $('#safetyBtn').addEventListener('click', openSafetyDialog);
       $('#toolSafetyBtn').addEventListener('click', openSafetyDialog);
       $('#exportBtn').addEventListener('click', exportData);
       // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
@@ -3157,6 +3249,11 @@
       els.filter.addEventListener('change', renderTable);
       els.sort.addEventListener('change', renderTable);
       els.dialog.addEventListener('click', event => { if (event.target === els.dialog) closeDialog(); });
+      // 应用内确认框（替代原生 confirm）：确定=true，取消/Esc/点遮罩=false
+      $('#confirmOkBtn').addEventListener('click', () => { confirmResult = true; $('#confirmDialog').close(); });
+      $('#confirmCancelBtn').addEventListener('click', () => $('#confirmDialog').close());
+      $('#confirmDialog').addEventListener('close', () => { if (confirmResolve) { confirmResolve(confirmResult); confirmResolve = null; } });
+      $('#confirmDialog').addEventListener('click', event => { if (event.target === $('#confirmDialog')) $('#confirmDialog').close(); });
       $('#closeCaptureDialog').addEventListener('click', closeCaptureDialog);
       $('#cancelCaptureDialog').addEventListener('click', closeCaptureDialog);
       $('#captureForm').addEventListener('submit', requestUrlCapture);
@@ -3211,7 +3308,6 @@
       $('#importBtn').addEventListener('click', () => $('#importFileInput').click());
       $('#importFileInput').addEventListener('change', importBackupFile);
       $('#restoreSnapshotBtn').addEventListener('click', restorePreviousSnapshot);
-      $('#syncBtn').addEventListener('click', openSyncDialog);
       $('#toolSyncBtn').addEventListener('click', openSyncDialog);
       $('#closeSyncDialog').addEventListener('click', () => $('#syncDialog').close());
       $('#cancelSyncDialog').addEventListener('click', () => $('#syncDialog').close());
