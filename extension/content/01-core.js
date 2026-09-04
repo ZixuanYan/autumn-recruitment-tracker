@@ -445,6 +445,21 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       border-color: #5367e9;
       box-shadow: 0 0 0 2px rgba(83, 103, 233, 0.15);
     }
+    /* 修复：抽屉整体 user-select:none 会让输入框中已有文本无法选中/替换（表现为"配置存了就改不了"）；输入控件必须可选可编辑 */
+    #aja-drawer input, #aja-drawer textarea {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    /* 修复：AI 配置面板复用了 .pending-list(为暂存队列设 max-height:180px)，内容更高会被裁剪；此处放开高度 */
+    #aja-ai-panel {
+      max-height: none;
+      overflow: visible;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #aja-ai-panel.hidden { display: none; }
     .form-row {
       display: grid;
       grid-template-columns: 1fr 1fr;

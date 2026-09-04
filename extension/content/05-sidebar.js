@@ -108,12 +108,13 @@ function ensureSidebarUI() {
             <label class="resume-source-hint" style="display:flex;align-items:center;gap:6px;cursor:pointer">
               <input type="checkbox" id="aja-ai-enabled" style="width:auto"> 启用 AI 补全（规则未命中的字段交给 AI）
             </label>
-            <div class="form-group"><label>API URL（OpenAI 兼容）</label><input type="text" id="aja-ai-url" placeholder="https://api.openai.com/v1/chat/completions"></div>
-            <div class="form-group"><label>模型名称</label><input type="text" id="aja-ai-model" placeholder="gpt-4o-mini"></div>
+            <div class="form-group"><label>API URL（OpenAI 兼容，可填 baseURL 或完整地址）</label><input type="text" id="aja-ai-url" placeholder="https://api.deepseek.com/v1 或 .../v1/chat/completions"></div>
+            <div class="form-group"><label>模型名称</label><input type="text" id="aja-ai-model" placeholder="deepseek-chat / qwen-plus / gpt-4o-mini"></div>
             <div class="form-group"><label>API Key（仅存本机）</label><input type="password" id="aja-ai-key" placeholder="sk-..."></div>
             <div class="form-actions">
               <button class="btn-save-record" id="aja-ai-save" type="button">保存配置</button>
               <button class="btn-cancel-capture" id="aja-ai-test" type="button">测试连接</button>
+              <button class="btn-cancel-capture" id="aja-ai-clear" type="button">清除</button>
             </div>
             <div class="autofill-warning-tip" id="aja-ai-tip">开启后，规则没填中的字段连同简历值会发往你配置的 AI 接口；Key 只存本机、不进云同步/备份。AI 填充项琥珀高亮，请务必人工复核后再提交。</div>
           </div>
@@ -413,6 +414,7 @@ function ensureSidebarUI() {
   const aiKeyEl = shadow.getElementById('aja-ai-key');
   const aiSaveBtn = shadow.getElementById('aja-ai-save');
   const aiTestBtn = shadow.getElementById('aja-ai-test');
+  const aiClearBtn = shadow.getElementById('aja-ai-clear');
   const autofillLabel = autofillBtn.querySelector('span:last-child');
   let aiPanelOpen = false;
 
@@ -432,6 +434,7 @@ function ensureSidebarUI() {
   aiToggleBtn.addEventListener('click', () => {
     aiPanelOpen = !aiPanelOpen;
     aiPanel.classList.toggle('hidden', !aiPanelOpen);
+    if (aiPanelOpen) refreshAiConfigUI(); // 每次展开都回显最新已存配置，避免看到过期/空值
   });
 
   aiSaveBtn.addEventListener('click', () => {
@@ -445,6 +448,16 @@ function ensureSidebarUI() {
       AJA.aiConfig = cfg;
       refreshAiConfigUI();
       showToast(cfg.enabled ? 'AI 辅助填写已开启' : 'AI 配置已保存（未启用）');
+    });
+  });
+
+  // 清除配置：删除本机存储并清空输入（解决“存了改不了 / 删不掉”）
+  aiClearBtn.addEventListener('click', () => {
+    chrome.storage.local.remove(AJA.AI_CONFIG_KEY, () => {
+      if (chrome.runtime.lastError) { showToast('清除失败：' + chrome.runtime.lastError.message); return; }
+      AJA.aiConfig = null;
+      refreshAiConfigUI();
+      showToast('AI 配置已清除');
     });
   });
 

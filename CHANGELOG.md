@@ -9,7 +9,9 @@
 - 新增可选「AI 辅助填写」：规则先行，对未命中字段调用用户自配的 OpenAI 兼容接口补全；AI 输出经"选项成员 + 语义正则"校验防幻觉；证件/外语等级/年月/学历等高风险字段不交给 AI 猜；AI 填充项琥珀高亮，需人工复核
 - 填充引擎增强：统一 `setElementValue` 支持原生日期/时间、AntD/Element 日期选择器、contentEditable；字段扫描带分组上下文；省市区级联按层回填
 - 默认关闭、纯离线行为不变；API Key 只存插件本机 `chrome.storage.local`，绝不进网页/云同步/导出备份
-- 侧边栏新增「AI 辅助填写」配置区（启用开关 + API URL/模型/Key + 测试连接）
+- 侧边栏新增「AI 辅助填写」配置区（启用开关 + API URL/模型/Key + 测试连接 + 清除）
+- 修复 AI 配置存入后"改不了/删不掉"：抽屉整体 `user-select:none` 导致输入框已有文本无法选中替换（改为输入控件 `user-select:text`）、AI 面板复用 `.pending-list` 的 `max-height:180px` 被裁剪（放开高度）、新增「清除」按钮删除本机配置
+- API URL 支持只填 baseURL：以 `/vN` 结尾自动补全 `/chat/completions`，兼容 DeepSeek（`https://api.deepseek.com/v1`）、阿里百炼（`https://dashscope.aliyuncs.com/compatible-mode/v1`）等 OpenAI 兼容端点
 - 部分算法参考 MIT 项目 Resume Pro（TshyGO/resume-form-assistant-plugin），已在 `extension/common/ai-helpers.js` 保留出处声明
 
 ## v4.1.0

@@ -231,9 +231,19 @@ const AI_SYSTEM_PROMPT = [
   '7. 只能使用简历字段里真实存在的值，绝不编造任何内容'
 ].join('\n');
 
+// 允许用户填 baseURL（如 https://api.deepseek.com/v1、百炼 https://dashscope.aliyuncs.com/compatible-mode/v1）：
+// 若以 /vN 结尾则自动补全为 /chat/completions；已是完整地址则原样使用
+function resolveChatCompletionsUrl(url) {
+  let u = String(url || '').trim().replace(/\/+$/, '');
+  if (!u) return '';
+  if (/\/chat\/completions$/i.test(u)) return u;
+  if (/\/v\d+$/i.test(u)) return u + '/chat/completions';
+  return u;
+}
+
 function normalizeAiConfig(aiConfig) {
   return {
-    apiUrl: String((aiConfig && aiConfig.apiUrl) || '').trim(),
+    apiUrl: resolveChatCompletionsUrl(aiConfig && aiConfig.apiUrl),
     model: String((aiConfig && aiConfig.model) || '').trim(),
     apiKey: String((aiConfig && aiConfig.apiKey) || '').trim()
   };
