@@ -1,4 +1,4 @@
-# 秋招求职与简历助手（Chrome/Edge 扩展 v3.1.0）
+# 秋招求职与简历助手（Chrome/Edge 扩展 v3.2.0）
 
 网申页采集端浏览器扩展（Manifest V3）：**简历表单快速填报 + 岗位一键收录 + 暂存箱**。与网页版 [秋招投递管理器](https://github.com/ZixuanYan/autumn-recruitment-tracker) 配套使用，插件负责采集，网页版负责管理与跨设备同步。
 
@@ -20,6 +20,12 @@
    - 网页版管理器未打开时，收录的岗位自动进入暂存箱排队
    - 打开网页版管理器后逐条弹出确认，人工核对后入库并云同步
    - 侧边栏可随时展开暂存箱查看、丢弃或回填修改
+4. **AI 辅助填写（可选，默认关闭）**
+   - 规则匹配先行；对规则没填中的字段，可调用你自配的 OpenAI 兼容接口（API URL / 模型 / Key）由 AI 判断该填什么
+   - AI 返回值经“选项成员 + 语义正则”校验防幻觉；证件类型 / 外语等级 / 年月 / 学历等高风险字段不交给 AI 猜
+   - AI 填充项琥珀高亮，务必人工复核后再提交；绝不自动提交表单
+   - 隐私：API Key 只存插件本机 `chrome.storage.local`，绝不进网页 / 云同步 / 导出备份；开启后未命中字段与相关简历值会发往你配置的 AI 接口
+   - 在侧边栏「AI 辅助填写」折叠区配置（含测试连接）；部分算法参考 MIT 项目 Resume Pro（TshyGO/resume-form-assistant-plugin）
 
 ## 工作流
 
@@ -67,5 +73,5 @@
 
 ## 版本
 
-- 扩展：v3.1.0（采集端形态）
+- 扩展：v3.2.0（采集端形态）
 - 存储键：`autumnRecruitmentTracker.resume.v1` / `autumnRecruitmentTracker.pending.v1`

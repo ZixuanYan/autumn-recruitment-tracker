@@ -4,7 +4,7 @@
  */
 'use strict';
 
-importScripts('common/constants.js', 'common/default-resume.js');
+importScripts('common/constants.js', 'common/default-resume.js', 'common/ai-helpers.js');
 
 const RECORDS_STORAGE_KEY = AJA.RECORDS_STORAGE_KEY;
 const RESUME_STORAGE_KEY = AJA.RESUME_STORAGE_KEY;
@@ -208,4 +208,119 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     })();
     return true;
   }
+
+  // AI 辅助填写：对规则未命中的字段，请求用户自配的 OpenAI 兼容接口，返回经校验的 {fieldId,value}
+  if (request.type === MSG.AI_FILL) {
+    handleAiFill(request)
+      .then(sendResponse)
+      .catch(err => sendResponse({ ok: false, success: false, error: (err && err.message) || 'AI 请求失败' }));
+    return true;
+  }
 });
+
+// ================= AI 辅助填写（思路移植自 MIT 项目 Resume Pro；仅对用户显式配置的接口发起请求）=================
+const AI_SYSTEM_PROMPT = [
+  '你是一个网页表单填写助手。根据简历字段数据，判断表单中每个输入框应该填写什么值。',
+  '规则：',
+  '1. 仅返回 JSON 数组，不含任何解释或 markdown 代码块',
+  '2. 格式：[{"fieldId":"xxx","value":"yyy"}]',
+  '3. 只填写能确定匹配的字段，不确定的跳过',
+  '4. 基本信息字段优先精确匹配，不要把教育背景、经历、技能字段填进姓名、邮箱、手机号、出生日期等基础字段',
+  '5. 遇到拼音、证件类型、外语类型/等级、年月分拆下拉框等复杂字段，只有在能确定时才填写',
+  '6. 匹配考虑同义词：手机=电话=联系方式=mobile=phone',
+  '7. 只能使用简历字段里真实存在的值，绝不编造任何内容'
+].join('\n');
+
+function normalizeAiConfig(aiConfig) {
+  return {
+    apiUrl: String((aiConfig && aiConfig.apiUrl) || '').trim(),
+    model: String((aiConfig && aiConfig.model) || '').trim(),
+    apiKey: String((aiConfig && aiConfig.apiKey) || '').trim()
+  };
+}
+
+function buildAiUserPrompt(formFields, resumeFields) {
+  return [
+    '表单字段列表：',
+    JSON.stringify(formFields, null, 2),
+    '',
+    '简历字段列表：',
+    JSON.stringify(resumeFields, null, 2),
+    '',
+    '填写原则：基本信息优先匹配基本信息分组；教育背景不要填进邮箱、电话、出生日期、籍贯等基础字段；低置信度时留空。'
+  ].join('\n');
+}
+
+function parseAiJsonContent(content) {
+  const cleaned = String(content).trim()
+    .replace(/^```json/i, '')
+    .replace(/^```/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  return JSON.parse(cleaned);
+}
+
+function normalizeAiMatches(payload) {
+  const source = Array.isArray(payload) ? payload : (payload && payload.matches);
+  if (!Array.isArray(source)) throw new Error('结果不是 JSON 数组');
+  return source.map(item => {
+    if (!item || typeof item !== 'object') return null;
+    const fieldId = String(item.fieldId == null ? '' : item.fieldId).trim();
+    const value = String(item.value == null ? '' : item.value);
+    if (!fieldId || !value) return null;
+    return { fieldId, value };
+  }).filter(Boolean);
+}
+
+async function handleAiFill(message) {
+  const aiConfig = normalizeAiConfig(message.aiConfig);
+  const formFields = Array.isArray(message.formFields) ? message.formFields : [];
+  const resumeFields = Array.isArray(message.resumeFields) ? message.resumeFields : [];
+
+  if (!aiConfig.apiUrl || !aiConfig.model || !aiConfig.apiKey) {
+    return { ok: false, success: false, error: '请先在插件侧边栏配置 AI 接口' };
+  }
+  if (!formFields.length) return { ok: true, success: true, matches: [] };
+  if (!resumeFields.length) return { ok: false, success: false, error: '简历为空，无可用于匹配的数据' };
+
+  // 兜底再次跳过高风险字段（内容脚本已过滤一层）
+  const targetFields = formFields.filter(f => !(AJA.AIHelpers && AJA.AIHelpers.shouldSkipAIForField(f)));
+  if (!targetFields.length) return { ok: true, success: true, matches: [] };
+
+  let response;
+  try {
+    response = await fetch(aiConfig.apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${aiConfig.apiKey}` },
+      body: JSON.stringify({
+        model: aiConfig.model,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user', content: buildAiUserPrompt(targetFields, resumeFields) }
+        ]
+      })
+    });
+  } catch (_) {
+    return { ok: false, success: false, error: '无法连接 AI 接口，请检查网络与 API URL' };
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = (data && data.error && data.error.message) || (data && data.message) || `HTTP ${response.status}`;
+    return { ok: false, success: false, error: `AI 接口请求失败：${detail}` };
+  }
+  const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    return { ok: false, success: false, error: 'AI 未返回可解析的内容' };
+  }
+  let aiMatches;
+  try {
+    aiMatches = normalizeAiMatches(parseAiJsonContent(content));
+  } catch (err) {
+    return { ok: false, success: false, error: `AI 返回结果解析失败：${err.message}` };
+  }
+  // 防幻觉：值必须对字段合法（select/radio 值∈选项 + email/phone/id/date/name 语义正则）
+  const matches = AJA.AIHelpers ? AJA.AIHelpers.filterValidMatches(formFields, aiMatches) : aiMatches;
+  return { ok: true, success: true, matches };
+}

@@ -96,8 +96,28 @@ function ensureSidebarUI() {
         </div>
 
         <!-- 简历资料库分类展示 -->
-        <div class="resume-source-hint">简历在网页版管理器中编辑，保存后自动同步到这里</div>
+        <div class="resume-source-hint" id="aja-resume-status">简历在网页版管理器中编辑，保存后自动同步到这里</div>
         <div id="aja-resume-list"></div>
+
+        <!-- AI 辅助填写设置（可选，默认关闭；API Key 仅存本机，绝不进网页/云同步/备份）-->
+        <div class="pending-box" id="aja-ai-config-box">
+          <button class="pending-toggle" id="aja-ai-toggle" type="button">
+            <span>🤖</span><span>AI 辅助填写</span><span class="pending-count" id="aja-ai-state">关</span>
+          </button>
+          <div class="pending-list hidden" id="aja-ai-panel">
+            <label class="resume-source-hint" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="checkbox" id="aja-ai-enabled" style="width:auto"> 启用 AI 补全（规则未命中的字段交给 AI）
+            </label>
+            <div class="form-group"><label>API URL（OpenAI 兼容）</label><input type="text" id="aja-ai-url" placeholder="https://api.openai.com/v1/chat/completions"></div>
+            <div class="form-group"><label>模型名称</label><input type="text" id="aja-ai-model" placeholder="gpt-4o-mini"></div>
+            <div class="form-group"><label>API Key（仅存本机）</label><input type="password" id="aja-ai-key" placeholder="sk-..."></div>
+            <div class="form-actions">
+              <button class="btn-save-record" id="aja-ai-save" type="button">保存配置</button>
+              <button class="btn-cancel-capture" id="aja-ai-test" type="button">测试连接</button>
+            </div>
+            <div class="autofill-warning-tip" id="aja-ai-tip">开启后，规则没填中的字段连同简历值会发往你配置的 AI 接口；Key 只存本机、不进云同步/备份。AI 填充项琥珀高亮，请务必人工复核后再提交。</div>
+          </div>
+        </div>
       </div>
 
       <!-- 底部中枢入口 -->
@@ -383,12 +403,104 @@ function ensureSidebarUI() {
     window.open(AJA.TRACKER_URL, '_blank');
   });
 
+  // ================= AI 辅助填写设置（可选，默认关闭；Key 仅存本机 chrome.storage.local）=================
+  const aiToggleBtn = shadow.getElementById('aja-ai-toggle');
+  const aiPanel = shadow.getElementById('aja-ai-panel');
+  const aiStateEl = shadow.getElementById('aja-ai-state');
+  const aiEnabledEl = shadow.getElementById('aja-ai-enabled');
+  const aiUrlEl = shadow.getElementById('aja-ai-url');
+  const aiModelEl = shadow.getElementById('aja-ai-model');
+  const aiKeyEl = shadow.getElementById('aja-ai-key');
+  const aiSaveBtn = shadow.getElementById('aja-ai-save');
+  const aiTestBtn = shadow.getElementById('aja-ai-test');
+  const autofillLabel = autofillBtn.querySelector('span:last-child');
+  let aiPanelOpen = false;
+
+  function refreshAiConfigUI() {
+    const cfg = AJA.aiConfig || {};
+    aiEnabledEl.checked = !!cfg.enabled;
+    aiUrlEl.value = cfg.apiUrl || '';
+    aiModelEl.value = cfg.model || '';
+    aiKeyEl.value = cfg.apiKey || '';
+    const configured = !!(cfg.apiUrl && cfg.model && cfg.apiKey);
+    const on = !!(cfg.enabled && configured);
+    aiStateEl.textContent = on ? '开' : (configured ? '未启用' : '关');
+    if (autofillLabel) autofillLabel.textContent = on ? '一键 AI 填充当前页面' : '一键填充当前页面';
+    autofillBtn.title = on ? '规则匹配 + AI 补全未命中字段（AI 项琥珀高亮，请复核）' : '自动匹配并填充页面空白表单项（纯本地规则）';
+  }
+
+  aiToggleBtn.addEventListener('click', () => {
+    aiPanelOpen = !aiPanelOpen;
+    aiPanel.classList.toggle('hidden', !aiPanelOpen);
+  });
+
+  aiSaveBtn.addEventListener('click', () => {
+    const cfg = { enabled: aiEnabledEl.checked, apiUrl: aiUrlEl.value.trim(), model: aiModelEl.value.trim(), apiKey: aiKeyEl.value.trim() };
+    if (cfg.enabled && (!cfg.apiUrl || !cfg.model || !cfg.apiKey)) {
+      showToast('启用 AI 需填写完整的 API URL、模型与 Key');
+      return;
+    }
+    chrome.storage.local.set({ [AJA.AI_CONFIG_KEY]: cfg }, () => {
+      if (chrome.runtime.lastError) { showToast('保存失败：' + chrome.runtime.lastError.message); return; }
+      AJA.aiConfig = cfg;
+      refreshAiConfigUI();
+      showToast(cfg.enabled ? 'AI 辅助填写已开启' : 'AI 配置已保存（未启用）');
+    });
+  });
+
+  aiTestBtn.addEventListener('click', async () => {
+    const cfg = { apiUrl: aiUrlEl.value.trim(), model: aiModelEl.value.trim(), apiKey: aiKeyEl.value.trim() };
+    if (!cfg.apiUrl || !cfg.model || !cfg.apiKey) { showToast('请先填写 API URL、模型与 Key'); return; }
+    aiTestBtn.disabled = true;
+    const origText = aiTestBtn.textContent;
+    aiTestBtn.textContent = '测试中…';
+    try {
+      // 用一个不会被 shouldSkipAIForField 跳过的普通文本字段做连通性测试
+      const resp = await chrome.runtime.sendMessage({
+        type: AJA.MSG.AI_FILL,
+        formFields: [{ fieldId: 'conn-test', label: '个人主页', placeholder: '', name: '', idAttr: '', ariaLabel: '', tagName: 'input', inputType: 'text', options: [], group: '基本信息' }],
+        resumeFields: [{ group: '基本信息', key: '个人主页', value: 'https://example.com' }],
+        aiConfig: cfg
+      });
+      if (resp && resp.success) showToast('AI 接口连接成功');
+      else showToast('AI 接口测试失败：' + ((resp && resp.error) || '未知错误'));
+    } catch (e) {
+      showToast('AI 接口测试失败：' + ((e && e.message) || '无法连接'));
+    } finally {
+      aiTestBtn.disabled = false;
+      aiTestBtn.textContent = origText;
+    }
+  });
+
+  refreshAiConfigUI();
+
+  // 简历同步状态：统计可填字段数（与一键填充实际可用字段一致），空则提示去网页版配置——消除“点击无反应”的困惑
+  function refreshResumeStatus() {
+    const el = shadow && shadow.getElementById('aja-resume-status');
+    if (!el) return;
+    let n = 0;
+    try { n = Object.keys(buildResumeFlatMap(currentResumeData || {})).length; } catch (_) { n = 0; }
+    if (n > 0) {
+      el.textContent = `简历：已同步（${n} 项可填字段）`;
+      el.style.color = '';
+      el.style.cursor = 'default';
+      el.onclick = null;
+    } else {
+      el.textContent = '简历：未同步 · 点此去网页版配置';
+      el.style.color = '#c2410c';
+      el.style.cursor = 'pointer';
+      el.onclick = () => window.open(AJA.TRACKER_URL, '_blank');
+    }
+  }
+  AJA.refreshResumeStatus = refreshResumeStatus;
+
   // ================= 导出惰性 UI 引用（供 02 简历渲染 / 04 填充引擎运行时访问）=================
   AJA.ui = { drawer, toggleBtn, resumeListEl, autofillBtn, captureForm, capCompany, capPosition, capCity, capStage, capDate, capSaveBtn, capCancelBtn };
   // 注意：toggleDrawer 是本函数内部的局部函数，必须在函数内导出到 AJA，
   // 顶层包装器无法引用它（作用域不可达，曾导致点击胶囊后 ReferenceError 静默失败）
   AJA.toggleDrawer = toggleDrawer;
   loadResumeData();
+  refreshResumeStatus();
   refreshPending();
   console.log('🚀 [秋招求职与简历助手] Shadow DOM 侧边栏已挂载。按 Ctrl/⌘+Shift+F 唤起。');
   return AJA.ui;

@@ -79,6 +79,7 @@
       console.warn('读取扩展存储失败，使用默认简历', e);
     }
     renderResumeSections(currentResumeData);
+    if (AJA.refreshResumeStatus) AJA.refreshResumeStatus();
   }
 
   // 监听 storage 变化（当用户在看板页面修改了简历，网页端实时刷新）
@@ -87,6 +88,7 @@
       if (areaName === 'local' && changes[RESUME_STORAGE_KEY]) {
         currentResumeData = changes[RESUME_STORAGE_KEY].newValue || AJA.DEFAULT_RESUME;
         renderResumeSections(currentResumeData);
+        if (AJA.refreshResumeStatus) AJA.refreshResumeStatus();
       }
     });
   }

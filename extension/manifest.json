@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "秋招求职与简历助手",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "秋招网申采集端：网申表单快速填报、岗位一键提取收录与暂存，配合网页版管理器实现跨设备同步。",
   "icons": {
     "16": "icons/icon16.png",
@@ -35,6 +35,7 @@
       "js": [
         "common/constants.js",
         "common/default-resume.js",
+        "common/ai-helpers.js",
         "content/01-core.js",
         "content/02-resume.js",
         "content/03-parsers.js",

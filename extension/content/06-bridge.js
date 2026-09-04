@@ -118,5 +118,14 @@ if (IS_TRACKER_PAGE) {
     }
   });
 
+  // ================= 主动索要简历：打开网页版即把简历拉进插件本地存储 =================
+  // 网页版的定时推送(1s/3s)可能因内容脚本注入晚/刚重载而错过；此处握手拉取 + 重试兜底，确保简历可靠送达。
+  function requestResumeFromTracker() {
+    try { window.postMessage({ source: AJA.BRIDGE_SOURCE, type: 'RESUME_REQUEST' }, '*'); } catch (_) {}
+  }
+  requestResumeFromTracker();
+  setTimeout(requestResumeFromTracker, 800);
+  setTimeout(requestResumeFromTracker, 2500);
+
   console.log('[秋招求职与简历助手] 桥接中继已就绪');
 }

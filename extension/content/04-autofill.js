@@ -599,6 +599,282 @@
     return false;
   }
 
+  // ================= AI 辅助填写支撑：统一填充引擎 / 字段扫描 / 分组标签 / 高亮 / 简历适配 =================
+  // 以下 setElementValue、scanFillableFields、highlight、日期/级联处理等思路移植自 MIT 项目 Resume Pro，
+  // 用于在规则填充之后，对仍未命中的字段做 AI 补全（AI 需用户在侧边栏显式开启）。
+
+  function inferPickerInputType(container, inner) {
+    const cls = container.className || '';
+    const ph = (inner.getAttribute('placeholder') || '').toLowerCase();
+    if (/time/i.test(cls) || /时间|hh:mm/.test(ph)) return 'time';
+    if (/month/i.test(cls) || /年月|月份|month/.test(ph)) return 'month';
+    if (/datetime/i.test(cls) || /日期.*时间|datetime/.test(ph)) return 'datetime-local';
+    return 'date';
+  }
+
+  function findNearestGroupLabel(element) {
+    const sectionSelectors = ['fieldset', "[role='group']", '.form-item', '.ant-form-item', '.el-form-item', '.semi-form-field', 'tr', 'li', 'section', 'td'];
+    for (const selector of sectionSelectors) {
+      const container = element.closest ? element.closest(selector) : null;
+      if (!container) continue;
+      const labelCandidate = container.querySelector('legend, label, th, .label, .form-label, .ant-form-item-label, .el-form-item__label');
+      const text = (labelCandidate && labelCandidate.textContent || '').trim().replace(/[*\s]+$/g, '').trim();
+      if (text && text.length < 40) return text;
+    }
+    return '';
+  }
+
+  // 统一填充引擎：radio / 原生日期时间 / 自定义日期选择器 / input / textarea / select / contentEditable
+  function setElementValue(entry, value) {
+    if (!entry) return false;
+    const H = (typeof AJA !== 'undefined' && AJA.AIHelpers) || null;
+    if (entry.kind === 'radio') {
+      const tv = String(value || '').trim();
+      const matched = entry.elements.find(r => getRadioOptionText(r) === tv || (r.value || '').trim() === tv);
+      if (!matched) return false;
+      matched.checked = true;
+      matched.dispatchEvent(new Event('input', { bubbles: true }));
+      matched.dispatchEvent(new Event('change', { bubbles: true }));
+      try { matched.click(); } catch (_) {}
+      return true;
+    }
+    let el = entry.kind === 'element' ? entry.element : entry;
+    if (!el) return false;
+    const pickerType = entry.pickerType || null;
+    const pickerInputType = entry.pickerInputType || 'date';
+
+    if (el instanceof HTMLInputElement && ['date', 'month', 'datetime-local', 'time'].includes(el.type)) {
+      const normalized = H ? H.normalizeDateValue(value, el.type) : value;
+      const desc = Object.getOwnPropertyDescriptor(el.constructor.prototype, 'value');
+      el.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+      if (desc && desc.set) desc.set.call(el, normalized); else el.value = normalized;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      return el.value === normalized;
+    }
+    if (el instanceof HTMLInputElement && (pickerType === 'antd' || pickerType === 'element' || pickerType === 'generic')) {
+      const normalized = H ? H.normalizeDateValue(value, pickerInputType) : value;
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      return new Promise(resolve => {
+        setTimeout(() => {
+          try {
+            const desc = Object.getOwnPropertyDescriptor(el.constructor.prototype, 'value');
+            if (desc && desc.set) desc.set.call(el, normalized); else el.value = normalized;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+          } catch (_) { resolve(false); return; }
+          resolve(el.value === normalized);
+        }, 150);
+      });
+    }
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const d = Object.getOwnPropertyDescriptor(proto, 'value');
+      if (d && d.set) d.set.call(el, value); else el.value = value;
+      if (el._valueTracker) { try { el._valueTracker.setValue(''); } catch (_) {} } // React 受控输入：复位值追踪器，确保触发 onChange 且值不被重置
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    if (el instanceof HTMLSelectElement) {
+      if (el.options.length <= 1) { const only = el.options[0]; if (!only || (only.value !== value && only.text.trim() !== String(value).trim())) return false; }
+      if (Array.from(el.options).some(o => o.value === value)) el.value = value;
+      else { const mo = Array.from(el.options).find(o => o.text.trim() === String(value).trim()); if (!mo) return false; el.value = mo.value; }
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    if (el instanceof HTMLElement && el.isContentEditable) { el.textContent = value; el.dispatchEvent(new Event('input', { bubbles: true })); return true; }
+    return false;
+  }
+
+  // 写后校验：值是否真的留住了（受控框架可能异步重置）。只判"是否非空/已选中"，容忍站点掩码/格式化改写
+  function verifyEntryValue(entry, val) {
+    if (!entry) return false;
+    if (entry.kind === 'radio') return entry.elements.some(r => r.checked);
+    const el = entry.element;
+    if (!el) return false;
+    if (el instanceof HTMLSelectElement) return el.selectedIndex > 0 && !!el.value;
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return (el.value || '').trim().length > 0;
+    if (el instanceof HTMLElement && el.isContentEditable) return (el.textContent || '').trim().length > 0;
+    return false;
+  }
+
+  // 加强重试：更完整的事件序列（focus + 原生 setter + _valueTracker 复位 + keydown/input/keyup/change/blur）
+  async function refillEnhanced(entry, val) {
+    if (!entry) return false;
+    if (entry.kind === 'radio') {
+      const tv = String(val || '').trim();
+      const r = entry.elements.find(x => getRadioOptionText(x) === tv || (x.value || '').trim() === tv);
+      if (!r) return false;
+      try { r.focus(); } catch (_) {}
+      r.checked = true;
+      r.dispatchEvent(new Event('input', { bubbles: true }));
+      r.dispatchEvent(new Event('change', { bubbles: true }));
+      try { r.click(); } catch (_) {}
+      return true;
+    }
+    const el = entry.element;
+    if (!el) return false;
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      try {
+        el.focus();
+        const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        const d = Object.getOwnPropertyDescriptor(proto, 'value');
+        if (d && d.set) d.set.call(el, val); else el.value = val;
+        if (el._valueTracker) { try { el._valueTracker.setValue(''); } catch (_) {} }
+        el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+        return true;
+      } catch (_) { return false; }
+    }
+    return await setElementValue(entry, val);
+  }
+
+  function isFieldEmpty(entry) {
+    if (!entry) return false;
+    if (entry.kind === 'radio') return !entry.elements.some(r => r.checked);
+    const el = entry.element;
+    if (!el) return false;
+    if (el instanceof HTMLSelectElement) return !(el.selectedIndex > 0 && el.value && el.value.trim());
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return !(el.value && el.value.trim());
+    if (el instanceof HTMLElement && el.isContentEditable) return !(el.textContent && el.textContent.trim());
+    return true;
+  }
+
+  // 扫描可填写字段（原生 input/textarea/select/radio + 日期选择器），为每个字段分配 fieldId 与元数据，供 AI 匹配
+  function scanFillableFields() {
+    const fieldMap = new Map();
+    const fields = [];
+    const radioGroups = new Set();
+    const visible = (el) => {
+      if (!el || (el.closest && el.closest('#autumn-job-assistant-host'))) return false;
+      const type = ((el.getAttribute && el.getAttribute('type')) || '').toLowerCase();
+      if (['hidden', 'submit', 'button', 'reset', 'image', 'file'].includes(type)) return false;
+      if (el.disabled) return false;
+      const style = window.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const candidates = Array.from(document.querySelectorAll('input, textarea, select')).filter(visible);
+    candidates.forEach((element, index) => {
+      if (element instanceof HTMLInputElement && element.type === 'radio') {
+        const groupName = element.name || `__radio__${index}`;
+        if (radioGroups.has(groupName)) return;
+        radioGroups.add(groupName);
+        const radioEls = candidates.filter(c => c instanceof HTMLInputElement && c.type === 'radio' && (c.name || `__radio__${index}`) === groupName);
+        const fieldId = `field-radio-${fields.length}`;
+        fieldMap.set(fieldId, { kind: 'radio', elements: radioEls });
+        fields.push({ fieldId, label: extractFieldLabel(element), placeholder: '', name: groupName, idAttr: '', ariaLabel: element.getAttribute('aria-label') || '', tagName: 'input', inputType: 'radio', options: radioEls.map(getRadioOptionText).filter(Boolean), group: findNearestGroupLabel(element) });
+        return;
+      }
+      const fieldId = `field-${fields.length}`;
+      fieldMap.set(fieldId, { kind: 'element', element });
+      fields.push({
+        fieldId, label: extractFieldLabel(element), placeholder: element.getAttribute('placeholder') || '',
+        name: element.getAttribute('name') || '', idAttr: element.id || '', ariaLabel: element.getAttribute('aria-label') || '',
+        tagName: element.tagName.toLowerCase(),
+        inputType: element instanceof HTMLInputElement ? (element.type || 'text') : element.tagName.toLowerCase(),
+        options: element instanceof HTMLSelectElement ? Array.from(element.options).map(o => o.text.trim()).filter(Boolean) : [],
+        group: findNearestGroupLabel(element)
+      });
+    });
+    const pickerSelectors = [{ selector: '.ant-picker', pickerType: 'antd' }, { selector: '.el-date-editor', pickerType: 'element' }, { selector: "[class*='date-picker']", pickerType: 'generic' }];
+    pickerSelectors.forEach(({ selector, pickerType }) => {
+      document.querySelectorAll(selector).forEach(container => {
+        if (container.closest && container.closest('#autumn-job-assistant-host')) return;
+        Array.from(container.querySelectorAll("input:not([type='hidden']):not([disabled])")).forEach(inner => {
+          if (!visible(inner)) return;
+          const pickerInputType = inferPickerInputType(container, inner);
+          const existing = Array.from(fieldMap.entries()).find(([, v]) => v.element === inner);
+          if (existing) {
+            const [eid, ev] = existing;
+            ev.pickerType = pickerType; ev.pickerInputType = pickerInputType;
+            const ef = fields.find(f => f.fieldId === eid);
+            if (ef) { ef.inputType = 'date-picker'; ef.pickerType = pickerType; ef.pickerInputType = pickerInputType; }
+            return;
+          }
+          const fieldId = `field-${fields.length}`;
+          fieldMap.set(fieldId, { kind: 'element', element: inner, pickerType, pickerInputType });
+          fields.push({ fieldId, label: extractFieldLabel(inner), placeholder: inner.getAttribute('placeholder') || '', name: inner.getAttribute('name') || '', idAttr: inner.id || '', ariaLabel: inner.getAttribute('aria-label') || '', tagName: 'input', inputType: 'date-picker', pickerType, pickerInputType, options: [], group: findNearestGroupLabel(inner) });
+        });
+      });
+    });
+    if (typeof AJA !== 'undefined' && AJA.AIHelpers && AJA.AIHelpers.detectCascadeGroups) AJA.AIHelpers.detectCascadeGroups(fields, fieldMap);
+    return { fields, fieldMap };
+  }
+
+  // 把网页版同步来的简历 JSON 转成 [{group,key,value}]，供 AI 匹配（数组段按 段名+序号 分组以保留多段上下文）
+  function buildResumeFieldsForAI(resume) {
+    const out = [];
+    if (!resume || typeof resume !== 'object') return out;
+    for (const [section, data] of Object.entries(resume)) {
+      if (!data) continue;
+      if (Array.isArray(data)) {
+        data.forEach((item, idx) => {
+          if (!item || typeof item !== 'object') return;
+          const g = `${section}${idx + 1}`;
+          for (const [k, v] of Object.entries(item)) {
+            if (k.startsWith('_') || v === undefined || v === null || String(v).trim() === '') continue;
+            out.push({ group: g, key: k, value: String(v).trim() });
+          }
+        });
+      } else if (typeof data === 'object') {
+        for (const [k, v] of Object.entries(data)) {
+          if (v === undefined || v === null || String(v).trim() === '') continue;
+          out.push({ group: section, key: k, value: String(v).trim() });
+        }
+      }
+    }
+    return out;
+  }
+
+  // 填充高亮：规则=绿、AI=琥珀（提示重点复核）
+  const AJA_HIGHLIGHT_STYLE_ID = 'aja-field-highlight-style';
+  function ensureHighlightStyle() {
+    if (document.getElementById(AJA_HIGHLIGHT_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = AJA_HIGHLIGHT_STYLE_ID;
+    style.textContent = `
+      .aja-fill-rule { animation: aja-fill-rule 2.4s ease-out forwards !important; outline: 2px solid rgba(22,163,74,.9) !important; outline-offset: 2px !important; background-color: rgba(22,163,74,.08) !important; }
+      .aja-fill-ai { animation: aja-fill-ai 3.4s ease-out forwards !important; outline: 2px solid rgba(217,119,6,.95) !important; outline-offset: 2px !important; box-shadow: 0 0 0 4px rgba(217,119,6,.14) !important; background-color: rgba(217,119,6,.1) !important; }
+      @keyframes aja-fill-rule { 0%{outline-color:rgba(22,163,74,.9)} 70%{outline-color:rgba(22,163,74,.55)} 100%{outline-color:rgba(22,163,74,0);background-color:transparent} }
+      @keyframes aja-fill-ai { 0%{outline-color:rgba(217,119,6,.95)} 75%{outline-color:rgba(217,119,6,.7)} 100%{outline-color:rgba(217,119,6,0);background-color:transparent} }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+  function getHighlightTargets(entry, value) {
+    if (!entry) return [];
+    if (entry.kind === 'radio') {
+      const tv = String(value || '').trim();
+      const mr = entry.elements.find(r => getRadioOptionText(r) === tv || (r.value || '').trim() === tv);
+      if (!mr) return [];
+      return [(mr.labels && mr.labels[0]) || (mr.closest && mr.closest('label')) || mr];
+    }
+    const el = entry.element;
+    if (!(el instanceof HTMLElement)) return [];
+    if (entry.pickerType) return [(el.closest && el.closest('.ant-picker, .el-date-editor, [class*="date-picker"]')) || el];
+    return [el];
+  }
+  function isInViewport(el) {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.left >= 0 && r.bottom <= (window.innerHeight || document.documentElement.clientHeight) && r.right <= (window.innerWidth || document.documentElement.clientWidth);
+  }
+  function highlightFilledField(entry, value, variant) {
+    const cls = variant === 'ai' ? 'aja-fill-ai' : 'aja-fill-rule';
+    getHighlightTargets(entry, value).forEach(t => {
+      if (!(t instanceof HTMLElement)) return;
+      if (!isInViewport(t)) { try { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} }
+      t.classList.remove(cls); void t.offsetWidth; t.classList.add(cls);
+      setTimeout(() => t.classList.remove(cls), variant === 'ai' ? 3600 : 2600);
+    });
+  }
+
   async function autoFillPageForm() {
     const autofillBtn = AJA.ui && AJA.ui.autofillBtn;
     if (!autofillBtn || autofillBtn.disabled) return;
@@ -609,7 +885,8 @@
     try {
       const flatMap = buildResumeFlatMap(currentResumeData);
       if (Object.keys(flatMap).length === 0) {
-        showToast('⚠️ 简历库为空，请先在看板配置简历');
+        showToast('⚠️ 插件里还没有简历：请打开网页版 →「我的简历」填写并保存，然后刷新本页重试');
+        if (typeof AJA !== 'undefined' && AJA.refreshResumeStatus) AJA.refreshResumeStatus();
         return;
       }
 
@@ -617,6 +894,8 @@
       let skippedCount = 0;
       const processedElements = new Set();
       const processedRadios = new Set();
+      const ruleAttempts = []; // 规则初次设值的字段，待写后校验（受控框架可能异步重置）
+      ensureHighlightStyle();
 
       // ================= 阶段 1: 常规表单项快速填充 (Input, Textarea, Select, Radio) =================
       const allElements = Array.from(document.querySelectorAll('input, textarea, select')).filter(el => {
@@ -661,8 +940,8 @@
               }
             }
             if (checkedAny) {
-              filledCount++;
               if (name) processedRadios.add(name);
+              ruleAttempts.push({ entry: { kind: 'radio', elements: group }, val });
             } else {
               skippedCount++;
             }
@@ -682,7 +961,7 @@
           const val = findMatchedResumeValue(label, flatMap);
           if (val) {
             const ok = setSelectFieldValue(el, val);
-            if (ok) filledCount++;
+            if (ok) ruleAttempts.push({ entry: { kind: 'element', element: el }, val });
             else skippedCount++;
           } else {
             skippedCount++;
@@ -702,16 +981,10 @@
           const label = extractFieldLabel(el);
           const val = findMatchedResumeValue(label, flatMap);
           if (val) {
-            const proto = (el instanceof HTMLTextAreaElement) ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-            if (setter) {
-              setter.call(el, val);
-            } else {
-              el.value = val;
-            }
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            filledCount++;
+            const entry = { kind: 'element', element: el };
+            const ok = setElementValue(entry, val);
+            if (ok) ruleAttempts.push({ entry, val });
+            else skippedCount++;
           } else {
             skippedCount++;
           }
@@ -757,6 +1030,7 @@
           const ok = await pickCustomDropdownOption(val);
           if (ok) {
             filledCount++;
+            highlightFilledField({ kind: 'element', element: customEl }, val, 'rule');
           } else {
             skippedCount++;
           }
@@ -765,10 +1039,67 @@
         }
       }
 
-      if (filledCount > 0) {
-        showToast(`⚡ 已自动填充 ${filledCount} 项，跳过 ${skippedCount} 项`);
+      // ================= 写后校验：受控框架可能异步重置，短延时后回读；未留住的加强重试一次 =================
+      if (ruleAttempts.length) {
+        await sleep(130);
+        for (const a of ruleAttempts) {
+          if (verifyEntryValue(a.entry, a.val)) {
+            filledCount++; highlightFilledField(a.entry, a.val, 'rule');
+          } else {
+            await refillEnhanced(a.entry, a.val);
+            await sleep(70);
+            if (verifyEntryValue(a.entry, a.val)) { filledCount++; highlightFilledField(a.entry, a.val, 'rule'); }
+            else skippedCount++;
+          }
+        }
+      }
+
+      // ================= 阶段 3: AI 补全（仅规则未命中、仍为空、非高风险字段；需用户在侧边栏显式开启）=================
+      let aiCount = 0;
+      const aiCfg = (typeof AJA !== 'undefined' && AJA.aiConfig) || null;
+      if (aiCfg && aiCfg.enabled && aiCfg.apiUrl && aiCfg.model && aiCfg.apiKey) {
+        try {
+          ensureHighlightStyle();
+          const H = AJA.AIHelpers || null;
+          const { fields, fieldMap } = scanFillableFields();
+          const residual = fields.filter(f => !(H && H.shouldSkipAIForField(f)) && isFieldEmpty(fieldMap.get(f.fieldId)));
+          if (residual.length) {
+            const resumeFields = buildResumeFieldsForAI(currentResumeData);
+            const resp = await chrome.runtime.sendMessage({
+              type: AJA.MSG.AI_FILL, formFields: residual, resumeFields,
+              aiConfig: { apiUrl: aiCfg.apiUrl, model: aiCfg.model, apiKey: aiCfg.apiKey }
+            });
+            if (resp && resp.success && Array.isArray(resp.matches) && resp.matches.length) {
+              const metaMap = new Map(fields.map(f => [f.fieldId, f]));
+              const sorted = [...resp.matches].sort((a, b) => {
+                const ma = metaMap.get(a.fieldId), mb = metaMap.get(b.fieldId);
+                if (ma && ma.cascadeGroup !== undefined && ma.cascadeGroup === (mb && mb.cascadeGroup)) return (ma.cascadeLevel || 0) - (mb.cascadeLevel || 0);
+                return 0;
+              });
+              for (const match of sorted) {
+                const entry = fieldMap.get(match.fieldId);
+                if (!entry) continue;
+                const meta = metaMap.get(match.fieldId);
+                let ok = await setElementValue(entry, match.value);
+                if (!ok && entry.kind === 'element' && entry.element instanceof HTMLSelectElement && meta && meta.cascadeGroup !== undefined) {
+                  for (let t = 0; t < 3 && !ok; t++) { await sleep(100); ok = await setElementValue(entry, match.value); }
+                }
+                if (ok) { aiCount++; highlightFilledField(entry, match.value, 'ai'); }
+                if (ok && meta && meta.cascadeGroup !== undefined) await sleep(250);
+              }
+            } else if (resp && !resp.success && resp.error) {
+              showToast(`AI 补全未完成：${resp.error}`);
+            }
+          }
+        } catch (e) {
+          showToast('AI 补全请求失败：' + ((e && e.message) || '未知错误'));
+        }
+      }
+
+      if (filledCount > 0 || aiCount > 0) {
+        showToast(`⚡ 已填充 ${filledCount} 项（绿色高亮）` + (aiCount ? `，AI 补全 ${aiCount} 项（琥珀高亮，请复核）` : '') + `，跳过 ${skippedCount} 项`);
       } else {
-        showToast(`未检测到可匹配的空白输入项 (跳过 ${skippedCount} 项)`);
+        showToast(`没有可匹配的空白项（跳过 ${skippedCount} 项）；若字段有值却没匹配上，可在侧边栏开启 AI 辅助填写`);
       }
     } finally {
       autofillBtn.disabled = false;

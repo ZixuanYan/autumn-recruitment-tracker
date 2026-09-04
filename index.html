@@ -2730,6 +2730,11 @@
       const BRIDGE_SOURCES = ['AUTUMN_JOB_CAPTURE', 'AUTUMN_JOB_ASSISTANT'];
       function handleCaptureMessage(event) {
         if (event.source !== window || !BRIDGE_SOURCES.includes(event.data?.source)) return;
+        if (event.data.type === 'RESUME_REQUEST') {
+          // 插件打开网页版时主动索要简历：立即下发，弥补定时推送可能因内容脚本注入时机而错过
+          if (!isResumeEmpty(resume)) pushResumeToPlugin();
+          return;
+        }
         if (event.data.type === 'CAPTURE_SUBMIT') {
           // 秋招求职与简历助手插件推送的已收录岗位：走人工确认弹窗，保存后自动快照与云同步
           const submitted = event.data.record || {};

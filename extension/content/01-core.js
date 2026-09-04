@@ -19,6 +19,28 @@ let lastSelectionEnd = null;
 let toggleBtn = null;
 let toastTimer = null;
 
+// AI 辅助填写配置（仅本机 chrome.storage.local；供 04-autofill 的 AI 补全阶段读取）。
+// 默认 null = 未配置 = 纯离线规则填充，零网络。Key 绝不进网页/云同步/备份。
+AJA.aiConfig = null;
+function loadAiConfig() {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get([AJA.AI_CONFIG_KEY], (res) => {
+        if (chrome.runtime.lastError) return;
+        AJA.aiConfig = (res && res[AJA.AI_CONFIG_KEY]) ? res[AJA.AI_CONFIG_KEY] : null;
+      });
+    }
+  } catch (_) {}
+}
+loadAiConfig();
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[AJA.AI_CONFIG_KEY]) {
+      AJA.aiConfig = changes[AJA.AI_CONFIG_KEY].newValue || null;
+    }
+  });
+}
+
 // Toast 消息函数（桥接模式下无 shadow，静默忽略）
 function showToast(msg) {
   if (!shadow) return;
