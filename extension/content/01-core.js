@@ -204,6 +204,16 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       font-weight: normal;
       color: #e0e7ff;
     }
+    .ver-badge {
+      flex-shrink: 0;
+      font-size: 9.5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: rgba(255, 255, 255, 0.16);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: #c7d2fe;
+      letter-spacing: .02em;
+    }
     .close-btn {
       background: none;
       border: none;

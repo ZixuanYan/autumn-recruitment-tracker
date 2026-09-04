@@ -36,6 +36,7 @@ function ensureSidebarUI() {
           <div class="brand-icon">🚀</div>
           <div class="brand-title">秋招求职助手</div>
           <span class="shortcut-badge">Ctrl/⌘+Shift+F</span>
+          <span class="ver-badge" title="当前运行的插件版本；若与仓库最新不符，请在 edge://extensions 重新加载">v${AJA.VERSION}</span>
         </div>
         <button class="close-btn" id="aja-close-btn" title="收起面板">✕</button>
       </div>
