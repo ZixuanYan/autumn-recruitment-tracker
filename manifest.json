@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "秋招求职与简历助手",
+  "version": "3.1.0",
+  "description": "秋招网申采集端：网申表单快速填报、岗位一键提取收录与暂存，配合网页版管理器实现跨设备同步。",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "唤起秋招求职助手侧边栏",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": [
+        "common/constants.js",
+        "common/default-resume.js",
+        "content/01-core.js",
+        "content/02-resume.js",
+        "content/03-parsers.js",
+        "content/04-autofill.js",
+        "content/05-sidebar.js",
+        "content/06-bridge.js"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "commands": {
+    "toggle-sidebar": {
+      "suggested_key": { "default": "Ctrl+Shift+F", "mac": "Command+Shift+F" },
+      "description": "唤起/收起秋招求职助手侧边栏"
+    }
+  }
+}
