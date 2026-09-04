@@ -120,6 +120,14 @@ function ensureSidebarUI() {
             <div class="autofill-warning-tip" id="aja-ai-tip">开启后，规则没填中的字段连同简历值会发往你配置的 AI 接口；Key 只存本机、不进云同步/备份。AI 填充项琥珀高亮，请务必人工复核后再提交。</div>
           </div>
         </div>
+
+        <!-- AI 填充建议（中置信度 0.5~阈值；不自动写入，点「应用」才填）-->
+        <div class="pending-box hidden" id="aja-ai-suggest-box">
+          <button class="pending-toggle" id="aja-ai-suggest-toggle" type="button">
+            <span>💡</span><span>AI 填充建议</span><span class="pending-count" id="aja-ai-suggest-count">0</span>
+          </button>
+          <div class="pending-list" id="aja-ai-suggest-list"></div>
+        </div>
       </div>
 
       <!-- 底部中枢入口 -->
@@ -416,6 +424,10 @@ function ensureSidebarUI() {
   const aiSaveBtn = shadow.getElementById('aja-ai-save');
   const aiTestBtn = shadow.getElementById('aja-ai-test');
   const aiClearBtn = shadow.getElementById('aja-ai-clear');
+  const aiSuggestBox = shadow.getElementById('aja-ai-suggest-box');
+  const aiSuggestList = shadow.getElementById('aja-ai-suggest-list');
+  const aiSuggestCount = shadow.getElementById('aja-ai-suggest-count');
+  const aiSuggestToggle = shadow.getElementById('aja-ai-suggest-toggle');
   const autofillLabel = autofillBtn.querySelector('span:last-child');
   let aiPanelOpen = false;
 
@@ -437,6 +449,15 @@ function ensureSidebarUI() {
     aiPanel.classList.toggle('hidden', !aiPanelOpen);
     if (aiPanelOpen) refreshAiConfigUI(); // 每次展开都回显最新已存配置，避免看到过期/空值
   });
+
+  // AI 填充建议清单：折叠/展开（清单内容由 04-autofill 的 renderAiSuggestions 填充）
+  let aiSuggestOpen = true;
+  if (aiSuggestToggle && aiSuggestList) {
+    aiSuggestToggle.addEventListener('click', () => {
+      aiSuggestOpen = !aiSuggestOpen;
+      aiSuggestList.classList.toggle('hidden', !aiSuggestOpen);
+    });
+  }
 
   aiSaveBtn.addEventListener('click', () => {
     const cfg = { enabled: aiEnabledEl.checked, apiUrl: aiUrlEl.value.trim(), model: aiModelEl.value.trim(), apiKey: aiKeyEl.value.trim() };
@@ -509,7 +530,7 @@ function ensureSidebarUI() {
   AJA.refreshResumeStatus = refreshResumeStatus;
 
   // ================= 导出惰性 UI 引用（供 02 简历渲染 / 04 填充引擎运行时访问）=================
-  AJA.ui = { drawer, toggleBtn, resumeListEl, autofillBtn, captureForm, capCompany, capPosition, capCity, capStage, capDate, capSaveBtn, capCancelBtn };
+  AJA.ui = { drawer, toggleBtn, resumeListEl, autofillBtn, captureForm, capCompany, capPosition, capCity, capStage, capDate, capSaveBtn, capCancelBtn, aiSuggestBox, aiSuggestList, aiSuggestCount };
   // 注意：toggleDrawer 是本函数内部的局部函数，必须在函数内导出到 AJA，
   // 顶层包装器无法引用它（作用域不可达，曾导致点击胶囊后 ReferenceError 静默失败）
   AJA.toggleDrawer = toggleDrawer;

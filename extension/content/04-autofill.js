@@ -1011,6 +1011,106 @@
     });
   }
 
+  // ===== 阶段2 支撑：按控件类型写值 / 语义缓存 / AI 建议清单 =====
+  // 按 ctx.kind 把值写入对应控件（文本/原生下拉/自定义下拉/单选/日期）
+  async function applyValueToEntry(entry, ctx, value) {
+    if (!entry) return false;
+    const kind = (ctx && ctx.kind) || '';
+    if (entry.kind === 'radio') {
+      const tv = String(value).trim();
+      const r = (entry.elements || []).find(x => {
+        const o = getRadioOptionText(x) || ''; const v = (x.value || '').trim();
+        return o === tv || v === tv || (o && (o.includes(tv) || (tv.length >= 2 && tv.includes(o))));
+      });
+      if (!r) return false;
+      simulateClick(r);
+      r.checked = true;
+      r.dispatchEvent(new Event('input', { bubbles: true }));
+      r.dispatchEvent(new Event('change', { bubbles: true }));
+      return verifyEntryValue({ kind: 'radio', elements: entry.elements }, value);
+    }
+    const el = entry.element;
+    if (!el) return false;
+    if (kind === 'select-native' || el instanceof HTMLSelectElement) return setSelectFieldValue(el, value);
+    if (kind === 'select-custom' || kind === 'cascader') {
+      const wrap = (el.closest && el.closest('.ud__select, .ant-select, .el-select, .semi-select, .arco-select, [role="combobox"]')) || el;
+      const trigger = (wrap.querySelector && wrap.querySelector('.ud__select__selector, .ant-select-selector, .el-select__wrapper, .el-input__inner, [class*="trigger" i], input')) || wrap;
+      simulateClick(trigger);
+      return await pickCustomDropdownOption(value);
+    }
+    return await setElementValue(entry, value); // text/textarea/date/contenteditable
+  }
+
+  // 语义类型缓存（字段签名 → semanticType），仅存本机，减少重复调用（值每次按最新简历重算）
+  function loadSemanticCache() {
+    return new Promise(resolve => {
+      try {
+        if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return resolve({});
+        chrome.storage.local.get([AJA.AI_SEMANTIC_CACHE_KEY], res => resolve((res && res[AJA.AI_SEMANTIC_CACHE_KEY]) || {}));
+      } catch (_) { resolve({}); }
+    });
+  }
+  function saveSemanticCache(cache) {
+    return new Promise(resolve => {
+      try {
+        if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return resolve();
+        const trimmed = {};
+        Object.entries(cache || {}).slice(-400).forEach(([k, v]) => { trimmed[k] = v; });
+        chrome.storage.local.set({ [AJA.AI_SEMANTIC_CACHE_KEY]: trimmed }, () => resolve());
+      } catch (_) { resolve(); }
+    });
+  }
+
+  // 中置信度建议：不自动写入，列在侧栏「AI 填充建议」，用户点「应用」才填（抽屉在 Shadow DOM，须经 AJA.ui 引用）
+  function renderAiSuggestions(suggestions) {
+    AJA.aiSuggestions = suggestions;
+    const ui = AJA.ui || {};
+    const box = ui.aiSuggestBox, list = ui.aiSuggestList, countEl = ui.aiSuggestCount;
+    if (!box || !list) return;
+    list.innerHTML = '';
+    if (countEl) countEl.textContent = String(suggestions.length);
+    const dropOne = (s) => {
+      AJA.aiSuggestions = (AJA.aiSuggestions || []).filter(x => x !== s);
+      const n = (AJA.aiSuggestions || []).length;
+      if (countEl) countEl.textContent = String(n);
+      if (n === 0) box.classList.add('hidden');
+    };
+    suggestions.forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'pending-item ai-suggest-item';
+      const main = document.createElement('div');
+      main.className = 'ai-suggest-main';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'ai-suggest-name';
+      nameEl.textContent = (s.ctx && (s.ctx.bestLabel || (s.ctx.attrs && s.ctx.attrs.i18nName))) || s.semanticType || '字段';
+      const valEl = document.createElement('span');
+      valEl.className = 'ai-suggest-val';
+      valEl.textContent = s.value;
+      const confEl = document.createElement('span');
+      confEl.className = 'ai-suggest-conf';
+      confEl.textContent = Math.round((s.confidence || 0) * 100) + '%';
+      main.appendChild(nameEl); main.appendChild(valEl); main.appendChild(confEl);
+      const actions = document.createElement('div');
+      actions.className = 'ai-suggest-actions';
+      const applyBtn = document.createElement('button');
+      applyBtn.type = 'button'; applyBtn.className = 'ai-suggest-apply'; applyBtn.textContent = '应用';
+      applyBtn.addEventListener('click', async () => {
+        const ok = await applyValueToEntry(s.entry, s.ctx, s.value);
+        if (ok) { highlightFilledField(s.entry, s.value, 'ai'); showToast(`已应用：${nameEl.textContent} ← ${s.value}`); }
+        else showToast('应用失败：字段可能已变化，请重新一键填充');
+        row.remove(); dropOne(s);
+      });
+      const ignoreBtn = document.createElement('button');
+      ignoreBtn.type = 'button'; ignoreBtn.className = 'ai-suggest-ignore'; ignoreBtn.textContent = '忽略';
+      ignoreBtn.addEventListener('click', () => { row.remove(); dropOne(s); });
+      actions.appendChild(applyBtn); actions.appendChild(ignoreBtn);
+      row.appendChild(main); row.appendChild(actions);
+      list.appendChild(row);
+      try { highlightFilledField(s.entry, s.value, 'ai'); } catch (_) {}
+    });
+    box.classList.remove('hidden');
+  }
+
   async function autoFillPageForm() {
     const autofillBtn = AJA.ui && AJA.ui.autofillBtn;
     if (!autofillBtn || autofillBtn.disabled) return;
@@ -1208,50 +1308,74 @@
         }
       }
 
-      // ================= 阶段 3: AI 补全（仅规则未命中、仍为空、非高风险字段；需用户在侧边栏显式开启）=================
+      // ================= 阶段 3: AI 表单理解引擎（规则未命中的空字段 → AI 读上下文定语义类型 → 按简历确定性取值 → 置信度分级）=================
       let aiCount = 0;
+      let suggestCount = 0;
       const aiCfg = (typeof AJA !== 'undefined' && AJA.aiConfig) || null;
       if (aiCfg && aiCfg.enabled && aiCfg.apiUrl && aiCfg.model && aiCfg.apiKey) {
         try {
           ensureHighlightStyle();
           const H = AJA.AIHelpers || null;
           const { fields, fieldMap } = scanFillableFields();
-          const residual = fields.filter(f => !(H && H.shouldSkipAIForField(f)) && isFieldEmpty(fieldMap.get(f.fieldId)));
-          if (residual.length) {
-            const resumeFields = buildResumeFieldsForAI(currentResumeData);
-            const resp = await chrome.runtime.sendMessage({
-              type: AJA.MSG.AI_FILL, formFields: residual, resumeFields,
-              aiConfig: { apiUrl: aiCfg.apiUrl, model: aiCfg.model, apiKey: aiCfg.apiKey }
-            });
-            if (resp && resp.success && Array.isArray(resp.matches) && resp.matches.length) {
-              const metaMap = new Map(fields.map(f => [f.fieldId, f]));
-              const sorted = [...resp.matches].sort((a, b) => {
-                const ma = metaMap.get(a.fieldId), mb = metaMap.get(b.fieldId);
-                if (ma && ma.cascadeGroup !== undefined && ma.cascadeGroup === (mb && mb.cascadeGroup)) return (ma.cascadeLevel || 0) - (mb.cascadeLevel || 0);
-                return 0;
-              });
-              for (const match of sorted) {
-                const entry = fieldMap.get(match.fieldId);
-                if (!entry) continue;
-                const meta = metaMap.get(match.fieldId);
-                let ok = await setElementValue(entry, match.value);
-                if (!ok && entry.kind === 'element' && entry.element instanceof HTMLSelectElement && meta && meta.cascadeGroup !== undefined) {
-                  for (let t = 0; t < 3 && !ok; t++) { await sleep(100); ok = await setElementValue(entry, match.value); }
-                }
-                if (ok) { aiCount++; highlightFilledField(entry, match.value, 'ai'); }
-                if (ok && meta && meta.cascadeGroup !== undefined) await sleep(250);
-              }
-            } else if (resp && !resp.success && resp.error) {
-              showToast(`AI 补全未完成：${resp.error}`);
+          const residual = fields.filter(f => f.ctx && f.ctx.isEmpty); // 规则没填、仍为空的字段
+          if (residual.length && H) {
+            const sigOf = (f) => `${(f.ctx.bestLabel || (f.ctx.attrs && (f.ctx.attrs.i18nName || f.ctx.attrs.placeholder)) || '')}|${f.ctx.kind}|${f.ctx.section || ''}`;
+            const cache = await loadSemanticCache();
+            const needAi = [];
+            const cachedType = new Map();
+            for (const f of residual) {
+              const sig = sigOf(f);
+              if (cache[sig]) cachedType.set(f.fieldId, cache[sig]); else needAi.push(f);
             }
+            const resumeFields = buildResumeFieldsForAI(currentResumeData);
+            const byField = new Map();
+            if (needAi.length && resumeFields.length) {
+              const payload = needAi.map(f => Object.assign({ fieldId: f.fieldId }, f.ctx));
+              const resp = await chrome.runtime.sendMessage({
+                type: AJA.MSG.AI_UNDERSTAND, fields: payload, resumeFields,
+                aiConfig: { apiUrl: aiCfg.apiUrl, model: aiCfg.model, apiKey: aiCfg.apiKey }
+              });
+              if (resp && resp.success && Array.isArray(resp.results)) {
+                const sigByField = new Map(needAi.map(f => [f.fieldId, sigOf(f)]));
+                for (const r of resp.results) {
+                  byField.set(r.fieldId, r);
+                  const sig = sigByField.get(r.fieldId);
+                  if (sig && r.semanticType && r.semanticType !== 'other' && r.semanticType !== 'open_question') cache[sig] = r.semanticType;
+                }
+                await saveSemanticCache(cache);
+              } else if (resp && !resp.success && resp.error) {
+                showToast(`AI 理解未完成：${resp.error}`);
+              }
+            }
+            for (const [fieldId, semanticType] of cachedType) if (!byField.has(fieldId)) byField.set(fieldId, { fieldId, semanticType, value: '', confidence: 0.9, needsReview: false });
+
+            const suggestions = [];
+            for (const f of residual) {
+              const r = byField.get(f.fieldId);
+              if (!r || !r.semanticType || r.semanticType === 'other' || r.semanticType === 'open_question') continue;
+              const entry = fieldMap.get(f.fieldId);
+              if (!entry) continue;
+              const value = H.resolveValueBySemantic(r.semanticType, flatMap); // 值只从简历确定性取得，AI 不编造
+              if (!value) continue;
+              if (!H.validateUnderstoodValue(f.ctx, r.semanticType, value)) continue; // 选项成员 + 语义正则校验
+              const conf = typeof r.confidence === 'number' ? r.confidence : 0;
+              const threshold = H.isHighRiskSemantic(r.semanticType) ? 0.85 : 0.75;
+              if (conf >= threshold && !r.needsReview) {
+                const ok = await applyValueToEntry(entry, f.ctx, value);
+                if (ok) { aiCount++; highlightFilledField(entry, value, 'ai'); }
+              } else if (conf >= 0.5) {
+                suggestions.push({ fieldId: f.fieldId, entry, ctx: f.ctx, value, semanticType: r.semanticType, confidence: conf });
+              }
+            }
+            if (suggestions.length) { suggestCount = suggestions.length; renderAiSuggestions(suggestions); }
           }
         } catch (e) {
-          showToast('AI 补全请求失败：' + ((e && e.message) || '未知错误'));
+          showToast('AI 理解请求失败：' + ((e && e.message) || '未知错误'));
         }
       }
 
-      if (filledCount > 0 || aiCount > 0) {
-        showToast(`⚡ 已填充 ${filledCount} 项（绿色高亮）` + (aiCount ? `，AI 补全 ${aiCount} 项（琥珀高亮，请复核）` : '') + `，跳过 ${skippedCount} 项`);
+      if (filledCount > 0 || aiCount > 0 || suggestCount > 0) {
+        showToast(`⚡ 已填充 ${filledCount} 项（绿色高亮）` + (aiCount ? `，AI 填充 ${aiCount} 项（琥珀高亮，请复核）` : '') + (suggestCount ? `，AI 建议 ${suggestCount} 项（见侧栏「AI 填充建议」，需你确认）` : '') + `，跳过 ${skippedCount} 项`);
       } else {
         showToast(`没有可匹配的空白项（跳过 ${skippedCount} 项）；若字段有值却没匹配上，可在侧边栏开启 AI 辅助填写；折叠区块需先点「添加」展开出输入框再填充`);
       }

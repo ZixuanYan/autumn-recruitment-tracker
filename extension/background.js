@@ -216,6 +216,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(err => sendResponse({ ok: false, success: false, error: (err && err.message) || 'AI 请求失败' }));
     return true;
   }
+
+  // AI 表单理解：字段富上下文 → 语义类型 + 建议值 + 置信度（值与校验在内容脚本侧按简历确定性落地）
+  if (request.type === MSG.AI_UNDERSTAND) {
+    handleAiUnderstand(request)
+      .then(sendResponse)
+      .catch(err => sendResponse({ ok: false, success: false, error: (err && err.message) || 'AI 请求失败' }));
+    return true;
+  }
 });
 
 // ================= AI 辅助填写（思路移植自 MIT 项目 Resume Pro；仅对用户显式配置的接口发起请求）=================
@@ -333,4 +341,98 @@ async function handleAiFill(message) {
   // 防幻觉：值必须对字段合法（select/radio 值∈选项 + email/phone/id/date/name 语义正则）
   const matches = AJA.AIHelpers ? AJA.AIHelpers.filterValidMatches(formFields, aiMatches) : aiMatches;
   return { ok: true, success: true, matches };
+}
+
+// ================= 阶段2：AI 表单理解引擎（字段上下文 → 语义类型 + 建议值 + 置信度）=================
+function buildAiUnderstandSystemPrompt() {
+  const types = (AJA.AIHelpers && AJA.AIHelpers.SEMANTIC_TYPES) || [];
+  return [
+    '你是网页表单理解引擎。输入是一批表单字段的上下文（bestLabel/labelCandidates 标签候选、section 所属区块、kind 控件类型、options 可选项、attrs 属性、snippet 局部DOM）与用户简历字段。',
+    '任务：判断每个字段对应简历里的哪一类信息，给出语义类型、建议值、置信度。',
+    '规则：',
+    '1. 只返回 JSON 数组，无任何解释、无 markdown 代码块。',
+    '2. 每项格式：{"fieldId":"..","semanticType":"..","value":"..","confidence":0.0到1.0,"needsReview":false}',
+    '3. semanticType 只能取词表之一：' + types.join(', ') + '；无法归类填 other。',
+    '4. value 必须是所给简历字段中真实存在的值，绝不编造；简历无对应信息则不要输出该字段。',
+    '5. 用 section 消歧：同为"名称/学校/单位"，在"教育经历"→school/college/major，在"实习/工作经历"→company/department/position，在"项目经历"→project_name/project_role。',
+    '6. confidence=把握度：标签明确且简历有对应值→≥0.85；需推断→0.5~0.8；很不确定→<0.5。姓名/手机/邮箱/证件/出生日期等基础强类型若不能确定，needsReview 置 true。',
+    '7. open_question 表示开放问答（如"请描述…"）；若简历无现成答案则不要输出该字段。'
+  ].join('\n');
+}
+
+function buildAiUnderstandUserPrompt(fields, resumeFields) {
+  return [
+    '表单字段（含上下文）：',
+    JSON.stringify(fields),
+    '',
+    '简历字段：',
+    JSON.stringify(resumeFields),
+    '',
+    '请只对能对应到简历真实值的字段输出结果；无对应的字段跳过。'
+  ].join('\n');
+}
+
+function normalizeAiUnderstand(payload) {
+  const source = Array.isArray(payload) ? payload : (payload && (payload.results || payload.matches));
+  if (!Array.isArray(source)) throw new Error('结果不是 JSON 数组');
+  const TYPES = (AJA.AIHelpers && AJA.AIHelpers.SEMANTIC_TYPES) || [];
+  return source.map(item => {
+    if (!item || typeof item !== 'object') return null;
+    const fieldId = String(item.fieldId == null ? '' : item.fieldId).trim();
+    if (!fieldId) return null;
+    let semanticType = String(item.semanticType == null ? '' : item.semanticType).trim();
+    if (TYPES.length && TYPES.indexOf(semanticType) === -1) semanticType = 'other';
+    const value = String(item.value == null ? '' : item.value);
+    let confidence = Number(item.confidence);
+    if (!isFinite(confidence)) confidence = 0;
+    confidence = Math.max(0, Math.min(1, confidence));
+    return { fieldId, semanticType, value, confidence, needsReview: !!item.needsReview };
+  }).filter(Boolean);
+}
+
+async function handleAiUnderstand(message) {
+  const aiConfig = normalizeAiConfig(message.aiConfig);
+  const fields = Array.isArray(message.fields) ? message.fields : [];
+  const resumeFields = Array.isArray(message.resumeFields) ? message.resumeFields : [];
+
+  if (!aiConfig.apiUrl || !aiConfig.model || !aiConfig.apiKey) {
+    return { ok: false, success: false, error: '请先在插件侧边栏配置 AI 接口' };
+  }
+  if (!fields.length) return { ok: true, success: true, results: [] };
+  if (!resumeFields.length) return { ok: false, success: false, error: '简历为空，无可用于匹配的数据' };
+
+  let response;
+  try {
+    response = await fetch(aiConfig.apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${aiConfig.apiKey}` },
+      body: JSON.stringify({
+        model: aiConfig.model,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: buildAiUnderstandSystemPrompt() },
+          { role: 'user', content: buildAiUnderstandUserPrompt(fields, resumeFields) }
+        ]
+      })
+    });
+  } catch (_) {
+    return { ok: false, success: false, error: '无法连接 AI 接口，请检查网络与 API URL' };
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = (data && data.error && data.error.message) || (data && data.message) || `HTTP ${response.status}`;
+    return { ok: false, success: false, error: `AI 接口请求失败：${detail}` };
+  }
+  const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    return { ok: false, success: false, error: 'AI 未返回可解析的内容' };
+  }
+  let results;
+  try {
+    results = normalizeAiUnderstand(parseAiJsonContent(content));
+  } catch (err) {
+    return { ok: false, success: false, error: `AI 返回结果解析失败：${err.message}` };
+  }
+  return { ok: true, success: true, results };
 }

@@ -209,6 +209,52 @@
     });
   }
 
+  // ================= 阶段2：AI 表单理解引擎支撑 =================
+  // 语义类型词表：AI 只负责把字段"归类"到这些类型，值由 resolveValueBySemantic 从简历确定性取得（防编造）
+  const SEMANTIC_TYPES = ['name', 'phone', 'email', 'gender', 'birth_date', 'id_type', 'id_number', 'address', 'hometown', 'school', 'college', 'major', 'degree', 'edu_start', 'edu_end', 'company', 'department', 'position', 'work_start', 'work_end', 'project_name', 'project_role', 'skill', 'english_level', 'english_score', 'salary_expect', 'available_date', 'accept_transfer', 'self_evaluation', 'open_question', 'other'];
+
+  // semanticType → 简历 flatMap 候选键（按优先级取第一个存在的值）
+  const SEMANTIC_TO_RESUME_KEYS = {
+    name: ['姓名', '中文名'], phone: ['手机', '电话', '手机号', '联系电话'], email: ['邮箱', '电子邮箱'],
+    gender: ['性别'], birth_date: ['标准出生日期', '出生年月', '出生日期', '生日'],
+    id_type: ['证件类型'], id_number: ['身份证', '证件号码', '身份证号', '证件号'],
+    address: ['现居地', '现居详细地址', '通讯地址', '家庭住址'], hometown: ['籍贯', '户籍地', '户口所在地'],
+    school: ['学校', '毕业院校', '就读学校', '最高学历学校'], college: ['学院', '院系'], major: ['专业', '所学专业', '最高学历专业'],
+    degree: ['学历', '最高学历'], edu_start: ['入学时间', '入学年月'], edu_end: ['毕业时间', '毕业年月'],
+    company: ['单位', '公司', '实习单位', '工作单位'], department: ['部门', '实习部门'], position: ['岗位', '职位', '实习岗位'],
+    work_start: ['开始'], work_end: ['结束'],
+    project_name: ['项目名称'], project_role: ['角色', '项目角色'], skill: ['专业技能', '技能'],
+    english_level: ['英语等级', '英语水平'], english_score: ['英语分数', '英语成绩'],
+    salary_expect: ['期望薪资'], available_date: ['到岗时间'], accept_transfer: ['是否接受调剂'],
+    self_evaluation: ['自我评价', '个人评价']
+  };
+
+  // 高风险语义：AI 需更高置信度才可写入，否则只标 needsReview
+  const HIGH_RISK_SEMANTICS = ['id_number', 'id_type', 'birth_date', 'phone', 'email', 'degree', 'english_score'];
+
+  function resolveValueBySemantic(semanticType, flatMap) {
+    const keys = SEMANTIC_TO_RESUME_KEYS[semanticType];
+    if (!keys || !flatMap) return null;
+    for (const k of keys) { if (flatMap[k]) return flatMap[k]; }
+    return null;
+  }
+  function isHighRiskSemantic(t) { return HIGH_RISK_SEMANTICS.includes(t); }
+
+  // 控件 kind → isValueValidForField 所需的 inputType
+  function kindToInputType(kind) {
+    if (kind === 'select-native' || kind === 'select-custom' || kind === 'cascader') return 'select';
+    if (kind === 'radio') return 'radio';
+    return 'text';
+  }
+
+  // 校验 AI 理解后的值对该字段是否合法：选项成员 + 语义正则（复用 isValueValidForField，label 传 semanticType 以命中正则）
+  function validateUnderstoodValue(ctx, semanticType, value) {
+    const text = String(value == null ? '' : value).trim();
+    if (!text) return false;
+    const field = { label: semanticType, inputType: kindToInputType(ctx && ctx.kind), options: (ctx && ctx.options) || [] };
+    return isValueValidForField(field, text);
+  }
+
   root.AJA.AIHelpers = {
     normalizeText,
     inferFieldSemantic,
@@ -217,6 +263,14 @@
     filterValidMatches,
     normalizeDateValue,
     parseDateParts,
-    detectCascadeGroups
+    detectCascadeGroups,
+    // 阶段2：AI 表单理解引擎（语义类型词表 + 确定性取值 + 校验）
+    SEMANTIC_TYPES,
+    SEMANTIC_TO_RESUME_KEYS,
+    HIGH_RISK_SEMANTICS,
+    resolveValueBySemantic,
+    isHighRiskSemantic,
+    kindToInputType,
+    validateUnderstoodValue
   };
 })();

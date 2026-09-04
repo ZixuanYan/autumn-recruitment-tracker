@@ -479,6 +479,18 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       gap: 8px;
     }
     #aja-ai-panel.hidden { display: none; }
+    /* AI 填充建议清单（中置信度，需用户点“应用”才写入）*/
+    .ai-suggest-item { flex-direction: column; align-items: stretch; gap: 6px; }
+    .ai-suggest-main { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+    .ai-suggest-name { color: #334155; font-weight: 600; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ai-suggest-val { flex: 1; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ai-suggest-conf { font-size: 10px; color: #b45309; background: #fef3c7; border-radius: 4px; padding: 1px 5px; flex-shrink: 0; }
+    .ai-suggest-actions { display: flex; gap: 6px; }
+    .ai-suggest-apply, .ai-suggest-ignore { flex: 1; border: 0; border-radius: 6px; padding: 5px 0; font-size: 12px; cursor: pointer; }
+    .ai-suggest-apply { background: #5b6cfa; color: #fff; }
+    .ai-suggest-apply:hover { background: #4a5ae8; }
+    .ai-suggest-ignore { background: #eef2f7; color: #475569; }
+    .ai-suggest-ignore:hover { background: #e2e8f0; }
     .form-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
