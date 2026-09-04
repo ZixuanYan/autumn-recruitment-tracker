@@ -2,6 +2,8 @@
 
 网申页采集端浏览器扩展（Manifest V3）：**简历表单快速填报 + 岗位一键收录 + 暂存箱**。与网页版 [秋招投递管理器](https://github.com/ZixuanYan/autumn-recruitment-tracker) 配套使用，插件负责采集，网页版负责管理与跨设备同步。
 
+> 本目录是 monorepo `autumn-recruitment-tracker` 的浏览器扩展部分（网页版管理器在仓库根目录）。安装：Chrome/Edge 扩展页开启开发者模式 →「加载已解压的扩展程序」→ 选择本 `extension/` 文件夹。
+
 > v3.0.0 重大调整：本扩展聚焦为纯采集端。投递看板、简历编辑器、OCR 与云同步已移除，统一由网页版管理器承担；简历在网页版编辑后自动下发到本扩展供填表使用。
 
 ## 核心特性

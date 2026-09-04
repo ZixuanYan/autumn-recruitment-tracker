@@ -2,6 +2,8 @@
 
 一个面向秋招求职者的投递管理工具，可在电脑浏览器和手机上使用。无需注册账号，投递数据默认只保存在使用者自己的浏览器中。
 
+> 本仓库为 monorepo：根目录 = 网页版管理器（GitHub Pages 部署），`extension/` = 配套浏览器扩展「秋招求职与简历助手」源码。
+
 ## 普通用户请从这里开始
 
 **[打开简洁下载中心](https://zixuanyan.github.io/autumn-recruitment-tracker/download.html)**
@@ -20,7 +22,7 @@
 
 | 内容 | 适用场景 | 下载 |
 | --- | --- | --- |
-| 秋招求职与简历助手 插件 v3.1.0 | 电脑 Chrome/Edge 网申填表 + 一键收录 + 暂存箱 | [前往插件仓库安装](https://github.com/ZixuanYan/autumn-job-assistant-tracker) |
+| 秋招求职与简历助手 插件 v3.1.0 | 电脑 Chrome/Edge 网申填表 + 一键收录 + 暂存箱 | [前往插件目录](https://github.com/ZixuanYan/autumn-recruitment-tracker/tree/main/extension) |
 
 > 手机端不能安装 Chrome 扩展程序。手机可以使用网页本身以及截图识别功能。
 
@@ -71,6 +73,7 @@ service-worker.js          离线缓存
 icons/                     网页 App 图标
 ocr/                       本地截图识别资源
 docs/                      安装、使用和数据迁移教程
+extension/                 配套浏览器扩展「秋招求职与简历助手」源码（采集端）
 ```
 
 ## 来源说明
