@@ -476,6 +476,8 @@
     .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(16, 24, 40, .12), 0 12px 26px -12px rgba(36, 71, 224, .55); }
     .btn-primary:hover { background: var(--accent-ink); }
     .btn-primary .icon { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 8px; border-radius: 50%; background: rgba(255, 255, 255, .2); font-size: 12px; }
+    .icon svg { width: 1.15em; height: 1.15em; vertical-align: -0.18em; }
+    .btn-primary .icon svg { width: 14px; height: 14px; vertical-align: 0; }
     .btn-soft { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px rgba(36, 71, 224, .18); }
     .btn-danger { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px rgba(192, 54, 44, .18); }
     .btn-small { min-height: 32px; padding: 0 12px; font-size: 12.5px; }
@@ -566,6 +568,11 @@
 <symbol id="i-scan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 12h8"/></symbol>
 <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/></symbol>
 <symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.3A3.5 3.5 0 0 1 17.5 18z"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="m8 11 4 4 4-4"/><path d="M5 19h14"/></symbol>
+<symbol id="i-file-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5"/><path d="m10 15 2 2 2-2"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 14.5 5-5"/><path d="M12.5 6.5 14 5a3.5 3.5 0 0 1 5 5l-1.5 1.5"/><path d="M11.5 17.5 10 19a3.5 3.5 0 0 1-5-5l1.5-1.5"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m8 8 4-4 4 4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></symbol>
 </defs></svg>
   <div class="app-layout">
     <aside class="app-sidebar" aria-label="主导航">
@@ -590,10 +597,12 @@
         <p class="subtitle" id="viewSubtitle">今天也别忘了跟进重要机会</p>
       </div>
       <div class="top-actions">
-        <button class="btn" id="exportBtn" type="button" title="导出数据"><span class="icon">⇩</span>导出数据</button>
-        <button class="btn" id="captureUrlBtn" type="button" title="识别投递网址"><span class="icon">⌁</span>识别投递网址</button>
-        <button class="btn" id="installAppBtn" type="button" title="安装到手机" hidden><span class="icon">⇧</span>安装到手机</button>
-        <button class="btn btn-primary" id="addBtn" type="button" title="新增投递"><span class="icon">＋</span>新增投递</button>
+        <button class="btn" id="exportRecordsBtn" type="button" title="导出投递记录（台账 JSON 备份）"><span class="icon"><svg><use href="#i-download"/></svg></span>导出投递记录</button>
+        <button class="btn" id="exportResumeBtn" type="button" title="导出简历 JSON"><span class="icon"><svg><use href="#i-file-down"/></svg></span>导出简历</button>
+        <button class="btn" id="topSyncBtn" type="button" title="云同步"><span class="icon"><svg><use href="#i-cloud"/></svg></span>云同步</button>
+        <button class="btn" id="captureUrlBtn" type="button" title="识别投递网址"><span class="icon"><svg><use href="#i-link"/></svg></span>识别投递网址</button>
+        <button class="btn" id="installAppBtn" type="button" title="安装到手机" hidden><span class="icon"><svg><use href="#i-share"/></svg></span>安装到手机</button>
+        <button class="btn btn-primary" id="addBtn" type="button" title="新增投递"><span class="icon"><svg><use href="#i-plus"/></svg></span>新增投递</button>
       </div>
     </header>
 
@@ -862,7 +871,7 @@
       <ol class="install-guide">
         <li><span class="install-step">iOS</span><div><strong>iPhone / iPad</strong><span>使用 Safari 打开网页 → 点击底部“分享” → 选择“添加到主屏幕” → 点击“添加”。</span></div></li>
         <li><span class="install-step">安卓</span><div><strong>Android</strong><span>使用 Chrome 打开网页 → 点击右上角菜单 → 选择“安装应用”或“添加到主屏幕”。</span></div></li>
-        <li><span class="install-step">备份</span><div><strong>换手机前先导出</strong><span>不同手机不会自动同步数据。请先点击“导出数据”，再在新手机的“数据安全”中导入。</span></div></li>
+        <li><span class="install-step">备份</span><div><strong>换手机前先导出</strong><span>不同手机不会自动同步数据。请先点击“导出投递记录”，再在新手机的“数据安全”中导入。</span></div></li>
       </ol>
     </div>
     <div class="modal-actions"><button class="btn btn-primary" id="doneInstallDialog" type="button">知道了</button></div>
@@ -2094,7 +2103,7 @@
 
       async function setupAutomaticBackup() {
         if (!window.showSaveFilePicker) {
-          alert('当前浏览器不支持自动写入备份文件。你仍可使用“导出数据”和“导入备份文件”。建议使用最新版 Chrome 或 Edge。');
+          alert('当前浏览器不支持自动写入备份文件。你仍可使用“导出投递记录”和“导入备份文件”。建议使用最新版 Chrome 或 Edge。');
           return;
         }
         try {
@@ -3121,6 +3130,12 @@
         showToast(`已导出 ${records.length} 条记录，原数据未改变`);
       }
 
+      // 导出简历 JSON（顶栏「导出简历」与简历页「导出 JSON」共用）
+      function exportResume() {
+        downloadPayload({ appVersion: APP_VERSION, exportedAt: new Date().toISOString(), resume: JSON.parse(JSON.stringify(resume)) }, `我的简历-${localDateInput(new Date())}.json`);
+        showToast('简历 JSON 已导出');
+      }
+
       // 盖章动效：Offer 到手，印章砸落（prefers-reduced-motion 下由 CSS 直接跳过）
       function playOfferStamp() {
         const overlay = document.createElement('div');
@@ -3342,10 +3357,7 @@
       $('#doneFieldLibraryDialog').addEventListener('click', () => $('#fieldLibraryDialog').close());
       $('#fieldLibraryDialog').addEventListener('click', event => { if (event.target === $('#fieldLibraryDialog')) $('#fieldLibraryDialog').close(); });
       $('#saveResumeBtn').addEventListener('click', collectAndSaveResume);
-      $('#resumeExportBtn').addEventListener('click', () => {
-        downloadPayload({ appVersion: APP_VERSION, exportedAt: new Date().toISOString(), resume: JSON.parse(JSON.stringify(resume)) }, `我的简历-${localDateInput(new Date())}.json`);
-        showToast('简历 JSON 已导出');
-      });
+      $('#resumeExportBtn').addEventListener('click', exportResume);
       $('#resumeImportBtn').addEventListener('click', () => $('#resumeFileInput').click());
       $('#resumeFileInput').addEventListener('change', async (event) => {
         const file = event.target.files?.[0];
@@ -3389,7 +3401,9 @@
         showToast('岗位库已清空，投递记录未改变');
       });
       $('#toolSafetyBtn').addEventListener('click', openSafetyDialog);
-      $('#exportBtn').addEventListener('click', exportData);
+      $('#exportRecordsBtn').addEventListener('click', exportData);
+      $('#exportResumeBtn').addEventListener('click', exportResume);
+      $('#topSyncBtn').addEventListener('click', openSyncDialog);
       // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
       $('#closeDialog').addEventListener('click', closeDialog);
       $('#cancelDialog').addEventListener('click', closeDialog);

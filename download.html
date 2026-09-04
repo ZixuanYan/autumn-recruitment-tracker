@@ -59,7 +59,7 @@
       font-size: 14px;
       font-weight: 700;
     }
-    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
     .card {
       display: flex;
       min-height: 280px;
@@ -140,18 +140,10 @@
 
       <article class="card">
         <div class="number">2</div>
-        <h2>下载电脑离线版</h2>
-        <p>适合希望断网也能使用的人。下载后先解压，再双击文件夹中的 index.html。</p>
-        <p class="meta">版本 v3.0.0 · 约 6 MB</p>
-        <a class="button" href="./downloads/秋招投递管理器-电脑离线版-v3.0.0.zip" download>下载离线版</a>
-      </article>
-
-      <article class="card">
-        <div class="number">3</div>
-        <h2>下载一键收录插件</h2>
-        <p>安装到电脑 Chrome 或 Edge，用于识别招聘页面。手机浏览器不能安装插件。</p>
-        <p class="meta">插件 v1.4.2 · 安装前需解压</p>
-        <a class="button" href="./downloads/秋招一键收录插件-v1.4.2.zip" download>下载浏览器插件</a>
+        <h2>获取浏览器插件</h2>
+        <p>「秋招求职与简历助手」安装到电脑 Chrome 或 Edge：网申页一键填表、一键收录岗位进投递台账，未打开管理器时先进暂存箱。手机浏览器不能安装插件。</p>
+        <p class="meta">插件 v3.1.0 · 在仓库下载 ZIP 或克隆</p>
+        <a class="button" href="https://github.com/ZixuanYan/autumn-job-assistant-tracker" target="_blank" rel="noopener">前往插件仓库</a>
       </article>
     </section>
 
@@ -159,14 +151,14 @@
       <h3>安装时只需要记住</h3>
       <div class="guide-grid">
         <p><strong>手机：</strong>iPhone 用 Safari 打开网页版后“添加到主屏幕”；Android 用 Chrome 选择“安装应用”。</p>
-        <p><strong>插件：</strong>ZIP 必须先解压，再到扩展程序页面选择“加载已解压的扩展程序”。</p>
+        <p><strong>插件：</strong>在插件仓库点绿色 Code → Download ZIP（或克隆），解压后到扩展程序页面选择“加载已解压的扩展程序”，选中含 manifest.json 的文件夹。</p>
       </div>
       <p style="margin-top:14px"><a class="text-link" href="./docs/安装与使用教程.md">查看完整安装与使用教程 →</a></p>
     </section>
 
     <footer>
-      网页 v3.6.0 · 插件 v1.4.2<br>
-      电脑和手机的数据不会自动同步，换设备请使用“导出数据”和“导入备份文件”。
+      网页 v4.0.0 · 插件 v3.1.0<br>
+      电脑和手机的数据默认不会自动同步，可在“工具 → 云同步”开启跨设备同步，或用“导出投递记录”和“导入备份文件”手动迁移。
     </footer>
   </main>
 </body>
