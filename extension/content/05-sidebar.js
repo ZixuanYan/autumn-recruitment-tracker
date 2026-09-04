@@ -73,16 +73,7 @@ function ensureSidebarUI() {
               </div>
               <div class="form-group">
                 <label>投递阶段</label>
-                <select id="cap-stage">
-                  <option value="已投递">已投递</option>
-                  <option value="待投递">待投递</option>
-                  <option value="笔试">笔试</option>
-                  <option value="一面">一面</option>
-                  <option value="二面">二面</option>
-                  <option value="HR面">HR面</option>
-                  <option value="Offer">Offer</option>
-                  <option value="已结束">已结束</option>
-                </select>
+                <select id="cap-stage"></select>
               </div>
             </div>
             <div class="form-group">
@@ -131,6 +122,8 @@ function ensureSidebarUI() {
   const capPosition = shadow.getElementById('cap-position');
   const capCity = shadow.getElementById('cap-city');
   const capStage = shadow.getElementById('cap-stage');
+  // 阶段选项由 AJA.STAGES 统一生成（消除硬编码，与网页版预设单一事实源）
+  capStage.innerHTML = AJA.STAGES.map(s => `<option value="${s}">${s}</option>`).join('');
   const capDate = shadow.getElementById('cap-date');
   const capSaveBtn = shadow.getElementById('cap-save-btn');
   const capCancelBtn = shadow.getElementById('cap-cancel-btn');

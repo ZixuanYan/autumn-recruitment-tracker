@@ -106,7 +106,7 @@
 
     .distribution { padding: 14px 16px 16px; margin-bottom: 16px; }
     .distribution .panel-head { padding: 0 0 12px; border: 0; }
-    .stage-grid { display: grid; grid-template-columns: repeat(8, minmax(64px, 1fr)); gap: 8px; }
+    .stage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 8px; }
     .stage-cell { min-width: 0; padding: 8px; border: 1px solid var(--stage-border, var(--line)); border-radius: 8px; background: var(--stage-soft, var(--surface-soft)); }
     .stage-meta { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 6px; color: var(--stage-color, var(--muted)); font-size: 11.5px; }
     .stage-meta span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -148,6 +148,12 @@
     .badge[data-stage="待投递"] { border-style: dashed; }
     .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"] { --stage-color: #52525b; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
     .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"] { --stage-color: #52525b; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
+    .stage-cell[data-stage="测评"], .badge[data-stage="测评"],
+    .stage-cell[data-stage="机试"], .badge[data-stage="机试"] { --stage-color: #52525b; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
+    .stage-cell[data-stage="三面"], .badge[data-stage="三面"],
+    .stage-cell[data-stage="四面"], .badge[data-stage="四面"],
+    .stage-cell[data-stage="五面"], .badge[data-stage="五面"],
+    .stage-cell[data-stage="交叉面"], .badge[data-stage="交叉面"] { --stage-color: #1e3ab0; --stage-soft: #eef1fd; --stage-border: #2749d6; }
     .stage-cell[data-stage="一面"], .badge[data-stage="一面"] { --stage-color: #1e3ab0; --stage-soft: #eef1fd; --stage-border: #2749d6; }
     .stage-cell[data-stage="二面"], .badge[data-stage="二面"] { --stage-color: #1e3ab0; --stage-soft: #eef1fd; --stage-border: #2749d6; }
     .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"] { --stage-color: #1e3ab0; --stage-soft: #eef1fd; --stage-border: #2749d6; }
@@ -158,6 +164,16 @@
     .badge[data-stage="已结束"] { opacity: .6; }
     .stage-cell { border-radius: 8px; }
     .stage-cell[data-stage="待投递"] { border-style: dashed; background: transparent; }
+    /* 阶段时间线编辑器（记录弹窗）+ 推进选择弹窗 */
+    .timeline-editor { display: grid; gap: 7px; margin: 8px 0; }
+    .tl-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .tl-row .tl-stage { flex: 1 1 96px; }
+    .tl-row .tl-date { flex: 0 0 142px; }
+    .tl-row .tl-note { flex: 2 1 120px; }
+    .tl-row .control { min-height: 34px; }
+    .tl-del { flex: 0 0 30px; width: 30px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; line-height: 1; font-size: 13px; }
+    .tl-del:hover { color: var(--red); border-color: var(--red); background: #fdecea; }
+    .advance-stage-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
     .row-actions { display: flex; gap: 7px; white-space: nowrap; }
     .text-button { min-height: 30px; padding: 3px 6px; background: transparent; border: 0; color: var(--muted); font-size: 13px; border-radius: 7px; }
     .text-button:hover { color: var(--primary); background: var(--primary-soft); }
@@ -746,7 +762,13 @@
           <div class="field"><label for="position">岗位 <span class="required">*</span></label><input class="control" id="position" name="position" required maxlength="80" placeholder="例如：产品经理校招生"></div>
           <div class="field"><label for="city">城市 <span class="required">*</span></label><input class="control" id="city" name="city" required maxlength="30" placeholder="例如：上海"></div>
           <div class="field"><label for="applicationDate">投递日期 <span class="required">*</span></label><input class="control" id="applicationDate" name="applicationDate" type="date" required></div>
-          <div class="field"><label for="stage">当前阶段 <span class="required">*</span></label><select class="control" id="stage" name="stage" required></select></div>
+          <div class="field full">
+            <label>阶段时间线 <span class="required">*</span></label>
+            <div class="hint">按时间顺序记录这条投递走过的阶段——可跳过笔试、可多面、可自定义；当前阶段 = 最后一条。</div>
+            <datalist id="stagePresets"></datalist>
+            <div class="timeline-editor" id="timelineEditor"></div>
+            <button class="btn btn-small" id="addTimelineBtn" type="button">＋ 添加阶段</button>
+          </div>
           <div class="field"><label for="scheduleAt">安排时间</label><input class="control" id="scheduleAt" name="scheduleAt" type="datetime-local"><div class="hint">有面试、笔试或跟进时间时填写</div></div>
           <div class="field full"><label for="applicationUrl">投递网址</label><input class="control" id="applicationUrl" name="applicationUrl" type="url" maxlength="1000" placeholder="https://jobs.example.com/position/123"><div class="hint">通过一键收录插件添加时会自动填写</div></div>
           <div class="field full"><label for="recentSchedule">最近安排</label><input class="control" id="recentSchedule" name="recentSchedule" maxlength="100" placeholder="例如：线上一面（腾讯会议）"></div>
@@ -761,6 +783,17 @@
     <div class="modal-head"><h2 id="confirmTitle">请确认</h2></div>
     <div class="form-body"><p class="capture-note" id="confirmMessage"></p></div>
     <div class="modal-actions"><button class="btn" id="confirmCancelBtn" type="button">取消</button><button class="btn btn-primary" id="confirmOkBtn" type="button">确定</button></div>
+  </dialog>
+
+  <dialog id="advanceDialog">
+    <div class="modal-head"><h2 id="advanceTitle">推进阶段</h2><button class="close-btn" id="closeAdvanceDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">选择要推进到的阶段——它会作为一条新里程碑追加到该投递的时间线，当前阶段随之更新。可跳过笔试、直接到任意面试轮次或 Offer。</p>
+      <div class="field"><label for="advanceDate">阶段日期</label><input class="control" id="advanceDate" type="date"></div>
+      <div class="advance-stage-grid" id="advanceStageGrid"></div>
+      <div class="field"><label for="advanceCustom">或自定义阶段</label><input class="control" id="advanceCustom" maxlength="20" placeholder="例如：加面、复试、意向书、测评"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelAdvanceDialog" type="button">取消</button><button class="btn btn-primary" id="confirmAdvanceBtn" type="button">确认推进</button></div>
   </dialog>
 
   <dialog id="captureDialog">
@@ -898,9 +931,38 @@
     (() => {
       'use strict';
 
-      // 单一事实源提醒：STAGES 与下方 DEFAULT_RESUME 是与扩展端 autumn-job-assistant-tracker
+      // 单一事实源提醒：STAGE_PRESETS 与下方 DEFAULT_RESUME 是与扩展端 extension/
       // （common/constants.js、common/default-resume.js）的跨端约定，两处必须保持一致，改一处需同步另一处。
-      const STAGES = ['待投递', '已投递', '笔试', '一面', '二面', 'HR面', 'Offer', '已结束'];
+      // 阶段预设（仅用于排序/推进建议/分布/配色）：实际阶段可自定义，允许跳过笔试、支持三/四/五面、交叉面等。
+      const STAGE_PRESETS = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
+      const STAGES = STAGE_PRESETS; // 兼容别名：旧引用（分布/筛选/采集）仍可用
+      // 阶段排序：预设返回索引；自定义/未知返回大值（视为“更靠后”），用 9000 规避 2^53 精度问题
+      function stageOrder(stage) {
+        const i = STAGE_PRESETS.indexOf(stage);
+        return i === -1 ? 9000 : i;
+      }
+      // 清洗时间线：仅保留有阶段名的里程碑，规范字段，按日期升序（同日期保持插入序）
+      function sanitizeTimeline(list) {
+        if (!Array.isArray(list)) return [];
+        return list
+          .map(m => ({ stage: String(m && m.stage || '').trim(), at: String(m && m.at || '').trim(), note: String(m && m.note || '').trim() }))
+          .filter(m => m.stage)
+          .map((m, i) => ({ m, i }))
+          .sort((a, b) => (a.m.at || '9999-99-99').localeCompare(b.m.at || '9999-99-99') || a.i - b.i)
+          .map(x => x.m);
+      }
+      // 当前阶段 = 时间线末项（派生）；无时间线则回退到 stage 字段
+      function deriveStage(rec) {
+        const tl = rec && Array.isArray(rec.timeline) ? rec.timeline : [];
+        return tl.length ? tl[tl.length - 1].stage : (String(rec && rec.stage || '').trim() || '待投递');
+      }
+      // 统一写时间线并同步派生 stage/updatedAt——所有时间线改动都走这里，保证 stage 一致
+      function setTimeline(rec, timeline) {
+        rec.timeline = sanitizeTimeline(timeline);
+        rec.stage = deriveStage(rec);
+        rec.updatedAt = Date.now();
+        return rec;
+      }
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
       const RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
@@ -923,7 +985,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.0.0';
+      const APP_VERSION = '4.1.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -989,7 +1051,7 @@
           { id: cryptoId(), company: '星海科技', position: '产品经理校招生', city: '上海', applicationDate: localDateInput(dateOffset(-12)), stage: '一面', scheduleAt: localDateTimeInput(dateOffset(1, 14, 0)), recentSchedule: '线上一面', nextAction: '梳理项目经历，准备三分钟自我介绍', updatedAt: now - 2000 },
           { id: cryptoId(), company: '山岚智能', position: '算法工程师', city: '北京', applicationDate: localDateInput(dateOffset(-18)), stage: '笔试', scheduleAt: localDateTimeInput(dateOffset(3, 19, 0)), recentSchedule: '在线笔试', nextAction: '复习动态规划与概率题', updatedAt: now - 5000 },
           { id: cryptoId(), company: '青禾互娱', position: '用户运营', city: '杭州', applicationDate: localDateInput(dateOffset(-7)), stage: '已投递', scheduleAt: localDateTimeInput(dateOffset(5, 10, 30)), recentSchedule: '邮件跟进招聘进度', nextAction: '检查邮箱并准备补充作品集', updatedAt: now - 8000 },
-          { id: cryptoId(), company: '远帆咨询', position: '商业分析顾问', city: '深圳', applicationDate: localDateInput(dateOffset(-28)), stage: '二面', scheduleAt: localDateTimeInput(dateOffset(8, 15, 0)), recentSchedule: '业务负责人面试', nextAction: '练习市场规模估算案例', updatedAt: now - 12000 },
+          { id: cryptoId(), company: '远帆咨询', position: '商业分析顾问', city: '深圳', applicationDate: localDateInput(dateOffset(-28)), stage: '二面', timeline: [{ stage: '已投递', at: localDateInput(dateOffset(-28)), note: '' }, { stage: '笔试', at: localDateInput(dateOffset(-20)), note: '在线测评' }, { stage: '一面', at: localDateInput(dateOffset(-10)), note: '' }, { stage: '二面', at: localDateInput(dateOffset(-3)), note: '业务负责人面' }], scheduleAt: localDateTimeInput(dateOffset(8, 15, 0)), recentSchedule: '业务负责人面试', nextAction: '练习市场规模估算案例', updatedAt: now - 12000 },
           { id: cryptoId(), company: '拾光设计', position: '交互设计师', city: '广州', applicationDate: localDateInput(dateOffset(-33)), stage: 'Offer', scheduleAt: '', recentSchedule: '已收到录用通知', nextAction: '确认入职时间并回复邮件', updatedAt: now - 15000 }
         ];
       }
@@ -1021,14 +1083,21 @@
       }
 
       function normalizeRecord(item) {
-        return {
+        // 时间线迁移：有时间线则清洗；否则由旧的单一 stage 合成一条里程碑（老数据零丢失，自定义阶段不再被打回）
+        const timeline = Array.isArray(item.timeline) && item.timeline.length
+          ? sanitizeTimeline(item.timeline)
+          : [{ stage: String(item.stage || '').trim() || '待投递', at: String(item.applicationDate || '').trim() || localDateInput(new Date()), note: '' }];
+        const rec = {
           id: String(item.id || cryptoId()),
           company: String(item.company || ''), position: String(item.position || ''), city: String(item.city || ''),
-          applicationDate: String(item.applicationDate || ''), stage: STAGES.includes(item.stage) ? item.stage : '待投递',
+          applicationDate: String(item.applicationDate || ''),
           applicationUrl: /^https?:\/\//i.test(String(item.applicationUrl || '')) ? String(item.applicationUrl) : '',
           scheduleAt: String(item.scheduleAt || ''), recentSchedule: String(item.recentSchedule || ''),
-          nextAction: String(item.nextAction || ''), updatedAt: Number(item.updatedAt) || Date.now()
+          nextAction: String(item.nextAction || ''), updatedAt: Number(item.updatedAt) || Date.now(),
+          timeline
         };
+        rec.stage = deriveStage(rec); // 当前阶段 = 时间线末项（派生缓存，兼容分布/筛选/排序/徽章/桥接/同步）
+        return rec;
       }
 
       function stableJobId(job) {
@@ -2252,6 +2321,7 @@
 
       function render() {
         renderStats();
+        refreshStageFilter();
         renderDistribution();
         renderJobPool();
         renderTable();
@@ -2317,12 +2387,16 @@
       }
 
       function renderDistribution() {
-        const counts = Object.fromEntries(STAGES.map(stage => [stage, records.filter(r => r.stage === stage).length]));
-        const max = Math.max(1, ...Object.values(counts));
-        els.stageGrid.innerHTML = STAGES.map(stage => `
-          <div class="stage-cell" data-stage="${escapeHtml(stage)}" title="${escapeHtml(stage)}：${counts[stage]} 条">
-            <div class="stage-meta"><span>${escapeHtml(stage)}</span><strong>${counts[stage]}</strong></div>
-            <div class="bar"><div class="bar-fill" data-stage="${escapeHtml(stage)}" style="width:${counts[stage] / max * 100}%"></div></div>
+        const counts = {};
+        records.forEach(r => { const s = r.stage || '待投递'; counts[s] = (counts[s] || 0) + 1; });
+        // 动态阶段集：仅展示有记录的阶段（含自定义），按 stageOrder 排序；空态回退到核心预设占位
+        let stages = Object.keys(counts).sort((a, b) => stageOrder(a) - stageOrder(b) || a.localeCompare(b, 'zh-CN'));
+        if (!stages.length) stages = ['待投递', '已投递', '一面', 'Offer', '已结束'];
+        const max = Math.max(1, ...stages.map(s => counts[s] || 0));
+        els.stageGrid.innerHTML = stages.map(stage => `
+          <div class="stage-cell" data-stage="${escapeHtml(stage)}" title="${escapeHtml(stage)}：${counts[stage] || 0} 条">
+            <div class="stage-meta"><span>${escapeHtml(stage)}</span><strong>${counts[stage] || 0}</strong></div>
+            <div class="bar"><div class="bar-fill" data-stage="${escapeHtml(stage)}" style="width:${(counts[stage] || 0) / max * 100}%"></div></div>
           </div>`).join('');
       }
 
@@ -2346,7 +2420,7 @@
             <td data-label="公司 / 岗位"><div class="company">${companyHtml}</div><div class="position">${escapeHtml(record.position)}</div></td>
             <td data-label="城市">${escapeHtml(record.city)}</td>
             <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
-            <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span></td>
+            <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
             <td class="schedule" data-label="最近安排"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(formatDateTime(record.scheduleAt))}${overdue ? ' · 已到期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div></td>
             <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
             <td data-label="操作"><div class="row-actions">
@@ -2463,8 +2537,48 @@
       }
 
       function populateSelects() {
-        els.filter.insertAdjacentHTML('beforeend', STAGES.map(s => `<option value="${s}">${s}</option>`).join(''));
-        $('#stage').innerHTML = STAGES.map(s => `<option value="${s}">${s}</option>`).join('');
+        // 阶段组合框预设候选（时间线编辑器与推进自定义共用）
+        $('#stagePresets').innerHTML = STAGE_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+        refreshStageFilter();
+      }
+      // 筛选下拉 = 预设 ∪ 记录中实际出现的自定义阶段（保留当前选择）
+      function refreshStageFilter() {
+        const current = els.filter.value;
+        const opts = [...STAGE_PRESETS];
+        records.forEach(r => { if (r.stage && !opts.includes(r.stage)) opts.push(r.stage); });
+        els.filter.innerHTML = '<option value="all">全部阶段</option>' + opts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+        if ([...els.filter.options].some(o => o.value === current)) els.filter.value = current;
+      }
+
+      // ================= 阶段时间线编辑器（记录弹窗内）=================
+      function timelineRowHtml(m) {
+        return `<div class="tl-row">
+          <input class="control tl-stage" list="stagePresets" maxlength="20" placeholder="阶段" value="${escapeHtml(m && m.stage || '')}">
+          <input class="control tl-date" type="date" value="${escapeHtml(m && m.at || '')}" aria-label="阶段日期">
+          <input class="control tl-note" maxlength="60" placeholder="备注（可选）" value="${escapeHtml(m && m.note || '')}">
+          <button class="tl-del" type="button" title="删除该阶段" aria-label="删除该阶段">✕</button>
+        </div>`;
+      }
+      function renderTimelineEditor(source) {
+        const appDate = $('#applicationDate').value || localDateInput(new Date());
+        const tl = Array.isArray(source && source.timeline) && source.timeline.length
+          ? source.timeline
+          : (source && source.stage ? [{ stage: source.stage, at: source.applicationDate || appDate, note: '' }]
+            : [{ stage: '待投递', at: appDate, note: '' }]);
+        $('#timelineEditor').innerHTML = tl.map(timelineRowHtml).join('');
+      }
+      function collectTimeline() {
+        return [...document.querySelectorAll('#timelineEditor .tl-row')].map(row => ({
+          stage: row.querySelector('.tl-stage').value.trim(),
+          at: row.querySelector('.tl-date').value,
+          note: row.querySelector('.tl-note').value.trim()
+        })).filter(m => m.stage);
+      }
+      function addTimelineRow() {
+        const ed = $('#timelineEditor');
+        ed.insertAdjacentHTML('beforeend', timelineRowHtml({ stage: '', at: $('#applicationDate').value || localDateInput(new Date()), note: '' }));
+        const last = ed.querySelector('.tl-row:last-child .tl-stage');
+        if (last) last.focus();
       }
 
       function openDialog(record = null, seed = null) {
@@ -2473,7 +2587,7 @@
         els.dialogTitle.textContent = record ? '编辑投递' : seed ? '确认识别结果' : '新增投递';
         els.form.reset();
         $('#applicationDate').value = source ? (source.applicationDate || '') : localDateInput(new Date());
-        $('#stage').value = source?.stage || '待投递';
+        renderTimelineEditor(source);
         for (const field of ['company', 'position', 'city', 'applicationUrl', 'scheduleAt', 'recentSchedule', 'nextAction']) {
           if (source) document.getElementById(field).value = source[field] || '';
         }
@@ -2624,7 +2738,7 @@
             position: submitted.position,
             city: submitted.city,
             applicationDate: submitted.applicationDate || '',
-            stage: STAGES.includes(submitted.stage) ? submitted.stage : '已投递',
+            stage: String(submitted.stage || '').trim() || '已投递',
             applicationUrl: submitted.applicationUrl,
             recentSchedule: submitted.recentSchedule || '',
             nextAction: submitted.nextAction || ''
@@ -2640,7 +2754,10 @@
             ['city', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction'].forEach(key => {
               if (seed[key] && !merged[key]) merged[key] = seed[key];
             });
-            if (STAGES.indexOf(seed.stage) > STAGES.indexOf(merged.stage)) merged.stage = seed.stage;
+            if (stageOrder(seed.stage) > stageOrder(merged.stage)) {
+              // 插件推送的阶段更靠后：作为新里程碑追加进时间线（而非直接覆盖 stage）
+              setTimeline(merged, [...(merged.timeline || []), { stage: seed.stage, at: seed.applicationDate || localDateInput(new Date()), note: '插件推送' }]);
+            }
             openDialog(merged);
             showToast('检测到重复投递，已为你打开更新（不会新增重复记录）');
             return;
@@ -2700,7 +2817,7 @@
             position: captured.position,
             city: captured.city,
             applicationDate: captured.applicationDate || '',
-            stage: STAGES.includes(captured.stage) ? captured.stage : '已投递',
+            stage: String(captured.stage || '').trim() || '已投递',
             applicationUrl: captured.applicationUrl,
             nextAction: '关注消息并及时跟进投递进度'
           });
@@ -3056,8 +3173,10 @@
 
       function submitForm(event) {
         event.preventDefault();
+        const timeline = collectTimeline();
+        if (!timeline.length) { showToast('请至少填写一个阶段（如“已投递”）'); return; }
         const data = Object.fromEntries(new FormData(els.form).entries());
-        const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now() });
+        const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now(), timeline });
         if (editingId) {
           records = records.map(record => record.id === editingId ? normalized : record);
           saveRecords('已更新并自动保存');
@@ -3090,15 +3209,40 @@
           return;
         }
         if (button.dataset.action === 'advance') {
-          const current = STAGES.indexOf(record.stage);
-          const next = STAGES[Math.min(current + 1, STAGES.length - 1)];
-          record.stage = next;
-          record.updatedAt = Date.now();
-          saveRecords(next === 'Offer' ? '已盖章：Offer' : `已推进到「${next}」并自动保存`);
-          render();
-          flashRow(record.id);
-          if (next === 'Offer') playOfferStamp();
+          openAdvanceDialog(record);
         }
+      }
+
+      // ================= 推进阶段：弹出选择，追加为时间线里程碑（不再盲目 index+1）=================
+      let advancingId = null;
+      function openAdvanceDialog(record) {
+        advancingId = record.id;
+        $('#advanceTitle').textContent = `推进阶段 · ${record.company || ''}`.trim();
+        const curOrder = stageOrder(record.stage);
+        let candidates = STAGE_PRESETS.filter(s => stageOrder(s) > curOrder && s !== '待投递');
+        if (!candidates.length) candidates = STAGE_PRESETS.filter(s => s !== '待投递' && s !== record.stage);
+        $('#advanceStageGrid').innerHTML = candidates.map(s =>
+          `<button class="btn btn-small advance-pick" type="button" data-stage="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('');
+        $('#advanceCustom').value = '';
+        $('#advanceDate').value = (record.scheduleAt ? String(record.scheduleAt).slice(0, 10) : '') || localDateInput(new Date());
+        $('#advanceDialog').showModal();
+      }
+      function applyAdvance(stage) {
+        const record = records.find(r => r.id === advancingId);
+        const s = String(stage || '').trim();
+        if (!record || !s) { showToast('请选择或填写一个阶段'); return; }
+        const at = $('#advanceDate').value || localDateInput(new Date());
+        setTimeline(record, [...(record.timeline || []), { stage: s, at, note: '' }]);
+        saveRecords(s === 'Offer' ? '已盖章：Offer' : `已推进到「${s}」并自动保存`);
+        closeAdvanceDialog();
+        render();
+        flashRow(record.id);
+        if (s === 'Offer') playOfferStamp();
+      }
+      function closeAdvanceDialog() {
+        advancingId = null;
+        const dlg = $('#advanceDialog');
+        if (dlg && dlg.open) dlg.close();
       }
 
       // 撤销最近一次删除：撤回墓碑 + 按原位置插回 + 重渲染高亮
@@ -3239,7 +3383,7 @@
             position: captured.position,
             city: captured.city,
             applicationDate: captured.applicationDate || '',
-            stage: STAGES.includes(captured.stage) ? captured.stage : '已投递',
+            stage: String(captured.stage || '').trim() || '已投递',
             applicationUrl: captured.applicationUrl,
             nextAction: '关注消息并及时跟进投递进度'
           });
@@ -3408,6 +3552,13 @@
       $('#closeDialog').addEventListener('click', closeDialog);
       $('#cancelDialog').addEventListener('click', closeDialog);
       els.form.addEventListener('submit', submitForm);
+      $('#addTimelineBtn').addEventListener('click', addTimelineRow);
+      $('#timelineEditor').addEventListener('click', event => {
+        const del = event.target.closest('.tl-del');
+        if (!del) return;
+        if (document.querySelectorAll('#timelineEditor .tl-row').length <= 1) { showToast('至少保留一个阶段'); return; }
+        del.closest('.tl-row').remove();
+      });
       els.body.addEventListener('click', handleTableAction);
       els.search.addEventListener('input', renderTable);
       els.filter.addEventListener('change', renderTable);
@@ -3418,6 +3569,15 @@
       $('#confirmCancelBtn').addEventListener('click', () => $('#confirmDialog').close());
       $('#confirmDialog').addEventListener('close', () => { if (confirmResolve) { confirmResolve(confirmResult); confirmResolve = null; } });
       $('#confirmDialog').addEventListener('click', event => { if (event.target === $('#confirmDialog')) $('#confirmDialog').close(); });
+      // 推进阶段弹窗：点预设阶段直接推进；自定义则填输入框后点确认
+      $('#advanceStageGrid').addEventListener('click', event => {
+        const btn = event.target.closest('.advance-pick');
+        if (btn) applyAdvance(btn.dataset.stage);
+      });
+      $('#confirmAdvanceBtn').addEventListener('click', () => applyAdvance($('#advanceCustom').value));
+      $('#closeAdvanceDialog').addEventListener('click', closeAdvanceDialog);
+      $('#cancelAdvanceDialog').addEventListener('click', closeAdvanceDialog);
+      $('#advanceDialog').addEventListener('click', event => { if (event.target === $('#advanceDialog')) closeAdvanceDialog(); });
       $('#closeCaptureDialog').addEventListener('click', closeCaptureDialog);
       $('#cancelCaptureDialog').addEventListener('click', closeCaptureDialog);
       $('#captureForm').addEventListener('submit', requestUrlCapture);
