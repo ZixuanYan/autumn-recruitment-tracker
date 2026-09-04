@@ -210,7 +210,7 @@
     if (emContact) {
       const phoneM = emContact.match(/(1[3-9]\d{9})/);
       if (phoneM) flatMap['紧急联系人电话'] = flatMap['紧急联系人手机'] = phoneM[1];
-      const nameM = emContact.replace(/(1[3-9]\d{9})|[\(\)（）\s,，]/g, '').trim();
+      const nameM = emContact.replace(/(1[3-9]\d{9})/g, '').replace(/[\(\)（）\s,，]/g, '').replace(/父亲|母亲|父母|父|母|爸|妈|兄|弟|姐|妹|配偶|亲属|家人/g, '').trim();
       if (nameM) flatMap['紧急联系人姓名'] = nameM;
       flatMap['紧急联系人关系'] = /父|母|爸|妈|家/.test(emContact) ? '父母' : '亲属';
     }
@@ -292,76 +292,86 @@
     return flatMap;
   }
 
+  // 过滤 name/id 里的随机 token（field_123 / input1384 / 纯数字 / hex 串），避免当作字段标签
+  function isNoiseToken(s) {
+    const t = String(s || '').trim();
+    if (!t) return true;
+    if (/^\d+$/.test(t)) return true;
+    if (/^[0-9a-f]{6,}$/i.test(t)) return true;
+    if (/\d{2,}\s*$/.test(t)) return true;
+    if (/^(?:field|input|item|node|el|txt|text)[_-]?\d*$/i.test(t)) return true;
+    return false;
+  }
+
   function extractFieldLabel(el) {
     if (!el) return '';
-    const candidates = [];
+    const tier1 = []; // 可靠：可见 label / 语义属性（优先）
+    const tier2 = []; // 兜底：name/id/title 等易噪属性
+    const push = (arr, raw) => { if (raw && typeof raw === 'string') arr.push(raw); };
 
-    // 1. ATS 专属属性直锁 (Moka, Beisen, Dayee, Yonyou, 24Talent)
-    const atsAttrs = [
-      'data-key', 'data-field-name', 'data-name', 'data-title', 'data-label',
-      'prop', 'data-prop', 'name', 'id', 'aria-label', 'placeholder', 'title'
-    ];
-    for (const attr of atsAttrs) {
-      const v = el.getAttribute ? el.getAttribute(attr) : null;
-      if (v && typeof v === 'string' && v.length >= 2 && v.length <= 40) {
-        candidates.push(v);
-      }
-    }
-
-    // 2. label[for=id]
+    // 1. label[for=id]
     if (el.id) {
       try {
         const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-        if (lbl && lbl.innerText) candidates.push(lbl.innerText);
+        if (lbl && lbl.innerText) push(tier1, lbl.innerText);
       } catch (_) {}
     }
 
-    // 3. aria-labelledby
+    // 2. aria-labelledby
     const labelledBy = el.getAttribute ? el.getAttribute('aria-labelledby') : null;
     if (labelledBy) {
       try {
         const lbl = document.getElementById(labelledBy);
-        if (lbl && lbl.innerText) candidates.push(lbl.innerText);
+        if (lbl && lbl.innerText) push(tier1, lbl.innerText);
       } catch (_) {}
     }
 
-    // 4. 祖先表单容器中的 label / 标题 (全面覆盖各大 ATS 类名)
-    const parentContainer = el.closest ? el.closest(`
-      .form-item, .form-group, .el-form-item, .ant-form-item, .semi-form-field,
-      .next-form-item, .moka-form-item, .beisen-form-item, .dayee-form-item,
-      .item-wrap, .field-wrap, .form-row, .form-line, tr, td,
-      [class*="form-item" i], [class*="formItem" i], [class*="form-group" i],
-      [class*="formGroup" i], [class*="form-field" i], [class*="formField" i]
+    // 3. 最近的“紧”字段容器的 label（排除 tr/td/table 与大 form-group，避免整组共用首个 label）
+    const wrap = el.closest ? el.closest(`
+      .form-item, .el-form-item, .ant-form-item, .semi-form-field, .next-form-item, .arco-form-item,
+      .moka-form-item, .beisen-form-item, .dayee-form-item, .item-wrap, .field-wrap, .form-row, .form-line,
+      [class*="form-item" i], [class*="formItem" i], [class*="form-field" i], [class*="formField" i], [class*="field-wrap" i]
     `) : null;
-    if (parentContainer) {
-      const lbl = parentContainer.querySelector(`
-        label, [class*="label" i], .ant-form-item-label, .el-form-item__label,
-        .semi-form-field-label, .next-form-item-label, th, [class*="title" i], [class*="name" i]
-      `);
-      if (lbl && lbl.innerText) {
-        candidates.push(lbl.innerText);
-      }
+    if (wrap) {
+      const fieldCount = wrap.querySelectorAll('input, select, textarea').length;
+      const labelSel = 'label, [class*="label" i], .ant-form-item-label, .el-form-item__label, .semi-form-field-label, .next-form-item-label, th';
+      const lbl = fieldCount <= 1
+        ? wrap.querySelector(labelSel)                                   // 紧容器：取其内首个 label
+        : wrap.querySelector(':scope > label, :scope > [class*="label" i]'); // 宽容器：只取直接 label
+      if (lbl && lbl.innerText) push(tier1, lbl.innerText);
     }
 
-    // 5. 前置兄弟节点中的文本 (如 <span>姓名:</span><input> 或 <th>毕业院校</th>)
+    // 4. 紧邻前置兄弟文本（如 <span>姓名:</span><input> 或 <th>毕业院校</th>）
     let prev = el.previousElementSibling;
-    while (prev) {
-      if (['LABEL', 'SPAN', 'DIV', 'STRONG', 'P', 'TH', 'B'].includes(prev.tagName)) {
-        const txt = prev.innerText?.trim();
-        if (txt && txt.length <= 30) {
-          candidates.push(txt);
-          break;
-        }
+    let hops = 0;
+    while (prev && hops < 3) {
+      if (['LABEL', 'SPAN', 'DIV', 'STRONG', 'P', 'TH', 'B', 'EM'].includes(prev.tagName)) {
+        const txt = (prev.innerText || prev.textContent || '').trim();
+        if (txt && txt.length <= 30) { push(tier1, txt); break; }
       }
       prev = prev.previousElementSibling;
+      hops += 1;
     }
 
-    // 综合清洗提取
-    for (const raw of candidates) {
+    // 5. 语义属性（ATS 直锁）+ aria-label + placeholder
+    const semanticAttrs = ['data-key', 'data-field-name', 'data-name', 'data-title', 'data-label', 'prop', 'data-prop', 'aria-label', 'placeholder'];
+    for (const attr of semanticAttrs) {
+      const v = el.getAttribute ? el.getAttribute(attr) : null;
+      if (v && v.length >= 2 && v.length <= 40) push(tier1, v);
+    }
+
+    // 6. 兜底：name / id / title（过滤随机 token 噪声）
+    for (const attr of ['name', 'id', 'title']) {
+      const v = el.getAttribute ? el.getAttribute(attr) : null;
+      if (v && v.length >= 2 && v.length <= 40 && !isNoiseToken(v)) push(tier2, v);
+    }
+
+    // 综合清洗：tier1 优先，再 tier2
+    for (const raw of tier1.concat(tier2)) {
       const cleaned = String(raw)
         .replace(/[\r\n\t]+/g, ' ')
-        .replace(/[*＊:：?？!！_]/g, ' ') // 剔除必填星号、下划线及标点
-        .replace(/^(?:请输入|请选择|请填写|录入|填写|input|select)\s*/i, '')
+        .replace(/[*＊:：?？!！_]/g, ' ')
+        .replace(/^(?:请输入|请选择|请填写|请选取|录入|填写|input|select|enter)\s*/i, '')
         .replace(/\s*(?:必填|选填|optional|required)$/i, '')
         .trim();
       if (cleaned && cleaned.length >= 1 && cleaned.length <= 50) {
@@ -399,36 +409,49 @@
     return '';
   }
 
-  function findMatchedResumeValue(label, flatMap) {
+  // 匹配简历值：返回 { value, strong } 或 null。strong=true 表示全等/锚定命中（可信），
+  // false 表示包含型弱命中（用于同值防串护栏）。修复“单字键(名/姓)泛匹配 → 全填成姓名”。
+  function matchResume(label, flatMap) {
     if (!label || !flatMap) return null;
-    const cleanLabel = label.trim();
+    const L = String(label).trim();
+    if (!L) return null;
 
-    // 1. 直接精确包含或匹配 flatMap 自身的 key
-    for (const [k, v] of Object.entries(flatMap)) {
-      if (cleanLabel === k || cleanLabel.includes(k) || (k.length >= 2 && cleanLabel.startsWith(k))) {
-        if (v) return v;
-      }
+    // A) 精确全等（最强）：避免“紧急联系人姓名”被“姓名”抢答
+    if (Object.prototype.hasOwnProperty.call(flatMap, L) && flatMap[L]) {
+      return { value: flatMap[L], strong: true };
     }
 
-    // 2. 根据同义词规则库进行模式匹配
+    // B) 同义词规则：锚定(全匹配 ^...$)优先于包含型；同规则内按 keys 顺序取首个存在的值
+    let looseHit = null;
     for (const rule of AUTOFILL_FIELD_SYNONYMS) {
-      let matched = false;
+      let anchored = false, loose = false;
       for (const pat of rule.patterns) {
-        if (pat.test(cleanLabel)) {
-          matched = true;
-          break;
-        }
+        if (!pat.test(L)) continue;
+        if (pat.source.charAt(0) === '^') anchored = true; else loose = true;
       }
-      if (matched) {
-        for (const k of rule.keys) {
-          if (flatMap[k]) {
-            return flatMap[k];
-          }
-        }
+      if (anchored) {
+        for (const k of rule.keys) { if (flatMap[k]) return { value: flatMap[k], strong: true }; }
+      } else if (loose && !looseHit) {
+        for (const k of rule.keys) { if (flatMap[k]) { looseHit = { value: flatMap[k], strong: false }; break; } }
       }
     }
+    if (looseHit) return looseHit;
 
-    return null;
+    // C) 直接键兜底：startsWith / includes，键长必须 >= 2（跳过“名/姓”等单字键），取最长键（最specific）
+    let best = null;
+    for (const k of Object.keys(flatMap)) {
+      const v = flatMap[k];
+      if (!v || k.length < 2) continue;
+      if (L.startsWith(k) || L.includes(k)) {
+        if (!best || k.length > best.klen) best = { value: v, strong: false, klen: k.length };
+      }
+    }
+    return best;
+  }
+
+  function findMatchedResumeValue(label, flatMap) {
+    const m = matchResume(label, flatMap);
+    return m ? m.value : null;
   }
 
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -692,7 +715,15 @@
   // 写后校验：值是否真的留住了（受控框架可能异步重置）。只判"是否非空/已选中"，容忍站点掩码/格式化改写
   function verifyEntryValue(entry, val) {
     if (!entry) return false;
-    if (entry.kind === 'radio') return entry.elements.some(r => r.checked);
+    if (entry.kind === 'radio') {
+      const tv = String(val || '').trim();
+      return entry.elements.some(r => {
+        if (!r.checked) return false;
+        const opt = getRadioOptionText(r) || '';
+        const rv = (r.value || '').trim();
+        return opt === tv || rv === tv || (opt && (opt.includes(tv) || (tv.length >= 2 && tv.includes(opt))));
+      });
+    }
     const el = entry.element;
     if (!el) return false;
     if (el instanceof HTMLSelectElement) return el.selectedIndex > 0 && !!el.value;
@@ -895,6 +926,15 @@
       const processedElements = new Set();
       const processedRadios = new Set();
       const ruleAttempts = []; // 规则初次设值的字段，待写后校验（受控框架可能异步重置）
+      // 同值防串护栏：同一个简历值最多弱命中写入 MAX_SAME_VALUE 个字段，超出则拒绝（防“整页填成一个值”）
+      const MAX_SAME_VALUE = 3;
+      const valueUseCount = new Map();
+      const allowValue = (val, strong) => {
+        const n = valueUseCount.get(val) || 0;
+        if (n >= MAX_SAME_VALUE && !strong) return false;
+        valueUseCount.set(val, n + 1);
+        return true;
+      };
       ensureHighlightStyle();
 
       // ================= 阶段 1: 常规表单项快速填充 (Input, Textarea, Select, Radio) =================
@@ -920,7 +960,7 @@
           if (name && processedRadios.has(name)) continue;
           
           const label = extractFieldLabel(el);
-          const val = findMatchedResumeValue(label, flatMap);
+          const m = matchResume(label, flatMap); let val = m ? m.value : null; if (val && !allowValue(val, m.strong)) val = null;
           if (val) {
             const group = name ? Array.from(document.querySelectorAll(`input[type="radio"][name="${CSS.escape(name)}"]`)) : [el];
             let checkedAny = false;
@@ -958,7 +998,7 @@
             continue;
           }
           const label = extractFieldLabel(el);
-          const val = findMatchedResumeValue(label, flatMap);
+          const m = matchResume(label, flatMap); let val = m ? m.value : null; if (val && !allowValue(val, m.strong)) val = null;
           if (val) {
             const ok = setSelectFieldValue(el, val);
             if (ok) ruleAttempts.push({ entry: { kind: 'element', element: el }, val });
@@ -979,7 +1019,7 @@
           }
 
           const label = extractFieldLabel(el);
-          const val = findMatchedResumeValue(label, flatMap);
+          const m = matchResume(label, flatMap); let val = m ? m.value : null; if (val && !allowValue(val, m.strong)) val = null;
           if (val) {
             const entry = { kind: 'element', element: el };
             const ok = setElementValue(entry, val);
@@ -1023,18 +1063,25 @@
 
       for (const customEl of customSelectWrappers) {
         const label = extractFieldLabel(customEl);
-        const val = findMatchedResumeValue(label, flatMap);
+        const m = matchResume(label, flatMap);
+        let val = m ? m.value : null;
+        if (val && !allowValue(val, m.strong)) val = null;
         if (val) {
           const trigger = customEl.querySelector('.ant-select-selector, .el-select__wrapper, .el-input__inner, [class*="trigger" i], input') || customEl;
           simulateClick(trigger);
           const ok = await pickCustomDropdownOption(val);
-          if (ok) {
+          await sleep(50);
+          const inner = customEl.querySelector('input');
+          const shown = ((inner && inner.value) || customEl.textContent || customEl.value || '').trim();
+          const reverted = !!shown && !shown.includes(val) && !val.includes(shown) && !/^(?:请选择|选择|请选取|select)/i.test(shown);
+          if (ok && !reverted) {
             filledCount++;
             highlightFilledField({ kind: 'element', element: customEl }, val, 'rule');
           } else {
             skippedCount++;
           }
           processedElements.add(customEl);
+          customEl.querySelectorAll('input, textarea').forEach(i => processedElements.add(i)); // 去重内部 input，避免阶段1/2重复处理
           await sleep(60);
         }
       }
