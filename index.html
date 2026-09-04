@@ -14,46 +14,6 @@
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
   <title>秋招投递管理</title>
   <style>
-    :root {
-      /* 高级简约令牌：中性单色为底 + 单一冷蓝强调；语义色仅用于状态 */
-      --paper: #f7f7f8;
-      --bg: #f7f7f8;
-      --surface: #ffffff;
-      --surface-soft: #f4f4f5;
-      --ink: #101014;
-      --ink-2: #3f3f46;
-      --muted: #71717a;
-      --line: #e4e4e7;
-      --line-strong: #d4d4d8;
-      --accent: #2749d6;
-      --accent-ink: #1e3ab0;
-      --accent-soft: #eef1fd;
-      /* 旧变量名保留以最小改动完成重着色：gold/primary→强调蓝族，seal/red→危险红，silver→中性灰 */
-      --gold: #2749d6;
-      --gold-dark: #1e3ab0;
-      --gold-soft: #eef1fd;
-      --seal: #b91c1c;
-      --seal-soft: #fdecec;
-      --silver: #52525b;
-      --silver-soft: #f4f4f5;
-      --primary: #2749d6;
-      --primary-dark: #1e3ab0;
-      --primary-soft: #eef1fd;
-      --green: #15803d;
-      --green-soft: #ecfdf3;
-      --amber: #b45309;
-      --amber-soft: #fff7e6;
-      --red: #b91c1c;
-      --red-soft: #fdecec;
-      --shadow: 0 1px 2px rgba(16, 16, 20, .05);
-      --shadow-1: 0 1px 2px rgba(16, 16, 20, .05);
-      --shadow-2: 0 8px 24px rgba(16, 16, 20, .08);
-      --radius: 10px;
-      --radius-sm: 8px;
-      --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
-      --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-    }
-
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body {
@@ -487,6 +447,8 @@
       --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
       --shadow: var(--sh-ambient); --radius: var(--r-lg);
+      /* 兼容别名：供仍引用旧变量名的结构规则使用 */
+      --paper: #f4f5f7; --surface-soft: #f4f4f5; --shadow-1: var(--sh-ambient); --shadow-2: var(--sh-pop); --radius-sm: 9px;
     }
     body { background: radial-gradient(1100px 460px at 12% -8%, rgba(36, 71, 224, .05), transparent 62%), var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 14px; -webkit-font-smoothing: antialiased; }
     ::selection { background: var(--accent-soft); color: var(--accent-ink); }
@@ -952,7 +914,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '3.6.0';
+      const APP_VERSION = '4.0.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1337,7 +1299,11 @@
         }
         return {
           records: Array.isArray(parsed?.records) ? parsed.records : [],
-          tombstones: Array.isArray(parsed?.tombstones) ? parsed.tombstones : []
+          tombstones: Array.isArray(parsed?.tombstones) ? parsed.tombstones : [],
+          // 简历必须一并带回，否则跨设备拉取时 remote.resume/resumeSavedAt 为 undefined，
+          // LWW 采纳条件(Number(undefined)>x 恒为 false)永不成立，简历只能推不能拉
+          resume: parsed?.resume && typeof parsed.resume === 'object' && !Array.isArray(parsed.resume) ? parsed.resume : null,
+          resumeSavedAt: Number(parsed?.resumeSavedAt) || 0
         };
       }
 
