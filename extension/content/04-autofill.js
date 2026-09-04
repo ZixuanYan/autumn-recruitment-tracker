@@ -27,7 +27,7 @@
 
     // 3. 证件信息
     { keys: ['证件类型', '证件名称'], patterns: [/^证件类型$/, /^证件名称$/, /^id\s*type$/i, /^certificate\s*type$/i, /^card\s*type$/i, /证件类型/i] },
-    { keys: ['证件号码', '身份证号', '身份证', '证件号'], patterns: [/^身份证(?:号(?:码)?)?$/, /^证件号码$/, /^证件号$/, /^id\s*card$/i, /^id\s*number$/i, /^sfz$/i, /^zjhm$/i, /身份证/i, /证件号/i] },
+    { keys: ['证件号码', '身份证号', '身份证', '证件号'], patterns: [/^身份证(?:号(?:码)?)?$/, /^证件号码$/, /^证件号$/, /^个人证件$/, /^id\s*card$/i, /^id\s*number$/i, /^sfz$/i, /^zjhm$/i, /身份证/i, /证件号/i, /个人证件/i] },
 
     // 4. 联系方式
     { keys: ['手机', '联系电话', '手机号', '电话'], patterns: [/^手\s*机(?:号(?:码)?)?$/, /^联系电话$/, /^移动电话$/, /^phone(?:\s*number)?$/i, /^mobile$/i, /^tel$/i, /^sjh$/i, /^lxdh$/i, /手机号?/i, /联系电话/i] },
@@ -309,6 +309,16 @@
     const tier2 = []; // 兜底：name/id/title 等易噪属性
     const push = (arr, raw) => { if (raw && typeof raw === 'string') arr.push(raw); };
 
+    // 0. Formily / UD-Design（字节跳动校招等）：字段自身或最近容器带 data-form-field-i18n-name（人类可读中文标签，最稳定）
+    //    这类站点 input 无 placeholder/name/id/aria-label，且容器类名为 ud-formily-item（不含子串 form-item），只能靠该属性取标签
+    if (el.closest) {
+      const i18nEl = el.closest('[data-form-field-i18n-name]');
+      if (i18nEl) {
+        const v = i18nEl.getAttribute('data-form-field-i18n-name');
+        if (v && v.trim()) push(tier1, v.trim());
+      }
+    }
+
     // 1. label[for=id]
     if (el.id) {
       try {
@@ -488,6 +498,7 @@
 
     // 寻找页面上处于可见激活状态的下拉浮层容器
     const containerSelectors = [
+      '.ud__select__dropdown:not(.ud__select__dropdown-hidden)',
       '.ant-select-dropdown:not(.ant-select-dropdown-hidden)',
       '.ant-cascader-dropdown:not(.ant-cascader-dropdown-hidden)',
       '.el-select-dropdown:not([style*="display: none"])',
@@ -540,6 +551,8 @@
 
     // 2. 查找选项节点
     const optionSelectors = [
+      '.ud__select__list__item__content',
+      '.ud__select__list__item',
       '.ant-select-item-option-content',
       '.ant-select-item-option',
       '.ant-cascader-menu-item',
@@ -1038,6 +1051,7 @@
         .el-select:not(.is-disabled),
         .ant-cascader:not(.ant-cascader-disabled),
         .el-cascader:not(.is-disabled),
+        .ud__select:not(.ud__select--disabled),
         [role="combobox"]:not([aria-disabled="true"]),
         [aria-haspopup="listbox"]:not([disabled]),
         [class*="custom-select" i],
@@ -1062,12 +1076,13 @@
       });
 
       for (const customEl of customSelectWrappers) {
+        if (processedElements.has(customEl)) continue; // 父级 .ud__select 等已处理并登记内部 input，跳过重复
         const label = extractFieldLabel(customEl);
         const m = matchResume(label, flatMap);
         let val = m ? m.value : null;
         if (val && !allowValue(val, m.strong)) val = null;
         if (val) {
-          const trigger = customEl.querySelector('.ant-select-selector, .el-select__wrapper, .el-input__inner, [class*="trigger" i], input') || customEl;
+          const trigger = customEl.querySelector('.ud__select__selector, .ant-select-selector, .el-select__wrapper, .el-input__inner, [class*="trigger" i], input') || customEl;
           simulateClick(trigger);
           const ok = await pickCustomDropdownOption(val);
           await sleep(50);

@@ -1,5 +1,13 @@
 # 更新记录
 
+## 插件 v3.2.4
+
+- **适配字节跳动校招简历页（UD Design + Formily）**：该站 input 无 `placeholder/name/id/aria-label`，容器类名是 `ud-formily-item`（不含子串 `form-item`），旧逻辑取不到标签 → 0 命中 →「一个字都没填」
+- `extractFieldLabel` 新增最高优先级策略：读字段自身或最近容器的 **`data-form-field-i18n-name`**（后端下发的中文标签），文本框与下拉框都能拿到正确标签
+- 自定义下拉支持 UD：`.ud__select` 纳入扫描、点击 `.ud__select__selector` 展开、在 `.ud__select__dropdown:not(…-hidden)` 内点 `.ud__select__list__item`；父容器处理后登记内部 input 去重，避免重复展开
+- 新增 `个人证件` → 身份证 映射
+- 已知边界：日期区间（起止时间）本轮未适配；折叠区块（自我评价/实习经历等）需先点「添加」展开出控件，再点一键填充（脚本每次点击都会重新扫描 DOM）
+
 ## 插件 v3.2.3
 
 - 修复「暂存箱 / AI 辅助填写面板在矮窗口下显示不全、滚不动」：`.drawer-body` 是 flex 列，而 `.pending-box` 带 `overflow:hidden`，作为 flex 子项时 `min-height:auto` 会解析成 0 → 被压缩并裁掉内容（其它卡片 `overflow:visible` 不收缩，所以只有这两个盒子出问题）。现禁止 `.drawer-body` 所有直接子项收缩（`flex-shrink:0`），让整个内容区成为唯一滚动容器
