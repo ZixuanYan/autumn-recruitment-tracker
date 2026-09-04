@@ -1,5 +1,11 @@
 # 更新记录
 
+## 插件 v3.2.3
+
+- 修复「暂存箱 / AI 辅助填写面板在矮窗口下显示不全、滚不动」：`.drawer-body` 是 flex 列，而 `.pending-box` 带 `overflow:hidden`，作为 flex 子项时 `min-height:auto` 会解析成 0 → 被压缩并裁掉内容（其它卡片 `overflow:visible` 不收缩，所以只有这两个盒子出问题）。现禁止 `.drawer-body` 所有直接子项收缩（`flex-shrink:0`），让整个内容区成为唯一滚动容器
+- 一键填充标签提取增强：`extractFieldLabel` 的语义属性源加入 `data-test`/`data-cy`/`data-field`/`data-id`/`data-role`（字节跳动 atsx 等用这些做字段锚点），并把用户可见的 `placeholder`/`aria-label` 提到技术属性之前
+- 说明：字节跳动校招简历页（`atsx-` 组件、React SPA、无 `<label for>`）等站点的完整适配仍在进行，需按真实表单 DOM 进一步收敛
+
 ## 插件 v3.2.2
 
 - 抽屉标题栏新增**可见版本号徽标**（`v3.2.2`）：用于一眼确认"当前运行的是不是最新代码"。此前版本号只在悬停提示里，导致改了代码但浏览器未重新加载（仍跑旧版）时无法察觉——本次两个"没修复"的问题经哈希比对确认正是因为 Edge 里加载的仍是 v3.2.0 旧包

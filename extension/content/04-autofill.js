@@ -353,8 +353,8 @@
       hops += 1;
     }
 
-    // 5. 语义属性（ATS 直锁）+ aria-label + placeholder
-    const semanticAttrs = ['data-key', 'data-field-name', 'data-name', 'data-title', 'data-label', 'prop', 'data-prop', 'aria-label', 'placeholder'];
+    // 5. 语义属性：用户可见文本(placeholder/aria-label)优先，再 ATS 语义标识（含字节 atsx 的 data-test/data-cy），最后技术属性
+    const semanticAttrs = ['placeholder', 'aria-label', 'data-label', 'data-title', 'data-field-name', 'data-test', 'data-cy', 'data-field', 'data-key', 'data-name', 'data-id', 'data-role', 'prop', 'data-prop'];
     for (const attr of semanticAttrs) {
       const v = el.getAttribute ? el.getAttribute(attr) : null;
       if (v && v.length >= 2 && v.length <= 40) push(tier1, v);

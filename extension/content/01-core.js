@@ -248,6 +248,12 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       background: #cbd5e1;
       border-radius: 4px;
     }
+    /* 关键修复：.drawer-body 是 flex 列，子项默认 flex-shrink:1；而 .pending-box 有 overflow:hidden，
+       作为 flex 子项时 min-height:auto 会解析为 0 → 矮窗口下被压缩并裁掉内容（暂存箱/AI 面板"显示不全、滚不动"）。
+       禁止所有直接子项收缩，让 .drawer-body 成为唯一滚动容器。 */
+    .drawer-body > * {
+      flex-shrink: 0;
+    }
 
     /* 一键收录卡片 */
     .capture-card {
