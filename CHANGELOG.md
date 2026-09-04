@@ -1,5 +1,14 @@
 # 更新记录
 
+## 插件 v3.3.0
+
+一键填充「通用化」改造 **M1（阶段 0+1，不改变规则填充行为）**：
+
+- **阶段 1 富字段上下文采集**：新增 `collectFieldContext / detectFieldKind / findFieldSection / buildFieldSnippet`；`scanFillableFields` 为每个字段附带 `ctx = { kind, bestLabel, labelCandidates, section, attrs, options, snippet(脱敏+截断300), isEmpty }`，作为后续「AI 表单理解引擎」的数据地基
+- `extractFieldLabel` 拆出 `extractFieldLabelCandidates`（返回全部候选 + best），旧调用行为完全不变
+- **阶段 0 站点适配补齐**：识别日期区间控件（`kind=daterange`，含字节 `throne…range-picker`）；自定义下拉遇 `rc-virtual-list` 虚拟滚动时滚动 holder 兜底查找选项；无匹配提示补充「折叠区块需先点『添加』展开」
+- 不变量：**AI 关闭时行为与 v3.2.4 逐字段一致**；vm 测试（detectFieldKind / snippet 脱敏截断 / i18n 标签 / matchResume 回归）+ 9 文件集成加载 全过
+
 ## 插件 v3.2.4
 
 - **适配字节跳动校招简历页（UD Design + Formily）**：该站 input 无 `placeholder/name/id/aria-label`，容器类名是 `ud-formily-item`（不含子串 `form-item`），旧逻辑取不到标签 → 0 命中 →「一个字都没填」

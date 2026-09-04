@@ -303,8 +303,8 @@
     return false;
   }
 
-  function extractFieldLabel(el) {
-    if (!el) return '';
+  function extractFieldLabelCandidates(el) {
+    if (!el) return { best: '', candidates: [] };
     const tier1 = []; // 可靠：可见 label / 语义属性（优先）
     const tier2 = []; // 兜底：name/id/title 等易噪属性
     const push = (arr, raw) => { if (raw && typeof raw === 'string') arr.push(raw); };
@@ -376,7 +376,8 @@
       if (v && v.length >= 2 && v.length <= 40 && !isNoiseToken(v)) push(tier2, v);
     }
 
-    // 综合清洗：tier1 优先，再 tier2
+    // 综合清洗：收集全部有效候选（tier1 优先，再 tier2），best = 第一个
+    const candidates = [];
     for (const raw of tier1.concat(tier2)) {
       const cleaned = String(raw)
         .replace(/[\r\n\t]+/g, ' ')
@@ -384,12 +385,16 @@
         .replace(/^(?:请输入|请选择|请填写|请选取|录入|填写|input|select|enter)\s*/i, '')
         .replace(/\s*(?:必填|选填|optional|required)$/i, '')
         .trim();
-      if (cleaned && cleaned.length >= 1 && cleaned.length <= 50) {
-        return cleaned;
+      if (cleaned && cleaned.length >= 1 && cleaned.length <= 50 && !candidates.includes(cleaned)) {
+        candidates.push(cleaned);
       }
     }
+    return { best: candidates[0] || '', candidates };
+  }
 
-    return '';
+  // 兼容旧调用：只取最佳标签字符串
+  function extractFieldLabel(el) {
+    return extractFieldLabelCandidates(el).best;
   }
 
   // 取单选项自身的可见文本（包裹 label / label[for] / 相邻兄弟），
@@ -600,6 +605,24 @@
       }
     }
 
+    // ③ 虚拟滚动兜底：rc-virtual-list 只渲染可视行，逐步滚动 holder 再找目标选项（字节 UD 等长列表下拉）
+    if (!bestOption) {
+      const holder = dropdown.querySelector('.rc-virtual-list-holder, [class*="virtual-list-holder" i], [class*="virtualList" i]');
+      if (holder && holder.scrollHeight > holder.clientHeight) {
+        const optSel = '.ud__select__list__item__content, .ud__select__list__item, [role="option"], li[class*="option" i], div[class*="option" i]';
+        for (let s = 1; s <= 6 && !bestOption; s++) {
+          holder.scrollTop = (holder.scrollHeight - holder.clientHeight) * (s / 6);
+          holder.dispatchEvent(new Event('scroll', { bubbles: true }));
+          await sleep(90);
+          for (const opt of Array.from(dropdown.querySelectorAll(optSel))) {
+            const txt = (opt.textContent || '').trim().toLowerCase();
+            if (!txt || txt.length >= 50) continue;
+            if (txt === cleanTarget || txt.includes(cleanTarget) || (cleanTarget.length >= 2 && cleanTarget.includes(txt))) { bestOption = opt; break; }
+          }
+        }
+      }
+    }
+
     if (bestOption) {
       simulateClick(bestOption);
       await sleep(100);
@@ -642,6 +665,7 @@
   function inferPickerInputType(container, inner) {
     const cls = container.className || '';
     const ph = (inner.getAttribute('placeholder') || '').toLowerCase();
+    if (/range/i.test(cls) || /range/i.test(ph)) return 'daterange';
     if (/time/i.test(cls) || /时间|hh:mm/.test(ph)) return 'time';
     if (/month/i.test(cls) || /年月|月份|month/.test(ph)) return 'month';
     if (/datetime/i.test(cls) || /日期.*时间|datetime/.test(ph)) return 'datetime-local';
@@ -790,6 +814,73 @@
     return true;
   }
 
+  // ================= 阶段1：富字段上下文采集（供 AI 表单理解；不改变规则填充行为）=================
+  // 判定控件类型：text/textarea/select-native/select-custom/radio/checkbox/date/daterange/cascader/contenteditable
+  function detectFieldKind(el, meta) {
+    if (!el) return 'text';
+    if (el.isContentEditable) return 'contenteditable';
+    const tag = (el.tagName || '').toLowerCase();
+    const type = String((el.getAttribute && el.getAttribute('type')) || el.type || '').toLowerCase();
+    if (tag === 'textarea') return 'textarea';
+    if (tag === 'select') return 'select-native';
+    if (type === 'radio') return 'radio';
+    if (type === 'checkbox') return 'checkbox';
+    if (el.closest && el.closest('[class*="cascader" i]')) return 'cascader';
+    if (meta && meta.pickerType) return (meta.pickerInputType === 'daterange' ? 'daterange' : 'date');
+    if (el.closest && el.closest('.ud__select, .ant-select, .el-select, .semi-select, .arco-select')) return 'select-custom';
+    const role = el.getAttribute && el.getAttribute('role');
+    if (role === 'combobox' || (type === 'search' && el.readOnly)) return 'select-custom';
+    if (/^(date|month|week|time|datetime-local)$/.test(type)) return 'date';
+    return 'text';
+  }
+
+  // 字段所属区块标题（如“教育经历”），供 AI 理解上下文；找不到返回 ''
+  function findFieldSection(el) {
+    if (!el || !el.closest) return '';
+    const sec = el.closest('[class*="applyFormModuleWrapper"], fieldset, [class*="form-section" i], [class*="section-card" i], section');
+    if (!sec) return '';
+    const t = sec.querySelector('[class*="applyFormModuleWrapper-title"], [class*="applyFormModuleWrapper-text"], legend, h1, h2, h3, h4, [class*="section-title" i], [class*="title" i]');
+    const txt = ((t && (t.innerText || t.textContent)) || '').replace(/\s+/g, ' ').trim();
+    return (txt && txt.length <= 30) ? txt : '';
+  }
+
+  // 字段容器 outerHTML 片段（截断 ~300 + 脱敏），供 AI 读懂结构；不含任何已填值/密码
+  function buildFieldSnippet(el) {
+    if (!el) return '';
+    const box = (el.closest && el.closest('.ud-formily-item, [class*="form-item" i], [class*="form-field" i], .form-group, label')) || el.parentElement || el;
+    let html = '';
+    try { html = box.outerHTML || ''; } catch (_) { return ''; }
+    html = html
+      .replace(/\svalue\s*=\s*"[^"]*"/gi, ' value=""')
+      .replace(/<input([^>]*?)type\s*=\s*["']?password["']?[^>]*>/gi, '<input type="password">');
+    return html.replace(/\s+/g, ' ').slice(0, 300);
+  }
+
+  // 采集单个字段的富上下文（FieldContext）
+  function collectFieldContext(el, meta) {
+    meta = meta || {};
+    const lab = extractFieldLabelCandidates(el);
+    const A = (n) => ((el.getAttribute && el.getAttribute(n)) || '');
+    let options = [];
+    if ((el.tagName || '').toLowerCase() === 'select') options = Array.from(el.options || []).map(o => (o.text || '').trim()).filter(Boolean);
+    else if (Array.isArray(meta.radioOptions)) options = meta.radioOptions;
+    return {
+      kind: detectFieldKind(el, meta),
+      bestLabel: lab.best,
+      labelCandidates: lab.candidates,
+      section: findFieldSection(el),
+      attrs: {
+        placeholder: A('placeholder'), ariaLabel: A('aria-label'), name: A('name'), id: el.id || '',
+        dataTest: A('data-test') || A('data-cy'), i18nName: A('data-form-field-i18n-name'),
+        type: String((el.getAttribute && el.getAttribute('type')) || el.type || ''), role: A('role'),
+        required: !!(el.required || A('aria-required') === 'true')
+      },
+      options,
+      snippet: buildFieldSnippet(el),
+      isEmpty: meta.radioElements ? isFieldEmpty({ kind: 'radio', elements: meta.radioElements }) : isFieldEmpty({ kind: 'element', element: el })
+    };
+  }
+
   // 扫描可填写字段（原生 input/textarea/select/radio + 日期选择器），为每个字段分配 fieldId 与元数据，供 AI 匹配
   function scanFillableFields() {
     const fieldMap = new Map();
@@ -814,7 +905,7 @@
         const radioEls = candidates.filter(c => c instanceof HTMLInputElement && c.type === 'radio' && (c.name || `__radio__${index}`) === groupName);
         const fieldId = `field-radio-${fields.length}`;
         fieldMap.set(fieldId, { kind: 'radio', elements: radioEls });
-        fields.push({ fieldId, label: extractFieldLabel(element), placeholder: '', name: groupName, idAttr: '', ariaLabel: element.getAttribute('aria-label') || '', tagName: 'input', inputType: 'radio', options: radioEls.map(getRadioOptionText).filter(Boolean), group: findNearestGroupLabel(element) });
+        fields.push({ fieldId, label: extractFieldLabel(element), placeholder: '', name: groupName, idAttr: '', ariaLabel: element.getAttribute('aria-label') || '', tagName: 'input', inputType: 'radio', options: radioEls.map(getRadioOptionText).filter(Boolean), group: findNearestGroupLabel(element), ctx: collectFieldContext(element, { radioOptions: radioEls.map(getRadioOptionText).filter(Boolean), radioElements: radioEls }) });
         return;
       }
       const fieldId = `field-${fields.length}`;
@@ -825,10 +916,11 @@
         tagName: element.tagName.toLowerCase(),
         inputType: element instanceof HTMLInputElement ? (element.type || 'text') : element.tagName.toLowerCase(),
         options: element instanceof HTMLSelectElement ? Array.from(element.options).map(o => o.text.trim()).filter(Boolean) : [],
-        group: findNearestGroupLabel(element)
+        group: findNearestGroupLabel(element),
+        ctx: collectFieldContext(element, {})
       });
     });
-    const pickerSelectors = [{ selector: '.ant-picker', pickerType: 'antd' }, { selector: '.el-date-editor', pickerType: 'element' }, { selector: "[class*='date-picker']", pickerType: 'generic' }];
+    const pickerSelectors = [{ selector: '.ant-picker', pickerType: 'antd' }, { selector: '.el-date-editor', pickerType: 'element' }, { selector: "[class*='date-picker']", pickerType: 'generic' }, { selector: "[class*='range-picker' i]", pickerType: 'generic' }, { selector: "[class*='date-range' i]", pickerType: 'generic' }];
     pickerSelectors.forEach(({ selector, pickerType }) => {
       document.querySelectorAll(selector).forEach(container => {
         if (container.closest && container.closest('#autumn-job-assistant-host')) return;
@@ -840,12 +932,12 @@
             const [eid, ev] = existing;
             ev.pickerType = pickerType; ev.pickerInputType = pickerInputType;
             const ef = fields.find(f => f.fieldId === eid);
-            if (ef) { ef.inputType = 'date-picker'; ef.pickerType = pickerType; ef.pickerInputType = pickerInputType; }
+            if (ef) { ef.inputType = 'date-picker'; ef.pickerType = pickerType; ef.pickerInputType = pickerInputType; if (ef.ctx) ef.ctx.kind = (pickerInputType === 'daterange' ? 'daterange' : 'date'); }
             return;
           }
           const fieldId = `field-${fields.length}`;
           fieldMap.set(fieldId, { kind: 'element', element: inner, pickerType, pickerInputType });
-          fields.push({ fieldId, label: extractFieldLabel(inner), placeholder: inner.getAttribute('placeholder') || '', name: inner.getAttribute('name') || '', idAttr: inner.id || '', ariaLabel: inner.getAttribute('aria-label') || '', tagName: 'input', inputType: 'date-picker', pickerType, pickerInputType, options: [], group: findNearestGroupLabel(inner) });
+          fields.push({ fieldId, label: extractFieldLabel(inner), placeholder: inner.getAttribute('placeholder') || '', name: inner.getAttribute('name') || '', idAttr: inner.id || '', ariaLabel: inner.getAttribute('aria-label') || '', tagName: 'input', inputType: 'date-picker', pickerType, pickerInputType, options: [], group: findNearestGroupLabel(inner), ctx: collectFieldContext(inner, { pickerType, pickerInputType }) });
         });
       });
     });
@@ -1161,7 +1253,7 @@
       if (filledCount > 0 || aiCount > 0) {
         showToast(`⚡ 已填充 ${filledCount} 项（绿色高亮）` + (aiCount ? `，AI 补全 ${aiCount} 项（琥珀高亮，请复核）` : '') + `，跳过 ${skippedCount} 项`);
       } else {
-        showToast(`没有可匹配的空白项（跳过 ${skippedCount} 项）；若字段有值却没匹配上，可在侧边栏开启 AI 辅助填写`);
+        showToast(`没有可匹配的空白项（跳过 ${skippedCount} 项）；若字段有值却没匹配上，可在侧边栏开启 AI 辅助填写；折叠区块需先点「添加」展开出输入框再填充`);
       }
     } finally {
       autofillBtn.disabled = false;
