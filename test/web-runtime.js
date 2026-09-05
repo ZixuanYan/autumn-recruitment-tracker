@@ -689,6 +689,24 @@ check('Offer 对比矩阵：<2 个隐藏，≥2 个按意向度降序显示', ()
   assert.ok(h.includes('offer-row'));
 });
 
+check('多岗位公司清单：每家一个岗位时隐藏，有多岗位时列出明细', () => {
+  seedRecords(); // r1 腾讯/后端、r2 腾讯科技有限公司/前端、r3 阿里/算法 → 腾讯 2 个岗位
+  sandbox2.renderMultiCompanies();
+  assert.strictEqual(els2['#multiCompanyWrap'].hidden, false, '存在多岗位公司时应显示');
+  const h = els2['#multiCompanyList'].innerHTML;
+  assert.ok(h.includes('multi-company'), '有清单容器');
+  assert.ok(h.includes('2 个岗位'), '标出岗位数');
+  assert.ok(h.includes('data-id="r1"') && h.includes('data-id="r2"'), '两个岗位都可点开');
+  assert.ok(h.includes('提前批'), '带批次');
+  assert.ok(h.includes('--company-color:#'), '带公司标识色');
+  assert.strictEqual(els2['#multiCompanyNote'].textContent, '1 家公司投了多个岗位');
+  // 只剩互不相同的公司时应隐藏
+  sandbox2.records = [sandbox2.records[2]];
+  sandbox2.renderMultiCompanies();
+  assert.strictEqual(els2['#multiCompanyWrap'].hidden, true);
+  assert.strictEqual(els2['#multiCompanyList'].innerHTML, '');
+});
+
 check('空状态三态：首启 / 筛选无结果 / 有数据隐藏', () => {
   seedRecords();
   sandbox2.renderEmptyState(3);
