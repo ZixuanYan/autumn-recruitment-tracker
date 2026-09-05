@@ -731,6 +731,40 @@
     .cmd-empty { padding: 24px 12px; text-align: center; color: var(--muted); font-size: 13px; }
     .cmd-foot { display: flex; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
 
+    /* ===== v4.4.0：同公司多岗位（chip / 聚合组头）、空状态三态、首启引导、Offer 矩阵 ===== */
+    .company-chip { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink-2); font-size: 11px; font-weight: 700; white-space: nowrap; border-left: 3px solid var(--company-color, var(--accent)); }
+    .company-group-row > td { padding: 6px 12px 4px; background: transparent; border-top: 0; }
+    .company-group-row:not(:first-child) > td { padding-top: 14px; }
+    .group-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 10px; border: 0; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: var(--ring); font-size: 12.5px; font-weight: 680; color: var(--ink); text-align: left; }
+    .group-toggle:hover { background: var(--accent-soft); color: var(--accent-ink); }
+    .group-caret { color: var(--muted); font-size: 11px; }
+    .group-label { border-left: 3px solid var(--company-color, var(--accent)); padding-left: 8px; }
+    .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; }
+    .empty-icon svg { width: 30px; height: 30px; }
+    .empty-title { margin-top: 8px; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--ink); }
+    .empty-text { margin: 6px auto 0; max-width: 460px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+    .guide { padding: 16px 18px 18px; }
+    .guide-note { padding: 11px 13px; border-radius: var(--r-md); background: var(--warn-soft); color: var(--warn); font-size: 13px; line-height: 1.7; }
+    .guide-note strong { display: block; margin-bottom: 2px; font-size: 13.5px; }
+    .guide-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
+    .guide-step { display: flex; gap: 11px; align-items: flex-start; padding: 12px 13px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); }
+    .guide-no { flex: 0 0 auto; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .guide-text { min-width: 0; display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+    .guide-text strong { color: var(--ink); font-size: 13.5px; }
+    .guide-text kbd { padding: 0 5px; border-radius: 5px; background: var(--surface); box-shadow: var(--ring); color: var(--ink-2); font-family: var(--font-mono); font-size: 11px; }
+    .guide-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .offer-row { cursor: pointer; }
+    .offer-matrix th:last-child, .offer-matrix td:last-child { max-width: 220px; }
+    .muted-text { color: var(--muted); font-size: 12px; }
+    /* 中间断点（561–1100px）：台账 8 列太挤，隐藏「编号」「城市」并收窄最小宽度，避免横向滚动。
+       只作用于台账表格（#records），不影响洞察里的 Offer 矩阵；≤560px 的卡片化布局也不受影响。 */
+    @media (max-width: 1100px) and (min-width: 561px) {
+      #records table { min-width: 780px; }
+      #records thead th:nth-child(1), #records tbody td:nth-child(1):not([colspan]),
+      #records thead th:nth-child(3), #records tbody td:nth-child(3) { display: none; }
+    }
+
     /* ===== 邮件提醒视图（M3）+ 导航角标 ===== */
     .nav-badge { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
     .mail-head-actions { display: flex; gap: 8px; }
@@ -842,6 +876,15 @@
       <div class="panel-head">
         <div><h2 class="panel-title" id="insightsTitle">洞察</h2><div class="panel-caption">全部由你的阶段时间线本机算出：转化漏斗、投递节奏、各阶段停留与卡点提醒</div></div>
       </div>
+      <div class="guide" id="firstRunGuide" hidden>
+        <div class="guide-note" id="guideNote"></div>
+        <div class="guide-steps">
+          <div class="guide-step"><span class="guide-no">1</span><div class="guide-text"><strong>新增投递</strong><span>填公司 / 岗位 / 城市 / 投递日期；按 <kbd>N</kbd> 可随时快速新增，按 <kbd>⌘K</kbd> 打开命令面板</span></div></div>
+          <div class="guide-step"><span class="guide-no">2</span><div class="guide-text"><strong>收到通知就推进</strong><span>笔试、面试、Offer 每次推进都追加一条里程碑，历史不会被覆盖；点公司名看详情抽屉</span></div></div>
+          <div class="guide-step"><span class="guide-no">3</span><div class="guide-text"><strong>开启云同步（可选）</strong><span>用你自己的 GitHub 令牌同步到私有 Gist，手机与电脑数据一致</span></div></div>
+        </div>
+        <div class="guide-actions" id="guideActions"></div>
+      </div>
       <div class="insights-body" id="insightsBody">
         <div class="insight-block">
           <div class="insight-block-head"><h3>转化漏斗</h3><span class="insight-note" id="funnelNote">按记录口径</span></div>
@@ -896,6 +939,7 @@
               <option value="applied-desc">投递日期：从新到旧</option>
               <option value="updated-desc">最近更新优先</option>
               <option value="company">公司名称排序</option>
+              <option value="company-group">按公司聚合（同公司多岗位）</option>
             </select>
           </div>
           <div class="table-scroll">
@@ -908,7 +952,7 @@
             <div class="board-hint">拖卡片到目标阶段列即可推进（追加一条里程碑，向后拖会二次确认）· 点卡片看详情</div>
             <div class="board-cols" id="boardCols"></div>
           </div>
-          <div class="empty" id="emptyState" hidden><div class="empty-icon">⌕</div><div>没有找到符合条件的记录</div></div>
+          <div class="empty" id="emptyState" hidden></div>
         </section>
       </section>
       <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
@@ -1364,6 +1408,8 @@
         dialog: $('#recordDialog'), form: $('#recordForm'), dialogTitle: $('#dialogTitle'), toast: $('#toast')
       };
       let primaryLoadState = 'unknown';
+      // 当前台账是否为「首次打开自动塞入的示例数据」（必须在 loadRecords 调用前声明，否则赋值触发 TDZ）
+      let sampleDataMode = false;
       let records = loadRecords();
       let resume = loadResumeData();
       let resumeSavedAt = loadResumeMeta();
@@ -1453,6 +1499,8 @@
           console.warn('无法读取本地记录', error);
         }
         const initial = exampleRecords();
+        // 标记「当前台账是示例数据」：首启引导会明确告知并提供一键清空，避免用户误把示例当成自己的投递
+        sampleDataMode = true;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(initial)); } catch (error) { console.warn(error); }
         return initial;
       }
@@ -1920,6 +1968,14 @@
             if (trigger !== 'manual') throw new Error('云端没有与此口令匹配的数据空间，请在云同步设置中确认口令');
             const createNew = await confirmInApp('云端没有与此口令匹配的数据空间（口令可能不正确）。\n\n可以用当前设备的数据新建一个独立空间，云端原有数据不会被改动，之后可随时换回原口令。是否新建？', { title: '云同步', confirmText: '新建空间' });
             if (!createNew) throw new Error('已取消：云端没有与此口令匹配的数据空间');
+          }
+          // 首次打开自动塞入的示例数据绝不参与云合并：示例的 updatedAt 就是"刚刚"，
+          // 在 LWW 里会赢过云端真实记录，进而把星海科技之类的样例污染进 vault。
+          // 因此只要走到云同步（无论云端有无数据），一律先丢弃本地示例；引导卡会随后提示开始记录。
+          if (sampleDataMode) {
+            records = [];
+            sampleDataMode = false;
+            try { localStorage.setItem(STORAGE_KEY, '[]'); } catch (_) {}
           }
           const { mergedRecords, mergedTombstones } = mergeSyncState(remote);
           // 邮件已应用/已忽略状态：跨设备并集合并（远端处理过的，本机也不再显示），随后用合并态重新过滤建议
@@ -2562,6 +2618,7 @@
             records = latest.records.map(normalizeRecord);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
             primaryLoadState = 'valid';
+            sampleDataMode = false; // 恢复出来的是真实数据，不再是示例
             render();
             showToast(`已从安全快照恢复 ${records.length} 条记录`);
           } else {
@@ -2745,6 +2802,13 @@
           if (els.sort.value === 'applied-desc') return (b.applicationDate || '').localeCompare(a.applicationDate || '');
           if (els.sort.value === 'updated-desc') return b.updatedAt - a.updatedAt;
           if (els.sort.value === 'company') return a.company.localeCompare(b.company, 'zh-CN');
+          if (els.sort.value === 'company-group') {
+            // 同公司多岗位：按归一化公司键聚拢（「腾讯」与「腾讯科技（深圳）有限公司」视为同一家），
+            // 组内按最近更新倒序，便于一眼看清「一家公司投了几个岗、各自到哪一步」
+            const ka = String(companyKeyOf(a)), kb = String(companyKeyOf(b));
+            if (ka !== kb) return ka.localeCompare(kb, 'zh-CN');
+            return (b.updatedAt || 0) - (a.updatedAt || 0);
+          }
           // 默认「最近安排优先」：分层比较，避免用 Number.MAX_SAFE_INTEGER 相加超过 2^53 丢精度
           // tier 0 = 未来安排（按时间升序，最近的最靠前）；tier 1 = 无安排（居中）；tier 2 = 已过期（置底）
           const now = Date.now();
@@ -2802,8 +2866,9 @@
         const job = jobs.find(item => item.id === button.dataset.jobId);
         if (!job) return;
         if (button.dataset.jobAction === 'applied') {
-          const duplicate = records.some(record => (job.applicationUrl && record.applicationUrl === job.applicationUrl) || (record.company === job.company && record.position === job.position));
-          if (duplicate) return showToast('这条岗位已经在投递记录中');
+          // 查重走统一的 findDuplicateRecord：同链接或「同公司+同岗位+同批次」才算重复（同公司多岗位允许并存）
+          const duplicate = findDuplicateRecord(records, job);
+          if (duplicate && duplicate.mode === 'duplicate') return showToast('这条岗位已经在投递记录中');
           records.unshift(normalizeRecord({
             company: job.company,
             position: job.position,
@@ -2849,6 +2914,29 @@
       function renderInsights() {
         const body = $('#insightsBody');
         if (!body) return;
+        const guide = $('#firstRunGuide');
+        // 首启引导：台账为空、或当前是自动塞入的示例数据时，用三步引导替换洞察内容（可「不再显示」）
+        const showGuide = (records.length === 0 || sampleDataMode) && !uiPrefs.hideGuide;
+        if (guide) guide.hidden = !showGuide;
+        body.hidden = showGuide;
+        if (showGuide) {
+          const note = $('#guideNote'), actions = $('#guideActions');
+          if (note) {
+            note.innerHTML = sampleDataMode
+              ? `<strong>当前是示例数据</strong>下面台账里的 ${records.length} 条（星海科技 / 山岚智能 / 青禾互娱 …）是首次打开自动放入的样例，只用于认识界面，不是你的投递记录。`
+              : '<strong>开始记录你的秋招</strong>台账还是空的，新增第一条投递后，这里会自动算出转化漏斗、投递节奏与卡点提醒。';
+          }
+          if (actions) {
+            actions.innerHTML = sampleDataMode
+              ? `<button class="btn btn-primary btn-small" type="button" data-guide="clear">清空示例并开始记录</button>
+                 <button class="btn btn-small" type="button" data-guide="keep">保留示例继续体验</button>
+                 <button class="btn btn-small" type="button" data-guide="hide">不再显示</button>`
+              : `<button class="btn btn-primary btn-small" type="button" data-guide="add">新增第一条投递</button>
+                 <button class="btn btn-small" type="button" data-guide="demo">载入示例数据体验</button>
+                 <button class="btn btn-small" type="button" data-guide="hide">不再显示</button>`;
+          }
+          return;
+        }
         const now = new Date();
         const funnel = computeFunnel(records);
         const steps = funnelScope === 'company' ? funnel.byCompany : funnel.byRecord;
@@ -2900,6 +2988,112 @@
         $('#alertList').innerHTML = alerts.length
           ? alerts.map(alert => `<button class="alert-item ${escapeHtml(alert.level)}" data-id="${escapeHtml(alert.id)}" type="button">${escapeHtml(alert.text)}</button>`).join('')
           : '<div class="insight-empty">没有逾期、临期或停滞的投递</div>';
+
+        renderOfferMatrix();
+      }
+
+      // Offer 对比矩阵：手里有 ≥2 个 Offer 时才出现，按意向度降序、同分按签约截止近的先
+      function renderOfferMatrix() {
+        const wrap = $('#offerMatrixWrap'), table = $('#offerMatrix');
+        if (!wrap || !table) return;
+        const offers = records.filter(record => record.stage === 'Offer');
+        if (offers.length < 2) { wrap.hidden = true; table.innerHTML = ''; return; }
+        const sorted = offers.slice().sort((a, b) => (Number(b.intent) || 0) - (Number(a.intent) || 0)
+          || String(a.deadline || '9999-12-31').localeCompare(String(b.deadline || '9999-12-31')));
+        wrap.hidden = false;
+        table.innerHTML = `<thead><tr><th>公司 / 岗位</th><th>城市</th><th>薪资 / 待遇</th><th>意向度</th><th>签约截止</th><th>最新备注</th></tr></thead>
+          <tbody>${sorted.map(record => {
+            const dl = deadlineInfo(record.deadline);
+            const notes = Array.isArray(record.notes) ? record.notes : [];
+            const lastNote = notes.length ? notes[notes.length - 1].text : (record.nextAction || '—');
+            return `<tr class="offer-row" data-id="${escapeHtml(record.id)}">
+              <td data-label="公司 / 岗位"><div class="company">${escapeHtml(record.company)}</div><div class="position">${escapeHtml(record.position || '—')}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+              <td data-label="城市">${escapeHtml(record.city || '—')}</td>
+              <td data-label="薪资 / 待遇">${escapeHtml(record.salary || '—')}</td>
+              <td data-label="意向度">${intentDotsHtml(record.intent) || '<span class="muted-text">未设</span>'}</td>
+              <td data-label="签约截止">${record.deadline ? `<span class="deadline-hint ${dl ? dl.level : ''}">${escapeHtml(formatDate(record.deadline))}${dl ? ` · ${escapeHtml(dl.text.replace('截止 · ', ''))}` : ''}</span>` : '—'}</td>
+              <td data-label="最新备注"><div class="next-action">${escapeHtml(lastNote)}</div></td>
+            </tr>`;
+          }).join('')}</tbody>`;
+      }
+
+      // 空状态三态：首启（价值主张 + 双 CTA）/ 筛选无结果（回显条件 + 清除）/ 有数据（隐藏）
+      function renderEmptyState(visibleCount) {
+        const host = els.empty;
+        if (!host) return;
+        if (visibleCount > 0) { host.hidden = true; host.innerHTML = ''; return; }
+        host.hidden = false;
+        if (!records.length) {
+          host.innerHTML = `<div class="empty-icon" aria-hidden="true"><svg><use href="#i-stack"/></svg></div>
+            <div class="empty-title">还没有投递记录</div>
+            <div class="empty-text">新增第一条投递，之后每次「推进」都会沉淀成里程碑时间线——转化率、停留天数与卡点提醒都由它算出来。</div>
+            <div class="empty-actions">
+              <button class="btn btn-primary" type="button" data-empty-action="add">新增投递</button>
+              <button class="btn" type="button" data-empty-action="demo">载入示例数据体验</button>
+            </div>`;
+          return;
+        }
+        const bits = [];
+        const keyword = els.search.value.trim();
+        if (keyword) bits.push(`关键词「${keyword}」`);
+        if (els.filter.value !== 'all') bits.push(`阶段「${els.filter.value}」`);
+        host.innerHTML = `<div class="empty-icon" aria-hidden="true">⌕</div>
+          <div class="empty-title">没有符合条件的记录</div>
+          <div class="empty-text">当前筛选：${bits.length ? escapeHtml(bits.join(' + ')) : '无'} · 台账共 ${records.length} 条</div>
+          <div class="empty-actions"><button class="btn" type="button" data-empty-action="clear">清除筛选条件</button></div>`;
+      }
+
+      // 清空示例数据：写 tombstone 后再清空，避免已开云同步时下次合并又把示例拉回来
+      function clearSampleData() {
+        const ids = records.map(record => record.id);
+        if (ids.length) markDeleted(ids);
+        records = [];
+        sampleDataMode = false;
+        saveRecords('已清空示例数据');
+        render();
+        showToast('示例数据已清空，现在记录你自己的投递');
+        openDialog(null);
+      }
+      // 载入示例数据体验：只在台账为空时允许，绝不覆盖真实记录
+      function loadDemoRecords() {
+        if (records.length) { showToast('台账已有记录，为避免覆盖不载入示例'); return; }
+        records = exampleRecords().map(item => normalizeRecord(item));
+        sampleDataMode = true;
+        saveRecords('已载入示例数据（可随时清空）');
+        render();
+      }
+
+      // 台账单行 HTML（表格视图）；companyIndex 用于「同公司多岗位」chip
+      function recordRowHtml(record, recordNo, companyIndex) {
+        const scheduleDate = parseLocal(record.scheduleAt);
+        const overdue = scheduleDate && scheduleDate < new Date() && !['Offer', '已结束'].includes(record.stage);
+        const canAdvance = record.stage !== '已结束';
+        const dl = deadlineInfo(record.deadline);
+        const dlHtml = dl && !['Offer', '已结束'].includes(record.stage)
+          ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
+        const companyHtml = record.applicationUrl
+          ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
+          : escapeHtml(record.company);
+        // 同公司多岗位：chip 显示该公司在台账里的岗位数，title 列出岗位与阶段
+        const key = companyKeyOf(record);
+        const siblings = (companyIndex && companyIndex.get(key)) || [];
+        const chipHtml = siblings.length > 1
+          ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${item.position || '未填岗位'}${item.batch ? `（${item.batch}）` : ''} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
+          : '';
+        return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}" data-company="${escapeHtml(key)}">
+          <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
+          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${chipHtml}</div><div class="position">${escapeHtml(record.position)}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+          <td data-label="城市">${escapeHtml(record.city)}</td>
+          <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
+          <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
+          <td class="schedule" data-label="最近安排"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(formatDateTime(record.scheduleAt))}${overdue ? ' · 已到期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
+          <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
+          <td data-label="操作"><div class="row-actions">
+            ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
+            <button class="text-button" data-action="edit" data-id="${escapeHtml(record.id)}" type="button">编辑</button>
+            <button class="text-button danger" data-action="delete" data-id="${escapeHtml(record.id)}" type="button">删除</button>
+          </div></td>
+        </tr>`;
       }
 
       function renderTable() {
@@ -2910,31 +3104,39 @@
           [...records].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || String(a.id).localeCompare(String(b.id)))
             .map((record, index) => [record.id, String(index + 1).padStart(4, '0')])
         );
-        els.body.innerHTML = visible.map(record => {
-          const scheduleDate = parseLocal(record.scheduleAt);
-          const overdue = scheduleDate && scheduleDate < new Date() && !['Offer', '已结束'].includes(record.stage);
-          const canAdvance = record.stage !== '已结束';
-          const dl = deadlineInfo(record.deadline);
-          const dlHtml = dl && !['Offer', '已结束'].includes(record.stage)
-            ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
-          const companyHtml = record.applicationUrl
-            ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
-            : escapeHtml(record.company);
-          return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}">
-            <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
-            <td data-label="公司 / 岗位"><div class="company">${companyHtml}</div><div class="position">${escapeHtml(record.position)}</div></td>
-            <td data-label="城市">${escapeHtml(record.city)}</td>
-            <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
-            <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
-            <td class="schedule" data-label="最近安排"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(formatDateTime(record.scheduleAt))}${overdue ? ' · 已到期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
-            <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
-            <td data-label="操作"><div class="row-actions">
-              ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
-              <button class="text-button" data-action="edit" data-id="${escapeHtml(record.id)}" type="button">编辑</button>
-              <button class="text-button danger" data-action="delete" data-id="${escapeHtml(record.id)}" type="button">删除</button>
-            </div></td>
-          </tr>`;
-        }).join('');
+        // 公司索引按**全量台账**统计（不是只按筛选结果），chip 才能回答「我在这家一共投了几个岗」
+        const companyIndex = new Map();
+        for (const record of records) {
+          const key = companyKeyOf(record);
+          if (!key) continue;
+          if (!companyIndex.has(key)) companyIndex.set(key, []);
+          companyIndex.get(key).push(record);
+        }
+        const grouped = els.sort.value === 'company-group';
+        const collapsed = new Set(uiPrefs.collapsedGroups);
+        const rows = [];
+        let lastKey = null;
+        for (const record of visible) {
+          const key = companyKeyOf(record);
+          if (!grouped || key === lastKey) {
+            if (grouped && collapsed.has(key)) continue; // 该组已折叠：跳过明细行
+            rows.push(recordRowHtml(record, recordNo, companyIndex));
+            continue;
+          }
+          lastKey = key;
+          const siblings = companyIndex.get(key) || [];
+          const isCollapsed = collapsed.has(key);
+          rows.push(`<tr class="company-group-row" data-group="${escapeHtml(key)}"><td colspan="8">
+            <button class="group-toggle" type="button" data-group-toggle="${escapeHtml(key)}" aria-expanded="${String(!isCollapsed)}">
+              <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
+              <span class="group-label" style="--company-color:${companyColor(key)}">${escapeHtml(record.company)}</span>
+              <span class="group-count">${siblings.length} 个岗位</span>
+            </button>
+          </td></tr>`);
+          if (isCollapsed) continue;
+          rows.push(recordRowHtml(record, recordNo, companyIndex));
+        }
+        els.body.innerHTML = rows.join('');
         els.empty.hidden = visible.length !== 0;
         $('.table-scroll').hidden = visible.length === 0;
       }
@@ -3233,6 +3435,35 @@
         const rank = { danger: 0, warn: 1, info: 2 };
         return alerts.sort((a, b) => (rank[a.level] - rank[b.level])).slice(0, Number(limit) > 0 ? limit : 5);
       }
+      // ----- 查重三态（同公司多岗位的关键）-----
+      // 岗位名归一化：去空格、去括号内修饰（如「产品经理（提前批）」→「产品经理」）、小写
+      function normalizePositionSlug(position) {
+        return String(position || '').trim().toLowerCase().replace(/\s+/g, '').replace(/[（(][^）)]*[）)]/g, '');
+      }
+      // 返回 { mode: 'duplicate' | 'same-company', reason, matches } 或 null
+      //   duplicate    ：同投递网址，或 同公司 + 同岗位 + 同批次 → 应改为编辑既有记录，避免重复堆积
+      //   same-company ：同公司但岗位或批次不同 → 合法（同公司多岗位 / 提前批与正式批），只做非阻断提示
+      // 修复点：此前查重不认 batch，导致「提前批」与「正式批」的同岗位被误合并成一条。
+      // options.ignoreBatch：调用方无法提供批次时（如插件收录）置 true，退回「同公司+同岗位」即判重复，
+      //                      保持插件重复推送不会堆积旧行为。
+      function findDuplicateRecord(records, seed, options = {}) {
+        const list = Array.isArray(records) ? records : [];
+        const url = String((seed && seed.applicationUrl) || '').trim();
+        if (url) {
+          const hit = list.find(record => String(record.applicationUrl || '').trim() === url);
+          if (hit) return { mode: 'duplicate', reason: 'url', matches: [hit] };
+        }
+        const key = companyKeyOf(seed);
+        if (!key) return null;
+        const sameCompany = list.filter(record => companyKeyOf(record) === key);
+        if (!sameCompany.length) return null;
+        const position = normalizePositionSlug(seed && seed.position);
+        const batch = String((seed && seed.batch) || '').trim();
+        const exact = sameCompany.filter(record => normalizePositionSlug(record.position) === position
+          && (options.ignoreBatch === true || String(record.batch || '').trim() === batch));
+        if (exact.length) return { mode: 'duplicate', reason: options.ignoreBatch === true ? 'company+position' : 'company+position+batch', matches: exact };
+        return { mode: 'same-company', reason: 'company', matches: sameCompany };
+      }
       /*__CORE_PURE_END__*/
 
       // ================= 台账视图增强（v4.4.0）：UI 偏好 / 看板 / 详情抽屉 / ⌘K 命令面板 =================
@@ -3287,6 +3518,16 @@
         saveUiPrefs();
         renderRecordsView();
       }
+      // 「按公司聚合」排序下的分组折叠：折叠态存本机 ui 偏好（上限 100 个键防膨胀）
+      function toggleCompanyGroup(key) {
+        const value = String(key || '');
+        if (!value) return;
+        const set = new Set(uiPrefs.collapsedGroups);
+        if (set.has(value)) set.delete(value); else set.add(value);
+        uiPrefs.collapsedGroups = [...set].slice(-100);
+        saveUiPrefs();
+        renderRecordsView();
+      }
       // 台账渲染总入口：搜索/筛选/排序变化与 render() 都走这里，保证两种视图不会各渲染一半。
       // 切换按钮的选中态也在这里同步，避免启动时按 HTML 默认值显示成「表格」而实际是看板。
       function renderRecordsView() {
@@ -3299,9 +3540,9 @@
         if (board) board.hidden = !isBoard;
         if (scroll) scroll.hidden = isBoard;
         if (isBoard) renderBoard(); else renderTable();
-        // 空状态只在表格视图且无内容时显示（看板自带列与「拖到这里」占位）
+        // 空状态只在表格视图显示（看板自带列与「拖到这里」占位）；三态渲染见 renderEmptyState
         const visibleCount = getVisibleRecords().length;
-        if (els.empty) els.empty.hidden = visibleCount !== 0 || isBoard;
+        if (isBoard) { if (els.empty) { els.empty.hidden = true; els.empty.innerHTML = ''; } } else { renderEmptyState(visibleCount); }
       }
 
       function intentDotsHtml(intent) {
@@ -3728,6 +3969,8 @@
         const lowConf = conf < 0.6;
         const checked = conf >= 0.6; // 高置信默认勾选，低置信需手动勾选
         const matches = matchRecordsByCompany(s.company, s.position, records);
+        // 同公司多岗位：按最近更新倒序，让 select 默认预选「最近活跃」的那条（下拉首项即选中项）
+        const orderedMatches = matches.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
         const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
 
@@ -3736,7 +3979,7 @@
           const r = matches[0];
           matchHtml = `<div class="mail-match single" data-target-id="${escapeHtml(r.id)}">匹配到台账：<strong>${escapeHtml(r.company)}</strong> · ${escapeHtml(r.position)}（当前阶段：${escapeHtml(r.stage)}）</div>`;
         } else if (matches.length > 1) {
-          matchHtml = `<div class="mail-match multi"><label>匹配到 ${matches.length} 条台账，请选择目标：<select class="control mail-target-select">${matches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}（${escapeHtml(r.stage)}）</option>`).join('')}</select></label></div>`;
+          matchHtml = `<div class="mail-match multi"><label>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），请选择目标：<select class="control mail-target-select">${orderedMatches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}${r.batch ? `（${escapeHtml(r.batch)}）` : ''} · ${escapeHtml(r.stage)}</option>`).join('')}</select></label></div>`;
         } else {
           matchHtml = '<div class="mail-match none">未匹配到台账记录——可「新建记录」并预填邮件信息（走人工补全），或忽略。</div>';
         }
@@ -4285,12 +4528,11 @@
             recentSchedule: submitted.recentSchedule || '',
             nextAction: submitted.nextAction || ''
           });
-          // 入库前查重（与“岗位库→记为已投递”同规则）：同链接或同公司同岗位命中则改为编辑既有记录，
-          // 避免插件重复推送产生重复台账
-          const existing = records.find(r =>
-            (seed.applicationUrl && r.applicationUrl === seed.applicationUrl) ||
-            (seed.company && seed.position && r.company === seed.company && r.position === seed.position)
-          );
+          // 入库前查重（与“岗位库→记为已投递”同规则，统一走 findDuplicateRecord）：
+          // 同链接或「同公司+同岗位」命中则改为编辑既有记录，避免插件重复推送产生重复台账。
+          // 插件不知道批次，因此 ignoreBatch=true（手填路径才严格按批次区分提前批/正式批）。
+          const dup = findDuplicateRecord(records, seed, { ignoreBatch: true });
+          const existing = dup && dup.mode === 'duplicate' ? dup.matches[0] : null;
           if (existing) {
             const merged = { ...existing };
             ['city', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction'].forEach(key => {
@@ -4714,12 +4956,27 @@
         pendingMailSeedId = null; // 取消/关闭新建：撤销邮件建议的待应用交接
       }
 
-      function submitForm(event) {
+      async function submitForm(event) {
         event.preventDefault();
         const timeline = collectTimeline();
         if (!timeline.length) { showToast('请至少填写一个阶段（如“已投递”）'); return; }
         const data = Object.fromEntries(new FormData(els.form).entries());
         const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now(), timeline });
+        if (!editingId) {
+          // 手填新增查重（此前这条路径完全没有查重）：
+          //   duplicate → 让用户选「编辑已有」还是「仍然新增」；same-company → 只做非阻断提示
+          const dup = findDuplicateRecord(records, normalized);
+          if (dup && dup.mode === 'duplicate') {
+            const target = dup.matches[0];
+            const goEdit = await confirmInApp(
+              `「${target.company} · ${target.position}」已经在台账里（当前阶段：${target.stage}${target.batch ? `，批次：${target.batch}` : ''}）。\n\n改为编辑这条已有记录，还是仍然新增一条？`,
+              { title: '疑似重复投递', confirmText: '编辑已有记录', cancelText: '仍然新增' }
+            );
+            if (goEdit) { closeDialog(); openDialog(target); return; }
+          } else if (dup && dup.mode === 'same-company') {
+            showToast(`${normalized.company} 名下现在共 ${dup.matches.length + 1} 个岗位在台账里`, { duration: 4000 });
+          }
+        }
         if (editingId) {
           records = records.map(record => record.id === editingId ? normalized : record);
           saveRecords('已更新并自动保存');
@@ -4737,6 +4994,9 @@
       let lastDeleted = null; // 仅最近一次删除可撤销
 
       async function handleTableAction(event) {
+        // 公司分组折叠开关（只在「按公司聚合」排序时出现）
+        const groupToggle = event.target.closest('button[data-group-toggle]');
+        if (groupToggle) { toggleCompanyGroup(groupToggle.dataset.groupToggle); return; }
         const button = event.target.closest('button[data-action]');
         if (!button) {
           // 点公司 / 岗位单元格 → 打开详情抽屉；点链接仍走原生跳转（不打断）
@@ -4908,6 +5168,8 @@
         const okBtn = $('#confirmOkBtn');
         okBtn.textContent = options.confirmText || '确定';
         okBtn.classList.toggle('danger', !!options.danger);
+        const cancelBtn = $('#confirmCancelBtn');
+        if (cancelBtn) cancelBtn.textContent = options.cancelText || '取消';
         confirmResult = false;
         return new Promise(resolve => {
           confirmResolve = resolve;
@@ -5231,6 +5493,35 @@
       $('#cmdPalette').addEventListener('click', event => { if (event.target === $('#cmdPalette')) closeCmdPalette(); });
       // 全局快捷键（⌘K / N / / / ? / Esc）
       document.addEventListener('keydown', handleGlobalKeydown);
+      // 首启引导 / 示例数据处置
+      $('#firstRunGuide').addEventListener('click', event => {
+        const button = event.target.closest('button[data-guide]');
+        if (!button) return;
+        const action = button.dataset.guide;
+        if (action === 'clear') return clearSampleData();
+        if (action === 'keep') { sampleDataMode = false; uiPrefs.hideGuide = true; saveUiPrefs(); return render(); }
+        if (action === 'add') return openDialog(null);
+        if (action === 'demo') return loadDemoRecords();
+        if (action === 'hide') { uiPrefs.hideGuide = true; saveUiPrefs(); render(); }
+      });
+      // 台账空状态 CTA（首启 / 筛选无结果）
+      els.empty.addEventListener('click', event => {
+        const button = event.target.closest('button[data-empty-action]');
+        if (!button) return;
+        const action = button.dataset.emptyAction;
+        if (action === 'add') return openDialog(null);
+        if (action === 'demo') return loadDemoRecords();
+        if (action === 'clear') {
+          els.search.value = '';
+          els.filter.value = 'all';
+          renderRecordsView();
+        }
+      });
+      // Offer 对比矩阵：点行打开详情抽屉
+      $('#offerMatrix').addEventListener('click', event => {
+        const row = event.target.closest('tr[data-id]');
+        if (row) openRecordFocus(row.dataset.id);
+      });
       // 未来安排卡片可点击/可键盘激活（role=button + tabindex=0）
       els.upcoming.addEventListener('click', event => {
         const item = event.target.closest('.schedule-item[data-id]');
