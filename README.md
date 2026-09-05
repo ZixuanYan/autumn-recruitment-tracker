@@ -6,7 +6,7 @@
 
 ## 普通用户请从这里开始
 
-**[打开简洁下载中心](https://zixuanyan.github.io/autumn-recruitment-tracker/download.html)**
+**[快速上手指南（新用户 5 分钟）](./docs/快速上手指南.md)** · **[打开简洁下载中心](https://zixuanyan.github.io/autumn-recruitment-tracker/download.html)**
 
 下载中心只有两个选择：在线使用、获取浏览器插件。普通使用者不需要理解仓库里的技术文件。
 
@@ -45,6 +45,7 @@
 
 ## 安装教程
 
+- **[快速上手指南（新用户推荐）](./docs/快速上手指南.md)**
 - [完整安装与使用教程](./docs/安装与使用教程.md)
 - [数据保存、迁移与常见问题](./docs/数据保存与迁移.md)
 
