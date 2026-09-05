@@ -5237,6 +5237,9 @@
       function confirmInApp(message, options = {}) {
         const dialog = $('#confirmDialog');
         if (!dialog || typeof dialog.showModal !== 'function') return Promise.resolve(window.confirm(message));
+        // 重入保护：确认框已开着时再调用，showModal() 按规范会抛 InvalidStateError 并留下悬挂的 Promise。
+        // 先把上一次按「取消」结算掉，再复用同一个弹窗。
+        if (dialog.open) { confirmResult = false; settleConfirm(); }
         $('#confirmMessage').textContent = message;
         $('#confirmTitle').textContent = options.title || '请确认';
         const okBtn = $('#confirmOkBtn');
@@ -5627,10 +5630,27 @@
       els.sort.addEventListener('change', renderRecordsView);
       els.dialog.addEventListener('click', event => { if (event.target === els.dialog) closeDialog(); });
       // 应用内确认框（替代原生 confirm）：确定=true，取消/Esc/点遮罩=false
-      $('#confirmOkBtn').addEventListener('click', () => { confirmResult = true; $('#confirmDialog').close(); });
-      $('#confirmCancelBtn').addEventListener('click', () => $('#confirmDialog').close());
-      $('#confirmDialog').addEventListener('close', () => { if (confirmResolve) { confirmResolve(confirmResult); confirmResolve = null; } });
-      $('#confirmDialog').addEventListener('click', event => { if (event.target === $('#confirmDialog')) $('#confirmDialog').close(); });
+      // 结算只发生一次：OK/Cancel 点击时立即 resolve，close 事件仅作 Esc / 点遮罩的兜底。
+      // 不能把 resolve 只押在 close 上——部分 WebView / 内嵌浏览器不派发 <dialog> 的 close 事件，
+      // 那样 await 会永久挂起，表现为「删除点了没反应」且无任何提示（浏览器实证发现）。
+      function settleConfirm() {
+        if (!confirmResolve) return;
+        const resolve = confirmResolve;
+        confirmResolve = null;
+        resolve(confirmResult);
+      }
+      $('#confirmOkBtn').addEventListener('click', () => { confirmResult = true; settleConfirm(); $('#confirmDialog').close(); });
+      $('#confirmCancelBtn').addEventListener('click', () => { confirmResult = false; settleConfirm(); $('#confirmDialog').close(); });
+      $('#confirmDialog').addEventListener('close', () => { settleConfirm(); });
+      // Esc 取消：modal dialog 先派发 cancel 再派发 close，而部分环境只派发其中之一，
+      // 因此两条都监听（与 #screenshotDialog 的做法一致），确保 await 一定能结算
+      $('#confirmDialog').addEventListener('cancel', () => { confirmResult = false; settleConfirm(); });
+      $('#confirmDialog').addEventListener('click', event => {
+        if (event.target !== $('#confirmDialog')) return;
+        confirmResult = false;
+        settleConfirm();
+        $('#confirmDialog').close();
+      });
       // 推进阶段弹窗：点预设阶段直接推进；自定义则填输入框后点确认
       $('#advanceStageGrid').addEventListener('click', event => {
         const btn = event.target.closest('.advance-pick');
