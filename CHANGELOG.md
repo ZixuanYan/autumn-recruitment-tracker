@@ -81,6 +81,18 @@
 - API URL 支持只填 baseURL：以 `/vN` 结尾自动补全 `/chat/completions`，兼容 DeepSeek（`https://api.deepseek.com/v1`）、阿里百炼（`https://dashscope.aliyuncs.com/compatible-mode/v1`）等 OpenAI 兼容端点
 - 部分算法参考 MIT 项目 Resume Pro（TshyGO/resume-form-assistant-plugin），已在 `extension/common/ai-helpers.js` 保留出处声明
 
+## v4.2.0
+
+- 新增第 5 个视图「邮件提醒」（`#/mail`，左侧导航带待复核角标）：把招聘邮件（面试/笔试/测评/Offer/拒信）解析成结构化建议，逐项人工复核后并入投递台账
+- 采用 A2 架构：独立私有仓库 `autumn-mail-sync` 的定时 GitHub Action 增量拉取 QQ 邮箱（IMAP）→ 关键词预筛 → AI 判定归属+阶段+细节 → 只写你私有 Gist 的独立文件 `mail-suggestions.json`；网页端在云同步时顺带读取该文件
+- **一切更新经人工复核**：建议卡片按公司名模糊匹配本地台账（0/1/多命中分支），proposed 字段（里程碑/安排时间/最近安排/下一步）逐项勾选后才写入，走 `setTimeline`/`saveRecords`，无免复核自动写入
+- 阶段严格受限：AI 只能从 14 个 `STAGE_PRESETS` 里选，选不出留空；低于置信度阈值的建议不进队列，0.3~0.6 之间进队列但标黄提醒仔细核对
+- 失败可观测：授权码失效/AI 超额/IMAP 被风控等写入 `meta.lastError` 并在视图顶部红条上屏提示，附「怎么修复」折叠说明
+- 依赖云同步：邮件建议随云同步从你自己的私有 Gist 读取，未开启云同步时视图提示先去开启；`mailState`（已应用/已忽略）仅存本机、不进同步 envelope、不跨设备
+- 隐私：Action 与网页按文件分别 PATCH 同一 Gist，互不覆盖，Action 永不读写 vault；邮件正文只发往你自配的 AI 端点，建议明文存于你的私有 Gist；QQ 授权码/AI Key/GIST PAT 只在私有仓库 Secrets，永不进浏览器
+- 不改 record schema、不改 vault envelope、不动插件 `extension/`；四视图路由与旧书签不受影响
+- 版本：网页 v4.2.0
+
 ## v4.1.0
 
 - 阶段模型升级为「里程碑时间线」：每条投递拥有一串带日期的阶段里程碑，当前阶段由最新里程碑派生

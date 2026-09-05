@@ -573,6 +573,47 @@
     @keyframes view-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
     @media (max-width: 1100px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stat-card:first-child { grid-column: span 1; } }
     @media (max-width: 780px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+    /* ===== 邮件提醒视图（M3）+ 导航角标 ===== */
+    .nav-badge { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+    .mail-head-actions { display: flex; gap: 8px; }
+    .mail-statusbar { margin-bottom: 14px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); color: var(--muted); font-size: 13px; }
+    .mail-statusbar strong { display: block; margin-bottom: 3px; color: var(--ink); font-size: 14px; }
+    .mail-statusbar.ok { background: var(--ok-soft); color: var(--ok); }
+    .mail-statusbar.ok strong { color: var(--ok); }
+    .mail-statusbar.warning { background: var(--warn-soft); color: var(--warn); }
+    .mail-statusbar.warning strong { color: var(--warn); }
+    .mail-statusbar.error { background: var(--danger-soft); color: var(--danger); }
+    .mail-statusbar.error strong { color: var(--danger); }
+    .mail-help { margin-top: 8px; }
+    .mail-help summary { cursor: pointer; font-weight: 600; }
+    .mail-help ol { margin: 8px 0 0 18px; line-height: 1.7; }
+    .mail-list { display: grid; gap: 12px; }
+    .mail-empty { padding: 30px 16px; text-align: center; color: var(--faint); }
+    .mail-card { padding: 14px 16px; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--hi), var(--ring), var(--sh-ambient); }
+    .mail-card.low-conf { box-shadow: var(--hi), 0 0 0 1px var(--warn), var(--sh-ambient); }
+    .mail-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .mail-type { padding: 2px 10px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; background: var(--surface-2); color: var(--ink-2); box-shadow: var(--ring); }
+    .mail-type[data-type="Offer"] { background: var(--ok); color: #fff; box-shadow: none; }
+    .mail-type[data-type="拒信"] { background: var(--silver-soft); color: var(--faint); box-shadow: none; }
+    .mail-type[data-type="面试邀请"] { background: var(--accent-soft); color: var(--accent-ink); box-shadow: none; }
+    .mail-company { font-size: 15px; font-weight: 700; }
+    .mail-position { color: var(--muted); font-size: 13px; }
+    .mail-conf { margin-left: auto; font-size: 12px; color: var(--muted); }
+    .mail-conf.low { color: var(--warn); font-weight: 700; }
+    .mail-subject { margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+    .mail-summary { margin-top: 4px; font-size: 13px; color: var(--muted); }
+    .mail-meta { margin-top: 6px; font-size: 12px; color: var(--faint); }
+    .mail-match { margin-top: 10px; padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
+    .mail-match.single { box-shadow: inset 3px 0 0 var(--ok); }
+    .mail-match.none { box-shadow: inset 3px 0 0 var(--warn); color: var(--warn); }
+    .mail-match label { display: block; }
+    .mail-match select { width: 100%; margin-top: 6px; }
+    .mail-fields { display: grid; gap: 6px; margin-top: 10px; }
+    .mail-field { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer; }
+    .mail-field input { margin-top: 2px; accent-color: var(--accent); }
+    .mail-fields-empty { color: var(--faint); font-size: 13px; }
+    .mail-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -589,6 +630,7 @@
 <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
 <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 14.5 5-5"/><path d="M12.5 6.5 14 5a3.5 3.5 0 0 1 5 5l-1.5 1.5"/><path d="M11.5 17.5 10 19a3.5 3.5 0 0 1-5-5l1.5-1.5"/></symbol>
 <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m8 8 4-4 4 4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7 8.5 6 8.5-6"/></symbol>
 </defs></svg>
   <div class="app-layout">
     <aside class="app-sidebar" aria-label="主导航">
@@ -601,6 +643,7 @@
         <a class="nav-item" data-route="jobPool" href="#/jobPool"><span class="nav-icon"><svg><use href="#i-briefcase"/></svg></span><span>岗位库</span></a>
         <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon"><svg><use href="#i-file"/></svg></span><span>我的简历</span></a>
         <a class="nav-item" data-route="tools" href="#/tools"><span class="nav-icon"><svg><use href="#i-tool"/></svg></span><span>工具</span></a>
+        <a class="nav-item" data-route="mail" href="#/mail"><span class="nav-icon"><svg><use href="#i-mail"/></svg></span><span>邮件提醒</span><span class="nav-badge" id="mailNavBadge" hidden></span></a>
       </nav>
       <div class="sidebar-footer" id="sideDataNotice"><strong>数据保存在本机</strong>无需账号，不上传投递记录</div>
     </aside>
@@ -748,6 +791,21 @@
           <button class="btn" id="toolSyncBtn" type="button">打开云同步</button>
         </article>
       </div>
+    </section>
+    </div>
+<div class="view" data-view="mail" hidden>
+    <section class="panel" id="mail" aria-labelledby="mailTitle">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title" id="mailTitle">邮件提醒</h2>
+          <div class="panel-caption">招聘邮件解析结果，逐项复核后并入台账——所有更新都需你手动勾选确认，绝不自动写入。邮件建议随云同步从你的私有 Gist 读取。</div>
+        </div>
+        <div class="mail-head-actions">
+          <button class="btn btn-small" id="mailRefreshBtn" type="button"><span class="icon">↻</span>重新读取</button>
+        </div>
+      </div>
+      <div class="mail-statusbar" id="mailStatusBar" role="status" aria-live="polite"></div>
+      <div class="mail-list" id="mailList"></div>
     </section>
     </div>
     </main>
@@ -985,12 +1043,15 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.1.0';
+      const APP_VERSION = '4.2.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
       const GIST_API = 'https://api.github.com';
       const GIST_FILENAME = 'qiuzhao-tracker-data.json';
+      // 邮件提醒（M3）：Action 只写这个独立文件，网页只读它、绝不写它；mailState 纯本地，不进 envelope、不跨设备同步
+      const MAIL_SUGGEST_FILENAME = 'mail-suggestions.json';
+      const MAIL_STORAGE_KEY = 'autumnRecruitmentTracker.mail.v1';
       const TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
       const $ = (selector) => document.querySelector(selector);
       const els = {
@@ -1026,6 +1087,14 @@
       let syncBusy = false;
       let syncPushTimer = null;
       let cachedSnapshotCount = null; // 快照计数缓存，避免每次渲染都全量读 IndexedDB
+
+      // ===== 邮件提醒（M3）本地状态 =====
+      // mailState.appliedIds/dismissedIds 仅本机、不进 envelope、不跨设备同步（v1 取舍）；
+      // mailSuggestions/mailMeta 为内存态，每次 syncNow 从 Gist 的 mail-suggestions.json 刷新。
+      let mailState = loadMailState();
+      let mailSuggestions = [];
+      let mailMeta = null;
+      let pendingMailSeedId = null; // 「新建记录」交接到弹窗，保存成功后才标记该建议为已应用
 
       function dateOffset(days, hour = 10, minute = 0) {
         const d = new Date();
@@ -1474,6 +1543,13 @@
           if (!gist || !gist.files) throw new Error('云端数据读取失败，请稍后重试');
           const vaultName = await vaultFileName(syncConfig.passphrase);
           const cloud = classifyGistFiles(gist.files, vaultName);
+          // 邮件建议（M3）：独立于 vault 解密读取，不受同步口令影响；缺失/损坏静默跳过，绝不影响 vault 同步。
+          // Action 只写这一个文件、网页只读它，两者按文件分别 PATCH 同一 Gist，互不覆盖。
+          try {
+            const mailFile = gist.files[MAIL_SUGGEST_FILENAME];
+            if (mailFile && mailFile.content) applyMailPayload(JSON.parse(mailFile.content));
+            else applyMailPayload(null);
+          } catch (_) { /* 邮件文件损坏：静默跳过 */ }
           let remote = null;
           let migrateLegacy = false;
           if (cloud.vaultContent.trim() && cloud.vaultContent.trim() !== '{}') {
@@ -2453,15 +2529,269 @@
         }).join('');
       }
 
+      // ================= 邮件提醒（M3）：本地状态、模糊匹配、复核视图、应用/忽略 =================
+      function loadMailState() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(MAIL_STORAGE_KEY) || '{}');
+          return {
+            appliedIds: Array.isArray(parsed.appliedIds) ? parsed.appliedIds.map(String) : [],
+            dismissedIds: Array.isArray(parsed.dismissedIds) ? parsed.dismissedIds.map(String) : [],
+            lastReadAt: String(parsed.lastReadAt || '')
+          };
+        } catch (_) {
+          return { appliedIds: [], dismissedIds: [], lastReadAt: '' };
+        }
+      }
+      function saveMailState() {
+        try { localStorage.setItem(MAIL_STORAGE_KEY, JSON.stringify(mailState)); } catch (_) {}
+      }
+
+      /*__MAIL_PURE_START__*/
+      // 公司名归一化：全角→半角、去标点空格、latin 小写、循环剥离常见后缀/修饰词
+      function normalizeCompanySlug(name) {
+        let s = String(name || '');
+        s = s.replace(/[\uFF01-\uFF5E]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)).replace(/\u3000/g, ' ');
+        s = s.toLowerCase();
+        s = s.replace(/[\s()\（\）\[\]{}\·,\.、\-_—~&'"/]/g, '');
+        const suffixes = ['有限责任公司', '股份有限公司', '有限公司', '股份公司', '分公司', '子公司', '集团', '公司', '科技', '网络', '信息', '技术', '文化', '传媒', '数字', '智能', '数据', '咨询', '中国'];
+        let changed = true;
+        while (changed && s.length > 2) {
+          changed = false;
+          for (const suf of suffixes) {
+            if (s.length > suf.length && s.endsWith(suf)) { s = s.slice(0, -suf.length); changed = true; }
+          }
+        }
+        return s;
+      }
+      // Sørensen–Dice 二元组相似度（多重集交集）
+      function diceCoefficient(a, b) {
+        const s1 = String(a || ''), s2 = String(b || '');
+        if (!s1 || !s2) return 0;
+        if (s1 === s2) return 1;
+        if (s1.length < 2 || s2.length < 2) return 0;
+        const grams = new Map();
+        for (let i = 0; i < s1.length - 1; i += 1) { const g = s1.slice(i, i + 2); grams.set(g, (grams.get(g) || 0) + 1); }
+        let inter = 0;
+        for (let i = 0; i < s2.length - 1; i += 1) {
+          const g = s2.slice(i, i + 2); const c = grams.get(g) || 0;
+          if (c > 0) { inter += 1; grams.set(g, c - 1); }
+        }
+        return (2 * inter) / ((s1.length - 1) + (s2.length - 1));
+      }
+      // 归一化后完全相等→1；互相包含→0.9；否则 Dice
+      function companyMatchScore(a, b) {
+        const na = normalizeCompanySlug(a), nb = normalizeCompanySlug(b);
+        if (!na || !nb) return 0;
+        if (na === nb) return 1;
+        if (na.includes(nb) || nb.includes(na)) return 0.9;
+        return diceCoefficient(na, nb);
+      }
+      // 公司名模糊匹配台账：阈值 ≥0.6，按分数（再按岗位命中）降序；返回 0/1/多 候选
+      function matchRecordsByCompany(company, position, list) {
+        const arr = Array.isArray(list) ? list : [];
+        if (!normalizeCompanySlug(company)) return [];
+        const pos = String(position || '').trim().toLowerCase();
+        const posHit = rec => (pos && String(rec.position || '').toLowerCase().includes(pos)) ? 1 : 0;
+        return arr
+          .map(rec => ({ rec, score: companyMatchScore(company, rec.company) }))
+          .filter(x => x.score >= 0.6)
+          .sort((a, b) => (b.score - a.score) || (posHit(b.rec) - posHit(a.rec)))
+          .map(x => x.rec);
+      }
+      // 过滤掉本机已应用/已忽略的建议（按 id）
+      function filterMailSuggestions(suggestions, appliedIds, dismissedIds) {
+        const applied = new Set((appliedIds || []).map(String)), dismissed = new Set((dismissedIds || []).map(String));
+        return (Array.isArray(suggestions) ? suggestions : []).filter(s => s && s.id && !applied.has(String(s.id)) && !dismissed.has(String(s.id)));
+      }
+      /*__MAIL_PURE_END__*/
+
+      // syncNow 读到邮件文件后调用：过滤本机已处理项 → 存内存态 → 刷新视图与角标（缺失/损坏已在调用方静默处理）
+      function applyMailPayload(fileJson) {
+        const data = fileJson && typeof fileJson === 'object' ? fileJson : null;
+        mailMeta = data && data.meta && typeof data.meta === 'object' ? data.meta : null;
+        const all = data && Array.isArray(data.suggestions) ? data.suggestions : [];
+        mailSuggestions = filterMailSuggestions(all, mailState.appliedIds, mailState.dismissedIds);
+        mailState.lastReadAt = new Date().toISOString();
+        saveMailState();
+        renderMailView();
+        updateMailBadge();
+      }
+
+      function updateMailBadge() {
+        const badge = $('#mailNavBadge');
+        if (!badge) return;
+        const n = mailSuggestions.length;
+        if (n > 0) { badge.textContent = n > 99 ? '99+' : String(n); badge.hidden = false; }
+        else { badge.textContent = ''; badge.hidden = true; }
+      }
+
+      function mailCardHtml(s) {
+        const conf = Number(s.confidence) || 0;
+        const lowConf = conf < 0.6;
+        const checked = conf >= 0.6; // 高置信默认勾选，低置信需手动勾选
+        const matches = matchRecordsByCompany(s.company, s.position, records);
+        const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
+        const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
+
+        let matchHtml;
+        if (matches.length === 1) {
+          const r = matches[0];
+          matchHtml = `<div class="mail-match single" data-target-id="${escapeHtml(r.id)}">匹配到台账：<strong>${escapeHtml(r.company)}</strong> · ${escapeHtml(r.position)}（当前阶段：${escapeHtml(r.stage)}）</div>`;
+        } else if (matches.length > 1) {
+          matchHtml = `<div class="mail-match multi"><label>匹配到 ${matches.length} 条台账，请选择目标：<select class="control mail-target-select">${matches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}（${escapeHtml(r.stage)}）</option>`).join('')}</select></label></div>`;
+        } else {
+          matchHtml = '<div class="mail-match none">未匹配到台账记录——可「新建记录」并预填邮件信息（走人工补全），或忽略。</div>';
+        }
+
+        const fields = [];
+        if (mile.stage) fields.push({ key: 'milestone', label: `推进里程碑：${mile.stage}${mile.at ? `（${mile.at}）` : ''}${mile.note ? ` · ${mile.note}` : ''}` });
+        if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: `安排时间：${formatDateTime(p.scheduleAt)}` });
+        if (p.recentSchedule) fields.push({ key: 'recentSchedule', label: `最近安排：${p.recentSchedule}` });
+        if (p.nextAction) fields.push({ key: 'nextAction', label: `下一步行动：${p.nextAction}` });
+        const fieldsHtml = fields.length
+          ? `<div class="mail-fields">${fields.map(f => `<label class="mail-field"><input type="checkbox" data-mail-field="${f.key}" ${checked ? 'checked' : ''}><span>${escapeHtml(f.label)}</span></label>`).join('')}</div>`
+          : '<div class="mail-fields mail-fields-empty">这封邮件没有可直接应用的字段。</div>';
+
+        const primaryBtn = matches.length === 0
+          ? `<button class="btn btn-small btn-primary" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`
+          : `<button class="btn btn-small btn-primary" data-mail-action="apply" data-mail-id="${escapeHtml(s.id)}" type="button">应用所选</button>`;
+
+        return `<article class="mail-card${lowConf ? ' low-conf' : ''}" data-mail-id="${escapeHtml(s.id)}">
+          <div class="mail-card-top">
+            <span class="mail-type" data-type="${escapeHtml(s.emailType || '其它')}">${escapeHtml(s.emailType || '其它')}</span>
+            <span class="mail-company">${escapeHtml(s.company || '（未识别公司）')}</span>
+            ${s.position ? `<span class="mail-position">${escapeHtml(s.position)}</span>` : ''}
+            ${s.stage ? `<span class="badge" data-stage="${escapeHtml(s.stage)}">${escapeHtml(s.stage)}</span>` : ''}
+            <span class="mail-conf${lowConf ? ' low' : ''}" title="${lowConf ? '低置信，请仔细核对后再应用' : 'AI 判定置信度'}">置信度 ${Math.round(conf * 100)}%</span>
+          </div>
+          ${s.subject ? `<div class="mail-subject">${escapeHtml(s.subject)}</div>` : ''}
+          ${s.summary ? `<div class="mail-summary">${escapeHtml(s.summary)}</div>` : ''}
+          <div class="mail-meta">${escapeHtml(s.from || '')}${s.receivedAt ? ` · ${escapeHtml(formatClock(s.receivedAt) || '')}` : ''}</div>
+          ${matchHtml}
+          ${fieldsHtml}
+          <div class="mail-actions">${primaryBtn}<button class="btn btn-small" data-mail-action="dismiss" data-mail-id="${escapeHtml(s.id)}" type="button">忽略</button></div>
+        </article>`;
+      }
+
+      function renderMailView() {
+        const list = $('#mailList');
+        const bar = $('#mailStatusBar');
+        if (!list || !bar) return;
+
+        if (!syncConfig.token) {
+          bar.className = 'mail-statusbar warning';
+          bar.innerHTML = '<strong>需先开启云同步</strong>邮件建议随云同步从你的私有 Gist 读取。请到「工具 → 云同步」开启后再回到这里。';
+          list.innerHTML = '';
+          return;
+        }
+        if (mailMeta && mailMeta.lastStatus === 'error') {
+          bar.className = 'mail-statusbar error';
+          bar.innerHTML = `<strong>上次邮件同步失败</strong>${escapeHtml(mailMeta.lastError || '未知错误')}<details class="mail-help"><summary>怎么修复？</summary><ol><li>最常见：改过 QQ 密码后 <strong>16 位授权码失效</strong> → 到 QQ 邮箱重新生成，更新私有仓库 autumn-mail-sync 的 QQ_AUTHCODE Secret。</li><li>AI 超额/密钥无效 → 检查 AI_API_KEY / AI_BASE_URL / AI_MODEL。</li><li>被 QQ 风控（Unsafe Login）→ 需把定时任务迁到国内宿主。</li><li>修复后在仓库手动重跑 mail-sync，再回本页点「重新读取」。</li></ol></details>`;
+        } else if (mailMeta) {
+          bar.className = 'mail-statusbar ok';
+          bar.innerHTML = `<strong>已读取邮件建议</strong>上次运行 ${escapeHtml(formatClock(mailMeta.lastRunAt) || '—')} · 本次新增 ${Number(mailMeta.newCount) || 0} 封 · 云端候选 ${Number(mailMeta.pendingCount) || 0} 条 · 待你复核 ${mailSuggestions.length} 条`;
+        } else {
+          bar.className = 'mail-statusbar';
+          bar.innerHTML = '<strong>暂无邮件建议</strong>定时任务可能还没运行，或你的 Gist 里还没有 mail-suggestions.json。确认 autumn-mail-sync 的 mail-sync 已跑通后，点「重新读取」。';
+        }
+
+        if (!mailSuggestions.length) {
+          list.innerHTML = '<div class="mail-empty">没有待复核的邮件建议。已应用 / 已忽略的不会再出现在本机。</div>';
+          return;
+        }
+        list.innerHTML = mailSuggestions.map(mailCardHtml).join('');
+      }
+
+      function markMailApplied(id) {
+        const sid = String(id);
+        if (!mailState.appliedIds.includes(sid)) mailState.appliedIds.push(sid);
+        mailSuggestions = mailSuggestions.filter(s => String(s.id) !== sid);
+        saveMailState();
+      }
+      function markMailDismissed(id) {
+        const sid = String(id);
+        if (!mailState.dismissedIds.includes(sid)) mailState.dismissedIds.push(sid);
+        mailSuggestions = mailSuggestions.filter(s => String(s.id) !== sid);
+        saveMailState();
+      }
+
+      // 应用所选字段到匹配记录：里程碑走 setTimeline，其余字段直接赋值 → saveRecords（触发快照+云同步）
+      function applyMailSuggestion(id) {
+        const s = mailSuggestions.find(x => String(x.id) === String(id));
+        if (!s) return;
+        const card = document.querySelector(`.mail-card[data-mail-id="${CSS.escape(String(id))}"]`);
+        if (!card) return;
+        let targetId = '';
+        const sel = card.querySelector('.mail-target-select');
+        if (sel) targetId = sel.value;
+        else { const single = card.querySelector('.mail-match.single'); if (single) targetId = single.dataset.targetId || ''; }
+        const rec = records.find(r => r.id === targetId);
+        if (!rec) { showToast('未找到目标记录，请重新选择或改用「新建记录」'); return; }
+
+        const checked = new Set([...card.querySelectorAll('input[data-mail-field]:checked')].map(i => i.dataset.mailField));
+        if (!checked.size) { showToast('请至少勾选一个要应用的字段'); return; }
+
+        const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
+        const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
+        let milestoneApplied = false;
+        if (checked.has('milestone') && mile.stage) {
+          setTimeline(rec, [...(rec.timeline || []), { stage: mile.stage, at: mile.at || localDateInput(new Date()), note: mile.note || '邮件' }]);
+          milestoneApplied = true;
+        }
+        if (checked.has('scheduleAt') && p.scheduleAt) rec.scheduleAt = p.scheduleAt;
+        if (checked.has('recentSchedule') && p.recentSchedule) rec.recentSchedule = p.recentSchedule;
+        if (checked.has('nextAction') && p.nextAction) rec.nextAction = p.nextAction;
+        rec.updatedAt = Date.now();
+
+        saveRecords(`已按邮件更新：${rec.company}`);
+        markMailApplied(id);
+        render();
+        flashRow(rec.id);
+        renderMailView();
+        updateMailBadge();
+        if (milestoneApplied && (mile.stage === 'Offer' || rec.stage === 'Offer')) playOfferStamp();
+      }
+
+      function dismissMailSuggestion(id) {
+        markMailDismissed(id);
+        renderMailView();
+        updateMailBadge();
+        showToast('已忽略这封邮件建议（仅本机不再显示）');
+      }
+
+      // 0 命中：预填邮件信息走现有「新增投递」弹窗人工补全；保存成功后（submitForm）才标记该建议为已应用
+      function openMailSeedDialog(id) {
+        const s = mailSuggestions.find(x => String(x.id) === String(id));
+        if (!s) return;
+        const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
+        const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
+        const today = localDateInput(new Date());
+        const seed = normalizeRecord({
+          company: s.company || '',
+          position: s.position || '',
+          city: '',
+          applicationDate: mile.at || today,
+          scheduleAt: p.scheduleAt || '',
+          recentSchedule: p.recentSchedule || '',
+          nextAction: p.nextAction || '',
+          stage: mile.stage || '已投递',
+          timeline: mile.stage ? [{ stage: mile.stage, at: mile.at || today, note: mile.note || '邮件' }] : undefined
+        });
+        pendingMailSeedId = String(id);
+        openDialog(null, seed);
+        showToast('已预填邮件信息，请补全城市/岗位等后保存');
+      }
+
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
       const VIEW_META = {
         overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、台账与未来安排——从银十到金九，每一步都在这里' },
         jobPool: { kicker: 'JOB POOL', title: '岗位库', subtitle: '从每日更新的招聘文档发现岗位，确认后再加入台账' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
-        tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' }
+        tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
+        mail: { kicker: 'INBOX', title: '邮件提醒', subtitle: '招聘邮件解析结果，逐项复核后并入台账' }
       };
       // 旧路由 records / upcoming 已并入总览，重定向兼容旧书签
-      const ROUTE_ALIASES = { overview: 'overview', jobPool: 'jobPool', jobpool: 'jobPool', resume: 'resume', tools: 'tools', records: 'overview', upcoming: 'overview' };
+      const ROUTE_ALIASES = { overview: 'overview', jobPool: 'jobPool', jobpool: 'jobPool', resume: 'resume', tools: 'tools', mail: 'mail', records: 'overview', upcoming: 'overview' };
 
       // ================= 工具页卡片状态：云同步连接情况与快照数量 =================
       async function renderToolCards() {
@@ -2523,6 +2853,7 @@
           history.replaceState(null, '', `#/${route}`);
         }
         if (route === 'tools') renderToolCards();
+        if (route === 'mail') renderMailView();
         window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
       }
 
@@ -3174,6 +3505,7 @@
       function closeDialog() {
         els.dialog.close();
         editingId = null;
+        pendingMailSeedId = null; // 取消/关闭新建：撤销邮件建议的待应用交接
       }
 
       function submitForm(event) {
@@ -3188,6 +3520,8 @@
         } else {
           records.unshift(normalized);
           saveRecords('已新增并自动保存');
+          // 由「邮件提醒 → 新建记录」交接而来：保存成功后才把该建议标记为已应用（取消则不标记）
+          if (pendingMailSeedId) { const mid = pendingMailSeedId; pendingMailSeedId = null; markMailApplied(mid); renderMailView(); updateMailBadge(); }
         }
         closeDialog();
         render();
@@ -3643,6 +3977,21 @@
       $('#syncDialog').addEventListener('click', event => { if (event.target === $('#syncDialog')) $('#syncDialog').close(); });
       $('#saveSyncBtn').addEventListener('click', saveSyncSettings);
       $('#disconnectSyncBtn').addEventListener('click', disconnectSync);
+      // 邮件提醒（M3）：建议卡片操作事件委托 + 重新读取
+      $('#mailList').addEventListener('click', event => {
+        const btn = event.target.closest('button[data-mail-action]');
+        if (!btn) return;
+        const id = btn.dataset.mailId;
+        const action = btn.dataset.mailAction;
+        if (action === 'apply') applyMailSuggestion(id);
+        else if (action === 'new') openMailSeedDialog(id);
+        else if (action === 'dismiss') dismissMailSuggestion(id);
+      });
+      $('#mailRefreshBtn').addEventListener('click', () => {
+        if (!syncConfig.token) { openSyncDialog(); return; }
+        showToast('正在重新读取邮件建议…');
+        syncNow('manual');
+      });
       $('#closeInstallDialog').addEventListener('click', () => $('#installDialog').close());
       $('#doneInstallDialog').addEventListener('click', () => $('#installDialog').close());
       $('#installDialog').addEventListener('click', event => { if (event.target === $('#installDialog')) $('#installDialog').close(); });
