@@ -588,6 +588,57 @@
     .badge-sm { min-height: 19px; padding: 0 7px 0 6px; font-size: 11px; }
     .badge-sm::before { width: 5px; height: 5px; }
 
+    /* ===== v4.4.0：洞察面板（漏斗 / sparkline / 停留 / 指标 / 卡点 / Offer 对比）===== */
+    .insights { margin-bottom: 16px; }
+    .insights-body { display: grid; gap: 16px; padding: 16px 18px 18px; }
+    .insight-block { min-width: 0; }
+    .insight-block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+    .insight-block-head h3 { margin: 0; font-size: 13px; font-weight: 680; font-family: var(--font-display); }
+    .insight-note { color: var(--muted); font-size: 11.5px; }
+    .insight-toggle { margin-top: 8px; font-size: 12px; }
+    .insight-empty { padding: 10px 0; color: var(--muted); font-size: 12.5px; }
+    .funnel-row { display: flex; align-items: stretch; gap: 6px; flex-wrap: wrap; }
+    .funnel-step { flex: 1 1 120px; min-width: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); }
+    .funnel-label { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+    .funnel-value { display: flex; align-items: baseline; gap: 7px; margin: 3px 0 7px; font-family: var(--font-mono); font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+    .funnel-rate { color: var(--accent-ink); font-family: var(--font-sans); font-size: 11.5px; font-weight: 650; }
+    .funnel-bar { height: 4px; border-radius: 999px; background: rgba(11, 13, 16, .07); overflow: hidden; }
+    .funnel-bar-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s var(--ease); }
+    .funnel-arrow { flex: 0 0 auto; align-self: center; color: var(--faint); font-size: 14px; }
+    .insight-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; }
+    .spark { display: block; width: 100%; height: 46px; }
+    .spark-axis { display: flex; justify-content: space-between; margin-top: 2px; color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+    .dwell-list { display: grid; gap: 2px; }
+    .dwell-row { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 12.5px; }
+    .dwell-row:last-child { border-bottom: 0; }
+    .dwell-days { margin-left: auto; font-family: var(--font-mono); font-weight: 700; }
+    .dwell-count { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; }
+    .insight-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .insight-metric { padding: 11px 13px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); }
+    .insight-metric-label { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+    .insight-metric-value { margin-top: 2px; font-family: var(--font-mono); font-size: 21px; font-weight: 700; letter-spacing: -.02em; }
+    .insight-metric-sub { margin-top: 1px; color: var(--muted); font-size: 11.5px; }
+    .alert-list { display: grid; gap: 6px; }
+    .alert-item { display: block; width: 100%; padding: 9px 12px; border: 0; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); color: var(--ink-2); font-size: 12.5px; text-align: left; transition: background .18s var(--ease), color .18s var(--ease); }
+    .alert-item:hover { background: var(--accent-soft); color: var(--accent-ink); }
+    .alert-item.danger { box-shadow: inset 3px 0 0 var(--danger); color: var(--danger); }
+    .alert-item.warn { box-shadow: inset 3px 0 0 var(--warn); color: var(--warn); }
+    .alert-item.info { box-shadow: inset 3px 0 0 var(--accent); }
+    .offer-matrix { min-width: 620px; }
+    @media (max-width: 900px) {
+      .insight-grid { grid-template-columns: minmax(0, 1fr); }
+      .insight-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* ===== v4.4.0：记录表单「更多字段」折叠区 ===== */
+    .form-more { border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); overflow: hidden; }
+    .form-more summary { padding: 10px 13px; color: var(--ink-2); font-size: 12.5px; font-weight: 650; cursor: pointer; list-style: none; }
+    .form-more summary::-webkit-details-marker { display: none; }
+    .form-more summary::before { content: "▸ "; color: var(--muted); }
+    .form-more[open] summary::before { content: "▾ "; }
+    .form-more[open] summary { border-bottom: 1px solid var(--line); }
+    .form-more-grid { padding: 13px 13px 5px; }
+
     /* ===== 邮件提醒视图（M3）+ 导航角标 ===== */
     .nav-badge { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
     .mail-head-actions { display: flex; gap: 8px; }
@@ -693,6 +744,39 @@
       <article class="stat-card" data-metric="active"><div class="stat-top"><span>进行中的流程</span><span class="stat-icon"><svg><use href="#i-flow"/></svg></span></div><div class="stat-number" id="activeCount">0</div></article>
       <article class="stat-card" data-metric="week"><div class="stat-top"><span>七天内安排</span><span class="stat-icon"><svg><use href="#i-calendar"/></svg></span></div><div class="stat-number" id="weekCount">0</div></article>
       <article class="stat-card" data-metric="offer"><div class="stat-top"><span>Offer 数量</span><span class="stat-icon"><svg><use href="#i-trophy"/></svg></span></div><div class="stat-number" id="offerCount">0</div></article>
+    </section>
+
+    <section class="panel insights" id="insights" aria-labelledby="insightsTitle">
+      <div class="panel-head">
+        <div><h2 class="panel-title" id="insightsTitle">洞察</h2><div class="panel-caption">全部由你的阶段时间线本机算出：转化漏斗、投递节奏、各阶段停留与卡点提醒</div></div>
+      </div>
+      <div class="insights-body" id="insightsBody">
+        <div class="insight-block">
+          <div class="insight-block-head"><h3>转化漏斗</h3><span class="insight-note" id="funnelNote">按记录口径</span></div>
+          <div class="funnel-row" id="funnelRow"></div>
+          <button class="text-button insight-toggle" id="funnelScopeBtn" type="button">切换为公司去重口径</button>
+        </div>
+        <div class="insight-grid">
+          <div class="insight-block">
+            <div class="insight-block-head"><h3>近 14 天投递节奏</h3><span class="insight-note" id="sparkSummary">—</span></div>
+            <svg class="spark" id="sparkSvg" viewBox="0 0 280 46" preserveAspectRatio="none" role="img" aria-label="近 14 天每日投递数量"></svg>
+            <div class="spark-axis"><span id="sparkStart">—</span><span id="sparkEnd">—</span></div>
+          </div>
+          <div class="insight-block">
+            <div class="insight-block-head"><h3>各阶段平均停留</h3><span class="insight-note">相邻里程碑日期差</span></div>
+            <div class="dwell-list" id="dwellList"></div>
+          </div>
+        </div>
+        <div class="insight-metrics" id="insightMetrics"></div>
+        <div class="insight-block">
+          <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
+          <div class="alert-list" id="alertList"></div>
+        </div>
+        <div class="insight-block" id="offerMatrixWrap" hidden>
+          <div class="insight-block-head"><h3>Offer 对比</h3><span class="insight-note">按意向度排序</span></div>
+          <div class="table-scroll"><table class="offer-matrix" id="offerMatrix"></table></div>
+        </div>
+      </div>
     </section>
 
     <section class="panel distribution" aria-labelledby="distributionTitle">
@@ -863,6 +947,38 @@
           <div class="field full"><label for="applicationUrl">投递网址</label><input class="control" id="applicationUrl" name="applicationUrl" type="url" maxlength="1000" placeholder="https://jobs.example.com/position/123"><div class="hint">通过一键收录插件添加时会自动填写</div></div>
           <div class="field full"><label for="recentSchedule">最近安排</label><input class="control" id="recentSchedule" name="recentSchedule" maxlength="100" placeholder="例如：线上一面（腾讯会议）"></div>
           <div class="field full"><label for="nextAction">下一步行动</label><textarea class="control" id="nextAction" name="nextAction" maxlength="200" placeholder="例如：准备项目复盘，提前测试摄像头"></textarea></div>
+          <div class="field full">
+            <details class="form-more" id="formMore">
+              <summary>更多字段（批次 / 渠道 / 内推人 / 意向度 / 薪资）· 可选</summary>
+              <div class="form-grid form-more-grid">
+                <div class="field">
+                  <label for="batch">批次</label>
+                  <input class="control" id="batch" name="batch" list="batchPresets" maxlength="20" placeholder="例如：提前批">
+                  <datalist id="batchPresets"></datalist>
+                  <div class="hint">同公司同岗位、不同批次不会被判为重复投递</div>
+                </div>
+                <div class="field">
+                  <label for="channel">渠道</label>
+                  <input class="control" id="channel" name="channel" list="channelPresets" maxlength="20" placeholder="例如：内推">
+                  <datalist id="channelPresets"></datalist>
+                </div>
+                <div class="field"><label for="referral">内推人 / 联系方式</label><input class="control" id="referral" name="referral" maxlength="60" placeholder="例如：学长张三（微信 zhangsan）"></div>
+                <div class="field">
+                  <label for="intent">意向度</label>
+                  <select class="control" id="intent" name="intent">
+                    <option value="">未设</option>
+                    <option value="1">1 · 保底</option>
+                    <option value="2">2 · 一般</option>
+                    <option value="3">3 · 愿意去</option>
+                    <option value="4">4 · 很想去</option>
+                    <option value="5">5 · 首选</option>
+                  </select>
+                  <div class="hint">用于 Offer 对比排序与看板标记</div>
+                </div>
+                <div class="field"><label for="salary">薪资 / 待遇</label><input class="control" id="salary" name="salary" maxlength="40" placeholder="例如：25k×16 或 面议"></div>
+              </div>
+            </details>
+          </div>
         </div>
       </div>
       <div class="modal-actions"><button class="btn" id="cancelDialog" type="button">取消</button><button class="btn btn-primary" type="submit">保存记录</button></div>
@@ -1045,6 +1161,9 @@
       // 阶段预设（仅用于排序/推进建议/分布/配色）：实际阶段可自定义，允许跳过笔试、支持三/四/五面、交叉面等。
       const STAGE_PRESETS = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
       const STAGES = STAGE_PRESETS; // 兼容别名：旧引用（分布/筛选/采集）仍可用
+      // v4.4.0 批次与渠道候选（datalist，允许自由输入，不做强约束）
+      const BATCH_PRESETS = ['提前批', '正式批', '补录', '内推批', '春招', '实习转正'];
+      const CHANNEL_PRESETS = ['官网', '内推', 'BOSS直聘', '猎聘', '智联招聘', '实习僧', '牛客', '校园宣讲', '学长推荐', '其他'];
       // 阶段排序：预设返回索引；自定义/未知返回大值（视为“更靠后”），用 9000 规避 2^53 精度问题
       function stageOrder(stage) {
         const i = STAGE_PRESETS.indexOf(stage);
@@ -2516,6 +2635,7 @@
         renderStats();
         refreshStageFilter();
         renderDistribution();
+        renderInsights();
         renderJobPool();
         renderTable();
         renderUpcoming();
@@ -2591,6 +2711,65 @@
             <div class="stage-meta"><span>${escapeHtml(stage)}</span><strong>${counts[stage] || 0}</strong></div>
             <div class="bar"><div class="bar-fill" data-stage="${escapeHtml(stage)}" style="width:${(counts[stage] || 0) / max * 100}%"></div></div>
           </div>`).join('');
+      }
+
+      // ===== 洞察面板（v4.4.0）：漏斗 / 节奏 / 停留 / 指标 / 卡点，全部由 records+timeline 派生 =====
+      let funnelScope = 'record'; // 'record'（按投递记录）| 'company'（按公司去重）
+
+      function renderInsights() {
+        const body = $('#insightsBody');
+        if (!body) return;
+        const now = new Date();
+        const funnel = computeFunnel(records);
+        const steps = funnelScope === 'company' ? funnel.byCompany : funnel.byRecord;
+        $('#funnelNote').textContent = records.length ? (funnelScope === 'company' ? '公司去重口径' : '记录口径') : '还没有记录';
+        const scopeBtn = $('#funnelScopeBtn');
+        if (scopeBtn) scopeBtn.textContent = funnelScope === 'company' ? '切换为记录口径' : '切换为公司去重口径';
+        $('#funnelRow').innerHTML = steps.map((step, index) => `
+          <div class="funnel-step">
+            <div class="funnel-label">${escapeHtml(step.label)}</div>
+            <div class="funnel-value">${step.count}<span class="funnel-rate">${index === 0 ? '基准' : `${Math.round(step.rate * 100)}%`}</span></div>
+            <div class="funnel-bar"><div class="funnel-bar-fill" style="width:${Math.max(step.rate * 100, step.count ? 3 : 0)}%"></div></div>
+          </div>${index < steps.length - 1 ? '<div class="funnel-arrow" aria-hidden="true">→</div>' : ''}`).join('');
+
+        const daily = computeDailyApplications(records, 14, now);
+        const spark = sparklinePath(daily, 280, 46);
+        $('#sparkSummary').textContent = records.length ? `共 ${spark.total} 条 · 单日最多 ${spark.max}` : '暂无数据';
+        $('#sparkSvg').innerHTML = spark.line
+          ? `<path d="${spark.area}" fill="var(--accent-soft)"></path><polyline points="${spark.line}" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"></polyline>${spark.dots.filter(dot => dot.count > 0).map(dot => `<circle cx="${dot.x}" cy="${dot.y}" r="2.1" fill="var(--accent)"><title>${escapeHtml(dot.date)}：${dot.count} 条</title></circle>`).join('')}`
+          : '';
+        $('#sparkStart').textContent = daily.length ? daily[0].date.slice(5).replace('-', '/') : '—';
+        $('#sparkEnd').textContent = daily.length ? daily[daily.length - 1].date.slice(5).replace('-', '/') : '—';
+
+        const dwell = computeStageDwell(records, 5);
+        $('#dwellList').innerHTML = dwell.length
+          ? dwell.map(item => `<div class="dwell-row"><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span><strong class="dwell-days">${item.avgDays.toFixed(1)} 天</strong><span class="dwell-count">${item.count} 次流转</span></div>`).join('')
+          : '<div class="insight-empty">至少要有两个带日期的阶段，才能算出停留时长</div>';
+
+        const groups = groupRecordsByCompany(records);
+        const multiCompanies = groups.filter(group => group.records.length > 1).length;
+        const inFlow = records.filter(isActive);
+        const flowDays = inFlow
+          .map(record => { const d = parseDay(record.applicationDate); return d ? Math.max(0, Math.round((now - d) / 86400000)) : null; })
+          .filter(value => value != null);
+        const avgFlowDays = flowDays.length ? Math.round(flowDays.reduce((a, b) => a + b, 0) / flowDays.length) : 0;
+        const alerts = collectAlerts(records, now, 5);
+        const stalledCount = findStalled(records, now, 14).length;
+        $('#insightMetrics').innerHTML = [
+          { label: '覆盖公司', value: groups.length, sub: multiCompanies ? `${multiCompanies} 家投了多个岗位` : '每家一个岗位' },
+          { label: '在流程中', value: inFlow.length, sub: flowDays.length ? `平均已 ${avgFlowDays} 天` : '暂无进行中' },
+          { label: '停滞 >14 天', value: stalledCount, sub: stalledCount ? '建议主动跟进' : '节奏正常' },
+          { label: '需要关注', value: alerts.length, sub: alerts.length ? '见下方清单' : '暂无卡点' }
+        ].map(metric => `<div class="insight-metric">
+            <div class="insight-metric-label">${escapeHtml(metric.label)}</div>
+            <div class="insight-metric-value">${metric.value}</div>
+            <div class="insight-metric-sub">${escapeHtml(metric.sub)}</div>
+          </div>`).join('');
+
+        $('#alertCount').textContent = alerts.length ? `${alerts.length} 条` : '';
+        $('#alertList').innerHTML = alerts.length
+          ? alerts.map(alert => `<button class="alert-item ${escapeHtml(alert.level)}" data-id="${escapeHtml(alert.id)}" type="button">${escapeHtml(alert.text)}</button>`).join('')
+          : '<div class="insight-empty">没有逾期、临期或停滞的投递</div>';
       }
 
       function renderTable() {
@@ -2767,6 +2946,161 @@
         while (rest.length > 74) { parts.push(rest.slice(0, 74)); rest = ' ' + rest.slice(74); }
         parts.push(rest);
         return parts.join('\r\n');
+      }
+
+      // ----- 公司维度分组（同公司多岗位）-----
+      // 分组键复用邮件匹配的 normalizeCompanySlug：自动处理全半角、公司后缀（有限公司/科技/集团…），
+      // 避免「腾讯」与「腾讯科技（深圳）有限公司」被算成两家公司。归一化后为空则退回小写原名。
+      function companyKeyOf(record) {
+        const raw = String((record && record.company) || '').trim();
+        if (!raw) return '';
+        return normalizeCompanySlug(raw) || raw.toLowerCase();
+      }
+      // 按公司聚合：返回 [{ key, label, records }]，多岗位公司排前
+      function groupRecordsByCompany(records) {
+        const map = new Map();
+        for (const r of (Array.isArray(records) ? records : [])) {
+          const key = companyKeyOf(r);
+          if (!key) continue;
+          if (!map.has(key)) map.set(key, { key, label: String(r.company || ''), records: [] });
+          const group = map.get(key);
+          group.records.push(r);
+          if (!group.label) group.label = String(r.company || '');
+        }
+        return [...map.values()].sort((a, b) => b.records.length - a.records.length
+          || String(a.label).localeCompare(String(b.label), 'zh-CN'));
+      }
+      // 公司标识色：按 key 哈希取固定色板，保证同一家公司在看板/表格/抽屉里颜色一致
+      const COMPANY_PALETTE = ['#2447e0', '#0e7a5f', '#9a5b00', '#4338ca', '#b7791f', '#0f766e', '#a21caf', '#c0362c'];
+      function companyColor(key) {
+        const s = String(key || '');
+        let h = 0;
+        for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return COMPANY_PALETTE[h % COMPANY_PALETTE.length];
+      }
+
+      // ----- 漏斗转化率 -----
+      // 语义：记录的 timeline 里**出现过**该组里程碑即计入（不是只看当前阶段），
+      // 因此后来「已结束」的记录仍算进面试转化，符合漏斗口径。
+      const FUNNEL_GROUPS = [
+        { key: 'applied', label: '投递', test: () => true },
+        { key: 'assess', label: '笔试 / 测评', test: s => ['测评', '笔试', '机试'].includes(s) },
+        { key: 'interview', label: '面试', test: s => String(s).includes('面') },
+        { key: 'offer', label: 'Offer', test: s => s === 'Offer' }
+      ];
+      function funnelCounts(items) {
+        const base = Array.isArray(items) ? items.length : 0;
+        return FUNNEL_GROUPS.map(group => {
+          const count = (Array.isArray(items) ? items : []).filter(record => {
+            const stages = Array.isArray(record.timeline) && record.timeline.length
+              ? record.timeline.map(m => String(m.stage || ''))
+              : [String(record.stage || '')];
+            return stages.some(group.test);
+          }).length;
+          return { key: group.key, label: group.label, count, rate: base ? count / base : 0 };
+        });
+      }
+      function computeFunnel(records) {
+        const groups = groupRecordsByCompany(records);
+        // 公司去重口径：一家公司只要有任一岗位达到该阶段即计入
+        const perCompany = groups.map(g => ({
+          timeline: g.records.flatMap(r => (Array.isArray(r.timeline) ? r.timeline : [])),
+          stage: g.records[0] && g.records[0].stage
+        }));
+        return { byRecord: funnelCounts(records), byCompany: funnelCounts(perCompany), companies: groups.length };
+      }
+
+      // ----- 各阶段平均停留天数（相邻里程碑日期差）-----
+      function computeStageDwell(records, top = 5) {
+        const acc = new Map();
+        for (const r of (Array.isArray(records) ? records : [])) {
+          const tl = (Array.isArray(r.timeline) ? r.timeline : [])
+            .map(m => ({ stage: String(m.stage || ''), date: parseDay(m.at) }))
+            .filter(m => m.stage && m.date);
+          for (let i = 0; i < tl.length - 1; i += 1) {
+            const days = Math.round((tl[i + 1].date - tl[i].date) / 86400000);
+            if (!Number.isFinite(days) || days < 0 || days > 365) continue;
+            const key = tl[i].stage;
+            if (!acc.has(key)) acc.set(key, { stage: key, total: 0, count: 0 });
+            const bucket = acc.get(key);
+            bucket.total += days;
+            bucket.count += 1;
+          }
+        }
+        return [...acc.values()]
+          .map(b => ({ stage: b.stage, avgDays: b.count ? b.total / b.count : 0, count: b.count }))
+          .sort((a, b) => b.avgDays - a.avgDays || b.count - a.count)
+          .slice(0, Number(top) > 0 ? top : 5);
+      }
+
+      // ----- 近 N 天投递节奏 -----
+      function computeDailyApplications(records, days = 14, now = new Date()) {
+        const span = Number(days) > 0 ? Number(days) : 14;
+        const counts = new Map();
+        for (let i = span - 1; i >= 0; i -= 1) {
+          const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+          counts.set(localDateInput(d), 0);
+        }
+        for (const r of (Array.isArray(records) ? records : [])) {
+          const key = String(r.applicationDate || '').slice(0, 10);
+          if (counts.has(key)) counts.set(key, counts.get(key) + 1);
+        }
+        return [...counts.entries()].map(([date, count]) => ({ date, count }));
+      }
+      // 生成 sparkline 的折线与面积路径（无第三方依赖）
+      function sparklinePath(counts, width = 280, height = 46) {
+        const list = Array.isArray(counts) ? counts : [];
+        const n = list.length;
+        if (!n) return { line: '', area: '', max: 0, total: 0, dots: [] };
+        const max = Math.max(1, ...list.map(c => Number(c.count) || 0));
+        const step = n > 1 ? width / (n - 1) : width;
+        const dots = list.map((c, i) => ({
+          x: +(i * step).toFixed(2),
+          y: +(height - ((Number(c.count) || 0) / max) * (height - 6) - 3).toFixed(2),
+          count: Number(c.count) || 0,
+          date: c.date
+        }));
+        const line = dots.map(d => `${d.x},${d.y}`).join(' ');
+        const area = `M${dots[0].x},${height} L${dots.map(d => `${d.x},${d.y}`).join(' L')} L${dots[n - 1].x},${height} Z`;
+        return { line, area, max, total: list.reduce((s, c) => s + (Number(c.count) || 0), 0), dots };
+      }
+
+      // ----- 卡点：停滞 / 临期截止 / 逾期安排 / 同公司多岗位 -----
+      function findStalled(records, now = new Date(), thresholdDays = 14) {
+        const out = [];
+        for (const r of (Array.isArray(records) ? records : [])) {
+          if (!isActive(r)) continue;
+          const tl = Array.isArray(r.timeline) ? r.timeline : [];
+          const lastDate = tl.length ? parseDay(tl[tl.length - 1].at) : parseDay(r.applicationDate);
+          if (!lastDate) continue;
+          const days = Math.round((now - lastDate) / 86400000);
+          if (days >= thresholdDays) out.push({ record: r, stage: r.stage, days });
+        }
+        return out.sort((a, b) => b.days - a.days);
+      }
+      // 汇总需要关注的事项，danger 优先，最多 limit 条；每条带 recordId 便于点击跳转
+      function collectAlerts(records, now = new Date(), limit = 5) {
+        const alerts = [];
+        const list = Array.isArray(records) ? records : [];
+        for (const r of list) {
+          if (['Offer', '已结束'].includes(r.stage)) continue;
+          const dl = deadlineInfo(r.deadline, now);
+          if (dl && dl.level === 'danger') alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：${dl.text}` });
+          else if (dl && dl.level === 'warn') alerts.push({ level: 'warn', id: r.id, text: `${r.company} · ${r.position}：${dl.text}` });
+          const s = parseLocal(r.scheduleAt);
+          if (s && s < now) alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：安排已过（${formatDateTime(r.scheduleAt)}）但阶段仍是「${r.stage}」` });
+        }
+        for (const item of findStalled(list, now, 14)) {
+          alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：停在「${item.stage}」已 ${item.days} 天` });
+        }
+        for (const group of groupRecordsByCompany(list)) {
+          const open = group.records.filter(r => isActive(r));
+          if (group.records.length > 1 && open.length > 1) {
+            alerts.push({ level: 'info', id: open[0].id, text: `${group.label}：同时有 ${open.length} 个岗位在流程中（${open.map(r => r.stage).join(' / ')}）` });
+          }
+        }
+        const rank = { danger: 0, warn: 1, info: 2 };
+        return alerts.sort((a, b) => (rank[a.level] - rank[b.level])).slice(0, Number(limit) > 0 ? limit : 5);
       }
       /*__CORE_PURE_END__*/
 
@@ -3230,6 +3564,11 @@
       function populateSelects() {
         // 阶段组合框预设候选（时间线编辑器与推进自定义共用）
         $('#stagePresets').innerHTML = STAGE_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+        // 批次 / 渠道候选（v4.4.0）：datalist 允许自由输入，取不到元素时静默跳过
+        const batchList = $('#batchPresets');
+        if (batchList) batchList.innerHTML = BATCH_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+        const channelList = $('#channelPresets');
+        if (channelList) channelList.innerHTML = CHANNEL_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
         refreshStageFilter();
       }
       // 筛选下拉 = 预设 ∪ 记录中实际出现的自定义阶段（保留当前选择）
@@ -3283,8 +3622,14 @@
         // 取不到元素时跳过（null 安全），便于分阶段加字段。
         for (const field of ['company', 'position', 'city', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
           const input = document.getElementById(field);
-          if (input) input.value = source ? (source[field] ?? '') : '';
+          if (!input) continue;
+          // intent 是下拉框：0（未设）要映射成空字符串，否则 select 会落在无匹配项的状态
+          const raw = source ? source[field] : '';
+          input.value = field === 'intent' ? (Number(raw) > 0 ? String(Number(raw)) : '') : (raw ?? '');
         }
+        // 已填过任一「更多字段」时自动展开折叠区，避免用户以为数据丢了
+        const more = $('#formMore');
+        if (more) more.open = !!source && ['batch', 'channel', 'referral', 'salary'].some(f => String(source[f] || '').trim()) || (!!source && Number(source.intent) > 0);
         els.dialog.showModal();
         requestAnimationFrame(() => $('#company').focus());
       }
@@ -4279,6 +4624,15 @@
       $('#exportRecordsBtn').addEventListener('click', exportData);
       $('#exportResumeBtn').addEventListener('click', exportResume);
       $('#exportIcsBtn').addEventListener('click', () => exportIcs());
+      // 洞察面板：漏斗口径切换（记录 / 公司去重）+ 卡点清单点击直达记录
+      $('#funnelScopeBtn').addEventListener('click', () => {
+        funnelScope = funnelScope === 'company' ? 'record' : 'company';
+        renderInsights();
+      });
+      $('#alertList').addEventListener('click', event => {
+        const item = event.target.closest('.alert-item[data-id]');
+        if (item) openRecordFocus(item.dataset.id);
+      });
       // 未来安排卡片可点击/可键盘激活（role=button + tabindex=0）
       els.upcoming.addEventListener('click', event => {
         const item = event.target.closest('.schedule-item[data-id]');
