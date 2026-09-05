@@ -157,7 +157,7 @@ const core = new Function(
    ${coreDeps.join('\n')}
    ${coreSrc}
    return {
-     parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs,
+     parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
      companyKeyOf, companyGroupKey, groupRecordsByCompany, companyGroupIndex, companyColor, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
      normalizePositionSlug, findDuplicateRecord, normalizeRecord
@@ -223,7 +223,75 @@ check('buildIcs 结构、CRLF、UID 与文本转义', () => {
   assert.ok(ics.includes('后端\\;基础平台'), '分号需转义');
   assert.ok(ics.includes('线上一面\\n腾讯会议'), '换行需转义成 \\n');
   assert.ok(ics.includes('URL:https://x.example/a'));
-  assert.ok(!ics.split('\r\n').some(line => line.length > 75), '单行不得超过 75 字节（需折叠）');
+});
+
+// ---- RFC 5545 严格校验器：结构 + 75 octets 折行 + 展开还原 ----
+// 展开规则（§3.1）：CRLF 后紧跟的单个空白是折叠标记，去掉即还原逻辑行。
+function unfoldIcs(ics) {
+  return ics.replace(/\r\n[ \t]/g, '').split('\r\n').filter(l => l !== '');
+}
+function validateIcs(ics) {
+  const problems = [];
+  if (!ics.endsWith('\r\n')) problems.push('未以 CRLF 结尾');
+  if (/[\n\r]/.test(ics.replace(/\r\n/g, ''))) problems.push('存在裸 LF 或 CR（必须全部是 CRLF）');
+  const physical = ics.split('\r\n').filter(l => l !== '');
+  for (const line of physical) {
+    const octets = Buffer.byteLength(line, 'utf8');
+    if (octets > 75) problems.push(`行超过 75 octets（${octets}）：${line.slice(0, 30)}…`);
+  }
+  // 续行必须以单个空白开头
+  for (let i = 1; i < physical.length; i += 1) {
+    const isContinuation = Buffer.byteLength(physical[i - 1], 'utf8') > 60 && /^[ \t]/.test(physical[i]);
+    if (isContinuation && !/^[ \t]/.test(physical[i])) problems.push(`第 ${i + 1} 行应为折叠续行但缺前导空白`);
+  }
+  const logical = unfoldIcs(ics);
+  const count = (re) => logical.filter(l => re.test(l)).length;
+  if (count(/^VERSION:2\.0$/) !== 1) problems.push('VERSION:2.0 缺失或非唯一');
+  if (count(/^PRODID:/) !== 1) problems.push('PRODID 缺失或非唯一');
+  if (count(/^BEGIN:VCALENDAR$/) !== 1 || count(/^END:VCALENDAR$/) !== 1) problems.push('VCALENDAR BEGIN/END 不配对');
+  if (count(/^BEGIN:VEVENT$/) !== count(/^END:VEVENT$/)) problems.push('VEVENT BEGIN/END 不配对');
+  if (count(/^UID:/) !== count(/^BEGIN:VEVENT$/)) problems.push('每个 VEVENT 必须有且仅有一个 UID');
+  if (count(/^DTSTAMP:/) !== count(/^BEGIN:VEVENT$/)) problems.push('每个 VEVENT 必须有 DTSTAMP');
+  if (count(/^DTSTART/) !== count(/^BEGIN:VEVENT$/)) problems.push('每个 VEVENT 必须有 DTSTART');
+  const uids = logical.filter(l => l.startsWith('UID:')).map(l => l.slice(4));
+  if (new Set(uids).size !== uids.length) problems.push('UID 重复（日历会当成同一事件更新）');
+  return { problems, logical, events: count(/^BEGIN:VEVENT$/) };
+}
+
+check('buildIcs 通过严格 RFC 5545 校验（长中文描述按 UTF-8 字节折叠，可无损展开还原）', () => {
+  const longChinese = '梳理项目经历，准备三分钟自我介绍；提前测试摄像头、麦克风与网络，备好作品集与岗位 JD 的关键要求逐条对照，并复习上一轮面试官提到的系统设计题目';
+  const events = core.collectScheduleEvents([
+    { id: 'cjk1', company: '星海科技', position: '产品经理校招生', city: '上海', stage: '一面', scheduleAt: '2026-09-20T10:00', deadline: '', recentSchedule: '线上一面（腾讯会议）', nextAction: longChinese, applicationUrl: '' },
+    { id: 'cjk2', company: '山岚智能', position: '算法工程师', city: '北京', stage: '笔试', scheduleAt: '', deadline: '2026-09-25', nextAction: '', applicationUrl: '' }
+  ], NOW, 10);
+  const ics = core.buildIcs(events);
+  const { problems, logical, events: n } = validateIcs(ics);
+  assert.deepStrictEqual(problems, [], `RFC 5545 校验失败：${problems.join('；')}`);
+  assert.strictEqual(n, 2);
+  // 展开还原：折叠只是物理换行，逻辑值必须与原始内容逐字一致（含转义后的中文与标点）
+  const desc = logical.find(l => l.startsWith('DESCRIPTION:') && l.includes('星海科技') === false && l.includes('产品经理校招生'));
+  assert.ok(desc, '应能找到含长中文的 DESCRIPTION');
+  assert.ok(desc.includes(core.icsEscape(longChinese)), '展开后必须无损还原长中文下一步行动');
+  assert.ok(!/\r|\n/.test(desc), '逻辑行内不得再有真实换行');
+});
+
+check('foldIcsLine 按字节预算折叠且不拆多字节字符', () => {
+  const ascii = 'X'.repeat(200);
+  const foldedAscii = core.foldIcsLine(ascii);
+  assert.ok(foldedAscii.split('\r\n').every(l => Buffer.byteLength(l, 'utf8') <= 75));
+  assert.strictEqual(foldedAscii.replace(/\r\n /g, ''), ascii, 'ASCII 展开无损');
+  const cjk = '面'.repeat(120); // 每字 3 字节 = 360 octets
+  const foldedCjk = core.foldIcsLine(cjk);
+  assert.ok(foldedCjk.split('\r\n').every(l => Buffer.byteLength(l, 'utf8') <= 75), '每行不超过 75 octets');
+  assert.strictEqual(foldedCjk.replace(/\r\n /g, ''), cjk, '中文展开无损（未在多字节字符中间断开）');
+  const emoji = '🎯'.repeat(60); // 代理对，每字 4 字节
+  const foldedEmoji = core.foldIcsLine(emoji);
+  assert.ok(foldedEmoji.split('\r\n').every(l => Buffer.byteLength(l, 'utf8') <= 75));
+  assert.strictEqual(foldedEmoji.replace(/\r\n /g, ''), emoji, '代理对不被拆开');
+  assert.strictEqual(core.utf8Octets('面'), 3);
+  assert.strictEqual(core.utf8Octets('🎯'), 4);
+  assert.strictEqual(core.utf8Octets('abc'), 3);
+  assert.strictEqual(core.foldIcsLine('SHORT:1'), 'SHORT:1', '短行原样返回');
 });
 
 check('buildIcs 全天截止用 VALUE=DATE', () => {
