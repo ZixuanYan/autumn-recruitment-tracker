@@ -48,8 +48,8 @@
       display: flex; align-items: center; gap: 11px; width: 100%; min-height: 42px; padding: 0 12px; border: 0; border-radius: 8px;
       color: var(--muted); background: transparent; text-decoration: none; font-size: 14px; font-weight: 640; text-align: left; transition: .16s ease;
     }
-    .nav-item:hover { color: var(--gold-dark); background: var(--surface-soft); }
-    .nav-item.is-active { color: var(--gold-dark); background: var(--gold-soft); box-shadow: inset 3px 0 0 var(--gold); }
+    .nav-item:hover { color: var(--accent-ink); background: var(--surface-soft); }
+    .nav-item.is-active { color: var(--accent-ink); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
     .nav-icon { display: grid; place-items: center; width: 22px; color: currentColor; font-size: 16px; flex: 0 0 auto; }
     .sidebar-footer { margin-top: auto; padding: 13px 12px; border-radius: 10px; background: var(--silver-soft); color: var(--silver); font-size: 12px; border: 1px solid var(--line); }
     .sidebar-footer strong { display: block; margin-bottom: 2px; font-size: 13px; }
@@ -88,15 +88,15 @@
     .main-column { min-width: 0; }
 
     /* 工具页卡片 */
-    .tools-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 20px 22px 22px; }
+    .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; padding: 20px 22px 22px; }
     .tool-card { display: flex; flex-direction: column; gap: 11px; min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: .18s ease; }
-    .tool-card:hover { transform: translateY(-1px); border-color: #d5cdb8; box-shadow: 0 8px 20px rgba(66, 58, 38, .07); }
+    .tool-card:hover { transform: translateY(-1px); border-color: var(--line-strong); box-shadow: 0 8px 20px rgba(16, 24, 40, .07); }
     .tool-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .tool-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 9px; background: var(--gold-soft); color: var(--gold-dark); font-size: 19px; }
+    .tool-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink); font-size: 19px; }
     .tool-card h3 { margin: 0; font-size: 16px; font-family: var(--font-display); }
     .tool-card p { margin: 0; flex: 1; color: var(--muted); font-size: 13px; line-height: 1.7; }
     .tool-status { padding: 3px 10px; border-radius: 999px; background: var(--silver-soft); color: var(--silver); font-size: 11px; font-weight: 720; white-space: nowrap; }
-    .tool-status.ok { background: var(--gold-soft); color: var(--gold-dark); }
+    .tool-status.ok { background: var(--accent-soft); color: var(--accent-ink); }
     .tool-status.warning { background: var(--seal-soft); color: var(--seal); }
     .tool-card .btn { justify-content: center; }
     .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1); }
@@ -125,11 +125,11 @@
     td { padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: middle; font-size: 13.5px; }
     tbody tr { transition: background .15s ease; }
     tbody tr:hover { background: var(--surface-soft); }
-    tbody tr[data-is-offer="true"] { box-shadow: inset 3px 0 0 var(--gold); }
+    /* Offer 行左侧色条只在下方视觉层定义一处（绿色），避免两份冲突规则 */
     .record-no { color: var(--muted); font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
     .company { font-weight: 720; }
     .company-link { color: inherit; text-decoration: none; }
-    .company-link:hover { color: var(--gold-dark); text-decoration: underline; text-underline-offset: 3px; }
+    .company-link:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
     .position { color: var(--muted); font-size: 13px; margin-top: 2px; }
     td[data-label="投递日期"] { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
     .schedule { max-width: 190px; }
@@ -143,27 +143,9 @@
       font-size: 12px; font-weight: 600; letter-spacing: .01em; white-space: nowrap;
     }
     .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--stage-color, var(--muted)); }
-    /* 阶段映射：中性灰(待投/已投/笔试/结束) → 强调蓝(面试中) → 语义绿(Offer) */
-    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"] { --stage-color: #71717a; --stage-soft: transparent; --stage-border: #d4d4d8; }
-    .badge[data-stage="待投递"] { border-style: dashed; }
-    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"] { --stage-color: #52525b; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
-    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"] { --stage-color: #52525b; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
-    .stage-cell[data-stage="测评"], .badge[data-stage="测评"],
-    .stage-cell[data-stage="机试"], .badge[data-stage="机试"] { --stage-color: #52525b; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
-    .stage-cell[data-stage="三面"], .badge[data-stage="三面"],
-    .stage-cell[data-stage="四面"], .badge[data-stage="四面"],
-    .stage-cell[data-stage="五面"], .badge[data-stage="五面"],
-    .stage-cell[data-stage="交叉面"], .badge[data-stage="交叉面"] { --stage-color: #1e3ab0; --stage-soft: #eef1fd; --stage-border: #2749d6; }
-    .stage-cell[data-stage="一面"], .badge[data-stage="一面"] { --stage-color: #1e3ab0; --stage-soft: #eef1fd; --stage-border: #2749d6; }
-    .stage-cell[data-stage="二面"], .badge[data-stage="二面"] { --stage-color: #1e3ab0; --stage-soft: #eef1fd; --stage-border: #2749d6; }
-    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"] { --stage-color: #1e3ab0; --stage-soft: #eef1fd; --stage-border: #2749d6; }
-    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"] { --stage-color: #15803d; --stage-soft: #ecfdf3; --stage-border: #15803d; }
-    .badge[data-stage="Offer"] { color: #fff; background: #15803d; border-color: #15803d; }
-    .badge[data-stage="Offer"]::before { background: #fff; }
-    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"] { --stage-color: #71717a; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
-    .badge[data-stage="已结束"] { opacity: .6; }
+    /* 阶段配色不在此定义：唯一的权威色阶见下方「视觉层」的 14 阶段有序色阶块，避免两份规则互相覆盖。 */
     .stage-cell { border-radius: 8px; }
-    .stage-cell[data-stage="待投递"] { border-style: dashed; background: transparent; }
+    .stage-cell[data-stage="待投递"] { background: transparent; }
     /* 阶段时间线编辑器（记录弹窗）+ 推进选择弹窗 */
     .timeline-editor { display: grid; gap: 7px; margin: 8px 0; }
     .tl-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -276,7 +258,7 @@
     .toast-action { margin-left: 12px; padding: 3px 11px; border: 1px solid rgba(255, 255, 255, .5); border-radius: 7px; background: transparent; color: #fff; font-size: 13px; cursor: pointer; }
     .toast-action:hover { background: rgba(255, 255, 255, .16); }
     tbody tr.row-flash { animation: row-flash 1s ease-out; }
-    @keyframes row-flash { 0% { background: var(--gold-soft); } 100% { background: transparent; } }
+    @keyframes row-flash { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
     .btn.danger { background: var(--seal); border-color: var(--seal); color: #fff; }
     .btn.danger:hover { background: #b23a1f; border-color: #b23a1f; }
     #confirmMessage { white-space: pre-line; }
@@ -297,9 +279,9 @@
     .resume-progress { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
     .resume-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
     .resume-progress-title { font-weight: 720; font-size: 14px; }
-    .resume-progress-value { font-family: var(--font-mono); font-size: 13px; color: var(--gold-dark); font-variant-numeric: tabular-nums; }
+    .resume-progress-value { font-family: var(--font-mono); font-size: 13px; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
     .resume-progress-bar { height: 7px; border-radius: 999px; background: var(--surface-soft); overflow: hidden; }
-    .resume-progress-fill { height: 100%; border-radius: inherit; background: var(--gold); transition: width .3s ease; }
+    .resume-progress-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s ease; }
     .resume-progress-hint { color: var(--muted); font-size: 12px; }
     .resume-section-block { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
     .resume-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
@@ -315,7 +297,7 @@
     .exp-item-card { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); padding: 12px 14px; }
     .exp-item-card.is-collapsed .exp-fields-grid, .exp-item-card.is-collapsed .exp-card-footer { display: none; }
     .exp-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
-    .exp-item-header h4 { margin: 0; font-size: 13.5px; color: var(--gold-dark); font-weight: 720; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+    .exp-item-header h4 { margin: 0; font-size: 13.5px; color: var(--accent-ink); font-weight: 720; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
     .exp-item-header h4::before { content: "▸ "; color: var(--muted); font-size: 12px; }
     .exp-item-card:not(.is-collapsed) .exp-item-header h4::before { content: "▾ "; }
     .exp-card-tools { display: flex; gap: 5px; }
@@ -326,7 +308,7 @@
     .exp-fields-grid .control { min-height: 38px; }
     .exp-card-footer { margin-top: 11px; padding-top: 10px; border-top: 1px dashed var(--line); display: flex; justify-content: flex-start; }
     .resume-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-    .resume-privacy-note { margin: 0; padding: 12px 14px; border-radius: 11px; background: var(--gold-soft); color: var(--gold-dark); font-size: 13px; }
+    .resume-privacy-note { margin: 0; padding: 12px 14px; border-radius: 11px; background: var(--accent-soft); color: var(--accent-ink); font-size: 13px; }
     .resume-empty-hint { padding: 26px 16px; text-align: center; color: var(--muted); font-size: 13px; }
 
     /* 字段库弹层 */
@@ -336,7 +318,7 @@
       border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink);
       font-size: 13px; font-weight: 620; text-align: left; transition: .14s ease;
     }
-    .field-library-item:hover { border-color: var(--gold); background: var(--gold-soft); }
+    .field-library-item:hover { border-color: var(--accent); background: var(--accent-soft); }
     .field-library-item.is-added { opacity: .42; cursor: default; }
     .field-library-item.is-added:hover { border-color: var(--line); background: var(--surface); }
     .field-library-type { font-size: 10px; color: var(--muted); font-family: var(--font-mono); letter-spacing: .06em; }
@@ -450,7 +432,9 @@
       --line: rgba(11, 13, 16, .08); --line-strong: rgba(11, 13, 16, .16);
       --accent: #2447e0; --accent-ink: #1a35b0; --accent-soft: #eceffd;
       --ok: #0e7a5f; --ok-soft: #e6f4ef; --warn: #9a5b00; --warn-soft: #fdf3e3; --danger: #c0362c; --danger-soft: #fdecea;
-      --gold: #2447e0; --gold-dark: #1a35b0; --gold-soft: #eceffd;
+      /* 历史遗留的 --gold* 别名已删除（名为金色实为蓝色，误导）：一律改引 --accent* 家族。
+         --offer-gold 是唯一的真实金色，仅用于 Offer 强调点缀（统计卡图标、Offer 对比矩阵表头），不参与常规状态语义。 */
+      --offer-gold: #b7791f; --offer-gold-soft: #fdf5e6;
       --primary: #2447e0; --primary-dark: #1a35b0; --primary-soft: #eceffd;
       --seal: #c0362c; --seal-soft: #fdecea; --silver: #6b7280; --silver-soft: #f1f2f4;
       --green: #0e7a5f; --green-soft: #e6f4ef; --amber: #9a5b00; --amber-soft: #fdf3e3; --red: #c0362c; --red-soft: #fdecea;
@@ -502,13 +486,14 @@
     .text-button.danger:hover { background: var(--danger-soft); color: var(--danger); }
     .control { border: 0; border-radius: var(--r-md); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); min-height: 38px; font-size: 13.5px; transition: box-shadow .2s var(--ease), background .2s var(--ease); }
     .control:focus { background: var(--surface); box-shadow: inset 0 0 0 2px var(--accent); outline: none; }
-    .search-glyph { color: var(--faint); }
+    .search-glyph { color: var(--muted); }
     .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
     .stat-card { padding: 14px 16px; }
     .stat-card:first-child { grid-column: span 2; }
     .stat-top { color: var(--muted); font-size: 12px; font-weight: 550; }
-    .stat-icon { width: 26px; height: 26px; border-radius: 8px; background: var(--surface-2); box-shadow: var(--ring); font-size: 0; }
-    .stat-icon::before { content: ""; width: 8px; height: 8px; border-radius: 3px; background: var(--accent); opacity: .85; }
+    .stat-icon { width: 26px; height: 26px; border-radius: 8px; background: var(--surface-2); box-shadow: var(--ring); display: grid; place-items: center; color: var(--accent); }
+    .stat-icon svg { width: 15px; height: 15px; }
+    .stat-card[data-metric="offer"] .stat-icon { background: var(--offer-gold-soft); color: var(--offer-gold); box-shadow: none; }
     .stat-number { font-family: var(--font-mono); font-size: 28px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); margin-top: 8px; }
     .stage-grid { gap: 8px; }
     .stage-cell { border: 0; border-radius: var(--r-md); box-shadow: var(--ring); background: var(--stage-soft, var(--surface-2)); padding: 9px 10px; }
@@ -517,22 +502,35 @@
     .bar-fill { background: var(--stage-color, var(--accent)); }
     .badge { border: 0; border-radius: var(--r-pill); background: var(--stage-soft, var(--surface-2)); color: var(--stage-color, var(--ink-2)); padding: 3px 10px 3px 8px; font-size: 12px; font-weight: 600; letter-spacing: 0; transform: none; font-family: var(--font-sans); box-shadow: inset 0 0 0 1px var(--line); }
     .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--stage-color, var(--faint)); }
-    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"] { --stage-color: #6b7280; --stage-soft: #f1f2f4; }
-    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"], .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"] { --stage-color: #4b5563; --stage-soft: #eef0f2; }
-    .stage-cell[data-stage="一面"], .badge[data-stage="一面"], .stage-cell[data-stage="二面"], .badge[data-stage="二面"], .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"] { --stage-color: #1a35b0; --stage-soft: #eceffd; }
-    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"] { --stage-color: #0e7a5f; --stage-soft: #e6f4ef; }
-    .badge[data-stage="Offer"] { color: #fff; background: #0e7a5f; box-shadow: none; }
+    /* ===== 阶段色阶：唯一权威定义（14 预设有序递进）=====
+       中性灰(未开始) → 蓝灰(筛选/笔试/机试) → 蓝(面试轮次逐轮加深) → 靛紫(交叉面/HR面) → 绿(Offer) → 淡灰(已结束)
+       自定义阶段（不在预设内）自动回退 .badge/.stage-cell 的 --accent 兜底色。 */
+    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"] { --stage-color: #71717a; --stage-soft: transparent; --stage-border: #d4d4d8; }
+    .badge[data-stage="待投递"], .stage-cell[data-stage="待投递"] { border: 1px dashed var(--stage-border); box-shadow: none; }
+    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"] { --stage-color: #475569; --stage-soft: #f1f5f9; --stage-border: #cbd5e1; }
+    .stage-cell[data-stage="测评"], .badge[data-stage="测评"] { --stage-color: #3f5a8a; --stage-soft: #eef3fa; --stage-border: #c3d2ea; }
+    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"] { --stage-color: #3a5f9e; --stage-soft: #eaf1fb; --stage-border: #bcd0ec; }
+    .stage-cell[data-stage="机试"], .badge[data-stage="机试"] { --stage-color: #3563b2; --stage-soft: #e8effc; --stage-border: #b5cbee; }
+    .stage-cell[data-stage="一面"], .badge[data-stage="一面"] { --stage-color: #2f5fc4; --stage-soft: #e7edfd; --stage-border: #adc2f3; }
+    .stage-cell[data-stage="二面"], .badge[data-stage="二面"] { --stage-color: #2b52cf; --stage-soft: #e6ebfd; --stage-border: #a5baf2; }
+    .stage-cell[data-stage="三面"], .badge[data-stage="三面"] { --stage-color: #2647d8; --stage-soft: #e4e9fd; --stage-border: #9db2f2; }
+    .stage-cell[data-stage="四面"], .badge[data-stage="四面"] { --stage-color: #213cdd; --stage-soft: #e3e7fd; --stage-border: #96aaf1; }
+    .stage-cell[data-stage="五面"], .badge[data-stage="五面"] { --stage-color: #1d33e6; --stage-soft: #e1e5fd; --stage-border: #8fa3f1; }
+    .stage-cell[data-stage="交叉面"], .badge[data-stage="交叉面"] { --stage-color: #4338ca; --stage-soft: #eceafd; --stage-border: #b3acf0; }
+    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"] { --stage-color: #5b3fd1; --stage-soft: #efeafd; --stage-border: #bdaef2; }
+    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"] { --stage-color: #0e7a5f; --stage-soft: #e6f4ef; --stage-border: #0e7a5f; }
+    .badge[data-stage="Offer"] { color: #fff; background: #0e7a5f; border: 0; box-shadow: none; }
     .badge[data-stage="Offer"]::before { background: #fff; }
-    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"] { --stage-color: #9aa1ab; --stage-soft: #f1f2f4; }
-    th { background: transparent; color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; border: 0; padding: 10px 14px; }
+    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"] { --stage-color: #6b7280; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
+    .badge[data-stage="已结束"] { opacity: .62; }
+    th { background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; border: 0; padding: 10px 14px; }
     td { border-top: 1px solid var(--line); padding: 12px 14px; font-size: 13.5px; }
     tbody tr:hover { background: var(--surface-2); }
     tbody tr[data-is-offer="true"] { box-shadow: inset 3px 0 0 var(--ok); }
-    .record-no { color: var(--faint); font-family: var(--font-mono); }
+    .record-no { color: var(--muted); font-family: var(--font-mono); }
     .company { font-weight: 650; }
     .company-link:hover { color: var(--accent-ink); }
     .overdue { color: var(--danger); }
-    @keyframes rowflash { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
     .panel-head { padding: 16px 18px; border-bottom: 1px solid var(--line); }
     .panel-title { font-family: var(--font-display); font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
     .panel-caption { color: var(--muted); font-size: 12.5px; }
@@ -568,11 +566,27 @@
     .ocr-dropzone.is-dragging { border-color: var(--accent); background: var(--accent-soft); }
     .ocr-result-card { border: 0; box-shadow: var(--ring); border-radius: var(--r-md); background: var(--surface-2); }
     .ocr-result-check { accent-color: var(--accent); }
-    .empty, .side-empty, .resume-empty-hint { color: var(--faint); }
+    .empty, .side-empty, .resume-empty-hint { color: var(--muted); }
     .view.is-entering { animation: view-in .45s var(--ease); }
     @keyframes view-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
     @media (max-width: 1100px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stat-card:first-child { grid-column: span 1; } }
     @media (max-width: 780px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+    /* ===== v4.4.0：截止日倒计时 + 未来安排统一事件流 ===== */
+    .deadline-hint { margin-top: 4px; font-size: 12px; font-weight: 650; color: var(--muted); }
+    .deadline-hint.warn { color: var(--warn); }
+    .deadline-hint.danger { color: var(--danger); }
+    .schedule-body { min-width: 0; }
+    .schedule-item[role="button"] { cursor: pointer; transition: background .18s var(--ease); }
+    .schedule-item[role="button"]:hover { background: var(--surface-2); }
+    .schedule-item.is-overdue { box-shadow: inset 3px 0 0 var(--danger); padding-left: 10px; }
+    .schedule-item.is-deadline .date-tile { background: var(--warn-soft); color: var(--warn); }
+    .schedule-item.is-deadline .date-month { background: var(--warn); }
+    .side-kind { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: var(--ring); color: var(--ink-2); font-size: 11px; font-weight: 700; }
+    .schedule-item.is-deadline .side-kind { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
+    .side-company { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .badge-sm { min-height: 19px; padding: 0 7px 0 6px; font-size: 11px; }
+    .badge-sm::before { width: 5px; height: 5px; }
 
     /* ===== 邮件提醒视图（M3）+ 导航角标 ===== */
     .nav-badge { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
@@ -589,13 +603,13 @@
     .mail-help summary { cursor: pointer; font-weight: 600; }
     .mail-help ol { margin: 8px 0 0 18px; line-height: 1.7; }
     .mail-list { display: grid; gap: 12px; }
-    .mail-empty { padding: 30px 16px; text-align: center; color: var(--faint); }
+    .mail-empty { padding: 30px 16px; text-align: center; color: var(--muted); }
     .mail-card { padding: 14px 16px; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--hi), var(--ring), var(--sh-ambient); }
     .mail-card.low-conf { box-shadow: var(--hi), 0 0 0 1px var(--warn), var(--sh-ambient); }
     .mail-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .mail-type { padding: 2px 10px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; background: var(--surface-2); color: var(--ink-2); box-shadow: var(--ring); }
     .mail-type[data-type="Offer"] { background: var(--ok); color: #fff; box-shadow: none; }
-    .mail-type[data-type="拒信"] { background: var(--silver-soft); color: var(--faint); box-shadow: none; }
+    .mail-type[data-type="拒信"] { background: var(--silver-soft); color: var(--muted); box-shadow: none; }
     .mail-type[data-type="面试邀请"] { background: var(--accent-soft); color: var(--accent-ink); box-shadow: none; }
     .mail-company { font-size: 15px; font-weight: 700; }
     .mail-position { color: var(--muted); font-size: 13px; }
@@ -603,7 +617,7 @@
     .mail-conf.low { color: var(--warn); font-weight: 700; }
     .mail-subject { margin-top: 8px; font-size: 13px; color: var(--ink-2); }
     .mail-summary { margin-top: 4px; font-size: 13px; color: var(--muted); }
-    .mail-meta { margin-top: 6px; font-size: 12px; color: var(--faint); }
+    .mail-meta { margin-top: 6px; font-size: 12px; color: var(--muted); }
     .mail-match { margin-top: 10px; padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
     .mail-match.single { box-shadow: inset 3px 0 0 var(--ok); }
     .mail-match.none { box-shadow: inset 3px 0 0 var(--warn); color: var(--warn); }
@@ -612,7 +626,7 @@
     .mail-fields { display: grid; gap: 6px; margin-top: 10px; }
     .mail-field { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer; }
     .mail-field input { margin-top: 2px; accent-color: var(--accent); }
-    .mail-fields-empty { color: var(--faint); font-size: 13px; }
+    .mail-fields-empty { color: var(--muted); font-size: 13px; }
     .mail-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
     .mail-key-row { display: flex; gap: 8px; align-items: center; }
     .mail-key-row .control { flex: 1 1 auto; min-width: 0; }
@@ -633,6 +647,11 @@
 <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 14.5 5-5"/><path d="M12.5 6.5 14 5a3.5 3.5 0 0 1 5 5l-1.5 1.5"/><path d="M11.5 17.5 10 19a3.5 3.5 0 0 1-5-5l1.5-1.5"/></symbol>
 <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m8 8 4-4 4 4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></symbol>
 <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7 8.5 6 8.5-6"/></symbol>
+<symbol id="i-stack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 8 4.5-8 4.5-8-4.5z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></symbol>
+<symbol id="i-today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M12 13v4M10 15h4"/></symbol>
+<symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="12" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8.5 6H12a3.5 3.5 0 0 1 3.5 3.5V12M15.5 12H12a3.5 3.5 0 0 0-3.5 3.5V18"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M7.5 14h3M13.5 14h3M7.5 17.5h3"/></symbol>
+<symbol id="i-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5H5.5v1.5A3.5 3.5 0 0 0 9 10M16 5h2.5v1.5A3.5 3.5 0 0 1 15 10"/><path d="M12 13v4M9 20h6M10 17h4"/></symbol>
 </defs></svg>
   <div class="app-layout">
     <aside class="app-sidebar" aria-label="主导航">
@@ -669,11 +688,11 @@
 
     <div class="view" data-view="overview">
     <section class="stats" id="overview" aria-label="投递概览">
-      <article class="stat-card"><div class="stat-top"><span>投递总数</span><span class="stat-icon">▤</span></div><div class="stat-number" id="totalCount">0</div></article>
-      <article class="stat-card"><div class="stat-top"><span>今日投递</span><span class="stat-icon">＋</span></div><div class="stat-number" id="todayCount">0</div></article>
-      <article class="stat-card"><div class="stat-top"><span>进行中的流程</span><span class="stat-icon">↻</span></div><div class="stat-number" id="activeCount">0</div></article>
-      <article class="stat-card"><div class="stat-top"><span>七天内安排</span><span class="stat-icon">□</span></div><div class="stat-number" id="weekCount">0</div></article>
-      <article class="stat-card"><div class="stat-top"><span>Offer 数量</span><span class="stat-icon">✓</span></div><div class="stat-number" id="offerCount">0</div></article>
+      <article class="stat-card" data-metric="total"><div class="stat-top"><span>投递总数</span><span class="stat-icon"><svg><use href="#i-stack"/></svg></span></div><div class="stat-number" id="totalCount">0</div></article>
+      <article class="stat-card" data-metric="today"><div class="stat-top"><span>今日投递</span><span class="stat-icon"><svg><use href="#i-today"/></svg></span></div><div class="stat-number" id="todayCount">0</div></article>
+      <article class="stat-card" data-metric="active"><div class="stat-top"><span>进行中的流程</span><span class="stat-icon"><svg><use href="#i-flow"/></svg></span></div><div class="stat-number" id="activeCount">0</div></article>
+      <article class="stat-card" data-metric="week"><div class="stat-top"><span>七天内安排</span><span class="stat-icon"><svg><use href="#i-calendar"/></svg></span></div><div class="stat-number" id="weekCount">0</div></article>
+      <article class="stat-card" data-metric="offer"><div class="stat-top"><span>Offer 数量</span><span class="stat-icon"><svg><use href="#i-trophy"/></svg></span></div><div class="stat-number" id="offerCount">0</div></article>
     </section>
 
     <section class="panel distribution" aria-labelledby="distributionTitle">
@@ -709,7 +728,10 @@
         </section>
       </section>
       <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
-        <div class="panel-head"><div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">接下来最需要关注的 4 项</div></div></div>
+        <div class="panel-head">
+          <div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">面试安排与截止日期合并排序，逾期项置顶 · 最多 6 项</div></div>
+          <button class="btn btn-small" id="exportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出日历</button>
+        </div>
         <div class="schedule-list" id="upcomingList"></div>
       </aside>
     </div>
@@ -770,7 +792,7 @@
       <div class="panel-head">
         <div>
           <h2 class="panel-title" id="toolsTitle">工具</h2>
-          <div class="panel-caption">截图识别、数据安全与云同步统一收在这里；顶栏不再重复放置，避免同一功能两个入口</div>
+          <div class="panel-caption">截图识别、日程导出、数据安全与云同步统一收在这里；顶栏不再重复放置，避免同一功能两个入口</div>
         </div>
       </div>
       <div class="tools-grid">
@@ -779,6 +801,12 @@
           <h3>截图识别导入岗位</h3>
           <p>上传招聘海报、官网或公众号截图，在本机完成文字识别，提取公司、岗位、城市后确认入账。</p>
           <button class="btn" id="toolScreenshotBtn" type="button">打开截图识别</button>
+        </article>
+        <article class="tool-card">
+          <div class="tool-card-top"><span class="tool-icon"><svg><use href="#i-calendar"/></svg></span><span class="tool-status" id="toolIcsBadge">—</span></div>
+          <h3>日程导出到日历</h3>
+          <p>把面试安排与截止日期生成 <code>.ics</code> 文件，双击即可加入系统日历（本机生成，不联网、不上传）。</p>
+          <button class="btn" id="toolIcsBtn" type="button">导出 .ics 日程</button>
         </article>
         <article class="tool-card">
           <div class="tool-card-top"><span class="tool-icon"><svg><use href="#i-shield"/></svg></span><span class="tool-status" id="toolSafetyBadge">—</span></div>
@@ -831,6 +859,7 @@
             <button class="btn btn-small" id="addTimelineBtn" type="button">＋ 添加阶段</button>
           </div>
           <div class="field"><label for="scheduleAt">安排时间</label><input class="control" id="scheduleAt" name="scheduleAt" type="datetime-local"><div class="hint">有面试、笔试或跟进时间时填写</div></div>
+          <div class="field"><label for="deadline">截止日期</label><input class="control" id="deadline" name="deadline" type="date"><div class="hint">网申 / 测评 / 笔试 / 签约的截止时间，会进入「未来安排」并可导出到日历</div></div>
           <div class="field full"><label for="applicationUrl">投递网址</label><input class="control" id="applicationUrl" name="applicationUrl" type="url" maxlength="1000" placeholder="https://jobs.example.com/position/123"><div class="hint">通过一键收录插件添加时会自动填写</div></div>
           <div class="field full"><label for="recentSchedule">最近安排</label><input class="control" id="recentSchedule" name="recentSchedule" maxlength="100" placeholder="例如：线上一面（腾讯会议）"></div>
           <div class="field full"><label for="nextAction">下一步行动</label><textarea class="control" id="nextAction" name="nextAction" maxlength="200" placeholder="例如：准备项目复盘，提前测试摄像头"></textarea></div>
@@ -1191,6 +1220,17 @@
           applicationUrl: /^https?:\/\//i.test(String(item.applicationUrl || '')) ? String(item.applicationUrl) : '',
           scheduleAt: String(item.scheduleAt || ''), recentSchedule: String(item.recentSchedule || ''),
           nextAction: String(item.nextAction || ''), updatedAt: Number(item.updatedAt) || Date.now(),
+          // ===== v4.4.0 新增字段（全部可选，老数据缺省即为空；必须在此显式携带，否则每次 load/sync 会静默丢失）=====
+          deadline: String(item.deadline || ''),            // 网申/测评/笔试/签约截止日（YYYY-MM-DD）
+          batch: String(item.batch || ''),                  // 批次：提前批/正式批/补录/内推批/春招/自定义
+          channel: String(item.channel || ''),              // 渠道：官网/内推/BOSS直聘/…
+          referral: String(item.referral || ''),            // 内推人或联系方式
+          salary: String(item.salary || ''),                // 薪资文本（Offer 对比用）
+          intent: Math.min(5, Math.max(0, Number(item.intent) || 0)), // 意向度 0-5，0=未设
+          notes: (Array.isArray(item.notes) ? item.notes : [])
+            .filter(n => n && String(n.text || '').trim())
+            .map(n => ({ id: String(n.id || cryptoId()), at: Number(n.at) || Date.now(), text: String(n.text).trim() }))
+            .slice(-200),                                   // 面经/跟进笔记，上限 200 条防膨胀
           timeline
         };
         rec.stage = deriveStage(rec); // 当前阶段 = 时间线末项（派生缓存，兼容分布/筛选/排序/徽章/桥接/同步）
@@ -2565,6 +2605,9 @@
           const scheduleDate = parseLocal(record.scheduleAt);
           const overdue = scheduleDate && scheduleDate < new Date() && !['Offer', '已结束'].includes(record.stage);
           const canAdvance = record.stage !== '已结束';
+          const dl = deadlineInfo(record.deadline);
+          const dlHtml = dl && !['Offer', '已结束'].includes(record.stage)
+            ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
           const companyHtml = record.applicationUrl
             ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
             : escapeHtml(record.company);
@@ -2574,7 +2617,7 @@
             <td data-label="城市">${escapeHtml(record.city)}</td>
             <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
             <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
-            <td class="schedule" data-label="最近安排"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(formatDateTime(record.scheduleAt))}${overdue ? ' · 已到期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div></td>
+            <td class="schedule" data-label="最近安排"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(formatDateTime(record.scheduleAt))}${overdue ? ' · 已到期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
             <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
             <td data-label="操作"><div class="row-actions">
               ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
@@ -2588,23 +2631,144 @@
       }
 
       function renderUpcoming() {
-        const now = new Date();
-        const upcoming = records
-          .filter(r => { const d = parseLocal(r.scheduleAt); return d && d >= now && !['Offer', '已结束'].includes(r.stage); })
-          .sort((a, b) => parseLocal(a.scheduleAt) - parseLocal(b.scheduleAt))
-          .slice(0, 4);
-        if (!upcoming.length) {
-          els.upcoming.innerHTML = '<div class="side-empty">近期还没有安排<br>新增或编辑记录时可以填写安排时间</div>';
+        // 统一事件流：安排时间 + 截止日期一起排（逾期置顶），最多 6 项
+        const events = collectScheduleEvents(records, new Date(), 6);
+        if (!events.length) {
+          els.upcoming.innerHTML = '<div class="side-empty">近期还没有安排或截止<br>新增 / 编辑记录时填写「安排时间」或「截止日期」</div>';
           return;
         }
-        els.upcoming.innerHTML = upcoming.map(record => {
-          const d = parseLocal(record.scheduleAt);
-          return `<article class="schedule-item">
+        els.upcoming.innerHTML = events.map(ev => {
+          const r = ev.record;
+          const d = ev.at;
+          const diff = daysUntil(d);
+          const isDeadline = ev.type === 'deadline';
+          const when = ev.overdue
+            ? `已过期${diff < 0 ? ` ${-diff} 天` : ''}`
+            : (diff === 0 ? '就是今天' : (diff > 0 && diff <= 3 ? `还剩 ${diff} 天` : (ev.allDay ? formatDate(localDateInput(d)) : formatDateTime(r.scheduleAt))));
+          return `<article class="schedule-item${isDeadline ? ' is-deadline' : ''}${ev.overdue ? ' is-overdue' : ''}" data-id="${escapeHtml(r.id)}" role="button" tabindex="0" title="查看详情">
             <div class="date-tile"><div class="date-month">${d.getMonth() + 1} 月</div><div class="date-day">${d.getDate()}</div></div>
-            <div><div class="side-company">${escapeHtml(record.company)} · ${escapeHtml(record.position)}</div><div class="side-detail">${escapeHtml(record.recentSchedule || record.nextAction || '待处理安排')}</div><div class="side-time">${escapeHtml(formatDateTime(record.scheduleAt))}</div></div>
+            <div class="schedule-body">
+              <div class="side-company">${escapeHtml(r.company)} · ${escapeHtml(r.position)} <span class="badge badge-sm" data-stage="${escapeHtml(r.stage)}">${escapeHtml(r.stage)}</span></div>
+              <div class="side-detail"><span class="side-kind">${isDeadline ? '截止' : '安排'}</span>${escapeHtml(isDeadline ? (r.deadline || '') : (r.recentSchedule || r.nextAction || '待处理安排'))}</div>
+              <div class="side-time${ev.overdue ? ' overdue' : ''}">${escapeHtml(when)}</div>
+            </div>
           </article>`;
         }).join('');
       }
+
+      // 记录聚焦入口：未来安排卡片 / 看板卡片 / ⌘K 命令面板统一走这里，避免多处各写一套打开逻辑
+      function openRecordFocus(id) {
+        const record = records.find(item => item.id === id);
+        if (!record) return;
+        openDialog(record);
+      }
+
+      /*__CORE_PURE_START__*/
+      // ===== v4.4.0 核心纯函数区（不触 DOM / 不读全局状态，便于本地单测）=====
+      // 日期-only 字符串（YYYY-MM-DD）用 new Date(str) 会被当成 UTC 午夜，在东八区以外的时区会差一天；
+      // 因此截止日一律走 parseDay（补 T00:00:00 → 本地午夜）。
+      function parseDay(value) {
+        const s = String(value || '').trim();
+        if (!s) return null;
+        const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00`) : new Date(s);
+        return Number.isNaN(d.getTime()) ? null : d;
+      }
+      // 相差整天数（按本地日历日，忽略时分秒）：正数=未来，负数=已过
+      function daysUntil(date, now = new Date()) {
+        if (!date) return null;
+        const a = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+        const b = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        return Math.round((a - b) / 86400000);
+      }
+      // 截止日倒计时：{ text, level }，level ∈ ''（>3天）| 'warn'（0~3天）| 'danger'（已过期）
+      function deadlineInfo(deadline, now = new Date()) {
+        const d = parseDay(deadline);
+        if (!d) return null;
+        const diff = daysUntil(d, now);
+        if (diff < 0) return { text: `截止 · 已过期 ${-diff} 天`, level: 'danger', days: diff };
+        if (diff === 0) return { text: '截止 · 今天', level: 'danger', days: 0 };
+        if (diff <= 3) return { text: `截止 · 还剩 ${diff} 天`, level: 'warn', days: diff };
+        return { text: `截止 · 还剩 ${diff} 天`, level: '', days: diff };
+      }
+      // 把「安排时间(scheduleAt)」与「截止日期(deadline)」合成统一事件流：
+      // 逾期未处理项置顶（按逾期时长倒序），其余按时间升序，最后截断 limit 条。
+      function collectScheduleEvents(records, now = new Date(), limit = 6) {
+        const out = [];
+        for (const r of (Array.isArray(records) ? records : [])) {
+          const closed = ['Offer', '已结束'].includes(r.stage);
+          const s = parseLocal(r.scheduleAt);
+          if (s && (!closed || s >= now)) out.push({ type: 'schedule', at: s, allDay: false, record: r, overdue: s < now && !closed });
+          const d = parseDay(r.deadline);
+          if (d && !closed) out.push({ type: 'deadline', at: d, allDay: true, record: r, overdue: d < now });
+        }
+        const overdueList = out.filter(e => e.overdue).sort((a, b) => a.at - b.at);
+        const futureList = out.filter(e => !e.overdue).sort((a, b) => a.at - b.at);
+        return [...overdueList, ...futureList].slice(0, Number(limit) > 0 ? limit : 6);
+      }
+      // ICS 文本转义（RFC 5545）：反斜杠/分号/逗号/换行
+      function icsEscape(text) {
+        return String(text == null ? '' : text)
+          .replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,')
+          .replace(/\r\n|\r|\n/g, '\\n');
+      }
+      // 本地时间 → ICS 浮动时间（不带 Z / TZID，由日历按本地时区解释，避免时区错位）
+      function icsLocal(date, allDay) {
+        const p = (n) => String(n).padStart(2, '0');
+        const ymd = `${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}`;
+        return allDay ? ymd : `${ymd}T${p(date.getHours())}${p(date.getMinutes())}00`;
+      }
+      // DTSTAMP 按 RFC 5545 必须是 UTC
+      function icsUtc(date) {
+        const p = (n) => String(n).padStart(2, '0');
+        return `${date.getUTCFullYear()}${p(date.getUTCMonth() + 1)}${p(date.getUTCDate())}T${p(date.getUTCHours())}${p(date.getUTCMinutes())}${p(date.getUTCSeconds())}Z`;
+      }
+      // 生成 .ics 日历文件内容（VCALENDAR + 每事件一个 VEVENT），CRLF 换行
+      function buildIcs(events, calName = '秋招投递日程') {
+        const now = new Date();
+        const lines = [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'PRODID:-//autumn-recruitment-tracker//v4.4.0//CN',
+          'CALSCALE:GREGORIAN',
+          'METHOD:PUBLISH',
+          `X-WR-CALNAME:${icsEscape(calName)}`
+        ];
+        for (const ev of (Array.isArray(events) ? events : [])) {
+          const r = ev.record || {};
+          const start = ev.at instanceof Date ? ev.at : (ev.allDay ? parseDay(ev.at) : parseLocal(ev.at));
+          if (!start) continue;
+          const end = new Date(start.getTime() + (ev.allDay ? 86400000 : 3600000));
+          const title = `${r.company || '投递'} · ${ev.type === 'deadline' ? `截止（${r.position || '岗位'}）` : (r.recentSchedule || r.position || '安排')}`;
+          const desc = [
+            `岗位：${r.position || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
+            ev.type === 'deadline' ? `截止日期：${r.deadline || '—'}` : `安排时间：${r.scheduleAt || '—'}`,
+            r.nextAction ? `下一步：${r.nextAction}` : ''
+          ].filter(Boolean).join('\n');
+          lines.push(
+            'BEGIN:VEVENT',
+            `UID:${icsEscape(r.id || 'unknown')}-${ev.type}@autumn-recruitment-tracker`,
+            `DTSTAMP:${icsUtc(now)}`,
+            ev.allDay ? `DTSTART;VALUE=DATE:${icsLocal(start, true)}` : `DTSTART:${icsLocal(start, false)}`,
+            ev.allDay ? `DTEND;VALUE=DATE:${icsLocal(end, true)}` : `DTEND:${icsLocal(end, false)}`,
+            `SUMMARY:${icsEscape(title)}`,
+            `DESCRIPTION:${icsEscape(desc)}`,
+            r.applicationUrl ? `URL:${icsEscape(r.applicationUrl)}` : null,
+            'END:VEVENT'
+          );
+        }
+        lines.push('END:VCALENDAR');
+        // 过滤 null 行；按 RFC 5545 折叠超长行（>75 字节按字符近似处理）
+        return lines.filter(l => l != null && l !== '').map(foldIcsLine).join('\r\n') + '\r\n';
+      }
+      function foldIcsLine(line) {
+        if (line.length <= 74) return line;
+        const parts = [];
+        let rest = line;
+        while (rest.length > 74) { parts.push(rest.slice(0, 74)); rest = ' ' + rest.slice(74); }
+        parts.push(rest);
+        return parts.join('\r\n');
+      }
+      /*__CORE_PURE_END__*/
 
       // ================= 邮件提醒（M3）：本地状态、模糊匹配、复核视图、应用/忽略 =================
       function loadMailState() {
@@ -2985,6 +3149,12 @@
 
       // ================= 工具页卡片状态：云同步连接情况与快照数量 =================
       async function renderToolCards() {
+        const icsBadge = $('#toolIcsBadge');
+        if (icsBadge) {
+          const count = collectScheduleEvents(records, new Date(), 500).length;
+          icsBadge.textContent = count ? `${count} 项可导出` : '暂无日程';
+          icsBadge.className = count ? 'tool-status ok' : 'tool-status';
+        }
         const syncBadge = $('#toolSyncBadge');
         if (syncBadge) {
           if (!syncConfig.token) {
@@ -3109,8 +3279,11 @@
         els.form.reset();
         $('#applicationDate').value = source ? (source.applicationDate || '') : localDateInput(new Date());
         renderTimelineEditor(source);
-        for (const field of ['company', 'position', 'city', 'applicationUrl', 'scheduleAt', 'recentSchedule', 'nextAction']) {
-          if (source) document.getElementById(field).value = source[field] || '';
+        // 回填字段清单：新增任何表单字段都必须同步加进这里，否则「编辑」时该字段会被静默清空。
+        // 取不到元素时跳过（null 安全），便于分阶段加字段。
+        for (const field of ['company', 'position', 'city', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
+          const input = document.getElementById(field);
+          if (input) input.value = source ? (source[field] ?? '') : '';
         }
         els.dialog.showModal();
         requestAnimationFrame(() => $('#company').focus());
@@ -3803,6 +3976,34 @@
         showToast(`已导出 ${records.length} 条记录，原数据未改变`);
       }
 
+      // 通用文本文件下载（.ics 等非 JSON 产物）；downloadPayload 仅用于 JSON
+      function downloadText(text, filename, mime) {
+        const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      // 导出日程到系统日历：把「安排时间 + 截止日期」写成 .ics（纯本机生成，不联网）
+      function exportIcs(recordId) {
+        const source = recordId ? records.filter(r => r.id === recordId) : records;
+        const events = collectScheduleEvents(source, new Date(), 500);
+        if (!events.length) {
+          showToast(recordId ? '这条记录还没有安排时间或截止日期' : '还没有可导出的安排或截止日期');
+          return;
+        }
+        const name = recordId
+          ? `${(source[0] && source[0].company) || '投递'}-日程.ics`
+          : `秋招日程-${localDateInput(new Date())}.ics`;
+        downloadText(buildIcs(events), name, 'text/calendar;charset=utf-8');
+        showToast(`已导出 ${events.length} 项日程，双击 .ics 文件即可加入系统日历`);
+      }
+
       // 导出简历 JSON（顶栏「导出简历」与简历页「导出 JSON」共用）
       function exportResume() {
         downloadPayload({ appVersion: APP_VERSION, exportedAt: new Date().toISOString(), resume: JSON.parse(JSON.stringify(resume)) }, `我的简历-${localDateInput(new Date())}.json`);
@@ -4074,8 +4275,22 @@
         showToast('岗位库已清空，投递记录未改变');
       });
       $('#toolSafetyBtn').addEventListener('click', openSafetyDialog);
+      $('#toolIcsBtn').addEventListener('click', () => exportIcs());
       $('#exportRecordsBtn').addEventListener('click', exportData);
       $('#exportResumeBtn').addEventListener('click', exportResume);
+      $('#exportIcsBtn').addEventListener('click', () => exportIcs());
+      // 未来安排卡片可点击/可键盘激活（role=button + tabindex=0）
+      els.upcoming.addEventListener('click', event => {
+        const item = event.target.closest('.schedule-item[data-id]');
+        if (item) openRecordFocus(item.dataset.id);
+      });
+      els.upcoming.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const item = event.target.closest('.schedule-item[data-id]');
+        if (!item) return;
+        event.preventDefault();
+        openRecordFocus(item.dataset.id);
+      });
       $('#topSyncBtn').addEventListener('click', openSyncDialog);
       // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
       $('#closeDialog').addEventListener('click', closeDialog);
