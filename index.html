@@ -2968,7 +2968,7 @@
         const multiCompanies = groups.filter(group => group.records.length > 1).length;
         const inFlow = records.filter(isActive);
         const flowDays = inFlow
-          .map(record => { const d = parseDay(record.applicationDate); return d ? Math.max(0, Math.round((now - d) / 86400000)) : null; })
+          .map(record => { const d = parseDay(record.applicationDate); return d ? Math.max(0, -daysUntil(d, now)) : null; })
           .filter(value => value != null);
         const avgFlowDays = flowDays.length ? Math.round(flowDays.reduce((a, b) => a + b, 0) / flowDays.length) : 0;
         const alerts = collectAlerts(records, now, 5);
@@ -3406,7 +3406,9 @@
           const tl = Array.isArray(r.timeline) ? r.timeline : [];
           const lastDate = tl.length ? parseDay(tl[tl.length - 1].at) : parseDay(r.applicationDate);
           if (!lastDate) continue;
-          const days = Math.round((now - lastDate) / 86400000);
+          // 用日历日差（daysUntil）而不是时间戳差：里程碑只有日期（本地午夜），
+          // 直接减带时刻的 now 会因为半天偏移把「20 天」算成「21 天」
+          const days = -daysUntil(lastDate, now);
           if (days >= thresholdDays) out.push({ record: r, stage: r.stage, days });
         }
         return out.sort((a, b) => b.days - a.days);
