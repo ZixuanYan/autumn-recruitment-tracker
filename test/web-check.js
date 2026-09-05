@@ -158,7 +158,7 @@ const core = new Function(
    ${coreSrc}
    return {
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs,
-     companyKeyOf, groupRecordsByCompany, companyColor, computeFunnel, computeStageDwell,
+     companyKeyOf, companyGroupKey, groupRecordsByCompany, companyGroupIndex, companyColor, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
      normalizePositionSlug, findDuplicateRecord, normalizeRecord
    };`
@@ -244,6 +244,40 @@ check('companyKeyOf + groupRecordsByCompany 把「腾讯」与「腾讯科技有
   assert.strictEqual(groups.length, 2);
   assert.strictEqual(groups[0].records.length, 2, '多岗位公司排前');
   assert.strictEqual(groups[0].label, '腾讯');
+  assert.strictEqual(groups[0].key, '腾讯', '规范键取成员里最短的那个');
+});
+
+check('companyGroupKey 只剥法人形式后缀，保留行业词（与查重用的激进 slug 区分开）', () => {
+  assert.strictEqual(core.companyGroupKey({ company: '腾讯科技（深圳）有限公司' }), '腾讯科技深圳');
+  assert.strictEqual(core.companyGroupKey({ company: '星海科技' }), '星海科技', '行业词「科技」不能被剥掉');
+  assert.strictEqual(core.companyGroupKey({ company: '某集团股份有限公司' }), '某');
+  assert.strictEqual(core.companyGroupKey({ company: 'Ｔｅｎｃｅｎｔ　Ｌｔｄ' }), 'tencent', '全角转半角 + 大小写归一 + 剥 Ltd');
+  assert.strictEqual(core.companyGroupKey({ company: '' }), '');
+  // 查专用的激进键仍会把行业词剥掉（这是刻意的：查重允许多合并，有人工确认兜底）
+  assert.strictEqual(core.companyKeyOf({ company: '星海科技' }), '星海');
+});
+
+check('分组不会把「星海科技」与「星海互娱」误并成一家（浏览器实证发现的缺陷）', () => {
+  const groups = core.groupRecordsByCompany([
+    { id: '1', company: '星海科技', position: '产品' },
+    { id: '2', company: '星海互娱', position: '运营' }
+  ]);
+  assert.strictEqual(groups.length, 2, '两家不同公司必须分开');
+  assert.notStrictEqual(groups[0].key, groups[1].key);
+});
+
+check('companyGroupIndex 把每条记录映射到所属公司的规范键', () => {
+  const index = core.companyGroupIndex([
+    { id: '1', company: '腾讯', position: '后端' },
+    { id: '2', company: '腾讯科技（深圳）有限公司', position: '前端' },
+    { id: '3', company: '星海科技', position: '产品' },
+    { id: '4', company: '星海互娱', position: '运营' }
+  ]);
+  assert.strictEqual(index.get('1'), index.get('2'), '腾讯两条同键');
+  assert.strictEqual(index.get('3'), '星海科技');
+  assert.strictEqual(index.get('4'), '星海互娱');
+  assert.notStrictEqual(index.get('3'), index.get('4'), '星海科技与星海互娱不同键');
+  assert.strictEqual(index.get('1'), '腾讯');
 });
 
 check('companyColor 同键稳定、取值在色板内', () => {

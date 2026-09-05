@@ -222,6 +222,7 @@ const mailPureBlock = extractBlock(html, '/*__MAIL_PURE_START__*/', '/*__MAIL_PU
 const insightSection = extractBlock(html, INSIGHT_START, CORE_START);
 const v44Section = extractBlock(html, V44_START, START);
 const getVisibleRecordsSrc = extractFunction(html, 'getVisibleRecords');
+const applyAdvanceSrc = extractFunction(html, 'applyAdvance');
 
 for (const [label, src] of [['CORE 纯函数块', coreBlock], ['邮件纯函数块', mailPureBlock], ['洞察/台账渲染段', insightSection], ['台账视图增强段', v44Section], ['getVisibleRecords', getVisibleRecordsSrc]]) {
   if (!src || src.length < 40) { console.error(`✗ 未定位到${label}`); process.exit(1); }
@@ -283,13 +284,15 @@ const sandbox2 = {
   confirmInApp: async () => { calls.confirm.push(1); return confirmAnswer; },
   setTimeline: (rec, tl) => { rec.timeline = tl; rec.stage = tl[tl.length - 1].stage; rec.updatedAt = Date.now(); return rec; },
   flashRow: () => {}, playOfferStamp: () => {},
+  // applyAdvance 的外部依赖（推进弹窗的状态与关闭动作不在被抽取的区段里）
+  advancingId: null, closeAdvanceDialog: () => {},
   openSyncDialog: () => {}, openScreenshotDialog: () => {}, openSafetyDialog: () => {}, openMailSettings: () => {},
   syncNow: () => {}, exportData: () => {}, exportIcs: () => {}, exportResume: () => {}
 };
 sandbox2.globalThis = sandbox2;
 vm.createContext(sandbox2);
 vm.runInContext(
-  [mailPureBlock, coreBlock, getVisibleRecordsSrc, insightSection, v44Section].join('\n'),
+  [mailPureBlock, coreBlock, getVisibleRecordsSrc, applyAdvanceSrc, insightSection, v44Section].join('\n'),
   sandbox2,
   { filename: 'v44-sections.js' }
 );
@@ -397,7 +400,8 @@ check('toggleCompanyGroup 折叠态持久化，且聚合排序下折叠组不渲
   assert.ok(h.includes('个岗位'));
   assert.ok(h.includes('data-id="r1"') && h.includes('data-id="r2"'), '未折叠时明细行都在');
   // 折叠「腾讯」这一组（zh-CN 排序下「阿里」在前，不能直接取第一个组头）
-  const tencentKey = sandbox2.companyKeyOf({ company: '腾讯' });
+  const tencentKey = sandbox2.companyGroupIndex(sandbox2.records).get('r1');
+  assert.ok(tencentKey, '应能取到腾讯的规范组键');
   assert.ok(h.includes(`data-group="${tencentKey}"`), '腾讯组头存在');
   sandbox2.toggleCompanyGroup(tencentKey);
   assert.ok(JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).collapsedGroups.includes(tencentKey));
@@ -411,20 +415,20 @@ check('toggleCompanyGroup 折叠态持久化，且聚合排序下折叠组不渲
 
 check('recordRowHtml：同公司 +N 岗位 chip、批次、截止倒计时分级', () => {
   seedRecords();
-  sandbox2.records[0].deadline = '2026-09-08'; // 距今 2 天 → warn
-  const index = new Map();
-  for (const r of sandbox2.records) {
-    const k = sandbox2.companyKeyOf(r);
-    if (!index.has(k)) index.set(k, []);
-    index.get(k).push(r);
-  }
+  // 截止日按「今天 +2 天」动态生成，避免测试随真实日期漂移而失效
+  const soon = new Date(Date.now() + 2 * 86400000);
+  sandbox2.records[0].deadline = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
+  const groups = sandbox2.groupRecordsByCompany(sandbox2.records);
+  const index = new Map(groups.map(g => [g.key, g.records]));
+  const groupKeyById = sandbox2.companyGroupIndex(sandbox2.records);
   const rowNo = new Map(sandbox2.records.map((r, i) => [r.id, String(i + 1).padStart(4, '0')]));
-  const h = sandbox2.recordRowHtml(sandbox2.records[0], rowNo, index);
+  const h = sandbox2.recordRowHtml(sandbox2.records[0], rowNo, index, groupKeyById);
   assert.ok(h.includes('company-chip'), '同公司多岗位应有 chip');
   assert.ok(h.includes('+1 岗位'), 'chip 显示除自己以外的岗位数');
   assert.ok(h.includes('提前批'), '岗位行显示批次');
   assert.ok(h.includes('deadline-hint warn'), '2 天内截止 → warn 配色');
-  const solo = sandbox2.recordRowHtml(sandbox2.records[2], rowNo, index);
+  assert.strictEqual(groupKeyById.get('r1'), groupKeyById.get('r2'), '腾讯与腾讯科技有限公司同组');
+  const solo = sandbox2.recordRowHtml(sandbox2.records[2], rowNo, index, groupKeyById);
   assert.ok(!solo.includes('company-chip'), '单独一家公司不显示 chip');
   sandbox2.records[0].deadline = '';
 });
@@ -535,6 +539,26 @@ check('Esc 在抽屉打开时关闭抽屉', () => {
   assert.strictEqual(els2['#recordDrawer'].hidden, true);
   assert.strictEqual(els2['#drawerBackdrop'].hidden, true);
   assert.strictEqual(sandbox2.document.body.style.overflow, '', '关闭后恢复页面滚动');
+});
+
+check('抽屉内点「推进阶段」后步骤条实时刷新（回归：此前要关掉重开才看得到）', () => {
+  seedRecords();
+  sandbox2.openRecordDrawer('r1');
+  // 用里程碑徽章判定（不能用裸字符串「二面」：样例的下一步行动就是"准备二面"）
+  assert.ok(!els2['#drawerBody'].innerHTML.includes('data-stage="二面"'), '推进前步骤条里没有二面里程碑');
+  sandbox2.advancingId = 'r1';
+  sandbox2.applyAdvance('二面');
+  assert.strictEqual(sandbox2.records[0].stage, '二面');
+  const after = els2['#drawerBody'].innerHTML;
+  assert.ok(after.includes('data-stage="二面"'), '推进后抽屉应立即出现新里程碑');
+  assert.ok(after.includes('距上一步'), '新步骤条带间隔天数');
+  // 抽屉开着但推进的是别的记录时，不应重渲当前抽屉
+  sandbox2.advancingId = 'r3';
+  const snapshot = els2['#drawerBody'].innerHTML;
+  sandbox2.applyAdvance('已结束');
+  assert.strictEqual(els2['#drawerBody'].innerHTML, snapshot, '推进别的记录不动当前抽屉');
+  sandbox2.closeRecordDrawer();
+  sandbox2.advancingId = null;
 });
 
 section('v4.4.0 ⌘K 命令面板与快捷键');
