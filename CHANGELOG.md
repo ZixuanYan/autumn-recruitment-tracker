@@ -81,6 +81,16 @@
 - API URL 支持只填 baseURL：以 `/vN` 结尾自动补全 `/chat/completions`，兼容 DeepSeek（`https://api.deepseek.com/v1`）、阿里百炼（`https://dashscope.aliyuncs.com/compatible-mode/v1`）等 OpenAI 兼容端点
 - 部分算法参考 MIT 项目 Resume Pro（TshyGO/resume-form-assistant-plugin），已在 `extension/common/ai-helpers.js` 保留出处声明
 
+## v4.3.0
+
+- 「邮件提醒」已忽略/已应用状态**跨设备同步**：mailState(appliedIds/dismissedIds) 并入 vault 云同步 envelope，采用**并集合并**（任一端处理过 → 全端不再重复显示），无需在每台设备重复点击；向后兼容老 payload（无 mailState 视为空）
+- 新增网页端**邮件设置面板**（视图右上「设置」）：可视化配置预筛关键词、置信度阈值、回看天数、单次上限、启用开关、最小运行间隔、AI 附加指令；保存后写入你自己 Gist 的 `mail-config.json`（明文、不含任何密钥），Action 下次运行读取生效，且随云同步跨设备一致
+- 新增**邮件建议端到端加密**：Action 侧配 `MAIL_ENC_KEY` 后，`mail-suggestions.json` 以 AES-GCM-PBKDF2（与 vault 同款算法/格式）加密存储，网页端填同一把密钥解密查看；密钥只存本机 localStorage、绝不进 Gist。堵住"secret gist 凭 URL 可被明文读取"的暴露面（未配密钥时仍明文，向后兼容）
+- 用「启用开关 + 最小间隔」变相控制拉取频率与 token 消耗（关闭或间隔未到时 Action 直接跳过，0 token），无需改动 workflow 的 cron
+- 配套 autumn-mail-sync Action v0.2.0：新增 mail-config.json 覆盖、运行门禁、MAIL_ENC_KEY 加解密、AI 附加指令（只追加不替换，保护"仅返回 JSON"契约）；并提供可 fork 自托管的公开模板仓库
+- 隐私不变量保持：QQ授权码/AI Key/GIST_PAT/MAIL_ENC_KEY 只在私有仓库 Secrets 与本机，永不进网页代码仓库、永不进 vault；Action 只写 mail-suggestions.json、网页只写 vault 与 mail-config.json，按文件互不覆盖
+- 版本：网页 v4.3.0
+
 ## v4.2.0
 
 - 新增第 5 个视图「邮件提醒」（`#/mail`，左侧导航带待复核角标）：把招聘邮件（面试/笔试/测评/Offer/拒信）解析成结构化建议，逐项人工复核后并入投递台账

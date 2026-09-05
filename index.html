@@ -614,6 +614,8 @@
     .mail-field input { margin-top: 2px; accent-color: var(--accent); }
     .mail-fields-empty { color: var(--faint); font-size: 13px; }
     .mail-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .mail-key-row { display: flex; gap: 8px; align-items: center; }
+    .mail-key-row .control { flex: 1 1 auto; min-width: 0; }
   </style>
 </head>
 <body>
@@ -801,6 +803,7 @@
           <div class="panel-caption">招聘邮件解析结果，逐项复核后并入台账——所有更新都需你手动勾选确认，绝不自动写入。邮件建议随云同步从你的私有 Gist 读取。</div>
         </div>
         <div class="mail-head-actions">
+          <button class="btn btn-small" id="mailSettingsBtn" type="button"><span class="icon">⚙</span>设置</button>
           <button class="btn btn-small" id="mailRefreshBtn" type="button"><span class="icon">↻</span>重新读取</button>
         </div>
       </div>
@@ -955,6 +958,25 @@
     </div>
   </dialog>
 
+  <dialog id="mailSettingsDialog">
+    <div class="modal-head"><h2>邮件提醒设置</h2><button class="close-btn" id="closeMailSettingsDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">这些设置保存在你自己的私有 Gist（<code>mail-config.json</code>），随云同步跨设备生效，autumn-mail-sync 的 Action 下次运行时读取。密钥类（QQ 授权码 / AI Key / GIST_PAT）不在此上传；「邮件解密密钥」也只存本机。</p>
+      <div class="form-grid">
+        <div class="field full"><label for="mailCfgKeywords">预筛关键词（用 | 分隔）</label><input class="control" id="mailCfgKeywords" type="text" maxlength="2000" placeholder="面试|笔试|校招|录用…"><div class="hint">只有命中关键词且非噪声（退订/营销等）的邮件才会发给 AI，收紧可省 token。</div></div>
+        <div class="field"><label for="mailCfgMinConf">置信度阈值</label><input class="control" id="mailCfgMinConf" type="number" step="0.05" min="0" max="1"><div class="hint">低于此值的建议丢弃（0~1）</div></div>
+        <div class="field"><label for="mailCfgSinceDays">回看天数</label><input class="control" id="mailCfgSinceDays" type="number" min="1" max="365"><div class="hint">首次/重置时按此天数全量扫</div></div>
+        <div class="field"><label for="mailCfgMaxPerRun">单次上限</label><input class="control" id="mailCfgMaxPerRun" type="number" min="1" max="200"><div class="hint">单次最多处理多少封</div></div>
+        <div class="field"><label for="mailCfgInterval">最小间隔（小时）</label><input class="control" id="mailCfgInterval" type="number" min="0" max="168"><div class="hint">0=每次定时都跑；&gt;0 则距上次不足该小时数时跳过（0 token）</div></div>
+        <div class="field full"><label class="mail-field" for="mailCfgEnabled"><input type="checkbox" id="mailCfgEnabled"><span>启用邮件同步（关闭后 Action 直接跳过，0 token）</span></label></div>
+        <div class="field full"><label for="mailCfgPrompt">AI 附加指令（可选）</label><textarea class="control" id="mailCfgPrompt" maxlength="2000" rows="3" placeholder="例如：只关注互联网/国企岗位；忽略培训机构"></textarea><div class="hint">在内置提示词基础上追加，不要要求改变输出格式（否则可能解析失败）。</div></div>
+        <div class="field full"><label for="mailCfgEncKey">邮件解密密钥（MAIL_ENC_KEY，可选）</label><div class="mail-key-row"><input class="control" id="mailCfgEncKey" type="password" autocomplete="off" spellcheck="false" maxlength="200" placeholder="留空=邮件建议不加密"><button class="btn btn-small" id="mailGenEncKeyBtn" type="button">生成</button></div><div class="hint">若 Action 配了 MAIL_ENC_KEY 加密邮件建议，这里填<strong>完全相同</strong>的密钥才能解密查看；只存本机 localStorage，不上传 Gist。</div></div>
+      </div>
+      <div class="capture-status" id="mailCfgStatus" role="status" aria-live="polite"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelMailSettingsDialog" type="button">取消</button><button class="btn btn-primary" id="saveMailSettingsBtn" type="button">保存设置</button></div>
+  </dialog>
+
   <dialog id="installDialog">
     <div class="modal-head"><h2>安装到手机桌面</h2><button class="close-btn" id="closeInstallDialog" type="button" aria-label="关闭">×</button></div>
     <div class="form-body">
@@ -1043,7 +1065,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.2.0';
+      const APP_VERSION = '4.3.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1052,6 +1074,9 @@
       // 邮件提醒（M3）：Action 只写这个独立文件，网页只读它、绝不写它；mailState 纯本地，不进 envelope、不跨设备同步
       const MAIL_SUGGEST_FILENAME = 'mail-suggestions.json';
       const MAIL_STORAGE_KEY = 'autumnRecruitmentTracker.mail.v1';
+      // 网页写、Action 读的配置文件（明文，不含任何密钥）；默认值与 Action src/config.js 保持一致
+      const MAIL_CONFIG_FILENAME = 'mail-config.json';
+      const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 0, promptExtra: '' };
       const TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
       const $ = (selector) => document.querySelector(selector);
       const els = {
@@ -1093,7 +1118,10 @@
       // mailSuggestions/mailMeta 为内存态，每次 syncNow 从 Gist 的 mail-suggestions.json 刷新。
       let mailState = loadMailState();
       let mailSuggestions = [];
+      let mailRawSuggestions = []; // 未过滤的原始建议（来自 Gist），供 mailState 合并后重新过滤
       let mailMeta = null;
+      let mailConfig = null;       // Gist 里的 mail-config.json（内存态，供设置面板回填）
+      let mailNeedKey = false;     // 邮件文件已加密但本机未填解密密钥
       let pendingMailSeedId = null; // 「新建记录」交接到弹窗，保存成功后才标记该建议为已应用
 
       function dateOffset(days, hour = 10, minute = 0) {
@@ -1450,7 +1478,15 @@
           // 简历必须一并带回，否则跨设备拉取时 remote.resume/resumeSavedAt 为 undefined，
           // LWW 采纳条件(Number(undefined)>x 恒为 false)永不成立，简历只能推不能拉
           resume: parsed?.resume && typeof parsed.resume === 'object' && !Array.isArray(parsed.resume) ? parsed.resume : null,
-          resumeSavedAt: Number(parsed?.resumeSavedAt) || 0
+          resumeSavedAt: Number(parsed?.resumeSavedAt) || 0,
+          // 邮件状态必须一并带回，否则跨设备拉取时 remote.mailState 为 undefined，
+          // 并集合并拿不到远端已忽略/已应用项 → 只能推不能拉（同"简历只推不拉"陷阱）
+          mailState: parsed?.mailState && typeof parsed.mailState === 'object'
+            ? {
+                appliedIds: Array.isArray(parsed.mailState.appliedIds) ? parsed.mailState.appliedIds.map(String) : [],
+                dismissedIds: Array.isArray(parsed.mailState.dismissedIds) ? parsed.mailState.dismissedIds.map(String) : []
+              }
+            : null
         };
       }
 
@@ -1543,13 +1579,31 @@
           if (!gist || !gist.files) throw new Error('云端数据读取失败，请稍后重试');
           const vaultName = await vaultFileName(syncConfig.passphrase);
           const cloud = classifyGistFiles(gist.files, vaultName);
-          // 邮件建议（M3）：独立于 vault 解密读取，不受同步口令影响；缺失/损坏静默跳过，绝不影响 vault 同步。
-          // Action 只写这一个文件、网页只读它，两者按文件分别 PATCH 同一 Gist，互不覆盖。
+          // 邮件配置（明文，无密钥）：读回供设置面板回填，网页与 Action 共用同一份配置
+          try {
+            const cfgFile = gist.files[MAIL_CONFIG_FILENAME];
+            mailConfig = cfgFile && cfgFile.content ? JSON.parse(cfgFile.content) : null;
+          } catch (_) { mailConfig = null; }
+          // 邮件建议：独立于 vault 解密读取，不受同步口令影响；缺失/损坏静默跳过，绝不影响 vault 同步。
+          // 若 Action 配了 MAIL_ENC_KEY，文件是加密信封，用本机 mailState.encKey 解密；未填/填错则提示去设置里填。
+          mailNeedKey = false;
           try {
             const mailFile = gist.files[MAIL_SUGGEST_FILENAME];
-            if (mailFile && mailFile.content) applyMailPayload(JSON.parse(mailFile.content));
-            else applyMailPayload(null);
-          } catch (_) { /* 邮件文件损坏：静默跳过 */ }
+            if (!mailFile || !mailFile.content) {
+              applyMailPayload(null);
+            } else {
+              let parsedMail = JSON.parse(mailFile.content);
+              if (parsedMail && parsedMail.enc) {
+                if (!mailState.encKey) { mailNeedKey = true; applyMailPayload(null); }
+                else {
+                  try { applyMailPayload(JSON.parse(await decryptSyncText(parsedMail, mailState.encKey))); }
+                  catch (_) { mailNeedKey = true; applyMailPayload(null); } // 密钥不正确
+                }
+              } else {
+                applyMailPayload(parsedMail);
+              }
+            }
+          } catch (_) { applyMailPayload(null); }
           let remote = null;
           let migrateLegacy = false;
           if (cloud.vaultContent.trim() && cloud.vaultContent.trim() !== '{}') {
@@ -1570,6 +1624,14 @@
             if (!createNew) throw new Error('已取消：云端没有与此口令匹配的数据空间');
           }
           const { mergedRecords, mergedTombstones } = mergeSyncState(remote);
+          // 邮件已应用/已忽略状态：跨设备并集合并（远端处理过的，本机也不再显示），随后用合并态重新过滤建议
+          if (remote && remote.mailState) {
+            const mergedMail = unionMailState(mailState, remote.mailState);
+            mailState.appliedIds = mergedMail.appliedIds;
+            mailState.dismissedIds = mergedMail.dismissedIds;
+            saveMailState();
+            refilterMail();
+          }
           // 简历整体 LWW：云端版本更新且非空则采用，随云同步拉取后同时下发插件
           if (remote && Number(remote.resumeSavedAt) > resumeSavedAt && remote.resume && !isResumeEmpty(remote.resume)) {
             resume = remote.resume;
@@ -2078,7 +2140,9 @@
           recordCount: sourceRecords.length,
           records: sourceRecords.map(record => ({ ...record })),
           resume: JSON.parse(JSON.stringify(resume)),
-          resumeSavedAt
+          resumeSavedAt,
+          // 邮件已应用/已忽略状态跨设备同步（只同步这两个 ID 列表；encKey/lastReadAt 仅本机，不上传）
+          mailState: { appliedIds: mailState.appliedIds.slice(), dismissedIds: mailState.dismissedIds.slice() }
         };
       }
 
@@ -2536,10 +2600,11 @@
           return {
             appliedIds: Array.isArray(parsed.appliedIds) ? parsed.appliedIds.map(String) : [],
             dismissedIds: Array.isArray(parsed.dismissedIds) ? parsed.dismissedIds.map(String) : [],
-            lastReadAt: String(parsed.lastReadAt || '')
+            lastReadAt: String(parsed.lastReadAt || ''),
+            encKey: String(parsed.encKey || '') // 邮件解密密钥：仅本机，绝不进 envelope/不上传
           };
         } catch (_) {
-          return { appliedIds: [], dismissedIds: [], lastReadAt: '' };
+          return { appliedIds: [], dismissedIds: [], lastReadAt: '', encKey: '' };
         }
       }
       function saveMailState() {
@@ -2603,16 +2668,40 @@
         const applied = new Set((appliedIds || []).map(String)), dismissed = new Set((dismissedIds || []).map(String));
         return (Array.isArray(suggestions) ? suggestions : []).filter(s => s && s.id && !applied.has(String(s.id)) && !dismissed.has(String(s.id)));
       }
+      // ID 列表并集去重，cap 最近 500 条防膨胀（applied/dismissed 只增不减，membership 语义，顺序无关）
+      function unionIdList(a, b, cap) {
+        const limit = Number(cap) > 0 ? Number(cap) : 500;
+        const seen = new Set(); const out = [];
+        for (const id of [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]) {
+          const s = String(id);
+          if (s && !seen.has(s)) { seen.add(s); out.push(s); }
+        }
+        return out.length > limit ? out.slice(out.length - limit) : out;
+      }
+      // 跨设备合并 mailState：applied/dismissed 各取并集（任一端处理过 → 全端隐藏），无冲突
+      function unionMailState(local, remote) {
+        const r = remote && typeof remote === 'object' ? remote : null;
+        const l = local && typeof local === 'object' ? local : null;
+        return {
+          appliedIds: unionIdList(l && l.appliedIds, r && r.appliedIds),
+          dismissedIds: unionIdList(l && l.dismissedIds, r && r.dismissedIds)
+        };
+      }
       /*__MAIL_PURE_END__*/
 
-      // syncNow 读到邮件文件后调用：过滤本机已处理项 → 存内存态 → 刷新视图与角标（缺失/损坏已在调用方静默处理）
+      // syncNow 读到邮件文件后调用：存原始建议 + meta，再按本机 mailState 过滤（缺失/损坏已在调用方静默处理）
       function applyMailPayload(fileJson) {
         const data = fileJson && typeof fileJson === 'object' ? fileJson : null;
         mailMeta = data && data.meta && typeof data.meta === 'object' ? data.meta : null;
-        const all = data && Array.isArray(data.suggestions) ? data.suggestions : [];
-        mailSuggestions = filterMailSuggestions(all, mailState.appliedIds, mailState.dismissedIds);
+        mailRawSuggestions = data && Array.isArray(data.suggestions) ? data.suggestions : [];
         mailState.lastReadAt = new Date().toISOString();
         saveMailState();
+        refilterMail();
+      }
+
+      // 用当前 mailState 重新过滤原始建议并刷新视图（mailState 跨设备合并后需重跑）
+      function refilterMail() {
+        mailSuggestions = filterMailSuggestions(mailRawSuggestions, mailState.appliedIds, mailState.dismissedIds);
         renderMailView();
         updateMailBadge();
       }
@@ -2684,6 +2773,12 @@
           list.innerHTML = '';
           return;
         }
+        if (mailNeedKey) {
+          bar.className = 'mail-statusbar warning';
+          bar.innerHTML = '<strong>邮件建议已加密</strong>本机未填写「邮件解密密钥」或密钥不正确，无法读取。点右上「设置」填入与 Action 的 MAIL_ENC_KEY 完全相同的密钥，保存后会自动重新读取。';
+          list.innerHTML = '';
+          return;
+        }
         if (mailMeta && mailMeta.lastStatus === 'error') {
           bar.className = 'mail-statusbar error';
           bar.innerHTML = `<strong>上次邮件同步失败</strong>${escapeHtml(mailMeta.lastError || '未知错误')}<details class="mail-help"><summary>怎么修复？</summary><ol><li>最常见：改过 QQ 密码后 <strong>16 位授权码失效</strong> → 到 QQ 邮箱重新生成，更新私有仓库 autumn-mail-sync 的 QQ_AUTHCODE Secret。</li><li>AI 超额/密钥无效 → 检查 AI_API_KEY / AI_BASE_URL / AI_MODEL。</li><li>被 QQ 风控（Unsafe Login）→ 需把定时任务迁到国内宿主。</li><li>修复后在仓库手动重跑 mail-sync，再回本页点「重新读取」。</li></ol></details>`;
@@ -2707,12 +2802,14 @@
         if (!mailState.appliedIds.includes(sid)) mailState.appliedIds.push(sid);
         mailSuggestions = mailSuggestions.filter(s => String(s.id) !== sid);
         saveMailState();
+        scheduleSyncPush(); // 跨设备：把已应用状态推上云，其它设备同步后不再重复显示
       }
       function markMailDismissed(id) {
         const sid = String(id);
         if (!mailState.dismissedIds.includes(sid)) mailState.dismissedIds.push(sid);
         mailSuggestions = mailSuggestions.filter(s => String(s.id) !== sid);
         saveMailState();
+        scheduleSyncPush(); // 跨设备：把已忽略状态推上云
       }
 
       // 应用所选字段到匹配记录：里程碑走 setTimeline，其余字段直接赋值 → saveRecords（触发快照+云同步）
@@ -2780,6 +2877,86 @@
         pendingMailSeedId = String(id);
         openDialog(null, seed);
         showToast('已预填邮件信息，请补全城市/岗位等后保存');
+      }
+
+      // ---- 邮件设置面板：读写 Gist 的 mail-config.json（非密钥项）+ 本机解密密钥（C）----
+      function currentMailConfig() {
+        const c = mailConfig && typeof mailConfig === 'object' ? mailConfig : {};
+        const num = (v, fb) => (String(v == null ? '' : v).trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : fb);
+        return {
+          keywords: (typeof c.keywords === 'string' && c.keywords.trim()) ? c.keywords : MAIL_CFG_DEFAULTS.keywords,
+          minConfidence: num(c.minConfidence, MAIL_CFG_DEFAULTS.minConfidence),
+          sinceDays: num(c.sinceDays, MAIL_CFG_DEFAULTS.sinceDays),
+          maxPerRun: num(c.maxPerRun, MAIL_CFG_DEFAULTS.maxPerRun),
+          minIntervalHours: num(c.minIntervalHours, MAIL_CFG_DEFAULTS.minIntervalHours),
+          enabled: c.enabled === false ? false : true,
+          promptExtra: typeof c.promptExtra === 'string' ? c.promptExtra : MAIL_CFG_DEFAULTS.promptExtra
+        };
+      }
+
+      function openMailSettings() {
+        if (!syncConfig.token) { openSyncDialog(); showToast('请先开启云同步，再配置邮件提醒'); return; }
+        const c = currentMailConfig();
+        $('#mailCfgKeywords').value = c.keywords;
+        $('#mailCfgMinConf').value = c.minConfidence;
+        $('#mailCfgSinceDays').value = c.sinceDays;
+        $('#mailCfgMaxPerRun').value = c.maxPerRun;
+        $('#mailCfgInterval').value = c.minIntervalHours;
+        $('#mailCfgEnabled').checked = c.enabled;
+        $('#mailCfgPrompt').value = c.promptExtra;
+        $('#mailCfgEncKey').value = mailState.encKey || '';
+        const st = $('#mailCfgStatus');
+        st.className = 'capture-status';
+        st.textContent = mailConfig ? '已加载云端配置（mail-config.json）。' : '尚未保存过配置，当前为默认值。';
+        $('#mailSettingsDialog').showModal();
+      }
+
+      function generateMailEncKey() {
+        const bytes = crypto.getRandomValues(new Uint8Array(24));
+        $('#mailCfgEncKey').value = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+        const st = $('#mailCfgStatus');
+        st.className = 'capture-status';
+        st.textContent = '已生成密钥。保存后请把这串密钥同样填进 autumn-mail-sync 仓库的 MAIL_ENC_KEY Secret（两端必须完全一致才能解密）。';
+      }
+
+      async function saveMailSettings() {
+        if (!syncConfig.token) { showToast('请先开启云同步'); return; }
+        const st = $('#mailCfgStatus');
+        const clampNum = (v, min, max, fb) => { const n = Number(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fb; };
+        const cfgObj = {
+          keywords: String($('#mailCfgKeywords').value || '').trim().slice(0, 2000) || MAIL_CFG_DEFAULTS.keywords,
+          minConfidence: clampNum($('#mailCfgMinConf').value, 0, 1, MAIL_CFG_DEFAULTS.minConfidence),
+          sinceDays: Math.round(clampNum($('#mailCfgSinceDays').value, 1, 365, MAIL_CFG_DEFAULTS.sinceDays)),
+          maxPerRun: Math.round(clampNum($('#mailCfgMaxPerRun').value, 1, 200, MAIL_CFG_DEFAULTS.maxPerRun)),
+          minIntervalHours: Math.round(clampNum($('#mailCfgInterval').value, 0, 168, MAIL_CFG_DEFAULTS.minIntervalHours)),
+          enabled: $('#mailCfgEnabled').checked,
+          promptExtra: String($('#mailCfgPrompt').value || '').trim().slice(0, 2000),
+          updatedAt: new Date().toISOString()
+        };
+        // 解密密钥只存本机 localStorage，绝不写进 mail-config.json（它明文存在 Gist）
+        const newEncKey = String($('#mailCfgEncKey').value || '').trim();
+        const encKeyChanged = newEncKey !== (mailState.encKey || '');
+        st.className = 'capture-status';
+        st.textContent = '正在保存到你的私有 Gist…';
+        try {
+          await resolveSyncGist();
+          // 只 PATCH mail-config.json 一个文件，不碰 vault / mail-suggestions（按文件互不覆盖）
+          await gistRequest(`/gists/${syncConfig.gistId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ files: { [MAIL_CONFIG_FILENAME]: { content: JSON.stringify(cfgObj, null, 2) } } })
+          });
+          mailConfig = cfgObj;
+          mailState.encKey = newEncKey;
+          saveMailState();
+          st.className = 'capture-status success';
+          st.textContent = '已保存。Action 下次运行按新配置执行。';
+          showToast('邮件设置已保存');
+          $('#mailSettingsDialog').close();
+          if (encKeyChanged) await syncNow('manual'); // 密钥变化影响能否解密邮件建议：立即重拉一次
+        } catch (error) {
+          st.className = 'capture-status error';
+          st.textContent = `保存失败：${error.message || error}`;
+        }
       }
 
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
@@ -3992,6 +4169,12 @@
         showToast('正在重新读取邮件建议…');
         syncNow('manual');
       });
+      $('#mailSettingsBtn').addEventListener('click', openMailSettings);
+      $('#mailGenEncKeyBtn').addEventListener('click', generateMailEncKey);
+      $('#saveMailSettingsBtn').addEventListener('click', saveMailSettings);
+      $('#closeMailSettingsDialog').addEventListener('click', () => $('#mailSettingsDialog').close());
+      $('#cancelMailSettingsDialog').addEventListener('click', () => $('#mailSettingsDialog').close());
+      $('#mailSettingsDialog').addEventListener('click', event => { if (event.target === $('#mailSettingsDialog')) $('#mailSettingsDialog').close(); });
       $('#closeInstallDialog').addEventListener('click', () => $('#installDialog').close());
       $('#doneInstallDialog').addEventListener('click', () => $('#installDialog').close());
       $('#installDialog').addEventListener('click', event => { if (event.target === $('#installDialog')) $('#installDialog').close(); });
