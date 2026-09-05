@@ -117,5 +117,289 @@ check('unionIdList 去重且 cap 上限', () => {
   assert.strictEqual(big.length, 500);
 });
 
+// ---- 3) v4.4.0：CORE 纯函数块 + normalizeRecord 新字段透传 ----
+// 依赖函数（parseLocal / localDateInput / isActive / normalizeRecord …）不在标记块内，
+// 这里按函数名从 index.html 现场抽取（花括号配平），避免在测试里复制一份实现而产生漂移。
+function extractFunction(src, name) {
+  const start = src.indexOf(`function ${name}(`);
+  if (start === -1) return '';
+  let i = src.indexOf('{', start);
+  if (i === -1) return '';
+  let depth = 0;
+  for (; i < src.length; i += 1) {
+    const ch = src[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}') { depth -= 1; if (depth === 0) return src.slice(start, i + 1); }
+  }
+  return '';
+}
+function extractBlock(src, startMark, endMark) {
+  const s = src.indexOf(startMark);
+  const e = src.indexOf(endMark);
+  return (s !== -1 && e !== -1 && e > s) ? src.slice(s + startMark.length, e) : '';
+}
+
+console.log('v4.4.0 核心纯函数单测（截止日 / 日程事件 / ICS / 公司分组 / 漏斗 / 停留 / 卡点 / 查重）');
+const coreSrc = extractBlock(html, '/*__CORE_PURE_START__*/', '/*__CORE_PURE_END__*/');
+check('找到 CORE 纯函数块标记', () => assert.ok(coreSrc.length > 500, `CORE 块过短或未找到：${coreSrc.length}`));
+
+const CORE_DEP_NAMES = ['stageOrder', 'parseLocal', 'localDateInput', 'localDateTimeInput', 'formatDate', 'formatDateTime', 'isActive', 'cryptoId', 'sanitizeTimeline', 'deriveStage', 'normalizeRecord'];
+const coreDeps = CORE_DEP_NAMES.map(name => extractFunction(html, name));
+check('CORE 依赖函数全部从 index.html 抽取到（无复制实现，避免漂移）', () => {
+  const missing = CORE_DEP_NAMES.filter((name, idx) => !coreDeps[idx]);
+  assert.deepStrictEqual(missing, []);
+});
+
+const core = new Function(
+  'self',
+  `const STAGE_PRESETS = ['待投递','已投递','测评','笔试','机试','一面','二面','三面','四面','五面','交叉面','HR面','Offer','已结束'];
+   ${pureSrc}
+   ${coreDeps.join('\n')}
+   ${coreSrc}
+   return {
+     parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs,
+     companyKeyOf, groupRecordsByCompany, companyColor, computeFunnel, computeStageDwell,
+     computeDailyApplications, sparklinePath, findStalled, collectAlerts,
+     normalizePositionSlug, findDuplicateRecord, normalizeRecord
+   };`
+)(globalThis);
+
+const DAY = 86400000;
+function dayOffset(n, base = new Date('2026-09-06T12:00:00')) {
+  const d = new Date(base.getTime() + n * DAY);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const NOW = new Date('2026-09-06T12:00:00');
+
+check('parseDay 把 date-only 当本地午夜（避开 new Date(YYYY-MM-DD) 的 UTC 陷阱）', () => {
+  const d = core.parseDay('2026-09-10');
+  assert.strictEqual(d.getHours(), 0);
+  assert.strictEqual(d.getMinutes(), 0);
+  assert.strictEqual(core.parseDay(''), null);
+  assert.strictEqual(core.parseDay('不是日期'), null);
+});
+
+check('daysUntil 按日历日取整', () => {
+  assert.strictEqual(core.daysUntil(new Date('2026-09-09T23:30:00'), NOW), 3);
+  assert.strictEqual(core.daysUntil(new Date('2026-09-06T01:00:00'), NOW), 0);
+  assert.strictEqual(core.daysUntil(new Date('2026-09-04T01:00:00'), NOW), -2);
+});
+
+check('deadlineInfo 分级：>3天正常 / ≤3天 warn / 今天与逾期 danger', () => {
+  assert.strictEqual(core.deadlineInfo(dayOffset(10), NOW).level, '');
+  assert.strictEqual(core.deadlineInfo(dayOffset(3), NOW).level, 'warn');
+  assert.strictEqual(core.deadlineInfo(dayOffset(0), NOW).level, 'danger');
+  assert.strictEqual(core.deadlineInfo(dayOffset(-2), NOW).level, 'danger');
+  assert.ok(core.deadlineInfo(dayOffset(-2), NOW).text.includes('已过期 2 天'));
+  assert.strictEqual(core.deadlineInfo('', NOW), null);
+});
+
+check('collectScheduleEvents 逾期置顶 + 已结束不计截止 + limit 生效', () => {
+  const recs = [
+    { id: 'a', company: 'A', position: 'p', stage: '一面', scheduleAt: '2026-09-20T10:00', deadline: '' },
+    { id: 'b', company: 'B', position: 'p', stage: '已投递', scheduleAt: '', deadline: dayOffset(-1, NOW) },
+    { id: 'c', company: 'C', position: 'p', stage: '已结束', scheduleAt: '', deadline: dayOffset(2, NOW) },
+    { id: 'd', company: 'D', position: 'p', stage: 'Offer', scheduleAt: '', deadline: dayOffset(2, NOW) }
+  ];
+  const events = core.collectScheduleEvents(recs, NOW, 6);
+  assert.strictEqual(events[0].record.id, 'b', '逾期项应置顶');
+  assert.strictEqual(events[0].overdue, true);
+  assert.ok(!events.some(e => e.record.id === 'c' || e.record.id === 'd'), '已结束/Offer 的截止不应出现');
+  assert.strictEqual(core.collectScheduleEvents(recs, NOW, 1).length, 1);
+});
+
+check('buildIcs 结构、CRLF、UID 与文本转义', () => {
+  const events = core.collectScheduleEvents([
+    { id: 'r1', company: '腾讯,深圳', position: '后端;基础平台', stage: '一面', scheduleAt: '2026-09-20T10:00', deadline: '', recentSchedule: '线上一面\n腾讯会议', applicationUrl: 'https://x.example/a' }
+  ], NOW, 10);
+  const ics = core.buildIcs(events);
+  assert.ok(ics.startsWith('BEGIN:VCALENDAR\r\n'));
+  assert.ok(ics.endsWith('END:VCALENDAR\r\n'));
+  assert.ok(ics.includes('\r\n'), '必须用 CRLF');
+  assert.ok(ics.includes('UID:r1-schedule@autumn-recruitment-tracker'));
+  assert.ok(ics.includes('DTSTART:20260920T100000'), '浮动本地时间');
+  assert.ok(/DTSTAMP:\d{8}T\d{6}Z/.test(ics), 'DTSTAMP 必须是 UTC');
+  assert.ok(ics.includes('腾讯\\,深圳'), '逗号需转义');
+  assert.ok(ics.includes('后端\\;基础平台'), '分号需转义');
+  assert.ok(ics.includes('线上一面\\n腾讯会议'), '换行需转义成 \\n');
+  assert.ok(ics.includes('URL:https://x.example/a'));
+  assert.ok(!ics.split('\r\n').some(line => line.length > 75), '单行不得超过 75 字节（需折叠）');
+});
+
+check('buildIcs 全天截止用 VALUE=DATE', () => {
+  const events = core.collectScheduleEvents([
+    { id: 'r2', company: 'A', position: 'p', stage: '已投递', scheduleAt: '', deadline: '2026-09-20' }
+  ], NOW, 10);
+  const ics = core.buildIcs(events);
+  assert.ok(ics.includes('DTSTART;VALUE=DATE:20260920'));
+  assert.ok(ics.includes('DTEND;VALUE=DATE:20260921'), '全天事件 DTEND 为次日（RFC 排他）');
+});
+
+check('companyKeyOf + groupRecordsByCompany 把「腾讯」与「腾讯科技有限公司」归为一家', () => {
+  const groups = core.groupRecordsByCompany([
+    { id: '1', company: '腾讯', position: '后端' },
+    { id: '2', company: '腾讯科技有限公司', position: '前端' },
+    { id: '3', company: '阿里巴巴', position: '算法' }
+  ]);
+  assert.strictEqual(groups.length, 2);
+  assert.strictEqual(groups[0].records.length, 2, '多岗位公司排前');
+  assert.strictEqual(groups[0].label, '腾讯');
+});
+
+check('companyColor 同键稳定、取值在色板内', () => {
+  const c1 = core.companyColor('腾讯');
+  assert.strictEqual(c1, core.companyColor('腾讯'));
+  assert.ok(/^#[0-9a-f]{6}$/i.test(c1));
+  assert.strictEqual(core.companyColor(''), core.companyColor(''));
+});
+
+check('computeFunnel 以「时间线出现过」计入，已结束仍算面试；公司口径去重', () => {
+  const recs = [
+    { id: '1', company: '腾讯', position: 'A', stage: '已结束', timeline: [{ stage: '已投递', at: '' }, { stage: '笔试', at: '' }, { stage: '一面', at: '' }, { stage: '已结束', at: '' }] },
+    { id: '2', company: '腾讯科技有限公司', position: 'B', stage: '已投递', timeline: [{ stage: '已投递', at: '' }] },
+    { id: '3', company: '阿里', position: 'C', stage: 'Offer', timeline: [{ stage: '已投递', at: '' }, { stage: '测评', at: '' }, { stage: '一面', at: '' }, { stage: 'Offer', at: '' }] }
+  ];
+  const f = core.computeFunnel(recs);
+  const byKey = list => Object.fromEntries(list.map(s => [s.key, s]));
+  const r = byKey(f.byRecord);
+  assert.strictEqual(r.applied.count, 3);
+  assert.strictEqual(r.assess.count, 2, '笔试与测评各一条');
+  assert.strictEqual(r.interview.count, 2, '已结束的那条仍算进面试');
+  assert.strictEqual(r.offer.count, 1);
+  assert.strictEqual(f.companies, 2);
+  assert.strictEqual(byKey(f.byCompany).applied.count, 2, '公司口径去重后为 2 家');
+});
+
+check('computeStageDwell 用相邻里程碑日期差求平均', () => {
+  const recs = [
+    { id: '1', stage: '一面', timeline: [{ stage: '已投递', at: dayOffset(-10, NOW) }, { stage: '笔试', at: dayOffset(-7, NOW) }, { stage: '一面', at: dayOffset(-1, NOW) }] },
+    { id: '2', stage: '笔试', timeline: [{ stage: '已投递', at: dayOffset(-9, NOW) }, { stage: '笔试', at: dayOffset(-4, NOW) }] }
+  ];
+  const dwell = core.computeStageDwell(recs, 5);
+  const submitted = dwell.find(d => d.stage === '已投递');
+  assert.ok(submitted, '应有「已投递」的停留统计');
+  assert.strictEqual(submitted.count, 2);
+  // 记录1：已投递(-10) → 笔试(-7) = 3 天；记录2：已投递(-9) → 笔试(-4) = 5 天 → 平均 4 天
+  assert.strictEqual(Math.round(submitted.avgDays), 4);
+  const written = dwell.find(d => d.stage === '笔试');
+  assert.strictEqual(written.count, 1);
+  assert.strictEqual(Math.round(written.avgDays), 6, '笔试(-7) → 一面(-1) = 6 天');
+  assert.deepStrictEqual(core.computeStageDwell([], 5), []);
+});
+
+check('computeDailyApplications + sparklinePath 长度与路径', () => {
+  const recs = [
+    { id: '1', applicationDate: dayOffset(0, NOW) },
+    { id: '2', applicationDate: dayOffset(0, NOW) },
+    { id: '3', applicationDate: dayOffset(-3, NOW) },
+    { id: '4', applicationDate: dayOffset(-99, NOW) } // 窗口外，不计
+  ];
+  const daily = core.computeDailyApplications(recs, 14, NOW);
+  assert.strictEqual(daily.length, 14);
+  assert.strictEqual(daily[13].count, 2, '最后一天是今天');
+  const spark = core.sparklinePath(daily, 280, 46);
+  assert.strictEqual(spark.total, 3);
+  assert.strictEqual(spark.max, 2);
+  assert.strictEqual(spark.dots.length, 14);
+  assert.ok(spark.line.includes(','));
+  assert.ok(spark.area.startsWith('M') && spark.area.endsWith('Z'));
+  assert.deepStrictEqual(core.sparklinePath([]), { line: '', area: '', max: 0, total: 0, dots: [] });
+});
+
+check('findStalled 只统计进行中且超过阈值', () => {
+  const recs = [
+    { id: '1', company: 'A', position: 'p', stage: '一面', applicationDate: dayOffset(-20, NOW), timeline: [{ stage: '一面', at: dayOffset(-20, NOW) }] },
+    { id: '2', company: 'B', position: 'p', stage: 'Offer', applicationDate: dayOffset(-40, NOW), timeline: [{ stage: 'Offer', at: dayOffset(-40, NOW) }] },
+    { id: '3', company: 'C', position: 'p', stage: '已投递', applicationDate: dayOffset(-2, NOW), timeline: [{ stage: '已投递', at: dayOffset(-2, NOW) }] }
+  ];
+  const stalled = core.findStalled(recs, NOW, 14);
+  assert.strictEqual(stalled.length, 1);
+  assert.strictEqual(stalled[0].record.id, '1');
+  assert.strictEqual(stalled[0].days, 20);
+});
+
+check('collectAlerts danger 优先且受 limit 约束', () => {
+  const recs = [
+    { id: '1', company: 'A', position: 'p', stage: '已投递', deadline: dayOffset(-1, NOW), scheduleAt: '', applicationDate: dayOffset(-1, NOW), timeline: [{ stage: '已投递', at: dayOffset(-1, NOW) }] },
+    { id: '2', company: 'B', position: 'p', stage: '一面', deadline: dayOffset(2, NOW), scheduleAt: '', applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '一面', at: dayOffset(-30, NOW) }] },
+    { id: '3', company: 'C', position: 'p', stage: '二面', deadline: '', scheduleAt: '', applicationDate: dayOffset(-40, NOW), timeline: [{ stage: '二面', at: dayOffset(-40, NOW) }] }
+  ];
+  const alerts = core.collectAlerts(recs, NOW, 5);
+  assert.ok(alerts.length >= 3);
+  assert.strictEqual(alerts[0].level, 'danger', 'danger 必须排在最前');
+  assert.ok(alerts.some(a => a.level === 'warn' && a.text.includes('停在「一面」')));
+  assert.ok(alerts.every(a => a.id), '每条都要带 recordId 以便点击跳转');
+  assert.strictEqual(core.collectAlerts(recs, NOW, 1).length, 1);
+});
+
+check('findDuplicateRecord：同链接判重', () => {
+  const recs = [{ id: '1', company: '腾讯', position: '后端', applicationUrl: 'https://x/a', batch: '' }];
+  const hit = core.findDuplicateRecord(recs, { company: '别家', position: '别的', applicationUrl: 'https://x/a' });
+  assert.strictEqual(hit.mode, 'duplicate');
+  assert.strictEqual(hit.reason, 'url');
+});
+
+check('findDuplicateRecord：同公司+同岗位+同批次才算重复', () => {
+  const recs = [{ id: '1', company: '腾讯科技有限公司', position: '后端开发', applicationUrl: '', batch: '提前批' }];
+  const dup = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发（提前批）', batch: '提前批' });
+  assert.strictEqual(dup.mode, 'duplicate');
+  assert.strictEqual(dup.reason, 'company+position+batch');
+});
+
+check('findDuplicateRecord：批次不同 → same-company（修复提前批/正式批被误合并）', () => {
+  const recs = [{ id: '1', company: '腾讯', position: '后端开发', applicationUrl: '', batch: '提前批' }];
+  const res = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发', batch: '正式批' });
+  assert.strictEqual(res.mode, 'same-company');
+  assert.strictEqual(res.matches.length, 1);
+});
+
+check('findDuplicateRecord：ignoreBatch=true 时批次不同也判重（插件收录路径）', () => {
+  const recs = [{ id: '1', company: '腾讯', position: '后端开发', applicationUrl: '', batch: '提前批' }];
+  const res = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发' }, { ignoreBatch: true });
+  assert.strictEqual(res.mode, 'duplicate');
+  assert.strictEqual(res.reason, 'company+position');
+});
+
+check('findDuplicateRecord：同公司不同岗位 → same-company；无关联 → null', () => {
+  const recs = [{ id: '1', company: '腾讯', position: '后端', applicationUrl: '', batch: '' }];
+  assert.strictEqual(core.findDuplicateRecord(recs, { company: '腾讯', position: '前端' }).mode, 'same-company');
+  assert.strictEqual(core.findDuplicateRecord(recs, { company: '阿里', position: '前端' }), null);
+  assert.strictEqual(core.findDuplicateRecord(recs, { company: '' }), null);
+});
+
+check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、intent 夹取、notes 清洗', () => {
+  // 老数据（完全没有 v4.4.0 字段）
+  const legacy = core.normalizeRecord({ id: 'old1', company: '星海科技', position: '产品', city: '上海', applicationDate: '2026-09-01', stage: '一面', updatedAt: 1 });
+  assert.strictEqual(legacy.deadline, '');
+  assert.strictEqual(legacy.batch, '');
+  assert.strictEqual(legacy.channel, '');
+  assert.strictEqual(legacy.referral, '');
+  assert.strictEqual(legacy.salary, '');
+  assert.strictEqual(legacy.intent, 0);
+  assert.deepStrictEqual(legacy.notes, []);
+  assert.strictEqual(legacy.stage, '一面', '旧 stage 仍合成里程碑并派生');
+  assert.strictEqual(legacy.timeline.length, 1);
+  // 新字段必须原样保留（漏一个就会在每次 load/sync 静默丢失）
+  const full = core.normalizeRecord({
+    id: 'n1', company: 'A', position: 'B', city: 'C', applicationDate: '2026-09-01',
+    deadline: '2026-09-20', batch: '提前批', channel: '内推', referral: '张三', salary: '25k×16', intent: 4,
+    notes: [{ id: 'k1', at: 5, text: '一面问了项目' }, { text: '' }, null, { text: '  补一条  ' }],
+    timeline: [{ stage: '已投递', at: '2026-09-01', note: '' }, { stage: '一面', at: '2026-09-05', note: '' }]
+  });
+  assert.strictEqual(full.deadline, '2026-09-20');
+  assert.strictEqual(full.batch, '提前批');
+  assert.strictEqual(full.channel, '内推');
+  assert.strictEqual(full.referral, '张三');
+  assert.strictEqual(full.salary, '25k×16');
+  assert.strictEqual(full.intent, 4);
+  assert.strictEqual(full.notes.length, 2, '空文本与 null 被过滤');
+  assert.strictEqual(full.notes[1].text, '补一条', '文本被 trim');
+  assert.ok(full.notes[1].id && Number(full.notes[1].at) > 0, '缺 id/at 会补齐');
+  // intent 越界夹取
+  assert.strictEqual(core.normalizeRecord({ company: 'x', intent: 99 }).intent, 5);
+  assert.strictEqual(core.normalizeRecord({ company: 'x', intent: -3 }).intent, 0);
+  assert.strictEqual(core.normalizeRecord({ company: 'x', intent: 'abc' }).intent, 0);
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;
