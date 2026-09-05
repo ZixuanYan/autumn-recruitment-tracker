@@ -205,6 +205,9 @@
     .ocr-preview-card img { display: block; width: 100%; height: 92px; object-fit: cover; background: var(--surface-soft); }
     .ocr-preview-name { padding: 6px 8px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
     .ocr-results { display: grid; gap: 9px; max-height: 280px; margin-top: 13px; overflow: auto; }
+    /* 同上：这两个容器自身设了 display:grid，会盖掉 [hidden] 的 UA display:none。
+       漏了守卫时，「已识别出结果后再选新图」会把上一轮的陈旧结果继续显示出来。 */
+    .ocr-preview-grid[hidden], .ocr-results[hidden] { display: none; }
     .ocr-result-card { padding: 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); }
     .ocr-result-fields { display: grid; grid-template-columns: 24px 1fr 1.35fr .7fr .95fr; gap: 8px; align-items: center; }
     .ocr-result-card .control { min-width: 0; padding: 8px 9px; font-size: 12px; }
@@ -592,6 +595,8 @@
     /* ===== v4.4.0：洞察面板（漏斗 / sparkline / 停留 / 指标 / 卡点 / Offer 对比）===== */
     .insights { margin-bottom: 16px; }
     .insights-body { display: grid; gap: 16px; padding: 16px 18px 18px; }
+    /* 同理：首启引导显示时要把洞察内容整体隐掉，作者层 display:grid 必须被 [hidden] 显式覆盖 */
+    .insights-body[hidden] { display: none; }
     .insight-block { min-width: 0; }
     .insight-block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
     .insight-block-head h3 { margin: 0; font-size: 13px; font-weight: 680; font-family: var(--font-display); }
@@ -685,6 +690,9 @@
     /* ===== v4.4.0：记录详情抽屉 ===== */
     .drawer-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(11, 13, 16, .38); backdrop-filter: blur(3px); }
     .drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 41; display: flex; flex-direction: column; width: min(560px, 100vw); background: var(--surface); box-shadow: -18px 0 48px -24px rgba(16, 24, 40, .34); animation: drawer-in .3s var(--ease); }
+    /* 关键：作者样式的 display:flex 会覆盖 [hidden] 的 UA display:none（同 .view[hidden] 的处理）。
+       漏了这条，关闭态的抽屉仍占位 560px 并吞掉右侧元素的点击，只是靠动画停在 opacity:0 才看不见。 */
+    .drawer[hidden], .drawer-backdrop[hidden] { display: none; }
     @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
     .drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
     .drawer-head-text { min-width: 0; flex: 1 1 auto; }
