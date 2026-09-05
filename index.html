@@ -2798,14 +2798,17 @@
           const matchesText = !keyword || `${record.company} ${record.position}`.toLocaleLowerCase('zh-CN').includes(keyword);
           return matchesText && (stage === 'all' || record.stage === stage);
         });
+        // 「按公司聚合」需要聚类后的规范键；建一次索引，避免在比较器里对每对记录重复聚类
+        const groupKeyById = els.sort.value === 'company-group' ? companyGroupIndex(records) : null;
         filtered.sort((a, b) => {
           if (els.sort.value === 'applied-desc') return (b.applicationDate || '').localeCompare(a.applicationDate || '');
           if (els.sort.value === 'updated-desc') return b.updatedAt - a.updatedAt;
           if (els.sort.value === 'company') return a.company.localeCompare(b.company, 'zh-CN');
           if (els.sort.value === 'company-group') {
-            // 同公司多岗位：按归一化公司键聚拢（「腾讯」与「腾讯科技（深圳）有限公司」视为同一家），
-            // 组内按最近更新倒序，便于一眼看清「一家公司投了几个岗、各自到哪一步」
-            const ka = String(companyKeyOf(a)), kb = String(companyKeyOf(b));
+            // 同公司多岗位：按聚类规范键聚拢（「腾讯」与「腾讯科技（深圳）有限公司」视为同一家，
+            // 但「星海科技」与「星海互娱」不会被误并），组内按最近更新倒序
+            const ka = String((groupKeyById && groupKeyById.get(a.id)) || companyGroupKey(a));
+            const kb = String((groupKeyById && groupKeyById.get(b.id)) || companyGroupKey(b));
             if (ka !== kb) return ka.localeCompare(kb, 'zh-CN');
             return (b.updatedAt || 0) - (a.updatedAt || 0);
           }
@@ -3063,8 +3066,8 @@
         render();
       }
 
-      // 台账单行 HTML（表格视图）；companyIndex 用于「同公司多岗位」chip
-      function recordRowHtml(record, recordNo, companyIndex) {
+      // 台账单行 HTML（表格视图）；companyIndex/groupKeyById 用于「同公司多岗位」chip 与公司配色
+      function recordRowHtml(record, recordNo, companyIndex, groupKeyById) {
         const scheduleDate = parseLocal(record.scheduleAt);
         const overdue = scheduleDate && scheduleDate < new Date() && !['Offer', '已结束'].includes(record.stage);
         const canAdvance = record.stage !== '已结束';
@@ -3074,8 +3077,9 @@
         const companyHtml = record.applicationUrl
           ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
           : escapeHtml(record.company);
-        // 同公司多岗位：chip 显示该公司在台账里的岗位数，title 列出岗位与阶段
-        const key = companyKeyOf(record);
+        // 同公司多岗位：chip 显示该公司在台账里的岗位数，title 列出岗位与阶段。
+        // 用聚类的规范键（不是查专用的激进 slug），避免「星海科技 / 星海互娱」被并成一家。
+        const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
         const siblings = (companyIndex && companyIndex.get(key)) || [];
         const chipHtml = siblings.length > 1
           ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${item.position || '未填岗位'}${item.batch ? `（${item.batch}）` : ''} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
@@ -3105,22 +3109,18 @@
             .map((record, index) => [record.id, String(index + 1).padStart(4, '0')])
         );
         // 公司索引按**全量台账**统计（不是只按筛选结果），chip 才能回答「我在这家一共投了几个岗」
-        const companyIndex = new Map();
-        for (const record of records) {
-          const key = companyKeyOf(record);
-          if (!key) continue;
-          if (!companyIndex.has(key)) companyIndex.set(key, []);
-          companyIndex.get(key).push(record);
-        }
+        const groups = groupRecordsByCompany(records);
+        const companyIndex = new Map(groups.map(group => [group.key, group.records]));
+        const groupKeyById = companyGroupIndex(records);
         const grouped = els.sort.value === 'company-group';
         const collapsed = new Set(uiPrefs.collapsedGroups);
         const rows = [];
         let lastKey = null;
         for (const record of visible) {
-          const key = companyKeyOf(record);
+          const key = groupKeyById.get(record.id) || companyGroupKey(record);
           if (!grouped || key === lastKey) {
             if (grouped && collapsed.has(key)) continue; // 该组已折叠：跳过明细行
-            rows.push(recordRowHtml(record, recordNo, companyIndex));
+            rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
             continue;
           }
           lastKey = key;
@@ -3134,7 +3134,7 @@
             </button>
           </td></tr>`);
           if (isCollapsed) continue;
-          rows.push(recordRowHtml(record, recordNo, companyIndex));
+          rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
         }
         els.body.innerHTML = rows.join('');
         els.empty.hidden = visible.length !== 0;
@@ -3282,26 +3282,57 @@
       }
 
       // ----- 公司维度分组（同公司多岗位）-----
-      // 分组键复用邮件匹配的 normalizeCompanySlug：自动处理全半角、公司后缀（有限公司/科技/集团…），
-      // 避免「腾讯」与「腾讯科技（深圳）有限公司」被算成两家公司。归一化后为空则退回小写原名。
+      // 两套键，用途不同，别混用：
+      //   companyKeyOf     —— 激进（复用邮件匹配 normalizeCompanySlug，连「科技/网络」这类行业词也剥掉）。
+      //                       只用于**查重**：宁可多合并，反正有人工确认兜底。
+      //   companyGroupKey  —— 保守（只归一化全半角/空格/标点，只剥「法人形式后缀」，保留行业词）。
+      //                       用于**展示分组/配色/聚合排序**：把「星海科技」和「星海互娱」误并成一家是硬伤。
       function companyKeyOf(record) {
         const raw = String((record && record.company) || '').trim();
         if (!raw) return '';
         return normalizeCompanySlug(raw) || raw.toLowerCase();
       }
-      // 按公司聚合：返回 [{ key, label, records }]，多岗位公司排前
+      // 法人形式后缀（可循环剥离，如「××集团有限公司」→「××」）；不含行业词
+      const LEGAL_SUFFIX_RE = /(股份有限公司|有限责任公司|集团有限公司|有限公司|股份公司|集团|公司|股份|co\.,?ltd\.?|inc\.?|ltd\.?|corp\.?|llc)+$/i;
+      function companyGroupKey(record) {
+        const raw = String((record && record.company) || '').trim();
+        if (!raw) return '';
+        // 全角 ASCII → 半角，去掉括号/标点/空白，latin 小写
+        let key = raw
+          .replace(/[\uff01-\uff5e]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+          .replace(/[（）()[\]【】·・,，.。、\-—_\s]/g, '')
+          .toLowerCase();
+        let prev = null;
+        while (key !== prev && key.length > 2) { prev = key; key = key.replace(LEGAL_SUFFIX_RE, ''); }
+        return key || raw.toLowerCase();
+      }
+      // 按公司聚合：先取保守键，再把「键互相包含」的并成一家（腾讯 ⊂ 腾讯科技深圳），
+      // 组的规范键取成员里最短的那个，保证同一家公司在配色/折叠/排序上始终一致。
       function groupRecordsByCompany(records) {
-        const map = new Map();
+        const groups = [];
         for (const r of (Array.isArray(records) ? records : [])) {
-          const key = companyKeyOf(r);
+          const key = companyGroupKey(r);
           if (!key) continue;
-          if (!map.has(key)) map.set(key, { key, label: String(r.company || ''), records: [] });
-          const group = map.get(key);
-          group.records.push(r);
-          if (!group.label) group.label = String(r.company || '');
+          const hit = groups.find(group => [...group.keys].some(existing => existing === key
+            || (existing.length >= 2 && key.length >= 2 && (existing.includes(key) || key.includes(existing)))));
+          if (hit) { hit.records.push(r); hit.keys.add(key); if (!hit.label) hit.label = String(r.company || ''); }
+          else groups.push({ keys: new Set([key]), label: String(r.company || ''), records: [r] });
         }
-        return [...map.values()].sort((a, b) => b.records.length - a.records.length
-          || String(a.label).localeCompare(String(b.label), 'zh-CN'));
+        return groups
+          .map(group => ({
+            key: [...group.keys].sort((a, b) => a.length - b.length || a.localeCompare(b, 'zh-CN'))[0],
+            label: group.label,
+            records: group.records
+          }))
+          .sort((a, b) => b.records.length - a.records.length || String(a.label).localeCompare(String(b.label), 'zh-CN'));
+      }
+      // 记录 id → 所属公司的规范键（渲染前建一次，避免每张卡片重复聚类）
+      function companyGroupIndex(records) {
+        const map = new Map();
+        for (const group of groupRecordsByCompany(records)) {
+          for (const record of group.records) map.set(record.id, group.key);
+        }
+        return map;
       }
       // 公司标识色：按 key 哈希取固定色板，保证同一家公司在看板/表格/抽屉里颜色一致
       const COMPANY_PALETTE = ['#2447e0', '#0e7a5f', '#9a5b00', '#4338ca', '#b7791f', '#0f766e', '#a21caf', '#c0362c'];
@@ -3575,8 +3606,8 @@
         return [...present].sort((a, b) => stageOrder(a) - stageOrder(b) || String(a).localeCompare(String(b), 'zh-CN'));
       }
 
-      function boardCardHtml(record) {
-        const key = companyKeyOf(record);
+      function boardCardHtml(record, groupKeyById) {
+        const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
         const dl = deadlineInfo(record.deadline);
         const dlClosed = ['Offer', '已结束'].includes(record.stage);
         const schedule = parseLocal(record.scheduleAt);
@@ -3597,11 +3628,13 @@
         if (!host) return;
         const visible = getVisibleRecords();
         const columns = boardColumns(visible);
+        // 公司规范键建一次即可（不能在 map 回调里直接传 boardCardHtml，否则数组下标会被当成第二个参数）
+        const groupKeyById = companyGroupIndex(records);
         host.innerHTML = columns.map(stage => {
           const items = visible.filter(r => String(r.stage || '待投递') === stage);
           return `<section class="board-col" data-stage="${escapeHtml(stage)}" aria-label="${escapeHtml(stage)} 列">
             <div class="board-col-head"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span><span class="board-col-count">${items.length}</span></div>
-            <div class="board-col-body">${items.length ? items.map(boardCardHtml).join('') : '<div class="board-empty">拖到这里</div>'}</div>
+            <div class="board-col-body">${items.length ? items.map(item => boardCardHtml(item, groupKeyById)).join('') : '<div class="board-empty">拖到这里</div>'}</div>
           </section>`;
         }).join('');
       }
@@ -3706,9 +3739,10 @@
           { label: '薪资 / 待遇', value: record.salary || '—' },
           { label: '投递网址', value: record.applicationUrl ? '<a class="company-link" href="' + escapeHtml(record.applicationUrl) + '" target="_blank" rel="noopener noreferrer">打开 ↗</a>' : '—' }
         ];
-        const siblings = groupRecordsByCompany(records)
-          .find(group => group.key === companyKeyOf(record));
-        const others = siblings ? siblings.records.filter(item => item.id !== record.id) : [];
+        // 同公司其它投递：按「该记录所在的聚类组」取，比比较键更稳（组键是聚类后的规范键）
+        const siblingGroup = groupRecordsByCompany(records)
+          .find(group => group.records.some(item => item.id === record.id));
+        const others = siblingGroup ? siblingGroup.records.filter(item => item.id !== record.id) : [];
         const notes = Array.isArray(record.notes) ? record.notes : [];
         if (body) {
           body.innerHTML = `
@@ -5091,6 +5125,9 @@
         closeAdvanceDialog();
         render();
         flashRow(record.id);
+        // 抽屉里点「推进阶段」走的也是这条路径：推进后必须重渲抽屉，
+        // 否则步骤条仍显示旧里程碑，要关掉重开才能看到（浏览器实证发现的缺陷）
+        if (drawerRecordId === record.id) renderDrawer();
         if (s === 'Offer') playOfferStamp();
       }
       function closeAdvanceDialog() {
