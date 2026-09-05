@@ -3413,15 +3413,29 @@
         }
         return out.sort((a, b) => b.days - a.days);
       }
+      // 临期 / 逾期截止清单：返回 [{ record, info }]（info 来自 deadlineInfo），按紧急度升序（逾期最久在前）。
+      // 已结束 / Offer 的记录不再需要赶截止，直接排除。卡点清单与未来安排共用同一套判定，避免两处口径不一致。
+      function findUpcomingDeadlines(records, now = new Date(), withinDays = 3) {
+        const span = Number.isFinite(Number(withinDays)) ? Number(withinDays) : 3;
+        const out = [];
+        for (const r of (Array.isArray(records) ? records : [])) {
+          if (['Offer', '已结束'].includes(r.stage)) continue;
+          const info = deadlineInfo(r.deadline, now);
+          if (!info) continue;
+          if (info.days < 0 || info.days <= span) out.push({ record: r, info });
+        }
+        return out.sort((a, b) => a.info.days - b.info.days);
+      }
       // 汇总需要关注的事项，danger 优先，最多 limit 条；每条带 recordId 便于点击跳转
       function collectAlerts(records, now = new Date(), limit = 5) {
         const alerts = [];
         const list = Array.isArray(records) ? records : [];
+        for (const item of findUpcomingDeadlines(list, now, 3)) {
+          const r = item.record;
+          alerts.push({ level: item.info.level === 'danger' ? 'danger' : 'warn', id: r.id, text: `${r.company} · ${r.position}：${item.info.text}` });
+        }
         for (const r of list) {
           if (['Offer', '已结束'].includes(r.stage)) continue;
-          const dl = deadlineInfo(r.deadline, now);
-          if (dl && dl.level === 'danger') alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：${dl.text}` });
-          else if (dl && dl.level === 'warn') alerts.push({ level: 'warn', id: r.id, text: `${r.company} · ${r.position}：${dl.text}` });
           const s = parseLocal(r.scheduleAt);
           if (s && s < now) alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：安排已过（${formatDateTime(r.scheduleAt)}）但阶段仍是「${r.stage}」` });
         }
@@ -3633,6 +3647,25 @@
         document.body.style.overflow = '';
       }
 
+      // 抽屉用的是普通 <aside> 而不是 <dialog>，浏览器不会自动困住焦点，
+      // 因此手动实现 Tab 循环：并处理「焦点还留在背景里」的情况（首次 Tab 直接拉进抽屉）。
+      const DRAWER_FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+      function trapFocusInDrawer(event) {
+        const drawer = $('#recordDrawer');
+        if (!drawer || drawer.hidden) return;
+        const items = [...drawer.querySelectorAll(DRAWER_FOCUSABLE)].filter(node => node.offsetParent !== null || node === document.activeElement);
+        if (!items.length) { event.preventDefault(); return; }
+        const active = document.activeElement;
+        const inside = !!(active && drawer.contains && drawer.contains(active));
+        event.preventDefault();
+        if (!inside) { items[0].focus(); return; }
+        const index = items.indexOf(active);
+        const next = event.shiftKey
+          ? (index <= 0 ? items[items.length - 1] : items[index - 1])
+          : (index === -1 || index >= items.length - 1 ? items[0] : items[index + 1]);
+        if (next && next.focus) next.focus();
+      }
+
       // 时间线步骤条：每个里程碑一个节点，显示日期、备注与「距上一步 N 天」
       function stepsHtml(record) {
         const timeline = Array.isArray(record.timeline) ? record.timeline : [];
@@ -3831,6 +3864,8 @@
           if (drawerRecordId) { closeRecordDrawer(); return; }
           return; // 其余 Esc 交给原生 dialog
         }
+        // 抽屉打开期间 Tab 一律走焦点陷阱（含焦点还在背景里的情况）
+        if (event.key === 'Tab' && drawerRecordId) { trapFocusInDrawer(event); return; }
         if (event.metaKey || event.ctrlKey || event.altKey) return;
         if (isTypingTarget(event.target)) return;
         const dialogOpen = document.querySelector('dialog[open]');
