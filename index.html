@@ -1502,7 +1502,15 @@
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
               primaryLoadState = 'valid';
-              return parsed.map(normalizeRecord);
+              const normalized = parsed.map(normalizeRecord);
+              // 老数据被 normalizeRecord 补齐新字段后写回一次：否则在下一次任何变更之前，
+              // localStorage 里仍是旧结构，导出备份 / 外部读取者（插件桥接、脚本）看不到 v4.4.0 的字段。
+              // 仅在序列化结果确实变化时写，避免每次启动都无谓写盘。
+              try {
+                const serialized = JSON.stringify(normalized);
+                if (serialized !== raw) localStorage.setItem(STORAGE_KEY, serialized);
+              } catch (error) { console.warn('回写归一化后的记录失败', error); }
+              return normalized;
             }
             primaryLoadState = 'corrupt';
           } else {
@@ -3797,6 +3805,7 @@
         const dl = deadlineInfo(record.deadline);
         const facts = [
           { label: '投递日期', value: formatDate(record.applicationDate) },
+          { label: '批次', value: record.batch || '—' },
           { label: '安排时间', value: record.scheduleAt ? formatDateTime(record.scheduleAt) : '—' },
           { label: '截止日期', value: record.deadline ? `${formatDate(record.deadline)}${dl ? `（${dl.text.replace('截止 · ', '')}）` : ''}` : '—' },
           { label: '意向度', value: record.intent ? `${record.intent} / 5` : '未设' },
@@ -3850,14 +3859,35 @@
         render();
         renderDrawer();
       }
+      // 笔记（面经）是有价值且不可再生的内容：删除给 6 秒撤销，防护等级与删除整条记录对齐
+      let lastDeletedNote = null; // { recordId, note, index }
       function deleteDrawerNote(noteId) {
         const record = records.find(item => item.id === drawerRecordId);
         if (!record) return;
-        record.notes = (Array.isArray(record.notes) ? record.notes : []).filter(note => note.id !== noteId);
+        const list = Array.isArray(record.notes) ? record.notes : [];
+        const index = list.findIndex(note => note.id === noteId);
+        if (index === -1) return;
+        lastDeletedNote = { recordId: record.id, note: list[index], index };
+        record.notes = list.filter(note => note.id !== noteId);
         record.updatedAt = Date.now();
-        saveRecords('已删除笔记');
+        saveRecords(); // 不传 message：由下面带「撤销」的 toast 统一提示，避免两条 toast 互相顶掉
         render();
         renderDrawer();
+        showToast('已删除笔记', { actionLabel: '撤销', duration: 6000, onAction: undoDeleteNote });
+      }
+      function undoDeleteNote() {
+        const pending = lastDeletedNote;
+        lastDeletedNote = null;
+        if (!pending) return;
+        const record = records.find(item => item.id === pending.recordId);
+        if (!record) { showToast('这条记录已不存在，无法恢复笔记'); return; }
+        const list = Array.isArray(record.notes) ? record.notes.slice() : [];
+        list.splice(Math.min(Math.max(pending.index, 0), list.length), 0, pending.note);
+        record.notes = list;
+        record.updatedAt = Date.now();
+        saveRecords('已恢复笔记');
+        render();
+        if (drawerRecordId === record.id) renderDrawer();
       }
 
       // ---- ⌘K 命令面板 ----
@@ -5099,6 +5129,7 @@
         if (!timeline.length) { showToast('请至少填写一个阶段（如“已投递”）'); return; }
         const data = Object.fromEntries(new FormData(els.form).entries());
         const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now(), timeline });
+        let sameCompanyHint = '';
         if (!editingId) {
           // 手填新增查重（此前这条路径完全没有查重）：
           //   duplicate → 让用户选「编辑已有」还是「仍然新增」；same-company → 只做非阻断提示
@@ -5111,7 +5142,9 @@
             );
             if (goEdit) { closeDialog(); openDialog(target); return; }
           } else if (dup && dup.mode === 'same-company') {
-            showToast(`${normalized.company} 名下现在共 ${dup.matches.length + 1} 个岗位在台账里`, { duration: 4000 });
+            // 不能在这里单独 showToast：紧接着 saveRecords 的 toast 会把它顶掉（同一个 #toast 元素），
+            // 用户永远看不到。改为把提示并进保存那条 toast。
+            sameCompanyHint = `（${normalized.company} 名下现在共 ${dup.matches.length + 1} 个岗位）`;
           }
         }
         if (editingId) {
@@ -5119,7 +5152,7 @@
           saveRecords('已更新并自动保存');
         } else {
           records.unshift(normalized);
-          saveRecords('已新增并自动保存');
+          saveRecords(`已新增并自动保存${sameCompanyHint}`);
           // 由「邮件提醒 → 新建记录」交接而来：保存成功后才把该建议标记为已应用（取消则不标记）
           if (pendingMailSeedId) { const mid = pendingMailSeedId; pendingMailSeedId = null; markMailApplied(mid); renderMailView(); updateMailBadge(); }
         }
