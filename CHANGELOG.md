@@ -1,5 +1,21 @@
 # 更新记录
 
+## 插件 v4.0.0（重大调整：移除整页自动填充 + AI，强化点击速填）
+
+**移除**（原因：网申站点结构千差万别，整页自动填充命中率不稳、有误填风险、需逐站维护；AI 需联网/配置/隐私成本，实测收益不足）：
+
+- 删除整页「一键自动填充」规则引擎（`content/04-autofill.js` 整文件）与「AI 辅助填写 / 表单理解引擎」（`common/ai-helpers.js` 整文件、background 的 `AI_FILL`/`AI_UNDERSTAND` 通道与全部 AI 函数、侧栏 AI 配置区与建议清单、相关 CSS/常量/存储键）
+- manifest 内容脚本由 9 个减为 7 个；background 不再 `importScripts` ai-helpers、不再发起任何网络请求 → **回归纯离线采集端**
+
+**保留并强化「简历字段点击速填」**（用户主导、跨站通用、零误填、纯离线）：
+
+- 左键点字段 → 填入最后聚焦的输入框（原生 Setter + `input/change`，兼容 React/Vue；无聚焦框时回退复制）
+- **新增右键点字段 → 复制该字段内容**到剪贴板
+- **新增顶部搜索框**：按字段名/内容即时过滤简历 chip，命中段自动展开
+- 新增明确操作引导文案；`refreshResumeStatus` 改为自包含计数（`countResumeFilledFields`，不再依赖已删除的填充引擎）
+
+**验证**：8 文件 `node --check`、manifest 合法、全仓 grep 无残留引用、7 文件集成加载无作用域错误、`countResumeFilledFields` 计数单测全过。网页版 `index.html` 未改（简历 schema / 云同步不受影响）。
+
 ## 插件 v3.4.0
 
 一键填充「通用化」改造 **M2（阶段 2：AI 表单理解引擎）**——通用性质变：

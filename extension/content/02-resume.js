@@ -34,7 +34,7 @@
             if (k.startsWith('_') || v === undefined || v === null || v === '') continue;
             const strVal = String(v);
             html += `
-              <button class="field-btn" data-val="${encodeURIComponent(strVal)}" title="${escapeHtml(k)}: ${escapeHtml(strVal)}">
+              <button class="field-btn" data-key="${escapeHtml(k)}" data-val="${encodeURIComponent(strVal)}" title="${escapeHtml(k)}: ${escapeHtml(strVal)}">
                 <span class="field-key">${escapeHtml(k)}</span>
                 <span class="field-val">${escapeHtml(strVal)}</span>
               </button>
@@ -49,7 +49,7 @@
           if (v === undefined || v === null || v === '') continue;
           const strVal = String(v);
           html += `
-            <button class="field-btn" data-val="${encodeURIComponent(strVal)}" title="${escapeHtml(k)}: ${escapeHtml(strVal)}">
+            <button class="field-btn" data-key="${escapeHtml(k)}" data-val="${encodeURIComponent(strVal)}" title="${escapeHtml(k)}: ${escapeHtml(strVal)}">
               <span class="field-key">${escapeHtml(k)}</span>
               <span class="field-val">${escapeHtml(strVal)}</span>
             </button>
@@ -64,6 +64,7 @@
     const resumeListEl = AJA.ui && AJA.ui.resumeListEl;
     if (!resumeListEl) return;
     resumeListEl.innerHTML = html;
+    if (AJA.applyResumeFilter) AJA.applyResumeFilter(); // 重渲染后恢复搜索过滤
   }
 
   // ================= 从 storage 加载最新简历 =================

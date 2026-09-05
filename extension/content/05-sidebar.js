@@ -24,6 +24,27 @@ function safeSendMessage(message, onResult, onError) {
   }
 }
 
+// 统计简历中已填写的字段数（自包含，不依赖任何填充引擎）：数组段累加各 item 的非空非下划线键，对象段统计非空值
+function countResumeFilledFields(resume) {
+  let n = 0;
+  try {
+    for (const sec of Object.values(resume || {})) {
+      if (Array.isArray(sec)) {
+        for (const item of sec) {
+          if (item && typeof item === 'object') {
+            for (const [k, v] of Object.entries(item)) {
+              if (!k.startsWith('_') && v != null && String(v).trim() !== '') n++;
+            }
+          }
+        }
+      } else if (sec && typeof sec === 'object') {
+        for (const v of Object.values(sec)) { if (v != null && String(v).trim() !== '') n++; }
+      }
+    }
+  } catch (_) { n = 0; }
+  return n;
+}
+
 function ensureSidebarUI() {
   if (AJA.ui) return AJA.ui;
 
@@ -48,12 +69,7 @@ function ensureSidebarUI() {
             <span>📌</span>
             <span>一键收录当前岗位</span>
           </button>
-          <button class="autofill-btn" id="aja-autofill-btn" title="自动匹配并填充页面空白表单项">
-            <span>⚡</span>
-            <span>一键填充当前页面</span>
-          </button>
-          <div class="autofill-warning-tip">功能不完善，请逐条核对</div>
-          
+
           <div class="capture-form hidden" id="aja-capture-form">
             <div class="title-hint" id="cap-title-hint" title="点击复制网页标题">
               <div class="title-hint-label">📄 网页标题（参考）</div>
@@ -96,38 +112,11 @@ function ensureSidebarUI() {
           <div class="pending-list hidden" id="aja-pending-list"></div>
         </div>
 
-        <!-- 简历资料库分类展示 -->
+        <!-- 简历资料库：左键点击填入聚焦框，右键复制字段内容 -->
         <div class="resume-source-hint" id="aja-resume-status">简历在网页版管理器中编辑，保存后自动同步到这里</div>
+        <div class="resume-help">① 先点网页里的输入框 → ② 再点下方字段即可填入；<b>右键字段 = 复制内容</b></div>
+        <input id="aja-resume-search" class="resume-search" type="text" placeholder="🔍 搜索字段名或内容…" autocomplete="off">
         <div id="aja-resume-list"></div>
-
-        <!-- AI 辅助填写设置（可选，默认关闭；API Key 仅存本机，绝不进网页/云同步/备份）-->
-        <div class="pending-box" id="aja-ai-config-box">
-          <button class="pending-toggle" id="aja-ai-toggle" type="button">
-            <span>🤖</span><span>AI 辅助填写</span><span class="pending-count" id="aja-ai-state">关</span>
-          </button>
-          <div class="pending-list hidden" id="aja-ai-panel">
-            <label class="resume-source-hint" style="display:flex;align-items:center;gap:6px;cursor:pointer">
-              <input type="checkbox" id="aja-ai-enabled" style="width:auto"> 启用 AI 补全（规则未命中的字段交给 AI）
-            </label>
-            <div class="form-group"><label>API URL（OpenAI 兼容，可填 baseURL 或完整地址）</label><input type="text" id="aja-ai-url" placeholder="https://api.deepseek.com/v1 或 .../v1/chat/completions"></div>
-            <div class="form-group"><label>模型名称</label><input type="text" id="aja-ai-model" placeholder="deepseek-chat / qwen-plus / gpt-4o-mini"></div>
-            <div class="form-group"><label>API Key（仅存本机）</label><input type="password" id="aja-ai-key" placeholder="sk-..."></div>
-            <div class="form-actions">
-              <button class="btn-save-record" id="aja-ai-save" type="button">保存配置</button>
-              <button class="btn-cancel-capture" id="aja-ai-test" type="button">测试连接</button>
-              <button class="btn-cancel-capture" id="aja-ai-clear" type="button">清除</button>
-            </div>
-            <div class="autofill-warning-tip" id="aja-ai-tip">开启后，规则没填中的字段连同简历值会发往你配置的 AI 接口；Key 只存本机、不进云同步/备份。AI 填充项琥珀高亮，请务必人工复核后再提交。</div>
-          </div>
-        </div>
-
-        <!-- AI 填充建议（中置信度 0.5~阈值；不自动写入，点「应用」才填）-->
-        <div class="pending-box hidden" id="aja-ai-suggest-box">
-          <button class="pending-toggle" id="aja-ai-suggest-toggle" type="button">
-            <span>💡</span><span>AI 填充建议</span><span class="pending-count" id="aja-ai-suggest-count">0</span>
-          </button>
-          <div class="pending-list" id="aja-ai-suggest-list"></div>
-        </div>
       </div>
 
       <!-- 底部中枢入口 -->
@@ -146,7 +135,6 @@ function ensureSidebarUI() {
   const closeBtn = shadow.getElementById('aja-close-btn');
   const dragHandle = shadow.getElementById('aja-drag-handle');
   const scanBtn = shadow.getElementById('aja-scan-btn');
-  const autofillBtn = shadow.getElementById('aja-autofill-btn');
   const captureForm = shadow.getElementById('aja-capture-form');
   const capCompany = shadow.getElementById('cap-company');
   const capPosition = shadow.getElementById('cap-position');
@@ -160,6 +148,7 @@ function ensureSidebarUI() {
   const capTitleHint = shadow.getElementById('cap-title-hint');
   const capTitleText = shadow.getElementById('cap-title-text');
   const resumeListEl = shadow.getElementById('aja-resume-list');
+  const resumeSearchEl = shadow.getElementById('aja-resume-search');
   const openTrackerBtn = shadow.getElementById('aja-open-tracker-btn');
   const pendingBox = shadow.getElementById('aja-pending-box');
   const pendingToggle = shadow.getElementById('aja-pending-toggle');
@@ -248,7 +237,7 @@ function ensureSidebarUI() {
     }
   });
 
-  // 点击字段按钮 -> 光标处插入/追加 + 剪贴板兜底
+  // 左键点击字段 chip → 填入当前聚焦框（无有效目标/写入失败时才回退到复制）；右键复制见下方 contextmenu
   resumeListEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.field-btn');
     if (!btn) return;
@@ -257,22 +246,23 @@ function ensureSidebarUI() {
     if (!rawVal) return;
     const value = decodeURIComponent(rawVal);
 
-    // 剪贴板兜底
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(value).catch(err => console.warn('剪贴板写入异常', err));
-    }
+    const copyFallback = (msg) => {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(value).catch(() => {});
+      showToast(msg || '未聚焦输入框，已复制到剪贴板，请粘贴');
+    };
+    const okToast = () => showToast(`已填入：${value.slice(0, 12)}${value.length > 12 ? '…' : ''}`);
 
     const targetEl = lastFocusedEl;
     if (targetEl && document.contains(targetEl)) {
       try {
         if (targetEl instanceof HTMLInputElement || targetEl instanceof HTMLTextAreaElement) {
           const prevVal = targetEl.value || '';
-          
+
           // 获取当前光标位置（如选区存在则替换选区，如无选区则直接在光标处插入）
           let start = (typeof targetEl.selectionStart === 'number' && targetEl.selectionStart >= 0)
             ? targetEl.selectionStart
             : ((typeof lastSelectionStart === 'number' && lastSelectionStart >= 0) ? lastSelectionStart : prevVal.length);
-            
+
           let end = (typeof targetEl.selectionEnd === 'number' && targetEl.selectionEnd >= 0)
             ? targetEl.selectionEnd
             : ((typeof lastSelectionEnd === 'number' && lastSelectionEnd >= 0) ? lastSelectionEnd : start);
@@ -304,22 +294,71 @@ function ensureSidebarUI() {
             lastSelectionEnd = nextCursorPos;
           } catch (_) {}
 
-          showToast(`已插入: ${value.slice(0, 12)}${value.length > 12 ? '...' : ''}`);
+          okToast();
         } else if (targetEl.isContentEditable) {
           targetEl.focus();
           document.execCommand('insertText', false, value);
-          showToast(`已插入: ${value.slice(0, 12)}${value.length > 12 ? '...' : ''}`);
+          okToast();
         } else {
-          showToast(`已复制到剪贴板，请在表单中粘贴`);
+          copyFallback();
         }
       } catch (err) {
         console.warn('插入文本异常', err);
-        showToast(`已复制到剪贴板，请手动粘贴`);
+        copyFallback('写入失败，已复制到剪贴板，请粘贴');
       }
     } else {
-      showToast(`已复制到剪贴板，请在表单中粘贴`);
+      copyFallback();
     }
   });
+
+  // 右键字段 chip → 复制该字段内容到剪贴板
+  resumeListEl.addEventListener('contextmenu', (e) => {
+    const btn = e.target.closest('.field-btn');
+    if (!btn) return;
+    e.preventDefault();
+    const rawVal = btn.getAttribute('data-val');
+    if (!rawVal) return;
+    const value = decodeURIComponent(rawVal);
+    const keyEl = btn.querySelector('.field-key');
+    const key = btn.getAttribute('data-key') || (keyEl ? keyEl.textContent.trim() : '');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value)
+        .then(() => showToast(`已复制：${key}${key ? ' → ' : ''}${value.slice(0, 20)}${value.length > 20 ? '…' : ''}`))
+        .catch(() => showToast('复制失败，请手动选择文本'));
+    } else {
+      showToast('当前环境不支持剪贴板');
+    }
+  });
+
+  // 简历字段搜索过滤：按 字段名/内容 过滤 chip；命中段自动展开；空查询恢复全部
+  function applyResumeFilter() {
+    if (!resumeListEl) return;
+    const q = String(AJA.resumeSearchQuery || '').trim().toLowerCase();
+    resumeListEl.querySelectorAll('.resume-section').forEach(sec => {
+      let secVisible = 0;
+      sec.querySelectorAll('.field-btn').forEach(chip => {
+        const txt = (chip.textContent || '').toLowerCase();
+        const key = (chip.getAttribute('data-key') || '').toLowerCase();
+        const hit = !q || txt.includes(q) || key.includes(q);
+        chip.style.display = hit ? '' : 'none';
+        if (hit) secVisible++;
+      });
+      sec.querySelectorAll('.exp-row').forEach(row => {
+        const anyVisible = Array.from(row.querySelectorAll('.field-btn')).some(c => c.style.display !== 'none');
+        row.style.display = anyVisible ? '' : 'none';
+      });
+      if (q) {
+        if (secVisible > 0) { sec.style.display = ''; sec.classList.remove('collapsed'); }
+        else sec.style.display = 'none';
+      } else {
+        sec.style.display = '';
+      }
+    });
+  }
+  AJA.applyResumeFilter = applyResumeFilter;
+  if (resumeSearchEl) {
+    resumeSearchEl.addEventListener('input', () => { AJA.resumeSearchQuery = resumeSearchEl.value; applyResumeFilter(); });
+  }
 
   // 一键提取岗位并展示微调表单
   scanBtn.addEventListener('click', () => {
@@ -405,118 +444,20 @@ function ensureSidebarUI() {
     });
   });
 
-  // 绑定一键自动填充按钮
-  autofillBtn.addEventListener('click', autoFillPageForm);
-
   // 底部入口：打开网页版管理器（数据中枢）
   openTrackerBtn.addEventListener('click', () => {
     window.open(AJA.TRACKER_URL, '_blank');
   });
 
-  // ================= AI 辅助填写设置（可选，默认关闭；Key 仅存本机 chrome.storage.local）=================
-  const aiToggleBtn = shadow.getElementById('aja-ai-toggle');
-  const aiPanel = shadow.getElementById('aja-ai-panel');
-  const aiStateEl = shadow.getElementById('aja-ai-state');
-  const aiEnabledEl = shadow.getElementById('aja-ai-enabled');
-  const aiUrlEl = shadow.getElementById('aja-ai-url');
-  const aiModelEl = shadow.getElementById('aja-ai-model');
-  const aiKeyEl = shadow.getElementById('aja-ai-key');
-  const aiSaveBtn = shadow.getElementById('aja-ai-save');
-  const aiTestBtn = shadow.getElementById('aja-ai-test');
-  const aiClearBtn = shadow.getElementById('aja-ai-clear');
-  const aiSuggestBox = shadow.getElementById('aja-ai-suggest-box');
-  const aiSuggestList = shadow.getElementById('aja-ai-suggest-list');
-  const aiSuggestCount = shadow.getElementById('aja-ai-suggest-count');
-  const aiSuggestToggle = shadow.getElementById('aja-ai-suggest-toggle');
-  const autofillLabel = autofillBtn.querySelector('span:last-child');
-  let aiPanelOpen = false;
+  // 注：整页自动填充 + AI 辅助填写已于 v4.0.0 移除；改为「点击字段填入聚焦框 + 右键复制 + 搜索」（见下方简历速填逻辑）
 
-  function refreshAiConfigUI() {
-    const cfg = AJA.aiConfig || {};
-    aiEnabledEl.checked = !!cfg.enabled;
-    aiUrlEl.value = cfg.apiUrl || '';
-    aiModelEl.value = cfg.model || '';
-    aiKeyEl.value = cfg.apiKey || '';
-    const configured = !!(cfg.apiUrl && cfg.model && cfg.apiKey);
-    const on = !!(cfg.enabled && configured);
-    aiStateEl.textContent = on ? '开' : (configured ? '未启用' : '关');
-    if (autofillLabel) autofillLabel.textContent = on ? '一键 AI 填充当前页面' : '一键填充当前页面';
-    autofillBtn.title = on ? '规则匹配 + AI 补全未命中字段（AI 项琥珀高亮，请复核）' : '自动匹配并填充页面空白表单项（纯本地规则）';
-  }
-
-  aiToggleBtn.addEventListener('click', () => {
-    aiPanelOpen = !aiPanelOpen;
-    aiPanel.classList.toggle('hidden', !aiPanelOpen);
-    if (aiPanelOpen) refreshAiConfigUI(); // 每次展开都回显最新已存配置，避免看到过期/空值
-  });
-
-  // AI 填充建议清单：折叠/展开（清单内容由 04-autofill 的 renderAiSuggestions 填充）
-  let aiSuggestOpen = true;
-  if (aiSuggestToggle && aiSuggestList) {
-    aiSuggestToggle.addEventListener('click', () => {
-      aiSuggestOpen = !aiSuggestOpen;
-      aiSuggestList.classList.toggle('hidden', !aiSuggestOpen);
-    });
-  }
-
-  aiSaveBtn.addEventListener('click', () => {
-    const cfg = { enabled: aiEnabledEl.checked, apiUrl: aiUrlEl.value.trim(), model: aiModelEl.value.trim(), apiKey: aiKeyEl.value.trim() };
-    if (cfg.enabled && (!cfg.apiUrl || !cfg.model || !cfg.apiKey)) {
-      showToast('启用 AI 需填写完整的 API URL、模型与 Key');
-      return;
-    }
-    chrome.storage.local.set({ [AJA.AI_CONFIG_KEY]: cfg }, () => {
-      if (chrome.runtime.lastError) { showToast('保存失败：' + chrome.runtime.lastError.message); return; }
-      AJA.aiConfig = cfg;
-      refreshAiConfigUI();
-      showToast(cfg.enabled ? 'AI 辅助填写已开启' : 'AI 配置已保存（未启用）');
-    });
-  });
-
-  // 清除配置：删除本机存储并清空输入（解决“存了改不了 / 删不掉”）
-  aiClearBtn.addEventListener('click', () => {
-    chrome.storage.local.remove(AJA.AI_CONFIG_KEY, () => {
-      if (chrome.runtime.lastError) { showToast('清除失败：' + chrome.runtime.lastError.message); return; }
-      AJA.aiConfig = null;
-      refreshAiConfigUI();
-      showToast('AI 配置已清除');
-    });
-  });
-
-  aiTestBtn.addEventListener('click', async () => {
-    const cfg = { apiUrl: aiUrlEl.value.trim(), model: aiModelEl.value.trim(), apiKey: aiKeyEl.value.trim() };
-    if (!cfg.apiUrl || !cfg.model || !cfg.apiKey) { showToast('请先填写 API URL、模型与 Key'); return; }
-    aiTestBtn.disabled = true;
-    const origText = aiTestBtn.textContent;
-    aiTestBtn.textContent = '测试中…';
-    try {
-      // 用一个不会被 shouldSkipAIForField 跳过的普通文本字段做连通性测试
-      const resp = await chrome.runtime.sendMessage({
-        type: AJA.MSG.AI_FILL,
-        formFields: [{ fieldId: 'conn-test', label: '个人主页', placeholder: '', name: '', idAttr: '', ariaLabel: '', tagName: 'input', inputType: 'text', options: [], group: '基本信息' }],
-        resumeFields: [{ group: '基本信息', key: '个人主页', value: 'https://example.com' }],
-        aiConfig: cfg
-      });
-      if (resp && resp.success) showToast('AI 接口连接成功');
-      else showToast('AI 接口测试失败：' + ((resp && resp.error) || '未知错误'));
-    } catch (e) {
-      showToast('AI 接口测试失败：' + ((e && e.message) || '无法连接'));
-    } finally {
-      aiTestBtn.disabled = false;
-      aiTestBtn.textContent = origText;
-    }
-  });
-
-  refreshAiConfigUI();
-
-  // 简历同步状态：统计可填字段数（与一键填充实际可用字段一致），空则提示去网页版配置——消除“点击无反应”的困惑
+  // 简历同步状态：统计已填写字段数（自包含，不依赖填充引擎），空则提示去网页版配置
   function refreshResumeStatus() {
     const el = shadow && shadow.getElementById('aja-resume-status');
     if (!el) return;
-    let n = 0;
-    try { n = Object.keys(buildResumeFlatMap(currentResumeData || {})).length; } catch (_) { n = 0; }
+    const n = countResumeFilledFields(currentResumeData);
     if (n > 0) {
-      el.textContent = `简历：已同步（${n} 项可填字段）`;
+      el.textContent = `简历：已同步（已填 ${n} 项）`;
       el.style.color = '';
       el.style.cursor = 'default';
       el.onclick = null;
@@ -530,7 +471,7 @@ function ensureSidebarUI() {
   AJA.refreshResumeStatus = refreshResumeStatus;
 
   // ================= 导出惰性 UI 引用（供 02 简历渲染 / 04 填充引擎运行时访问）=================
-  AJA.ui = { drawer, toggleBtn, resumeListEl, autofillBtn, captureForm, capCompany, capPosition, capCity, capStage, capDate, capSaveBtn, capCancelBtn, aiSuggestBox, aiSuggestList, aiSuggestCount };
+  AJA.ui = { drawer, toggleBtn, resumeListEl, resumeSearchEl, captureForm, capCompany, capPosition, capCity, capStage, capDate, capSaveBtn, capCancelBtn };
   // 注意：toggleDrawer 是本函数内部的局部函数，必须在函数内导出到 AJA，
   // 顶层包装器无法引用它（作用域不可达，曾导致点击胶囊后 ReferenceError 静默失败）
   AJA.toggleDrawer = toggleDrawer;

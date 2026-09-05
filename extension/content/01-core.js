@@ -9,7 +9,7 @@
 const IS_TRACKER_PAGE = location.origin === AJA.TRACKER_ORIGIN && location.pathname.startsWith(AJA.TRACKER_PATH_PREFIX);
 let shadow = null;
 
-// ===== 顶层声明：05-sidebar / 04-autofill 跨文件引用，严禁包进块级作用域 =====
+// ===== 顶层声明：05-sidebar 等跨文件引用，严禁包进块级作用域 =====
 const RESUME_STORAGE_KEY = AJA.RESUME_STORAGE_KEY;
 const MSG = AJA.MSG;
 let currentResumeData = AJA.DEFAULT_RESUME;
@@ -18,28 +18,6 @@ let lastSelectionStart = null;
 let lastSelectionEnd = null;
 let toggleBtn = null;
 let toastTimer = null;
-
-// AI 辅助填写配置（仅本机 chrome.storage.local；供 04-autofill 的 AI 补全阶段读取）。
-// 默认 null = 未配置 = 纯离线规则填充，零网络。Key 绝不进网页/云同步/备份。
-AJA.aiConfig = null;
-function loadAiConfig() {
-  try {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get([AJA.AI_CONFIG_KEY], (res) => {
-        if (chrome.runtime.lastError) return;
-        AJA.aiConfig = (res && res[AJA.AI_CONFIG_KEY]) ? res[AJA.AI_CONFIG_KEY] : null;
-      });
-    }
-  } catch (_) {}
-}
-loadAiConfig();
-if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes[AJA.AI_CONFIG_KEY]) {
-      AJA.aiConfig = changes[AJA.AI_CONFIG_KEY].newValue || null;
-    }
-  });
-}
 
 // Toast 消息函数（桥接模式下无 shadow，静默忽略）
 function showToast(msg) {
@@ -285,39 +263,27 @@ document.getElementById('autumn-job-assistant-host')?.remove();
     .capture-btn:active {
       transform: translateY(0);
     }
-    .autofill-btn {
+    .resume-help {
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+      padding: 2px 2px 0;
+    }
+    .resume-help b { color: #475569; }
+    .resume-search {
       width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 8px 12px;
-      margin-top: 6px;
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: #fff;
-      border: none;
+      box-sizing: border-box;
+      padding: 7px 10px;
+      border: 1px solid #e2e8f0;
       border-radius: 8px;
-      font-size: 13px;
-      font-weight: 650;
-      cursor: pointer;
-      transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
-      box-shadow: 0 2px 4px rgba(217, 119, 6, 0.2);
+      font-size: 12.5px;
+      color: #0f172a;
+      background: #fff;
+      outline: none;
     }
-    .autofill-btn:hover {
-      background: linear-gradient(135deg, #d97706, #b45309);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 6px rgba(217, 119, 6, 0.25);
-    }
-    .autofill-btn:active {
-      transform: translateY(0);
-    }
-    .autofill-warning-tip {
-      font-size: 10.5px;
-      color: #b45309;
-      text-align: center;
-      margin-top: 4px;
-      line-height: 1.2;
-      opacity: 0.9;
+    .resume-search:focus {
+      border-color: #5b6cfa;
+      box-shadow: 0 0 0 2px rgba(91, 108, 250, 0.15);
     }
 
     /* 暂存箱 */
@@ -469,28 +435,6 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       user-select: text;
       -webkit-user-select: text;
     }
-    /* 修复：AI 配置面板复用了 .pending-list(为暂存队列设 max-height:180px)，内容更高会被裁剪；此处放开高度 */
-    #aja-ai-panel {
-      max-height: none;
-      overflow: visible;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    #aja-ai-panel.hidden { display: none; }
-    /* AI 填充建议清单（中置信度，需用户点“应用”才写入）*/
-    .ai-suggest-item { flex-direction: column; align-items: stretch; gap: 6px; }
-    .ai-suggest-main { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-    .ai-suggest-name { color: #334155; font-weight: 600; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ai-suggest-val { flex: 1; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ai-suggest-conf { font-size: 10px; color: #b45309; background: #fef3c7; border-radius: 4px; padding: 1px 5px; flex-shrink: 0; }
-    .ai-suggest-actions { display: flex; gap: 6px; }
-    .ai-suggest-apply, .ai-suggest-ignore { flex: 1; border: 0; border-radius: 6px; padding: 5px 0; font-size: 12px; cursor: pointer; }
-    .ai-suggest-apply { background: #5b6cfa; color: #fff; }
-    .ai-suggest-apply:hover { background: #4a5ae8; }
-    .ai-suggest-ignore { background: #eef2f7; color: #475569; }
-    .ai-suggest-ignore:hover { background: #e2e8f0; }
     .form-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
