@@ -526,5 +526,71 @@ check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、
   assert.strictEqual(core.normalizeRecord({ company: 'x', intent: 'abc' }).intent, 0);
 });
 
+console.log('hidden 与 display 的冲突守卫（防「幽灵占位 + 吞点击」）');
+// 作者层的 display 会覆盖 UA 的 [hidden]{display:none}。凡是被 hidden 切换、自身又设了 display 的容器，
+// 必须显式补一条 [hidden] 守卫，否则关闭态仍然占位并拦截点击（.view 早有守卫，.drawer/.insights-body 曾漏）。
+check('被 hidden 切换且设了 display 的容器都有 [hidden]{display:none} 守卫', () => {
+  const styleStart = html.indexOf('<style>');
+  const styleEnd = html.indexOf('</style>');
+  // 必须先去掉注释：注释里常出现「display:none」「[hidden]」这类字样，会把选择器解析污染
+  const css = html.slice(styleStart, styleEnd).replace(/\/\*[\s\S]*?\*\//g, '');
+  const setsDisplay = new Set();   // 设了非 none display 的选择器
+  const hiddenGuards = new Set();  // 形如 .x[hidden] / #x[hidden] 的守卫目标
+  const ruleRe = /([^{}]+)\{([^{}]*)\}/g;
+  let match;
+  while ((match = ruleRe.exec(css)) !== null) {
+    const selectors = match[1].split(',').map(s => s.trim()).filter(Boolean);
+    const body = match[2];
+    const displayNone = /(?:^|;|\s)display:\s*none/.test(body);
+    const displayOther = /(?:^|;|\s)display:\s*(?!none)[a-z-]+/i.test(body);
+    for (const sel of selectors) {
+      if (displayOther && !sel.includes('[hidden]')) setsDisplay.add(sel);
+      if (displayNone && sel.includes('[hidden]')) {
+        const guardMatch = /^([.#][\w-]+)\[hidden\]$/.exec(sel);
+        if (guardMatch) hiddenGuards.add(guardMatch[1]);
+      }
+    }
+  }
+  // 目标元素：① HTML 上带 hidden 属性的；② JS 里通过 $('#id').hidden 切换的（HTML 上未必有初始属性）
+  const targets = [];
+  const pushTarget = (id, classes) => targets.push({ id, classes });
+  const hiddenAttrRe = /<([a-z]+)([^>]*\shidden)([^>]*)>/gi;
+  while ((match = hiddenAttrRe.exec(html)) !== null) {
+    const attrs = `${match[2]}${match[3]}`;
+    const id = /id="([\w-]+)"/.exec(attrs);
+    const cls = /class="([^"]+)"/.exec(attrs);
+    pushTarget(id ? id[1] : null, cls ? cls[1].trim().split(/\s+/) : []);
+  }
+  const jsBody = html.slice(html.indexOf('<script>'));
+  const jsHiddenIds = new Set();
+  const jsRe = /\$\('#([\w-]+)'\)\s*\.\s*hidden\s*=/g;
+  while ((match = jsRe.exec(jsBody)) !== null) jsHiddenIds.add(match[1]);
+  for (const id of jsHiddenIds) {
+    const tagRe = new RegExp(`<[a-z]+[^>]*\\sid="${id}"[^>]*>`, 'i');
+    const tagMatch = tagRe.exec(html);
+    const cls = tagMatch ? /class="([^"]+)"/.exec(tagMatch[0]) : null;
+    pushTarget(id, cls ? cls[1].trim().split(/\s+/) : []);
+  }
+  // 由 JS 变量间接切换（如 body.hidden = showGuide）的容器：显式登记，避免漏检
+  pushTarget('insightsBody', ['insights-body']);
+
+  const problems = [];
+  for (const target of targets) {
+    const keys = [...(target.id ? [`#${target.id}`] : []), ...target.classes.map(c => `.${c}`)];
+    for (const key of keys) {
+      if (setsDisplay.has(key) && !hiddenGuards.has(key)) {
+        problems.push(`${key} 设了 display 却没有 ${key}[hidden]{display:none} 守卫`);
+      }
+    }
+  }
+  assert.deepStrictEqual(problems, []);
+  // 守卫本身也要真的被识别到（防止解析漏判导致空过）
+  assert.ok(hiddenGuards.has('.view'), '.view 的守卫应被识别到');
+  assert.ok(hiddenGuards.has('.drawer'), '.drawer 的守卫应被识别到');
+  assert.ok(hiddenGuards.has('.insights-body'), '.insights-body 的守卫应被识别到');
+  assert.ok(hiddenGuards.has('.ocr-results'), '.ocr-results 的守卫应被识别到');
+  assert.ok(targets.length >= 8, `应扫到足够多的 hidden 目标，实际 ${targets.length}`);
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;
