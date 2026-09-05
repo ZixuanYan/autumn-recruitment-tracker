@@ -84,7 +84,7 @@
     .stat-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; background: var(--surface-soft); color: var(--muted); font-size: 13px; }
     .stat-number { font-size: 26px; font-weight: 700; margin-top: 6px; letter-spacing: -.02em; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 
-    .dashboard { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
+    .dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
     .main-column { min-width: 0; }
 
     /* 工具页卡片 */
@@ -181,8 +181,8 @@
     .empty { padding: 54px 20px; text-align: center; color: var(--muted); }
     .empty-icon { font-size: 30px; margin-bottom: 8px; }
 
-    .side-panel { position: sticky; top: 20px; }
-    .schedule-list { padding: 4px 20px 20px; }
+    .side-panel { position: static; }
+    .schedule-list { padding: 4px 20px 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px 22px; }
     .schedule-item { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 13px; padding: 16px 0; border-bottom: 1px solid var(--line); }
     .schedule-item:last-child { border-bottom: 0; }
     .date-tile { text-align: center; border-radius: 11px; overflow: hidden; background: var(--primary-soft); color: var(--primary-dark); }
@@ -642,10 +642,10 @@
       </div>
       <nav class="sidebar-nav">
         <a class="nav-item is-active" data-route="overview" href="#/overview"><span class="nav-icon"><svg><use href="#i-grid"/></svg></span><span>总览</span></a>
-        <a class="nav-item" data-route="jobPool" href="#/jobPool"><span class="nav-icon"><svg><use href="#i-briefcase"/></svg></span><span>岗位库</span></a>
-        <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon"><svg><use href="#i-file"/></svg></span><span>我的简历</span></a>
-        <a class="nav-item" data-route="tools" href="#/tools"><span class="nav-icon"><svg><use href="#i-tool"/></svg></span><span>工具</span></a>
         <a class="nav-item" data-route="mail" href="#/mail"><span class="nav-icon"><svg><use href="#i-mail"/></svg></span><span>邮件提醒</span><span class="nav-badge" id="mailNavBadge" hidden></span></a>
+        <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon"><svg><use href="#i-file"/></svg></span><span>我的简历</span></a>
+        <a class="nav-item" data-route="jobPool" href="#/jobPool"><span class="nav-icon"><svg><use href="#i-briefcase"/></svg></span><span>岗位库</span></a>
+        <a class="nav-item" data-route="tools" href="#/tools"><span class="nav-icon"><svg><use href="#i-tool"/></svg></span><span>工具</span></a>
       </nav>
       <div class="sidebar-footer" id="sideDataNotice"><strong>数据保存在本机</strong>无需账号，不上传投递记录</div>
     </aside>
@@ -1385,6 +1385,15 @@
         return left.every(item => map.get(item.id) === Number(item.deletedAt));
       }
 
+      // ID 集合是否相同（顺序无关）——用于判断 mailState 是否需要回推云端
+      function sameIdSet(left, right) {
+        const a = new Set((Array.isArray(left) ? left : []).map(String));
+        const b = new Set((Array.isArray(right) ? right : []).map(String));
+        if (a.size !== b.size) return false;
+        for (const x of a) if (!b.has(x)) return false;
+        return true;
+      }
+
       // LWW 合并：同一条记录保留 updatedAt 更新的版本；墓碑晚于记录则保持删除，否则记录复活
       function mergeSyncState(remote) {
         const remoteRecords = (remote?.records || []).map(normalizeRecord);
@@ -1651,7 +1660,11 @@
           }
           // 本地简历更新（或云端无简历而本地非空）时随下次推送上传
           const resumeNeedsPush = !isResumeEmpty(resume) && resumeSavedAt > Number(remote?.resumeSavedAt || 0);
-          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones) || resumeNeedsPush;
+          // 邮件已应用/已忽略状态：本地(并集合并后)与云端不一致就必须回推，
+          // 否则仅改 mailState（忽略/应用）时 remoteChanged 恒为 false → 永不上传 → 别的设备看不到（同"只推不拉"陷阱）
+          const remoteMail = remote && remote.mailState ? remote.mailState : null;
+          const mailStateNeedsPush = !sameIdSet(mailState.appliedIds, remoteMail && remoteMail.appliedIds) || !sameIdSet(mailState.dismissedIds, remoteMail && remoteMail.dismissedIds);
+          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones) || resumeNeedsPush || mailStateNeedsPush;
           if (remoteChanged) await pushSyncState(migrateLegacy);
           syncConfig.lastSyncAt = new Date().toISOString();
           saveSyncConfig();
