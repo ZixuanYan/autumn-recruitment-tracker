@@ -504,24 +504,25 @@
     .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--stage-color, var(--faint)); }
     /* ===== 阶段色阶：唯一权威定义（14 预设有序递进）=====
        中性灰(未开始) → 蓝灰(筛选/笔试/机试) → 蓝(面试轮次逐轮加深) → 靛紫(交叉面/HR面) → 绿(Offer) → 淡灰(已结束)
-       自定义阶段（不在预设内）自动回退 .badge/.stage-cell 的 --accent 兜底色。 */
-    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"] { --stage-color: #71717a; --stage-soft: transparent; --stage-border: #d4d4d8; }
+       自定义阶段（不在预设内）自动回退 .badge/.stage-cell 的 --accent 兜底色。
+       选择器同时覆盖 .step（抽屉时间线）：CSS 自定义属性会向下继承，故 .step-dot 等子孙能直接拿到同一套色值。 */
+    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"], .step[data-stage="待投递"] { --stage-color: #71717a; --stage-soft: transparent; --stage-border: #d4d4d8; }
     .badge[data-stage="待投递"], .stage-cell[data-stage="待投递"] { border: 1px dashed var(--stage-border); box-shadow: none; }
-    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"] { --stage-color: #475569; --stage-soft: #f1f5f9; --stage-border: #cbd5e1; }
-    .stage-cell[data-stage="测评"], .badge[data-stage="测评"] { --stage-color: #3f5a8a; --stage-soft: #eef3fa; --stage-border: #c3d2ea; }
-    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"] { --stage-color: #3a5f9e; --stage-soft: #eaf1fb; --stage-border: #bcd0ec; }
-    .stage-cell[data-stage="机试"], .badge[data-stage="机试"] { --stage-color: #3563b2; --stage-soft: #e8effc; --stage-border: #b5cbee; }
-    .stage-cell[data-stage="一面"], .badge[data-stage="一面"] { --stage-color: #2f5fc4; --stage-soft: #e7edfd; --stage-border: #adc2f3; }
-    .stage-cell[data-stage="二面"], .badge[data-stage="二面"] { --stage-color: #2b52cf; --stage-soft: #e6ebfd; --stage-border: #a5baf2; }
-    .stage-cell[data-stage="三面"], .badge[data-stage="三面"] { --stage-color: #2647d8; --stage-soft: #e4e9fd; --stage-border: #9db2f2; }
-    .stage-cell[data-stage="四面"], .badge[data-stage="四面"] { --stage-color: #213cdd; --stage-soft: #e3e7fd; --stage-border: #96aaf1; }
-    .stage-cell[data-stage="五面"], .badge[data-stage="五面"] { --stage-color: #1d33e6; --stage-soft: #e1e5fd; --stage-border: #8fa3f1; }
-    .stage-cell[data-stage="交叉面"], .badge[data-stage="交叉面"] { --stage-color: #4338ca; --stage-soft: #eceafd; --stage-border: #b3acf0; }
-    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"] { --stage-color: #5b3fd1; --stage-soft: #efeafd; --stage-border: #bdaef2; }
-    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"] { --stage-color: #0e7a5f; --stage-soft: #e6f4ef; --stage-border: #0e7a5f; }
+    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"], .step[data-stage="已投递"] { --stage-color: #475569; --stage-soft: #f1f5f9; --stage-border: #cbd5e1; }
+    .stage-cell[data-stage="测评"], .badge[data-stage="测评"], .step[data-stage="测评"] { --stage-color: #3f5a8a; --stage-soft: #eef3fa; --stage-border: #c3d2ea; }
+    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"], .step[data-stage="笔试"] { --stage-color: #3a5f9e; --stage-soft: #eaf1fb; --stage-border: #bcd0ec; }
+    .stage-cell[data-stage="机试"], .badge[data-stage="机试"], .step[data-stage="机试"] { --stage-color: #3563b2; --stage-soft: #e8effc; --stage-border: #b5cbee; }
+    .stage-cell[data-stage="一面"], .badge[data-stage="一面"], .step[data-stage="一面"] { --stage-color: #2f5fc4; --stage-soft: #e7edfd; --stage-border: #adc2f3; }
+    .stage-cell[data-stage="二面"], .badge[data-stage="二面"], .step[data-stage="二面"] { --stage-color: #2b52cf; --stage-soft: #e6ebfd; --stage-border: #a5baf2; }
+    .stage-cell[data-stage="三面"], .badge[data-stage="三面"], .step[data-stage="三面"] { --stage-color: #2647d8; --stage-soft: #e4e9fd; --stage-border: #9db2f2; }
+    .stage-cell[data-stage="四面"], .badge[data-stage="四面"], .step[data-stage="四面"] { --stage-color: #213cdd; --stage-soft: #e3e7fd; --stage-border: #96aaf1; }
+    .stage-cell[data-stage="五面"], .badge[data-stage="五面"], .step[data-stage="五面"] { --stage-color: #1d33e6; --stage-soft: #e1e5fd; --stage-border: #8fa3f1; }
+    .stage-cell[data-stage="交叉面"], .badge[data-stage="交叉面"], .step[data-stage="交叉面"] { --stage-color: #4338ca; --stage-soft: #eceafd; --stage-border: #b3acf0; }
+    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"], .step[data-stage="HR面"] { --stage-color: #5b3fd1; --stage-soft: #efeafd; --stage-border: #bdaef2; }
+    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"], .step[data-stage="Offer"] { --stage-color: #0e7a5f; --stage-soft: #e6f4ef; --stage-border: #0e7a5f; }
     .badge[data-stage="Offer"] { color: #fff; background: #0e7a5f; border: 0; box-shadow: none; }
     .badge[data-stage="Offer"]::before { background: #fff; }
-    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"] { --stage-color: #6b7280; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
+    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"], .step[data-stage="已结束"] { --stage-color: #6b7280; --stage-soft: #f4f4f5; --stage-border: #d4d4d8; }
     .badge[data-stage="已结束"] { opacity: .62; }
     th { background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; border: 0; padding: 10px 14px; }
     td { border-top: 1px solid var(--line); padding: 12px 14px; font-size: 13.5px; }
@@ -638,6 +639,97 @@
     .form-more[open] summary::before { content: "▾ "; }
     .form-more[open] summary { border-bottom: 1px solid var(--line); }
     .form-more-grid { padding: 13px 13px 5px; }
+
+    /* ===== v4.4.0：表格/看板切换器 + 看板 ===== */
+    td[data-label="公司 / 岗位"] { cursor: pointer; }
+    td[data-label="公司 / 岗位"]:hover .company { color: var(--accent-ink); }
+    .view-switch { display: inline-flex; flex: 0 0 auto; padding: 3px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: var(--ring); }
+    .view-switch-btn { border: 0; border-radius: var(--r-pill); background: transparent; color: var(--muted); padding: 0 14px; min-height: 28px; font-size: 12.5px; font-weight: 650; transition: background .2s var(--ease), color .2s var(--ease); }
+    .view-switch-btn:hover { color: var(--ink); }
+    .view-switch-btn.is-active { background: var(--surface); color: var(--accent-ink); box-shadow: var(--ring); }
+    .board { padding: 12px 16px 18px; }
+    .board-hint { margin-bottom: 12px; color: var(--muted); font-size: 12px; }
+    .board-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(232px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
+    .board-col { min-width: 0; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: var(--ring); }
+    .board-col.is-drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+    .board-col-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    .board-col-head .badge { flex: 0 0 auto; }
+    .board-col-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .board-col-body { display: grid; gap: 8px; padding: 10px; min-height: 62px; }
+    .board-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 12px 4px; }
+    .board-card { position: relative; padding: 10px 12px 10px 14px; border-radius: var(--r-md); background: var(--surface); box-shadow: var(--hi), var(--ring); cursor: grab; text-align: left; border: 0; width: 100%; transition: transform .18s var(--ease), box-shadow .18s var(--ease); }
+    .board-card:hover { transform: translateY(-1px); box-shadow: var(--hi), var(--ring), var(--sh-ambient); }
+    .board-card:active { cursor: grabbing; }
+    .board-card.is-dragging { opacity: .45; }
+    .board-card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--company-color, var(--accent)); }
+    .board-card-company { font-size: 13.5px; font-weight: 680; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .board-card-position { margin-top: 2px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .board-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+    .board-chip { padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: var(--ring); font-size: 11px; font-weight: 650; color: var(--ink-2); }
+    .board-chip.warn { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
+    .board-chip.danger { background: var(--danger-soft); color: var(--danger); box-shadow: none; }
+    .intent-dots { display: inline-flex; gap: 2px; align-items: center; }
+    .intent-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line-strong); }
+    .intent-dots i.on { background: var(--offer-gold); }
+
+    /* ===== v4.4.0：记录详情抽屉 ===== */
+    .drawer-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(11, 13, 16, .38); backdrop-filter: blur(3px); }
+    .drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 41; display: flex; flex-direction: column; width: min(560px, 100vw); background: var(--surface); box-shadow: -18px 0 48px -24px rgba(16, 24, 40, .34); animation: drawer-in .3s var(--ease); }
+    @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
+    .drawer-head-text { min-width: 0; flex: 1 1 auto; }
+    .drawer-head h2 { margin: 0; font-family: var(--font-display); font-size: 17px; font-weight: 700; letter-spacing: -.01em; overflow-wrap: anywhere; }
+    .drawer-sub { margin-top: 4px; color: var(--muted); font-size: 12.5px; }
+    .drawer-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px 20px; display: grid; gap: 18px; align-content: start; }
+    .drawer-section > h3 { margin: 0 0 9px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .drawer-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 9px; }
+    .drawer-fact { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); min-width: 0; }
+    .drawer-fact dt { color: var(--muted); font-size: 11px; font-weight: 650; }
+    .drawer-fact dd { margin: 3px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+    .steps { display: grid; gap: 0; }
+    .step { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 11px; padding-bottom: 14px; }
+    .step:last-child { padding-bottom: 0; }
+    .step-rail { position: relative; display: grid; place-items: start center; }
+    .step-dot { width: 10px; height: 10px; margin-top: 5px; border-radius: 50%; background: var(--stage-color, var(--accent)); box-shadow: 0 0 0 3px var(--stage-soft, var(--accent-soft)); z-index: 1; }
+    .step:not(:last-child) .step-rail::after { content: ""; position: absolute; top: 14px; bottom: -4px; left: 50%; width: 1.5px; transform: translateX(-50%); background: var(--line-strong); }
+    .step-main { min-width: 0; }
+    .step-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .step-date { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+    .step-gap { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+    .step-note { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
+    .note-list { display: grid; gap: 8px; }
+    .note-item { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); }
+    .note-item-head { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 11.5px; }
+    .note-item-head .text-button { margin-left: auto; }
+    .note-text { margin-top: 3px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .note-add { display: grid; gap: 7px; }
+    .sibling-list { display: grid; gap: 6px; }
+    .sibling-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px; border: 0; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); font-size: 12.5px; text-align: left; }
+    .sibling-item:hover { background: var(--accent-soft); }
+    .sibling-item .badge { margin-left: auto; flex: 0 0 auto; }
+    .drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 13px 20px; border-top: 1px solid var(--line); background: var(--surface-2); }
+    .drawer-actions .spacer { flex: 1 1 auto; }
+    @media (max-width: 620px) { .drawer { width: 100vw; } }
+
+    /* ===== v4.4.0：⌘K 命令面板 ===== */
+    #cmdPalette { width: min(620px, calc(100vw - 32px)); max-height: min(70vh, 560px); padding: 0; margin: 12vh auto 0; }
+    /* 桌面端 dialog 默认不设 max-height，这里显式让面板成为 flex 容器，结果区内部滚动而不撑破弹窗 */
+    #cmdPalette[open] { display: flex; flex-direction: column; }
+    .cmd-inner { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    .cmd-input-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .cmd-glyph { color: var(--muted); font-size: 16px; }
+    .cmd-input-row .control { flex: 1 1 auto; border: 0; background: transparent; box-shadow: none; min-height: 30px; padding: 0; font-size: 15px; }
+    .cmd-input-row .control:focus { background: transparent; box-shadow: none; }
+    .cmd-kbd { flex: 0 0 auto; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); box-shadow: var(--ring); color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+    .cmd-results { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px; display: grid; gap: 2px; align-content: start; }
+    .cmd-group { padding: 8px 10px 4px; color: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .cmd-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border: 0; border-radius: var(--r-md); background: transparent; text-align: left; font-size: 13.5px; color: var(--ink-2); }
+    .cmd-item.is-active { background: var(--accent-soft); color: var(--accent-ink); }
+    .cmd-item-main { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cmd-item-sub { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; }
+    .cmd-item.is-active .cmd-item-sub { color: var(--accent-ink); }
+    .cmd-empty { padding: 24px 12px; text-align: center; color: var(--muted); font-size: 13px; }
+    .cmd-foot { display: flex; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
 
     /* ===== 邮件提醒视图（M3）+ 导航角标 ===== */
     .nav-badge { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
@@ -791,6 +883,10 @@
         <section class="panel" id="records">
           <div class="panel-head">
             <div><h2 class="panel-title">投递记录</h2><div class="panel-caption" id="resultCaption">共 0 条记录</div></div>
+            <div class="view-switch" role="tablist" aria-label="台账显示方式">
+              <button class="view-switch-btn is-active" id="viewTableBtn" type="button" role="tab" aria-selected="true" title="表格视图">表格</button>
+              <button class="view-switch-btn" id="viewBoardBtn" type="button" role="tab" aria-selected="false" title="看板视图：按阶段分列，可拖拽推进">看板</button>
+            </div>
           </div>
           <div class="filters">
             <div class="search-wrap"><span class="search-glyph">⌕</span><input class="control" id="searchInput" type="search" placeholder="搜索公司或岗位" aria-label="搜索公司或岗位"></div>
@@ -807,6 +903,10 @@
               <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
               <tbody id="recordBody"></tbody>
             </table>
+          </div>
+          <div class="board" id="boardView" hidden>
+            <div class="board-hint">拖卡片到目标阶段列即可推进（追加一条里程碑，向后拖会二次确认）· 点卡片看详情</div>
+            <div class="board-cols" id="boardCols"></div>
           </div>
           <div class="empty" id="emptyState" hidden><div class="empty-icon">⌕</div><div>没有找到符合条件的记录</div></div>
         </section>
@@ -925,6 +1025,33 @@
     </div>
     </main>
   </div>
+
+  <!-- ===== 记录详情抽屉（v4.4.0）：时间线步骤条 + 笔记 + 同公司其它投递 ===== -->
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="drawer" id="recordDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+    <div class="drawer-head">
+      <div class="drawer-head-text">
+        <h2 id="drawerTitle">投递详情</h2>
+        <div class="drawer-sub" id="drawerSub"></div>
+      </div>
+      <button class="close-btn" id="closeDrawerBtn" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+    <div class="drawer-actions" id="drawerActions"></div>
+  </aside>
+
+  <!-- ===== ⌘K 命令面板（v4.4.0）：搜记录 / 跳视图 / 执行动作 ===== -->
+  <dialog id="cmdPalette" aria-label="命令面板">
+    <div class="cmd-inner">
+      <div class="cmd-input-row">
+        <span class="cmd-glyph" aria-hidden="true">⌕</span>
+        <input class="control" id="cmdInput" type="text" placeholder="搜索记录、跳转视图或执行动作…" autocomplete="off" spellcheck="false" aria-label="命令面板输入">
+        <kbd class="cmd-kbd">Esc</kbd>
+      </div>
+      <div class="cmd-results" id="cmdResults" role="listbox" aria-label="命令结果"></div>
+      <div class="cmd-foot"><span>↑↓ 选择 · Enter 执行</span><span class="cmd-foot-right">⌘K 唤起 · N 新增 · / 搜索台账</span></div>
+    </div>
+  </dialog>
 
   <dialog id="recordDialog">
     <form id="recordForm">
@@ -1222,6 +1349,9 @@
       // 邮件提醒（M3）：Action 只写这个独立文件，网页只读它、绝不写它；mailState 纯本地，不进 envelope、不跨设备同步
       const MAIL_SUGGEST_FILENAME = 'mail-suggestions.json';
       const MAIL_STORAGE_KEY = 'autumnRecruitmentTracker.mail.v1';
+      // UI 偏好（v4.4.0）：台账视图模式（表格/看板）、公司分组折叠态、首启引导是否已关闭。
+      // 纯本机、不进 envelope、不跨设备同步——这是显示偏好而非数据。
+      const UI_STORAGE_KEY = 'autumnRecruitmentTracker.ui.v1';
       // 网页写、Action 读的配置文件（明文，不含任何密钥）；默认值与 Action src/config.js 保持一致
       const MAIL_CONFIG_FILENAME = 'mail-config.json';
       const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 0, promptExtra: '' };
@@ -2637,7 +2767,7 @@
         renderDistribution();
         renderInsights();
         renderJobPool();
-        renderTable();
+        renderRecordsView();
         renderUpcoming();
       }
 
@@ -2835,11 +2965,12 @@
         }).join('');
       }
 
-      // 记录聚焦入口：未来安排卡片 / 看板卡片 / ⌘K 命令面板统一走这里，避免多处各写一套打开逻辑
+      // 记录聚焦入口：未来安排卡片 / 看板卡片 / ⌘K 命令面板 / 洞察卡点清单统一走这里，
+      // 避免多处各写一套打开逻辑。v4.4.0 起打开详情抽屉（而不是直接进编辑弹窗）。
       function openRecordFocus(id) {
         const record = records.find(item => item.id === id);
         if (!record) return;
-        openDialog(record);
+        openRecordDrawer(record.id);
       }
 
       /*__CORE_PURE_START__*/
@@ -3103,6 +3234,373 @@
         return alerts.sort((a, b) => (rank[a.level] - rank[b.level])).slice(0, Number(limit) > 0 ? limit : 5);
       }
       /*__CORE_PURE_END__*/
+
+      // ================= 台账视图增强（v4.4.0）：UI 偏好 / 看板 / 详情抽屉 / ⌘K 命令面板 =================
+      let uiPrefs = loadUiPrefs();
+      let drawerRecordId = null;   // 当前抽屉展示的记录 id
+      let cmdItems = [];           // 命令面板当前结果
+      let cmdActiveIndex = 0;      // 命令面板高亮项
+      let draggingRecordId = null; // 看板拖拽中的记录 id
+
+      function loadUiPrefs() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(UI_STORAGE_KEY) || '{}');
+          return {
+            recordsView: parsed.recordsView === 'board' ? 'board' : 'table',
+            collapsedGroups: Array.isArray(parsed.collapsedGroups) ? parsed.collapsedGroups.map(String) : [],
+            hideGuide: !!parsed.hideGuide
+          };
+        } catch (_) {
+          return { recordsView: 'table', collapsedGroups: [], hideGuide: false };
+        }
+      }
+      function saveUiPrefs() {
+        try { localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(uiPrefs)); } catch (_) {}
+      }
+
+      // 推进到指定阶段（看板拖拽 / 抽屉 / 命令面板共用）：永远是「追加一条里程碑」，历史不被删除。
+      // 向更早阶段移动属于回退，需二次确认，避免拖拽误操作。
+      async function advanceRecordTo(record, stage, options = {}) {
+        const target = String(stage || '').trim();
+        if (!record || !target || record.stage === target) return false;
+        const backward = stageOrder(target) < stageOrder(record.stage);
+        if (backward && !options.force) {
+          const ok = await confirmInApp(
+            `「${record.company} · ${record.position}」当前在「${record.stage}」，确定回退到「${target}」吗？\n回退同样是追加一条里程碑，历史记录不会被删除。`,
+            { title: '回退阶段', danger: true, confirmText: '确认回退' }
+          );
+          if (!ok) return false;
+        }
+        const at = options.at || localDateInput(new Date());
+        setTimeline(record, [...(record.timeline || []), { stage: target, at, note: String(options.note || '') }]);
+        saveRecords(target === 'Offer' ? '已盖章：Offer' : `已推进到「${target}」并自动保存`);
+        render();
+        flashRow(record.id);
+        if (drawerRecordId === record.id) renderDrawer();
+        if (target === 'Offer') playOfferStamp();
+        return true;
+      }
+
+      // ---- 表格 / 看板 切换 ----
+      function setRecordsView(mode) {
+        uiPrefs.recordsView = mode === 'board' ? 'board' : 'table';
+        saveUiPrefs();
+        renderRecordsView();
+      }
+      // 台账渲染总入口：搜索/筛选/排序变化与 render() 都走这里，保证两种视图不会各渲染一半。
+      // 切换按钮的选中态也在这里同步，避免启动时按 HTML 默认值显示成「表格」而实际是看板。
+      function renderRecordsView() {
+        const board = $('#boardView');
+        const scroll = $('.table-scroll');
+        const isBoard = uiPrefs.recordsView === 'board';
+        const tableBtn = $('#viewTableBtn'), boardBtn = $('#viewBoardBtn');
+        if (tableBtn) { tableBtn.classList.toggle('is-active', !isBoard); tableBtn.setAttribute('aria-selected', String(!isBoard)); }
+        if (boardBtn) { boardBtn.classList.toggle('is-active', isBoard); boardBtn.setAttribute('aria-selected', String(isBoard)); }
+        if (board) board.hidden = !isBoard;
+        if (scroll) scroll.hidden = isBoard;
+        if (isBoard) renderBoard(); else renderTable();
+        // 空状态只在表格视图且无内容时显示（看板自带列与「拖到这里」占位）
+        const visibleCount = getVisibleRecords().length;
+        if (els.empty) els.empty.hidden = visibleCount !== 0 || isBoard;
+      }
+
+      function intentDotsHtml(intent) {
+        const n = Math.min(5, Math.max(0, Number(intent) || 0));
+        if (!n) return '';
+        return `<span class="intent-dots" title="意向度 ${n}/5">${Array.from({ length: 5 }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</span>`;
+      }
+
+      // 看板列 = 当前可见记录里出现过的阶段（按 stageOrder 排序）+ 末尾固定 Offer / 已结束（便于拖入）
+      function boardColumns(visible) {
+        const present = new Set(visible.map(r => String(r.stage || '待投递')));
+        present.add('Offer');
+        present.add('已结束');
+        return [...present].sort((a, b) => stageOrder(a) - stageOrder(b) || String(a).localeCompare(String(b), 'zh-CN'));
+      }
+
+      function boardCardHtml(record) {
+        const key = companyKeyOf(record);
+        const dl = deadlineInfo(record.deadline);
+        const dlClosed = ['Offer', '已结束'].includes(record.stage);
+        const schedule = parseLocal(record.scheduleAt);
+        const chips = [];
+        if (record.batch) chips.push(`<span class="board-chip">${escapeHtml(record.batch)}</span>`);
+        if (dl && !dlClosed) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
+        if (schedule && !dlClosed) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
+        const dots = intentDotsHtml(record.intent);
+        return `<button class="board-card" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
+          <div class="board-card-company">${escapeHtml(record.company)}</div>
+          <div class="board-card-position">${escapeHtml(record.position || '—')}</div>
+          <div class="board-card-meta">${dots}${chips.join('')}</div>
+        </button>`;
+      }
+
+      function renderBoard() {
+        const host = $('#boardCols');
+        if (!host) return;
+        const visible = getVisibleRecords();
+        const columns = boardColumns(visible);
+        host.innerHTML = columns.map(stage => {
+          const items = visible.filter(r => String(r.stage || '待投递') === stage);
+          return `<section class="board-col" data-stage="${escapeHtml(stage)}" aria-label="${escapeHtml(stage)} 列">
+            <div class="board-col-head"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span><span class="board-col-count">${items.length}</span></div>
+            <div class="board-col-body">${items.length ? items.map(boardCardHtml).join('') : '<div class="board-empty">拖到这里</div>'}</div>
+          </section>`;
+        }).join('');
+      }
+
+      // 看板拖拽：dragover 时高亮当前列并清除其它列（dragleave 在子元素间频繁触发，不用它做状态管理）
+      function handleBoardDragOver(event) {
+        const col = event.target.closest('.board-col');
+        if (!col || !draggingRecordId) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll('.board-col.is-drop').forEach(node => { if (node !== col) node.classList.remove('is-drop'); });
+        col.classList.add('is-drop');
+      }
+      async function handleBoardDrop(event) {
+        const col = event.target.closest('.board-col');
+        document.querySelectorAll('.board-col.is-drop').forEach(node => node.classList.remove('is-drop'));
+        if (!col) return;
+        event.preventDefault();
+        const id = (event.dataTransfer && event.dataTransfer.getData('text/plain')) || draggingRecordId;
+        draggingRecordId = null;
+        const record = records.find(item => item.id === id);
+        if (!record) return;
+        await advanceRecordTo(record, col.dataset.stage);
+      }
+
+      // ---- 记录详情抽屉 ----
+      function openRecordDrawer(id) {
+        const record = records.find(item => item.id === id);
+        if (!record) return;
+        drawerRecordId = record.id;
+        renderDrawer();
+        const drawer = $('#recordDrawer'), backdrop = $('#drawerBackdrop');
+        if (drawer) drawer.hidden = false;
+        if (backdrop) backdrop.hidden = false;
+        document.body.style.overflow = 'hidden';
+        requestAnimationFrame(() => { const close = $('#closeDrawerBtn'); if (close) close.focus(); });
+      }
+      function closeRecordDrawer() {
+        drawerRecordId = null;
+        const drawer = $('#recordDrawer'), backdrop = $('#drawerBackdrop');
+        if (drawer) drawer.hidden = true;
+        if (backdrop) backdrop.hidden = true;
+        document.body.style.overflow = '';
+      }
+
+      // 时间线步骤条：每个里程碑一个节点，显示日期、备注与「距上一步 N 天」
+      function stepsHtml(record) {
+        const timeline = Array.isArray(record.timeline) ? record.timeline : [];
+        if (!timeline.length) return '<div class="insight-empty">还没有里程碑</div>';
+        let prev = null;
+        return `<div class="steps">${timeline.map(milestone => {
+          const stage = String(milestone.stage || '');
+          const date = parseDay(milestone.at);
+          const gap = prev && date ? Math.round((date - prev) / 86400000) : null;
+          if (date) prev = date;
+          return `<div class="step" data-stage="${escapeHtml(stage)}">
+            <div class="step-rail"><span class="step-dot"></span></div>
+            <div class="step-main">
+              <div class="step-top"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span><span class="step-date">${escapeHtml(milestone.at ? formatDate(String(milestone.at).slice(0, 10)) : '未填日期')}</span>${gap != null && gap >= 0 ? `<span class="step-gap">距上一步 ${gap} 天</span>` : ''}</div>
+              ${milestone.note ? `<div class="step-note">${escapeHtml(milestone.note)}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('')}</div>`;
+      }
+
+      function renderDrawer() {
+        const record = records.find(item => item.id === drawerRecordId);
+        const body = $('#drawerBody'), actions = $('#drawerActions'), title = $('#drawerTitle'), sub = $('#drawerSub');
+        if (!record) { closeRecordDrawer(); return; }
+        if (title) title.textContent = `${record.company} · ${record.position || '未填岗位'}`;
+        if (sub) {
+          const bits = [record.city, record.batch, record.channel].filter(Boolean);
+          sub.innerHTML = `<span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span> ${escapeHtml(bits.join(' · '))}`;
+        }
+        const dl = deadlineInfo(record.deadline);
+        const facts = [
+          { label: '投递日期', value: formatDate(record.applicationDate) },
+          { label: '安排时间', value: record.scheduleAt ? formatDateTime(record.scheduleAt) : '—' },
+          { label: '截止日期', value: record.deadline ? `${formatDate(record.deadline)}${dl ? `（${dl.text.replace('截止 · ', '')}）` : ''}` : '—' },
+          { label: '意向度', value: record.intent ? `${record.intent} / 5` : '未设' },
+          { label: '渠道', value: record.channel || '—' },
+          { label: '内推人', value: record.referral || '—' },
+          { label: '薪资 / 待遇', value: record.salary || '—' },
+          { label: '投递网址', value: record.applicationUrl ? '<a class="company-link" href="' + escapeHtml(record.applicationUrl) + '" target="_blank" rel="noopener noreferrer">打开 ↗</a>' : '—' }
+        ];
+        const siblings = groupRecordsByCompany(records)
+          .find(group => group.key === companyKeyOf(record));
+        const others = siblings ? siblings.records.filter(item => item.id !== record.id) : [];
+        const notes = Array.isArray(record.notes) ? record.notes : [];
+        if (body) {
+          body.innerHTML = `
+            <div class="drawer-section"><h3>里程碑时间线</h3>${stepsHtml(record)}</div>
+            <div class="drawer-section"><h3>关键信息</h3><dl class="drawer-facts">${facts.map(fact => `<div class="drawer-fact"><dt>${escapeHtml(fact.label)}</dt><dd>${fact.label === '投递网址' ? fact.value : escapeHtml(fact.value)}</dd></div>`).join('')}</dl></div>
+            <div class="drawer-section"><h3>下一步行动</h3><div class="note-text">${escapeHtml(record.nextAction || '—')}</div></div>
+            <div class="drawer-section">
+              <h3>笔记 / 面经（${notes.length}）</h3>
+              <div class="note-list">${notes.length ? notes.slice().reverse().map(note => `
+                <div class="note-item">
+                  <div class="note-item-head"><span>${escapeHtml(formatDateTime(new Date(Number(note.at) || Date.now())))}</span><button class="text-button danger" type="button" data-note-del="${escapeHtml(note.id)}">删除</button></div>
+                  <div class="note-text">${escapeHtml(note.text)}</div>
+                </div>`).join('') : '<div class="insight-empty">还没有笔记，可以记面试题目、HR 说法、跟进结果</div>'}</div>
+              <div class="note-add" style="margin-top:9px">
+                <textarea class="control" id="drawerNoteInput" rows="2" maxlength="1000" placeholder="例如：一面问了项目难点与复盘，面试官是业务负责人"></textarea>
+                <div><button class="btn btn-small btn-primary" type="button" id="drawerNoteAddBtn">添加笔记</button></div>
+              </div>
+            </div>
+            ${others.length ? `<div class="drawer-section"><h3>同公司其它投递（${others.length}）</h3><div class="sibling-list">${others.map(item => `
+              <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(item.position || '未填岗位')}${item.batch ? ` · ${escapeHtml(item.batch)}` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
+        }
+        if (actions) {
+          actions.innerHTML = `
+            <button class="btn btn-small btn-primary" type="button" data-drawer="advance">推进阶段</button>
+            <button class="btn btn-small" type="button" data-drawer="edit">编辑</button>
+            <button class="btn btn-small" type="button" data-drawer="ics">导出到日历</button>
+            <span class="spacer"></span>
+            <button class="btn btn-small btn-danger" type="button" data-drawer="delete">删除</button>`;
+        }
+      }
+
+      function addDrawerNote(text) {
+        const record = records.find(item => item.id === drawerRecordId);
+        const value = String(text || '').trim();
+        if (!record || !value) { showToast('请先输入笔记内容'); return; }
+        record.notes = [...(Array.isArray(record.notes) ? record.notes : []), { id: cryptoId(), at: Date.now(), text: value }];
+        record.updatedAt = Date.now();
+        saveRecords('已添加笔记');
+        render();
+        renderDrawer();
+      }
+      function deleteDrawerNote(noteId) {
+        const record = records.find(item => item.id === drawerRecordId);
+        if (!record) return;
+        record.notes = (Array.isArray(record.notes) ? record.notes : []).filter(note => note.id !== noteId);
+        record.updatedAt = Date.now();
+        saveRecords('已删除笔记');
+        render();
+        renderDrawer();
+      }
+
+      // ---- ⌘K 命令面板 ----
+      function isTypingTarget(node) {
+        if (!node) return false;
+        const tag = String(node.tagName || '').toLowerCase();
+        return tag === 'input' || tag === 'textarea' || tag === 'select' || node.isContentEditable === true;
+      }
+      // 命令面板候选：记录 / 视图 / 动作。query 为空时给默认清单（最近记录 + 全部视图与动作）
+      function buildCmdItems(query) {
+        const q = String(query || '').trim().toLowerCase();
+        const items = [];
+        const matched = q
+          ? records.filter(record => `${record.company} ${record.position} ${record.batch} ${record.city}`.toLowerCase().includes(q))
+          : records.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 5);
+        for (const record of matched.slice(0, 8)) {
+          items.push({
+            group: '记录', label: `${record.company} · ${record.position || '未填岗位'}`,
+            sub: record.stage, run: () => openRecordFocus(record.id)
+          });
+        }
+        const views = [
+          { label: '总览', hash: '#/overview' }, { label: '邮件提醒', hash: '#/mail' },
+          { label: '我的简历', hash: '#/resume' }, { label: '岗位库', hash: '#/jobPool' }, { label: '工具', hash: '#/tools' }
+        ];
+        for (const view of views) {
+          if (q && !view.label.toLowerCase().includes(q) && !view.hash.includes(q)) continue;
+          items.push({ group: '跳转', label: view.label, sub: view.hash, run: () => { location.hash = view.hash; } });
+        }
+        const actions = [
+          { label: '新增投递', sub: 'N', run: () => openDialog(null) },
+          { label: uiPrefs.recordsView === 'board' ? '切换为表格视图' : '切换为看板视图', sub: '台账', run: () => setRecordsView(uiPrefs.recordsView === 'board' ? 'table' : 'board') },
+          { label: '立即云同步', sub: '同步', run: () => { if (!syncConfig.token) { openSyncDialog(); return; } syncNow('manual'); } },
+          { label: '导出投递记录 JSON', sub: '备份', run: () => exportData() },
+          { label: '导出日程到日历 .ics', sub: '日程', run: () => exportIcs() },
+          { label: '导出简历 JSON', sub: '简历', run: () => exportResume() },
+          { label: '打开截图识别', sub: '工具', run: () => { location.hash = '#/tools'; openScreenshotDialog(); } },
+          { label: '打开数据安全', sub: '工具', run: () => { location.hash = '#/tools'; openSafetyDialog(); } },
+          { label: '打开云同步设置', sub: '工具', run: () => openSyncDialog() },
+          { label: '打开邮件提醒设置', sub: '邮件', run: () => { location.hash = '#/mail'; openMailSettings(); } },
+          { label: '搜索台账', sub: '/', run: () => { location.hash = '#/overview'; if (els.search) els.search.focus(); } }
+        ];
+        for (const action of actions) {
+          if (q && !`${action.label} ${action.sub}`.toLowerCase().includes(q)) continue;
+          items.push({ group: '动作', label: action.label, sub: action.sub, run: action.run });
+        }
+        return items;
+      }
+      function renderCmdResults() {
+        const host = $('#cmdResults');
+        if (!host) return;
+        if (!cmdItems.length) {
+          host.innerHTML = '<div class="cmd-empty">没有匹配的记录、视图或动作</div>';
+          return;
+        }
+        let lastGroup = null;
+        host.innerHTML = cmdItems.map((item, index) => {
+          const head = item.group !== lastGroup ? `<div class="cmd-group">${escapeHtml(item.group)}</div>` : '';
+          lastGroup = item.group;
+          return `${head}<button class="cmd-item${index === cmdActiveIndex ? ' is-active' : ''}" type="button" role="option" data-index="${index}" aria-selected="${index === cmdActiveIndex}">
+            <span class="cmd-item-main">${escapeHtml(item.label)}</span><span class="cmd-item-sub">${escapeHtml(item.sub || '')}</span>
+          </button>`;
+        }).join('');
+        const active = host.querySelector('.cmd-item.is-active');
+        if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
+      }
+      function openCmdPalette() {
+        const dialog = $('#cmdPalette');
+        if (!dialog) return;
+        cmdItems = buildCmdItems('');
+        cmdActiveIndex = 0;
+        const input = $('#cmdInput');
+        if (input) input.value = '';
+        dialog.showModal();
+        renderCmdResults();
+        requestAnimationFrame(() => { if (input) input.focus(); });
+      }
+      function closeCmdPalette() {
+        const dialog = $('#cmdPalette');
+        if (dialog && dialog.open) dialog.close();
+      }
+      function moveCmdActive(delta) {
+        if (!cmdItems.length) return;
+        cmdActiveIndex = (cmdActiveIndex + delta + cmdItems.length) % cmdItems.length;
+        renderCmdResults();
+      }
+      function runCmdItem(index) {
+        const item = cmdItems[index];
+        if (!item) return;
+        closeCmdPalette();
+        // 等 dialog 关闭后再执行，避免动作里再开弹窗时被 close 事件连带关掉
+        setTimeout(() => { try { item.run(); } catch (error) { showToast(`执行失败：${error.message}`); } }, 0);
+      }
+
+      // 全局快捷键：⌘K/Ctrl+K 命令面板、N 新增、/ 搜索台账、Esc 关抽屉
+      function handleGlobalKeydown(event) {
+        if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 'k') {
+          event.preventDefault();
+          const dialog = $('#cmdPalette');
+          if (dialog && dialog.open) closeCmdPalette(); else openCmdPalette();
+          return;
+        }
+        if (event.key === 'Escape') {
+          if (drawerRecordId) { closeRecordDrawer(); return; }
+          return; // 其余 Esc 交给原生 dialog
+        }
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+        if (isTypingTarget(event.target)) return;
+        const dialogOpen = document.querySelector('dialog[open]');
+        if (dialogOpen) return; // 弹窗打开时不抢按键
+        if (String(event.key).toLowerCase() === 'n') { event.preventDefault(); openDialog(null); return; }
+        if (event.key === '/') {
+          event.preventDefault();
+          if (parseRoute() !== 'overview') location.hash = '#/overview';
+          if (els.search) els.search.focus();
+          return;
+        }
+        if (event.key === '?') { event.preventDefault(); openCmdPalette(); }
+      }
 
       // ================= 邮件提醒（M3）：本地状态、模糊匹配、复核视图、应用/忽略 =================
       function loadMailState() {
@@ -4240,24 +4738,36 @@
 
       async function handleTableAction(event) {
         const button = event.target.closest('button[data-action]');
-        if (!button) return;
+        if (!button) {
+          // 点公司 / 岗位单元格 → 打开详情抽屉；点链接仍走原生跳转（不打断）
+          // 注意：此处不能引用下面的 record（const 尚未初始化会触发 TDZ），改从行上取 data-id
+          if (event.target.closest('a')) return;
+          const cell = event.target.closest('td[data-label="公司 / 岗位"]');
+          const row = cell && cell.closest('tr[data-id]');
+          if (row) openRecordFocus(row.dataset.id);
+          return;
+        }
         const record = records.find(item => item.id === button.dataset.id);
         if (!record) return;
         if (button.dataset.action === 'edit') return openDialog(record);
-        if (button.dataset.action === 'delete') {
-          if (!await confirmInApp(`确定删除「${record.company} · ${record.position}」吗？`, { title: '删除投递记录', danger: true, confirmText: '删除' })) return;
-          const index = records.findIndex(item => item.id === record.id);
-          records = records.filter(item => item.id !== record.id);
-          markDeleted([record.id]);
-          saveRecords();
-          render();
-          lastDeleted = { record, index };
-          showToast(`已删除「${record.company} · ${record.position}」`, { actionLabel: '撤销', duration: 6000, onAction: undoDelete });
-          return;
-        }
+        if (button.dataset.action === 'delete') return requestDeleteRecord(record);
         if (button.dataset.action === 'advance') {
           openAdvanceDialog(record);
         }
+      }
+
+      // 删除记录（表格行 / 详情抽屉共用）：确认后软删（写 tombstone）+ 可撤销
+      async function requestDeleteRecord(record) {
+        if (!record) return;
+        if (!await confirmInApp(`确定删除「${record.company} · ${record.position}」吗？`, { title: '删除投递记录', danger: true, confirmText: '删除' })) return;
+        const index = records.findIndex(item => item.id === record.id);
+        records = records.filter(item => item.id !== record.id);
+        markDeleted([record.id]);
+        saveRecords();
+        render();
+        lastDeleted = { record, index };
+        if (drawerRecordId === record.id) closeRecordDrawer();
+        showToast(`已删除「${record.company} · ${record.position}」`, { actionLabel: '撤销', duration: 6000, onAction: undoDelete });
       }
 
       // ================= 推进阶段：弹出选择，追加为时间线里程碑（不再盲目 index+1）=================
@@ -4633,6 +5143,94 @@
         const item = event.target.closest('.alert-item[data-id]');
         if (item) openRecordFocus(item.dataset.id);
       });
+      // ===== v4.4.0：表格/看板切换、看板拖拽、详情抽屉、⌘K 命令面板 =====
+      $('#viewTableBtn').addEventListener('click', () => setRecordsView('table'));
+      $('#viewBoardBtn').addEventListener('click', () => setRecordsView('board'));
+      const boardCols = $('#boardCols');
+      boardCols.addEventListener('dragstart', event => {
+        const card = event.target.closest('.board-card[data-id]');
+        if (!card) return;
+        draggingRecordId = card.dataset.id;
+        card.classList.add('is-dragging');
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', card.dataset.id);
+        }
+      });
+      boardCols.addEventListener('dragend', () => {
+        draggingRecordId = null;
+        boardCols.querySelectorAll('.board-card.is-dragging').forEach(node => node.classList.remove('is-dragging'));
+        boardCols.querySelectorAll('.board-col.is-drop').forEach(node => node.classList.remove('is-drop'));
+      });
+      boardCols.addEventListener('dragover', handleBoardDragOver);
+      boardCols.addEventListener('drop', handleBoardDrop);
+      boardCols.addEventListener('click', event => {
+        const card = event.target.closest('.board-card[data-id]');
+        if (card) openRecordFocus(card.dataset.id);
+      });
+      boardCols.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const card = event.target.closest('.board-card[data-id]');
+        if (!card) return;
+        event.preventDefault();
+        openRecordFocus(card.dataset.id);
+      });
+      // 抽屉：关闭（按钮 / 遮罩）、笔记增删、同公司切换、底部操作
+      $('#closeDrawerBtn').addEventListener('click', closeRecordDrawer);
+      $('#drawerBackdrop').addEventListener('click', closeRecordDrawer);
+      $('#drawerBody').addEventListener('click', event => {
+        const noteDel = event.target.closest('button[data-note-del]');
+        if (noteDel) { deleteDrawerNote(noteDel.dataset.noteDel); return; }
+        const sibling = event.target.closest('button[data-sibling]');
+        if (sibling) { openRecordDrawer(sibling.dataset.sibling); return; }
+        if (event.target.closest('#drawerNoteAddBtn')) {
+          const input = $('#drawerNoteInput');
+          addDrawerNote(input ? input.value : '');
+        }
+      });
+      $('#drawerBody').addEventListener('keydown', event => {
+        // 笔记输入框里 ⌘/Ctrl+Enter 快速提交
+        if (event.target.id !== 'drawerNoteInput') return;
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+          event.preventDefault();
+          addDrawerNote(event.target.value);
+        }
+      });
+      $('#drawerActions').addEventListener('click', async event => {
+        const button = event.target.closest('button[data-drawer]');
+        if (!button) return;
+        const record = records.find(item => item.id === drawerRecordId);
+        if (!record) return;
+        const action = button.dataset.drawer;
+        if (action === 'advance') return openAdvanceDialog(record);
+        if (action === 'edit') { closeRecordDrawer(); return openDialog(record); }
+        if (action === 'ics') return exportIcs(record.id);
+        if (action === 'delete') return requestDeleteRecord(record);
+      });
+      // 命令面板
+      $('#cmdInput').addEventListener('input', event => {
+        cmdItems = buildCmdItems(event.target.value);
+        cmdActiveIndex = 0;
+        renderCmdResults();
+      });
+      $('#cmdInput').addEventListener('keydown', event => {
+        if (event.key === 'ArrowDown') { event.preventDefault(); moveCmdActive(1); return; }
+        if (event.key === 'ArrowUp') { event.preventDefault(); moveCmdActive(-1); return; }
+        if (event.key === 'Enter') { event.preventDefault(); runCmdItem(cmdActiveIndex); }
+      });
+      $('#cmdResults').addEventListener('click', event => {
+        const item = event.target.closest('.cmd-item[data-index]');
+        if (item) runCmdItem(Number(item.dataset.index));
+      });
+      $('#cmdResults').addEventListener('mousemove', event => {
+        const item = event.target.closest('.cmd-item[data-index]');
+        if (!item) return;
+        const index = Number(item.dataset.index);
+        if (index !== cmdActiveIndex) { cmdActiveIndex = index; renderCmdResults(); }
+      });
+      $('#cmdPalette').addEventListener('click', event => { if (event.target === $('#cmdPalette')) closeCmdPalette(); });
+      // 全局快捷键（⌘K / N / / / ? / Esc）
+      document.addEventListener('keydown', handleGlobalKeydown);
       // 未来安排卡片可点击/可键盘激活（role=button + tabindex=0）
       els.upcoming.addEventListener('click', event => {
         const item = event.target.closest('.schedule-item[data-id]');
@@ -4658,9 +5256,10 @@
         del.closest('.tl-row').remove();
       });
       els.body.addEventListener('click', handleTableAction);
-      els.search.addEventListener('input', renderTable);
-      els.filter.addEventListener('change', renderTable);
-      els.sort.addEventListener('change', renderTable);
+      // 搜索 / 筛选 / 排序变化后重渲染「当前视图」（表格或看板），两者共用同一份 getVisibleRecords
+      els.search.addEventListener('input', renderRecordsView);
+      els.filter.addEventListener('change', renderRecordsView);
+      els.sort.addEventListener('change', renderRecordsView);
       els.dialog.addEventListener('click', event => { if (event.target === els.dialog) closeDialog(); });
       // 应用内确认框（替代原生 confirm）：确定=true，取消/Esc/点遮罩=false
       $('#confirmOkBtn').addEventListener('click', () => { confirmResult = true; $('#confirmDialog').close(); });
