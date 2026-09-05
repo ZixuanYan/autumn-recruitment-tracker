@@ -238,6 +238,7 @@ function makeEl(sel) {
     },
     setAttribute() {}, getAttribute() { return null; }, focus() {}, scrollIntoView() {},
     closest() { return null; }, querySelector() { return null; }, querySelectorAll() { return []; },
+    contains() { return false; },
     addEventListener() {}, showModal() { this.open = true; }, close() { this.open = false; }
   };
 }
@@ -251,7 +252,7 @@ const sandbox2 = {
     upcoming: makeEl('#upcomingList'), search: makeEl('#searchInput'), filter: makeEl('#stageFilter'),
     sort: makeEl('#sortSelect'), dialog: makeEl('#recordDialog'), form: makeEl('#recordForm'), toast: makeEl('#toast')
   },
-  document: { querySelector: () => null, querySelectorAll: () => [], body: { style: {} }, createElement: () => makeEl('tmp') },
+  document: { querySelector: () => null, querySelectorAll: () => [], body: { style: {} }, createElement: () => makeEl('tmp'), activeElement: null },
   localStorage: { _s: {}, getItem(k) { return Object.prototype.hasOwnProperty.call(this._s, k) ? this._s[k] : null; }, setItem(k, v) { this._s[k] = String(v); } },
   location: { hash: '#/overview' },
   requestAnimationFrame: fn => fn(),
@@ -476,6 +477,64 @@ check('addDrawerNote / deleteDrawerNote 增删并落库', () => {
   assert.strictEqual(sandbox2.records[0].notes.length, 1, '空文本不入库');
   assert.ok(calls.toast.some(t => t.includes('请先输入')));
   sandbox2.closeRecordDrawer();
+});
+
+check('抽屉焦点陷阱：Tab 在抽屉内循环，焦点在背景时先被拉进抽屉', () => {
+  seedRecords();
+  sandbox2.openRecordDrawer('r1');
+  const drawer = els2['#recordDrawer'];
+  let focused = null;
+  const node = name => ({ name, offsetParent: {}, focus() { focused = name; } });
+  const nodes = [node('close'), node('advance'), node('noteInput'), node('delete')];
+  drawer.querySelectorAll = () => nodes;
+  drawer.contains = n => nodes.includes(n);
+  const tab = (shiftKey = false) => {
+    const event = { key: 'Tab', shiftKey, metaKey: false, ctrlKey: false, altKey: false, target: { tagName: 'DIV' }, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+    sandbox2.handleGlobalKeydown(event);
+    return event;
+  };
+  // 焦点还在背景（activeElement 不在抽屉里）→ 首次 Tab 拉进抽屉第一个可聚焦元素
+  sandbox2.document.activeElement = null;
+  let event = tab();
+  assert.strictEqual(focused, 'close', '首次 Tab 把焦点拉进抽屉');
+  assert.strictEqual(event.defaultPrevented, true, '陷阱必须阻止默认 Tab，否则焦点会跑到背景');
+  // 顺序前进
+  sandbox2.document.activeElement = nodes[0];
+  tab();
+  assert.strictEqual(focused, 'advance');
+  sandbox2.document.activeElement = nodes[2];
+  tab();
+  assert.strictEqual(focused, 'delete');
+  // 末尾回卷到第一个
+  sandbox2.document.activeElement = nodes[3];
+  tab();
+  assert.strictEqual(focused, 'close', 'Tab 到末尾应回卷');
+  // Shift+Tab 从第一个回卷到末尾
+  sandbox2.document.activeElement = nodes[0];
+  tab(true);
+  assert.strictEqual(focused, 'delete', 'Shift+Tab 从首项回卷到末项');
+  // 抽屉内没有可聚焦元素时只阻止默认，不抛错
+  drawer.querySelectorAll = () => [];
+  event = tab();
+  assert.strictEqual(event.defaultPrevented, true);
+  // 抽屉关闭后 Tab 交还浏览器默认行为
+  drawer.querySelectorAll = () => nodes;
+  sandbox2.closeRecordDrawer();
+  sandbox2.document.activeElement = nodes[0];
+  focused = null;
+  event = tab();
+  assert.strictEqual(event.defaultPrevented, false, '抽屉关闭后不再拦截 Tab');
+  assert.strictEqual(focused, null);
+});
+
+check('Esc 在抽屉打开时关闭抽屉', () => {
+  seedRecords();
+  sandbox2.openRecordDrawer('r1');
+  assert.strictEqual(els2['#recordDrawer'].hidden, false);
+  sandbox2.handleGlobalKeydown({ key: 'Escape', metaKey: false, ctrlKey: false, altKey: false, target: { tagName: 'DIV' }, preventDefault() {} });
+  assert.strictEqual(els2['#recordDrawer'].hidden, true);
+  assert.strictEqual(els2['#drawerBackdrop'].hidden, true);
+  assert.strictEqual(sandbox2.document.body.style.overflow, '', '关闭后恢复页面滚动');
 });
 
 section('v4.4.0 ⌘K 命令面板与快捷键');

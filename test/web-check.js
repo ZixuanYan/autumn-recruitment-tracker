@@ -159,7 +159,7 @@ const core = new Function(
    return {
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs,
      companyKeyOf, groupRecordsByCompany, companyColor, computeFunnel, computeStageDwell,
-     computeDailyApplications, sparklinePath, findStalled, collectAlerts,
+     computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
      normalizePositionSlug, findDuplicateRecord, normalizeRecord
    };`
 )(globalThis);
@@ -316,6 +316,26 @@ check('findStalled 只统计进行中且超过阈值', () => {
   assert.strictEqual(stalled.length, 1);
   assert.strictEqual(stalled[0].record.id, '1');
   assert.strictEqual(stalled[0].days, 20);
+});
+
+check('findUpcomingDeadlines 只返回逾期与 withinDays 内临期，且按紧急度排序、排除已结束/Offer', () => {
+  const recs = [
+    { id: 'far', company: 'A', position: 'p', stage: '一面', deadline: dayOffset(20, NOW) },
+    { id: 'soon', company: 'B', position: 'p', stage: '一面', deadline: dayOffset(2, NOW) },
+    { id: 'today', company: 'C', position: 'p', stage: '已投递', deadline: dayOffset(0, NOW) },
+    { id: 'over', company: 'D', position: 'p', stage: '已投递', deadline: dayOffset(-5, NOW) },
+    { id: 'closed', company: 'E', position: 'p', stage: '已结束', deadline: dayOffset(1, NOW) },
+    { id: 'offer', company: 'F', position: 'p', stage: 'Offer', deadline: dayOffset(1, NOW) },
+    { id: 'none', company: 'G', position: 'p', stage: '一面', deadline: '' }
+  ];
+  const hits = core.findUpcomingDeadlines(recs, NOW, 3);
+  assert.strictEqual(hits.map(h => h.record.id).join('|'), 'over|today|soon', '逾期最久在前，20 天后的与已结束/Offer/无截止都被排除');
+  assert.strictEqual(hits[0].info.level, 'danger');
+  assert.strictEqual(hits[1].info.level, 'danger', '今天截止算 danger');
+  assert.strictEqual(hits[2].info.level, 'warn');
+  // withinDays 放宽后，更远期的也会被纳入
+  assert.ok(core.findUpcomingDeadlines(recs, NOW, 30).some(h => h.record.id === 'far'));
+  assert.deepStrictEqual(core.findUpcomingDeadlines([], NOW, 3), []);
 });
 
 check('collectAlerts danger 优先且受 limit 约束', () => {
