@@ -121,8 +121,11 @@ check('unionIdList 去重且 cap 上限', () => {
 // 依赖函数（parseLocal / localDateInput / isActive / normalizeRecord …）不在标记块内，
 // 这里按函数名从 index.html 现场抽取（花括号配平），避免在测试里复制一份实现而产生漂移。
 function extractFunction(src, name) {
-  const start = src.indexOf(`function ${name}(`);
+  const marker = `function ${name}(`;
+  let start = src.indexOf(marker);
   if (start === -1) return '';
+  // 带上 async 前缀，避免抽出异步函数时 await 变成语法错误
+  if (src.slice(Math.max(0, start - 6), start) === 'async ') start -= 6;
   let i = src.indexOf('{', start);
   if (i === -1) return '';
   let depth = 0;

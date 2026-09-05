@@ -197,8 +197,11 @@ check('currentMailConfig 无云端配置时回落默认值', () => {
 // normalizeCompanySlug）+ 洞察/台账渲染段 + 台账视图增强段；外部依赖一律用桩。
 // ============================================================================
 function extractFunction(src, name) {
-  const start = src.indexOf(`function ${name}(`);
+  const marker = `function ${name}(`;
+  let start = src.indexOf(marker);
   if (start === -1) return '';
+  // 必须带上 async 前缀：否则抽出来的异步函数体里的 await 会直接变成语法错误
+  if (src.slice(Math.max(0, start - 6), start) === 'async ') start -= 6;
   let i = src.indexOf('{', start);
   let depth = 0;
   for (; i < src.length; i += 1) {
@@ -223,6 +226,12 @@ const insightSection = extractBlock(html, INSIGHT_START, CORE_START);
 const v44Section = extractBlock(html, V44_START, START);
 const getVisibleRecordsSrc = extractFunction(html, 'getVisibleRecords');
 const applyAdvanceSrc = extractFunction(html, 'applyAdvance');
+const loadRecordsSrc = extractFunction(html, 'loadRecords');
+const submitFormSrc = extractFunction(html, 'submitForm');
+// normalizeRecord 必须是真实现：它是「老数据补默认值 + 新字段透传 + 写回」这条链的核心，
+// 桩成恒等函数会让 loadRecords 的写回永远不触发（测的是桩而不是应用）。
+const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId']
+  .map(name => extractFunction(html, name));
 
 for (const [label, src] of [['CORE 纯函数块', coreBlock], ['邮件纯函数块', mailPureBlock], ['洞察/台账渲染段', insightSection], ['台账视图增强段', v44Section], ['getVisibleRecords', getVisibleRecordsSrc]]) {
   if (!src || src.length < 40) { console.error(`✗ 未定位到${label}`); process.exit(1); }
@@ -273,12 +282,13 @@ const sandbox2 = {
   records: [],
   sampleDataMode: false,
   parseRoute: () => 'overview',
-  normalizeRecord: o => o,
   exampleRecords: () => [{ id: 'demo1', company: '星海科技', position: '产品', stage: '一面' }],
+  // normalizeRecord / sanitizeTimeline / deriveStage / cryptoId 用真实现（见下方注入），不在此打桩
+  self: null, crypto: globalThis.crypto,
   markDeleted: () => {},
-  saveRecords: msg => calls.saveRecords.push(msg),
+  saveRecords: msg => calls.saveRecords.push(msg || ''),
   render: () => {},
-  showToast: msg => calls.toast.push(msg),
+  showToast: (msg, options) => { calls.toast.push(msg); calls.lastToastOptions = options || null; },
   openDialog: rec => calls.openDialog.push(rec),
   openRecordFocus: id => calls.focus.push(id),
   confirmInApp: async () => { calls.confirm.push(1); return confirmAnswer; },
@@ -286,13 +296,27 @@ const sandbox2 = {
   flashRow: () => {}, playOfferStamp: () => {},
   // applyAdvance 的外部依赖（推进弹窗的状态与关闭动作不在被抽取的区段里）
   advancingId: null, closeAdvanceDialog: () => {},
+  // loadRecords / submitForm 的外部依赖
+  STORAGE_KEY: 'test.records.v1',
+  primaryLoadState: 'unknown',
+  editingId: null,
+  pendingMailSeedId: null,
+  collectTimeline: () => [{ stage: '已投递', at: '2026-09-06', note: '' }],
+  closeDialog: () => { calls.closeDialog = (calls.closeDialog || 0) + 1; },
+  markMailApplied: () => {}, renderMailView: () => {}, updateMailBadge: () => {},
+  // submitForm 用 Object.fromEntries(new FormData(form).entries()) 取值：用 _entries 数组驱动
+  FormData: class {
+    constructor(form) { this._entries = (form && form._entries) || []; }
+    entries() { return this._entries[Symbol.iterator](); }
+  },
   openSyncDialog: () => {}, openScreenshotDialog: () => {}, openSafetyDialog: () => {}, openMailSettings: () => {},
   syncNow: () => {}, exportData: () => {}, exportIcs: () => {}, exportResume: () => {}
 };
 sandbox2.globalThis = sandbox2;
+sandbox2.self = sandbox2; // cryptoId 用 self.crypto 探测
 vm.createContext(sandbox2);
 vm.runInContext(
-  [mailPureBlock, coreBlock, getVisibleRecordsSrc, applyAdvanceSrc, insightSection, v44Section].join('\n'),
+  [mailPureBlock, coreBlock, normalizeRecordSrc.join('\n'), getVisibleRecordsSrc, applyAdvanceSrc, loadRecordsSrc, submitFormSrc, insightSection, v44Section].join('\n'),
   sandbox2,
   { filename: 'v44-sections.js' }
 );
@@ -749,6 +773,111 @@ check('clearSampleData 清空并写删除标记，随后解除示例标记', () 
   assert.strictEqual(sandbox2.sampleDataMode, false);
   assert.ok(calls.openDialog.length >= 0, '清空后直接打开新增弹窗（不抛错即可）');
   sandbox2.markDeleted = () => {};
+});
+
+section('v4.4.0 浏览器实证发现问题的回归');
+
+check('loadRecords 把老数据补齐后写回 localStorage（外部读取者能看到新结构）', () => {
+  const legacy = [{ id: 'L1', company: '老数据公司', position: 'p', city: 'C', applicationDate: '2026-09-01' }];
+  sandbox2.localStorage.setItem('test.records.v1', JSON.stringify(legacy));
+  const loaded = sandbox2.loadRecords();
+  assert.strictEqual(loaded.length, 1);
+  const storedRaw = sandbox2.localStorage.getItem('test.records.v1');
+  assert.notStrictEqual(storedRaw, JSON.stringify(legacy), '应发生一次写回');
+  const stored = JSON.parse(storedRaw);
+  assert.ok(stored[0].timeline, '写回后带 normalizeRecord 补的字段');
+  assert.strictEqual(stored[0].company, '老数据公司', '老字段零丢失');
+  // 幂等：结构已一致时不再写盘
+  const before = sandbox2.localStorage.getItem('test.records.v1');
+  sandbox2.loadRecords();
+  assert.strictEqual(sandbox2.localStorage.getItem('test.records.v1'), before, '第二次不应再写');
+  sandbox2.localStorage.setItem('test.records.v1', '[]');
+});
+
+function formEntries(overrides = {}) {
+  const base = {
+    company: '腾讯', position: '前端', city: '深圳', applicationDate: '2026-09-06',
+    applicationUrl: '', scheduleAt: '', deadline: '', recentSchedule: '', nextAction: '',
+    batch: '', channel: '', referral: '', intent: '', salary: ''
+  };
+  return Object.entries(Object.assign(base, overrides));
+}
+
+check('submitForm：同公司不同岗位 → 新增成功，且提示并入保存 toast（不被顶掉）', async () => {
+  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.editingId = null;
+  sandbox2.els.form._entries = formEntries({ position: '前端' });
+  calls.saveRecords.length = 0; calls.confirm.length = 0; calls.toast.length = 0;
+  await sandbox2.submitForm({ preventDefault() {} });
+  assert.strictEqual(sandbox2.records.length, 2, '同公司不同岗位应新增成功');
+  assert.strictEqual(calls.confirm.length, 0, '不该弹「疑似重复投递」');
+  assert.strictEqual(calls.saveRecords.length, 1, '只保存一次');
+  const msg = calls.saveRecords[0];
+  assert.ok(msg.includes('已新增并自动保存'), msg);
+  assert.ok(msg.includes('名下现在共 2 个岗位'), `提示必须并入同一条 toast：${msg}`);
+});
+
+check('submitForm：同公司同岗位同批次 → 弹确认；选「编辑已有」则不新增', async () => {
+  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '提前批', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.editingId = null;
+  sandbox2.els.form._entries = formEntries({ position: '后端', batch: '提前批' });
+  calls.confirm.length = 0; calls.openDialog.length = 0; calls.saveRecords.length = 0;
+  confirmAnswer = true;
+  await sandbox2.submitForm({ preventDefault() {} });
+  assert.strictEqual(calls.confirm.length, 1, '应弹「疑似重复投递」确认框');
+  assert.strictEqual(sandbox2.records.length, 1, '选「编辑已有记录」不应新增');
+  assert.strictEqual(calls.openDialog.length, 1, '应打开已有记录的编辑弹窗');
+  assert.strictEqual(calls.openDialog[0].id, 'x1');
+  assert.strictEqual(calls.saveRecords.length, 0, '未保存新记录');
+  confirmAnswer = true;
+});
+
+check('submitForm：同公司同岗位但批次不同 → 不弹确认，正常新增（提前批/正式批不合并）', async () => {
+  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '提前批', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.editingId = null;
+  sandbox2.els.form._entries = formEntries({ position: '后端', batch: '正式批' });
+  calls.confirm.length = 0; calls.saveRecords.length = 0;
+  await sandbox2.submitForm({ preventDefault() {} });
+  assert.strictEqual(calls.confirm.length, 0, '批次不同不算重复');
+  assert.strictEqual(sandbox2.records.length, 2);
+  assert.strictEqual(sandbox2.records[0].batch, '正式批');
+});
+
+check('详情抽屉「关键信息」包含批次（此前缺失）', () => {
+  seedRecords();
+  sandbox2.openRecordDrawer('r1');
+  const h = els2['#drawerBody'].innerHTML;
+  assert.ok(h.includes('<dt>批次</dt>'), '应有批次一行');
+  assert.ok(h.includes('提前批'), '且显示实际批次值');
+  sandbox2.closeRecordDrawer();
+});
+
+check('删除笔记给 6 秒撤销，撤销后按原位置恢复', () => {
+  seedRecords();
+  sandbox2.records[0].notes = [
+    { id: 'n1', at: 1, text: '一面笔记' },
+    { id: 'n2', at: 2, text: '二面笔记' },
+    { id: 'n3', at: 3, text: 'HR 面笔记' }
+  ];
+  sandbox2.openRecordDrawer('r1');
+  calls.toast.length = 0; calls.lastToastOptions = null;
+  sandbox2.deleteDrawerNote('n2');
+  assert.strictEqual(sandbox2.records[0].notes.length, 2);
+  assert.ok(calls.lastToastOptions && calls.lastToastOptions.actionLabel === '撤销', '删除笔记必须提供撤销');
+  assert.strictEqual(typeof calls.lastToastOptions.onAction, 'function');
+  calls.lastToastOptions.onAction(); // 点撤销
+  const notes = sandbox2.records[0].notes;
+  assert.strictEqual(notes.length, 3);
+  assert.strictEqual(notes[1].id, 'n2', '恢复到原来的位置而不是追加到末尾');
+  assert.strictEqual(notes[1].text, '二面笔记');
+  // 撤销只能生效一次
+  calls.lastToastOptions.onAction();
+  assert.strictEqual(sandbox2.records[0].notes.length, 3, '重复点击不应重复插入');
+  // 删除不存在的笔记是安全空操作
+  const snapshot = sandbox2.records[0].notes.length;
+  sandbox2.deleteDrawerNote('not-exist');
+  assert.strictEqual(sandbox2.records[0].notes.length, snapshot);
+  sandbox2.closeRecordDrawer();
 });
 
 runAll();
