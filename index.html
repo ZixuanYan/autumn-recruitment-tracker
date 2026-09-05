@@ -626,6 +626,16 @@
     .alert-item.warn { box-shadow: inset 3px 0 0 var(--warn); color: var(--warn); }
     .alert-item.info { box-shadow: inset 3px 0 0 var(--accent); }
     .offer-matrix { min-width: 620px; }
+    .multi-company-list { display: grid; gap: 8px; }
+    .multi-company { padding: 10px 12px 10px 14px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); position: relative; }
+    .multi-company::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--company-color, var(--accent)); }
+    .multi-company-head { display: flex; align-items: baseline; gap: 9px; }
+    .multi-company-head strong { font-size: 13.5px; }
+    .multi-company-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; }
+    .multi-company-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .multi-company-item { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border: 0; border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--ring); font-size: 12px; color: var(--ink-2); }
+    .multi-company-item:hover { background: var(--accent-soft); color: var(--accent-ink); }
+    .multi-company-pos { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     @media (max-width: 900px) {
       .insight-grid { grid-template-columns: minmax(0, 1fr); }
       .insight-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -903,6 +913,10 @@
           </div>
         </div>
         <div class="insight-metrics" id="insightMetrics"></div>
+        <div class="insight-block" id="multiCompanyWrap" hidden>
+          <div class="insight-block-head"><h3>多岗位公司</h3><span class="insight-note" id="multiCompanyNote"></span></div>
+          <div class="multi-company-list" id="multiCompanyList"></div>
+        </div>
         <div class="insight-block">
           <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
           <div class="alert-list" id="alertList"></div>
@@ -2993,6 +3007,7 @@
           : '<div class="insight-empty">没有逾期、临期或停滞的投递</div>';
 
         renderOfferMatrix();
+        renderMultiCompanies();
       }
 
       // Offer 对比矩阵：手里有 ≥2 个 Offer 时才出现，按意向度降序、同分按签约截止近的先
@@ -3018,6 +3033,27 @@
               <td data-label="最新备注"><div class="next-action">${escapeHtml(lastNote)}</div></td>
             </tr>`;
           }).join('')}</tbody>`;
+      }
+
+      // 多岗位公司清单：一家公司投了 ≥2 个岗位时列出，每个岗位可直接点开详情抽屉。
+      // 回答「这家公司我投了哪几个岗、各自到哪一步」——只有计数不够，得能看到明细。
+      function renderMultiCompanies() {
+        const wrap = $('#multiCompanyWrap'), list = $('#multiCompanyList'), note = $('#multiCompanyNote');
+        if (!wrap || !list) return;
+        const multi = groupRecordsByCompany(records).filter(group => group.records.length > 1);
+        if (!multi.length) { wrap.hidden = true; list.innerHTML = ''; return; }
+        wrap.hidden = false;
+        if (note) note.textContent = `${multi.length} 家公司投了多个岗位`;
+        list.innerHTML = multi.map(group => {
+          const items = group.records.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          return `<div class="multi-company" style="--company-color:${companyColor(group.key)}">
+            <div class="multi-company-head"><strong>${escapeHtml(group.label)}</strong><span class="multi-company-count">${group.records.length} 个岗位</span></div>
+            <div class="multi-company-items">${items.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}">
+              <span class="multi-company-pos">${escapeHtml(record.position || '未填岗位')}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</span>
+              <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
+            </button>`).join('')}</div>
+          </div>`;
+        }).join('');
       }
 
       // 空状态三态：首启（价值主张 + 双 CTA）/ 筛选无结果（回显条件 + 清除）/ 有数据（隐藏）
@@ -5628,6 +5664,11 @@
       $('#offerMatrix').addEventListener('click', event => {
         const row = event.target.closest('tr[data-id]');
         if (row) openRecordFocus(row.dataset.id);
+      });
+      // 多岗位公司清单：点某个岗位打开详情抽屉
+      $('#multiCompanyList').addEventListener('click', event => {
+        const item = event.target.closest('.multi-company-item[data-id]');
+        if (item) openRecordFocus(item.dataset.id);
       });
       // 未来安排卡片可点击/可键盘激活（role=button + tabindex=0）
       els.upcoming.addEventListener('click', event => {
