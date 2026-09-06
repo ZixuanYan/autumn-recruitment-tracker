@@ -171,6 +171,7 @@ function ensureSidebarUI() {
           <div class="pending-item-main" data-fill="${escapeHtml(item.id)}" title="点击回填收录表单，可修改后重新保存">
             <div class="pending-item-title">${escapeHtml(item.company)} · ${escapeHtml(item.position)}</div>
             <div class="pending-item-meta">${escapeHtml(item.applicationDate || '')} · ${escapeHtml(item.stage || '已投递')}</div>
+            ${item.variantOf ? `<div class="pending-item-variant" title="这不是重复堆积：同一家公司的岗位名相近（括号里通常是城市/方向/批次），已作为独立一条暂存">≈ 与「${escapeHtml(item.variantOf)}」是同公司的相近岗位</div>` : ''}
           </div>
           <button class="pending-item-discard" data-discard="${escapeHtml(item.id)}" title="丢弃这条暂存">✕</button>
         </div>

@@ -35,6 +35,7 @@
       "js": [
         "common/constants.js",
         "common/default-resume.js",
+        "common/company-key.js",
         "content/01-core.js",
         "content/02-resume.js",
         "content/03-parsers.js",

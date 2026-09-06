@@ -350,6 +350,16 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       color: #94a3b8;
       margin-top: 1px;
     }
+    /* 暂存箱里的「同公司相近岗位」说明：让用户知道这不是重复堆积，而是刻意保留的第二个岗位 */
+    .pending-item-variant {
+      font-size: 10.5px;
+      color: #92400e;
+      background: #fffbeb;
+      border-radius: 4px;
+      padding: 1px 5px;
+      margin-top: 3px;
+      line-height: 1.45;
+    }
     .pending-item-discard {
       flex: 0 0 auto;
       width: 22px;

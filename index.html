@@ -751,6 +751,11 @@
 
     /* ===== v4.4.0：同公司多岗位（chip / 聚合组头）、空状态三态、首启引导、Offer 矩阵 ===== */
     .company-chip { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink-2); font-size: 11px; font-weight: 700; white-space: nowrap; border-left: 3px solid var(--company-color, var(--accent)); }
+    /* 录入表单里的「该公司已有 N 个岗位」前置提示（挂在 #sameCompanyHint 内，
+       注意不要给 #sameCompanyHint 本身设 display，否则会盖掉 hidden 属性） */
+    .same-company-item { display: inline-block; margin: 3px 5px 0 0; padding: 1px 8px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: var(--ring); color: var(--ink-2); font-size: 11.5px; font-weight: 620; }
+    .same-company-item.is-similar { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
+    .same-company-more { margin-left: 2px; color: var(--muted); font-size: 11.5px; }
     .company-group-row > td { padding: 6px 12px 4px; background: transparent; border-top: 0; }
     .company-group-row:not(:first-child) > td { padding-top: 14px; }
     .group-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 10px; border: 0; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: var(--ring); font-size: 12.5px; font-weight: 680; color: var(--ink); text-align: left; }
@@ -1124,7 +1129,7 @@
       <div class="modal-head"><h2 id="dialogTitle">新增投递</h2><button class="close-btn" id="closeDialog" type="button" aria-label="关闭">×</button></div>
       <div class="form-body">
         <div class="form-grid">
-          <div class="field"><label for="company">公司 <span class="required">*</span></label><input class="control" id="company" name="company" required maxlength="60" placeholder="例如：星海科技"></div>
+          <div class="field"><label for="company">公司 <span class="required">*</span></label><input class="control" id="company" name="company" required maxlength="60" placeholder="例如：星海科技"><div class="hint" id="sameCompanyHint" hidden></div></div>
           <div class="field"><label for="position">岗位 <span class="required">*</span></label><input class="control" id="position" name="position" required maxlength="80" placeholder="例如：产品经理校招生"></div>
           <div class="field"><label for="city">城市 <span class="required">*</span></label><input class="control" id="city" name="city" required maxlength="30" placeholder="例如：上海"></div>
           <div class="field"><label for="applicationDate">投递日期 <span class="required">*</span></label><input class="control" id="applicationDate" name="applicationDate" type="date" required></div>
@@ -2880,7 +2885,12 @@
           return;
         }
         $('#jobList').innerHTML = shown.map(job => {
-          const alreadyAdded = records.some(record => (job.applicationUrl && record.applicationUrl === job.applicationUrl) || (record.company === job.company && record.position === job.position));
+          // 按钮 disabled 态必须与点击时的判定同源。此前这里用「公司名与岗位名原文精确相等」，
+          // 而点击时走 findDuplicateRecord 的归一化比较，两者会给出不同结论：
+          // 按钮可点但点了说重复，或按钮被禁用但其实是一条合法的新岗位。
+          // variant（同岗位不同方向/城市/批次）不禁用 —— 那正是需要放行的「第二个岗位」。
+          const dupHit = findDuplicateRecord(records, job);
+          const alreadyAdded = !!dupHit && dupHit.mode === 'duplicate';
           return `<article class="job-card">
             <div class="job-card-top"><div class="job-company" title="${escapeHtml(job.company)}">${escapeHtml(job.company)}</div>${job.city ? `<span class="job-city">${escapeHtml(job.city)}</span>` : ''}</div>
             <div class="job-position">${escapeHtml(job.position)}</div>
@@ -2893,15 +2903,18 @@
         }).join('') + (visible.length > shown.length ? `<div class="job-empty">已显示前 ${shown.length} 条，请使用搜索快速定位岗位</div>` : '');
       }
 
-      function handleJobAction(event) {
+      async function handleJobAction(event) {
         const button = event.target.closest('button[data-job-action]');
         if (!button) return;
         const job = jobs.find(item => item.id === button.dataset.jobId);
         if (!job) return;
         if (button.dataset.jobAction === 'applied') {
-          // 查重走统一的 findDuplicateRecord：同链接或「同公司+同岗位+同批次」才算重复（同公司多岗位允许并存）
-          const duplicate = findDuplicateRecord(records, job);
-          if (duplicate && duplicate.mode === 'duplicate') return showToast('这条岗位已经在投递记录中');
+          // 统一走 resolveDuplicate。此前这里是 `return showToast('这条岗位已经在投递记录中')` —— 直接 return
+          // 什么都不做；叠加旧版岗位归一化删括号的误判，同一家公司的第二个岗位根本录不进去，
+          // 用户侧只看到一句提示，像是按钮坏了。现在 duplicate / variant 都给二选一逃生口。
+          const decision = await resolveDuplicate(findDuplicateRecord(records, job), job);
+          if (decision.action === 'cancel') return; // Esc / 点遮罩：什么都不写
+          if (decision.action === 'edit') { openDialog(decision.target); return; }
           records.unshift(normalizeRecord({
             company: job.company,
             position: job.position,
@@ -2912,7 +2925,7 @@
             nextAction: '关注招聘通知并及时跟进',
             updatedAt: Date.now()
           }));
-          saveRecords('已加入投递记录并自动保存');
+          saveRecords(`已加入投递记录并自动保存${decision.hint || ''}`);
           render();
         }
       }
@@ -3364,15 +3377,17 @@
       }
 
       // ----- 公司维度分组（同公司多岗位）-----
-      // 两套键，用途不同，别混用：
-      //   companyKeyOf     —— 激进（复用邮件匹配 normalizeCompanySlug，连「科技/网络」这类行业词也剥掉）。
-      //                       只用于**查重**：宁可多合并，反正有人工确认兜底。
-      //   companyGroupKey  —— 保守（只归一化全半角/空格/标点，只剥「法人形式后缀」，保留行业词）。
-      //                       用于**展示分组/配色/聚合排序**：把「星海科技」和「星海互娱」误并成一家是硬伤。
-      function companyKeyOf(record) {
-        const raw = String((record && record.company) || '').trim();
-        if (!raw) return '';
-        return normalizeCompanySlug(raw) || raw.toLowerCase();
+      // 只有一套键：companyGroupKey（保守——只归一化全半角/空格/标点，只剥「法人形式后缀」，保留行业词）。
+      // 查重与展示必须共用它，否则会出现自相矛盾：实证过「字节 / 字节跳动」展示合并但查重放行
+      // （重复记录被美化成「一家 2 个岗位」），而「小米科技 / 小米智能」展示分成两家却被查重判为重复
+      // （两家不同公司被合并）。旧版查重用的是激进的 normalizeCompanySlug（连「科技/网络/智能」这类
+      // 行业词也剥），已退役；该函数仍保留，但只服务于邮件建议的模糊匹配。
+      // 聚类语义也统一为「相等或互相包含」，与 groupRecordsByCompany 完全一致。
+      function sameCompanyGroup(keyA, keyB) {
+        const a = String(keyA || ''), b = String(keyB || '');
+        if (!a || !b) return false;
+        if (a === b) return true;
+        return a.length >= 2 && b.length >= 2 && (a.includes(b) || b.includes(a));
       }
       // 法人形式后缀（可循环剥离，如「××集团有限公司」→「××」）；不含行业词
       const LEGAL_SUFFIX_RE = /(股份有限公司|有限责任公司|集团有限公司|有限公司|股份公司|集团|公司|股份|co\.,?ltd\.?|inc\.?|ltd\.?|corp\.?|llc)+$/i;
@@ -3564,36 +3579,130 @@
         const rank = { danger: 0, warn: 1, info: 2 };
         return alerts.sort((a, b) => (rank[a.level] - rank[b.level])).slice(0, Number(limit) > 0 ? limit : 5);
       }
-      // ----- 查重三态（同公司多岗位的关键）-----
-      // 岗位名归一化：去空格、去括号内修饰（如「产品经理（提前批）」→「产品经理」）、小写
+      // ----- 查重四态（同公司多岗位的关键）-----
+      // 岗位名归一化：全半角统一、去空白、小写。**保留括号内容** —— 括号里常是城市 / iOS-Android /
+      // 校招社招 / 提前批正式批，是同一家公司多个岗位的关键区分维度。
+      // 旧版这里有一行 .replace(/[（(][^）)]*[）)]/g,'') 把括号整块删掉，导致「后端（深圳）」与「后端（北京）」
+      // 撞成同名被判重复；而岗位库与插件两条路径当时都是硬拦截、没有逃生口 → 第二个岗位根本录不进去。
       function normalizePositionSlug(position) {
-        return String(position || '').trim().toLowerCase().replace(/\s+/g, '').replace(/[（(][^）)]*[）)]/g, '');
+        return String(position || '')
+          .replace(/[\uFF01-\uFF5E]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+          .replace(/\s+/g, '')
+          .toLowerCase();
       }
-      // 返回 { mode: 'duplicate' | 'same-company', reason, matches } 或 null
-      //   duplicate    ：同投递网址，或 同公司 + 同岗位 + 同批次 → 应改为编辑既有记录，避免重复堆积
-      //   same-company ：同公司但岗位或批次不同 → 合法（同公司多岗位 / 提前批与正式批），只做非阻断提示
-      // 修复点：此前查重不认 batch，导致「提前批」与「正式批」的同岗位被误合并成一条。
-      // options.ignoreBatch：调用方无法提供批次时（如插件收录）置 true，退回「同公司+同岗位」即判重复，
-      //                      保持插件重复推送不会堆积旧行为。
-      function findDuplicateRecord(records, seed, options = {}) {
+      // 宽松版：再去掉括号与连字符后缀。**只用于「疑似同岗位不同方向」提示，绝不用于判重**
+      function loosePositionSlug(position) {
+        return normalizePositionSlug(position).replace(/[（(][^）)]*[）)]/g, '').replace(/[-—|·_~].*$/, '');
+      }
+      // 返回 { mode: 'duplicate' | 'variant' | 'same-company', reason, matches } 或 null
+      //   duplicate    ：同投递网址，或 同公司 + 岗位归一化严格相等 + 同批次 → 应改为编辑既有记录
+      //   variant      ：同公司 + 岗位宽松相等 + （严格不等或批次不等）→ 疑似同一岗位的不同方向/城市/批次，
+      //                  合法但值得提醒，必须给用户「是独立投递 / 其实是同一条」二选一，不得静默拦截
+      //   same-company ：同公司但岗位无关 → 合法（同公司多岗位），只做非阻断提示
+      // 公司判定统一走 companyGroupKey + sameCompanyGroup，与展示分组同源（见上方「公司维度分组」注释）。
+      // 不再有 options.ignoreBatch：插件不传批次（恒为空），已有记录填了批次时自然不等 → 走 variant/same-company
+      // 非阻断放行；两边都没批次才判 duplicate 并给逃生口。旧版插件路径 ignoreBatch:true 会把
+      // 「已有提前批 + 新收正式批」判成 duplicate 并强制打开旧记录编辑，污染已有里程碑。
+      function findDuplicateRecord(records, seed) {
         const list = Array.isArray(records) ? records : [];
         const url = String((seed && seed.applicationUrl) || '').trim();
         if (url) {
           const hit = list.find(record => String(record.applicationUrl || '').trim() === url);
           if (hit) return { mode: 'duplicate', reason: 'url', matches: [hit] };
         }
-        const key = companyKeyOf(seed);
+        const key = companyGroupKey(seed);
         if (!key) return null;
-        const sameCompany = list.filter(record => companyKeyOf(record) === key);
+        const sameCompany = list.filter(record => sameCompanyGroup(companyGroupKey(record), key));
         if (!sameCompany.length) return null;
         const position = normalizePositionSlug(seed && seed.position);
+        const loose = loosePositionSlug(seed && seed.position);
         const batch = String((seed && seed.batch) || '').trim();
         const exact = sameCompany.filter(record => normalizePositionSlug(record.position) === position
-          && (options.ignoreBatch === true || String(record.batch || '').trim() === batch));
-        if (exact.length) return { mode: 'duplicate', reason: options.ignoreBatch === true ? 'company+position' : 'company+position+batch', matches: exact };
+          && String(record.batch || '').trim() === batch);
+        if (exact.length) return { mode: 'duplicate', reason: 'company+position+batch', matches: exact };
+        if (loose && loose.length >= 2) {
+          const variant = sameCompany.filter(record => {
+            const otherLoose = loosePositionSlug(record.position);
+            if (!otherLoose || otherLoose !== loose) return false;
+            return normalizePositionSlug(record.position) !== position
+              || String(record.batch || '').trim() !== batch;
+          });
+          if (variant.length) return { mode: 'variant', reason: 'company+position-loose', matches: variant };
+        }
         return { mode: 'same-company', reason: 'company', matches: sameCompany };
       }
       /*__CORE_PURE_END__*/
+
+      // ================= 查重统一处置（v4.5.0）=================
+      // 三条建记录入口（手填 submitForm / 岗位库「记为已投递」/ 插件推送 handleCaptureMessage）统一走这里。
+      // 铁律：任何「疑似重复」都必须给人工逃生口，绝不静默拦截、绝不静默改写既有记录。
+      // 修复前：岗位库路径是 `return showToast('这条岗位已经在投递记录中')` —— 直接 return，点几次都只有
+      //        一句提示，看起来像按钮坏了；插件路径直接 openDialog(既有记录) 并自动 setTimeline 追加里程碑，
+      //        既没有「仍然新增」选项，又会把第二个岗位的信息污染进第一个岗位。
+      //        这两条硬拦截叠加「岗位归一化删括号」的误判，就是「同一家公司录不进第二个岗位」的根因。
+      // 返回 { action:'add'|'edit'|'cancel', target, hint }：
+      //   add    → 调用方继续新增；hint 非空时请并进保存 toast（单独 showToast 会被随后的 toast 顶掉）
+      //   edit   → 调用方应打开 target 编辑，不要新增
+      //   cancel → 用户按 Esc / 点遮罩关掉了确认框，既没选新增也没选编辑 → 中止本次入库，什么都不写
+      async function resolveDuplicate(dup, seed) {
+        if (!dup) return { action: 'add', target: null, hint: '' };
+        const label = String((seed && seed.company) || '该公司');
+        const countHint = `（${label} 名下现在共 ${dup.matches.length + 1} 个岗位）`;
+        if (dup.mode === 'same-company') {
+          // 同公司不同岗位：完全合法，只做非阻断提示，不打断录入
+          return { action: 'add', target: null, hint: countHint };
+        }
+        const target = dup.matches[0];
+        const targetLabel = `${target.company} · ${target.position}${target.batch ? `（${target.batch}）` : ''}`;
+        if (dup.mode === 'variant') {
+          // 疑似同一岗位的不同方向 / 城市 / 批次：绝大多数情况确实是两条独立投递，故主按钮是「新增」
+          const isSeparate = await confirmInApp(
+            `${label} 已有相似岗位「${targetLabel}」（当前阶段：${target.stage}）。\n\n这条是不同方向 / 城市 / 批次的独立投递吗？`,
+            { title: '疑似同岗位不同方向', confirmText: '是独立投递，新增', cancelText: '其实是同一条，编辑已有' }
+          );
+          if (lastConfirmOutcome() === 'dismiss') return { action: 'cancel', target: null, hint: '' };
+          return isSeparate
+            ? { action: 'add', target: null, hint: countHint }
+            : { action: 'edit', target, hint: '' };
+        }
+        // duplicate：默认倾向「编辑已有」，避免重复堆积；但始终保留「仍然新增」的逃生口
+        const goEdit = await confirmInApp(
+          `「${targetLabel}」已经在台账里（当前阶段：${target.stage}）。\n\n改为编辑这条已有记录，还是仍然新增一条？`,
+          { title: '疑似重复投递', confirmText: '编辑已有记录', cancelText: '仍然新增' }
+        );
+        if (lastConfirmOutcome() === 'dismiss') return { action: 'cancel', target: null, hint: '' };
+        return goEdit ? { action: 'edit', target, hint: '' } : { action: 'add', target: null, hint: '' };
+      }
+
+      // ---- 录入时前置提示：这家公司已经有哪几个岗位（v4.5.0）----
+      // 让用户在**录入过程中**就知道自己是在加第二个岗位，而不是提交后被查重弹窗拦住才反应过来。
+      // 判定与查重、展示分组同源（companyGroupKey + sameCompanyGroup），三处不会再给出不同结论。
+      function updateSameCompanyHint() {
+        const box = $('#sameCompanyHint');
+        if (!box) return;
+        const companyInput = $('#company'), positionInput = $('#position');
+        const company = String((companyInput && companyInput.value) || '').trim();
+        if (company.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+        const key = companyGroupKey({ company });
+        // 编辑态排除自身：否则编辑一条记录时会把自己也算成「已有岗位」
+        const siblings = records.filter(record => record.id !== editingId && sameCompanyGroup(companyGroupKey(record), key));
+        if (!siblings.length) { box.hidden = true; box.innerHTML = ''; return; }
+        const loose = loosePositionSlug(String((positionInput && positionInput.value) || ''));
+        const items = siblings.slice(0, 4).map(record => {
+          // 与当前正在填的岗位「宽松相等」→ 标黄，提示保存时会再确认一次是不是同一条
+          const similar = loose.length >= 2 && loosePositionSlug(record.position) === loose;
+          return `<span class="same-company-item${similar ? ' is-similar' : ''}">${escapeHtml(record.position || '未填岗位')}${record.batch ? `（${escapeHtml(record.batch)}）` : ''} · ${escapeHtml(record.stage)}</span>`;
+        }).join('');
+        const more = siblings.length > 4 ? `<span class="same-company-more">等 ${siblings.length} 个</span>` : '';
+        box.innerHTML = `该公司已有 ${siblings.length} 个岗位：${items}${more}`;
+        box.hidden = false;
+      }
+      // 公司名 / 岗位名变化时刷新提示（debounce，避免逐字符重算整份台账）
+      let sameCompanyHintTimer = null;
+      function scheduleSameCompanyHint() {
+        clearTimeout(sameCompanyHintTimer);
+        sameCompanyHintTimer = setTimeout(updateSameCompanyHint, 250);
+      }
 
       // ================= 台账视图增强（v4.4.0）：UI 偏好 / 看板 / 详情抽屉 / ⌘K 命令面板 =================
       let uiPrefs = loadUiPrefs();
@@ -4038,6 +4147,9 @@
 
       /*__MAIL_PURE_START__*/
       // 公司名归一化：全角→半角、去标点空格、latin 小写、循环剥离常见后缀/修饰词
+      // ⚠️ 激进版：连「科技/网络/智能/数据」这类行业词也会剥掉，因此**只用于邮件建议的模糊匹配**
+      // （那里宁可多命中，反正有人工逐条复核兜底）。查重与展示分组请一律用 companyGroupKey +
+      // sameCompanyGroup —— 用本函数做查重会把「星海科技」与「星海互娱」当成同一家公司。
       function normalizeCompanySlug(name) {
         let s = String(name || '');
         s = s.replace(/[\uFF01-\uFF5E]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)).replace(/\u3000/g, ' ');
@@ -4546,6 +4658,7 @@
         // 已填过任一「更多字段」时自动展开折叠区，避免用户以为数据丢了
         const more = $('#formMore');
         if (more) more.open = !!source && ['batch', 'channel', 'referral', 'salary'].some(f => String(source[f] || '').trim()) || (!!source && Number(source.intent) > 0);
+        updateSameCompanyHint(); // 打开即显示「该公司已有哪几个岗位」，录入第二个岗位时心里有数
         els.dialog.showModal();
         requestAnimationFrame(() => $('#company').focus());
       }
@@ -4683,7 +4796,7 @@
 
       // 桥接消息源：原配“一键收录插件”与本插件（秋招求职与简历助手）共存，两者都认
       const BRIDGE_SOURCES = ['AUTUMN_JOB_CAPTURE', 'AUTUMN_JOB_ASSISTANT'];
-      function handleCaptureMessage(event) {
+      async function handleCaptureMessage(event) {
         if (event.source !== window || !BRIDGE_SOURCES.includes(event.data?.source)) return;
         if (event.data.type === 'RESUME_REQUEST') {
           // 插件打开网页版时主动索要简历：立即下发，弥补定时推送可能因内容脚本注入时机而错过
@@ -4703,26 +4816,30 @@
             recentSchedule: submitted.recentSchedule || '',
             nextAction: submitted.nextAction || ''
           });
-          // 入库前查重（与“岗位库→记为已投递”同规则，统一走 findDuplicateRecord）：
-          // 同链接或「同公司+同岗位」命中则改为编辑既有记录，避免插件重复推送产生重复台账。
-          // 插件不知道批次，因此 ignoreBatch=true（手填路径才严格按批次区分提前批/正式批）。
-          const dup = findDuplicateRecord(records, seed, { ignoreBatch: true });
-          const existing = dup && dup.mode === 'duplicate' ? dup.matches[0] : null;
-          if (existing) {
-            const merged = { ...existing };
+          // 统一走 resolveDuplicate。此前这条路径**没有逃生口**：一旦判为重复就强制 openDialog(既有记录)，
+          // 还自动 setTimeline 追加里程碑 + 合并 city/url —— 用户想录同一家公司的第二个岗位时不仅录不进，
+          // 新岗位的信息还会被静默写进旧记录。另外旧版传 ignoreBatch:true，会把「已有提前批 + 新收正式批」
+          // 判成 duplicate，同样触发上述静默改写。
+          // 现在：add → 新增弹窗；edit → 打开既有记录（阶段更靠后时只把里程碑**预置进时间线编辑器**，
+          // 用户看得到、可改可删，保存才落库）；cancel → 什么都不做。
+          const decision = await resolveDuplicate(findDuplicateRecord(records, seed), seed);
+          if (decision.action === 'cancel') return;
+          if (decision.action === 'edit') {
+            const target = decision.target;
+            const merged = { ...target };
             ['city', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction'].forEach(key => {
               if (seed[key] && !merged[key]) merged[key] = seed[key];
             });
             if (stageOrder(seed.stage) > stageOrder(merged.stage)) {
-              // 插件推送的阶段更靠后：作为新里程碑追加进时间线（而非直接覆盖 stage）
-              setTimeline(merged, [...(merged.timeline || []), { stage: seed.stage, at: seed.applicationDate || localDateInput(new Date()), note: '插件推送' }]);
+              // 不直接 setTimeline 落库：只把新里程碑放进弹窗的时间线编辑器，由用户确认后保存
+              merged.timeline = [...(merged.timeline || []), { stage: seed.stage, at: seed.applicationDate || localDateInput(new Date()), note: '插件推送' }];
             }
             openDialog(merged);
-            showToast('检测到重复投递，已为你打开更新（不会新增重复记录）');
+            showToast('已打开既有记录，请核对后保存（未自动改动任何内容）');
             return;
           }
           openDialog(null, seed);
-          showToast('插件已推送岗位，请检查信息后保存');
+          showToast(`插件已推送岗位，请检查信息后保存${decision.hint || ''}`);
           return;
         }
         if (event.data.type === 'CAPTURE_READY') {
@@ -5139,21 +5256,13 @@
         const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now(), timeline });
         let sameCompanyHint = '';
         if (!editingId) {
-          // 手填新增查重（此前这条路径完全没有查重）：
-          //   duplicate → 让用户选「编辑已有」还是「仍然新增」；same-company → 只做非阻断提示
-          const dup = findDuplicateRecord(records, normalized);
-          if (dup && dup.mode === 'duplicate') {
-            const target = dup.matches[0];
-            const goEdit = await confirmInApp(
-              `「${target.company} · ${target.position}」已经在台账里（当前阶段：${target.stage}${target.batch ? `，批次：${target.batch}` : ''}）。\n\n改为编辑这条已有记录，还是仍然新增一条？`,
-              { title: '疑似重复投递', confirmText: '编辑已有记录', cancelText: '仍然新增' }
-            );
-            if (goEdit) { closeDialog(); openDialog(target); return; }
-          } else if (dup && dup.mode === 'same-company') {
-            // 不能在这里单独 showToast：紧接着 saveRecords 的 toast 会把它顶掉（同一个 #toast 元素），
-            // 用户永远看不到。改为把提示并进保存那条 toast。
-            sameCompanyHint = `（${normalized.company} 名下现在共 ${dup.matches.length + 1} 个岗位）`;
-          }
+          // 手填新增：统一走 resolveDuplicate —— duplicate / variant 都给逃生口，same-company 只做非阻断提示
+          const decision = await resolveDuplicate(findDuplicateRecord(records, normalized), normalized);
+          if (decision.action === 'cancel') return; // Esc / 点遮罩关掉确认框：什么都不写
+          if (decision.action === 'edit') { closeDialog(); openDialog(decision.target); return; }
+          // 不能在这里单独 showToast：紧接着 saveRecords 的 toast 会把它顶掉（同一个 #toast 元素），
+          // 用户永远看不到。改为把提示并进保存那条 toast。
+          sameCompanyHint = decision.hint || '';
         }
         if (editingId) {
           records = records.map(record => record.id === editingId ? normalized : record);
@@ -5341,12 +5450,20 @@
       // 应用内确认框：替代原生 confirm()，风格统一、可 danger 样式化；Esc/点遮罩/取消均为 false
       let confirmResolve = null;
       let confirmResult = false;
+      // 'ok' | 'cancel' | 'dismiss'：布尔返回值无法区分「点了取消按钮」与「Esc / 点遮罩关掉」，
+      // 而查重场景里 Esc 应当中止整次操作，不该被当成任何一个按钮（否则按 Esc 会静默新增一条重复记录）。
+      let confirmOutcome = 'cancel';
+      function lastConfirmOutcome() { return confirmOutcome; }
       function confirmInApp(message, options = {}) {
         const dialog = $('#confirmDialog');
-        if (!dialog || typeof dialog.showModal !== 'function') return Promise.resolve(window.confirm(message));
+        if (!dialog || typeof dialog.showModal !== 'function') {
+          const fallback = window.confirm(message);
+          confirmOutcome = fallback ? 'ok' : 'cancel';
+          return Promise.resolve(fallback);
+        }
         // 重入保护：确认框已开着时再调用，showModal() 按规范会抛 InvalidStateError 并留下悬挂的 Promise。
         // 先把上一次按「取消」结算掉，再复用同一个弹窗。
-        if (dialog.open) { confirmResult = false; settleConfirm(); }
+        if (dialog.open) { confirmResult = false; confirmOutcome = 'dismiss'; settleConfirm(); }
         $('#confirmMessage').textContent = message;
         $('#confirmTitle').textContent = options.title || '请确认';
         const okBtn = $('#confirmOkBtn');
@@ -5355,6 +5472,7 @@
         const cancelBtn = $('#confirmCancelBtn');
         if (cancelBtn) cancelBtn.textContent = options.cancelText || '取消';
         confirmResult = false;
+        confirmOutcome = 'cancel';
         return new Promise(resolve => {
           confirmResolve = resolve;
           dialog.showModal();
@@ -5728,6 +5846,9 @@
       $('#closeDialog').addEventListener('click', closeDialog);
       $('#cancelDialog').addEventListener('click', closeDialog);
       els.form.addEventListener('submit', submitForm);
+      // 公司名 / 岗位名输入时实时刷新「该公司已有 N 个岗位」提示
+      $('#company').addEventListener('input', scheduleSameCompanyHint);
+      $('#position').addEventListener('input', scheduleSameCompanyHint);
       $('#addTimelineBtn').addEventListener('click', addTimelineRow);
       $('#timelineEditor').addEventListener('click', event => {
         const del = event.target.closest('.tl-del');
@@ -5751,15 +5872,17 @@
         confirmResolve = null;
         resolve(confirmResult);
       }
-      $('#confirmOkBtn').addEventListener('click', () => { confirmResult = true; settleConfirm(); $('#confirmDialog').close(); });
-      $('#confirmCancelBtn').addEventListener('click', () => { confirmResult = false; settleConfirm(); $('#confirmDialog').close(); });
+      $('#confirmOkBtn').addEventListener('click', () => { confirmResult = true; confirmOutcome = 'ok'; settleConfirm(); $('#confirmDialog').close(); });
+      $('#confirmCancelBtn').addEventListener('click', () => { confirmResult = false; confirmOutcome = 'cancel'; settleConfirm(); $('#confirmDialog').close(); });
       $('#confirmDialog').addEventListener('close', () => { settleConfirm(); });
       // Esc 取消：modal dialog 先派发 cancel 再派发 close，而部分环境只派发其中之一，
-      // 因此两条都监听（与 #screenshotDialog 的做法一致），确保 await 一定能结算
-      $('#confirmDialog').addEventListener('cancel', () => { confirmResult = false; settleConfirm(); });
+      // 因此两条都监听（与 #screenshotDialog 的做法一致），确保 await 一定能结算。
+      // Esc 记为 dismiss 而非 cancel：查重场景要能区分「用户明确选了取消按钮」与「用户什么都没选就关掉」。
+      $('#confirmDialog').addEventListener('cancel', () => { confirmResult = false; confirmOutcome = 'dismiss'; settleConfirm(); });
       $('#confirmDialog').addEventListener('click', event => {
         if (event.target !== $('#confirmDialog')) return;
         confirmResult = false;
+        confirmOutcome = 'dismiss'; // 点遮罩关掉同样视为「未作选择」
         settleConfirm();
         $('#confirmDialog').close();
       });

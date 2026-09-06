@@ -4,7 +4,7 @@
  */
 'use strict';
 
-importScripts('common/constants.js', 'common/default-resume.js');
+importScripts('common/constants.js', 'common/default-resume.js', 'common/company-key.js');
 
 const RECORDS_STORAGE_KEY = AJA.RECORDS_STORAGE_KEY;
 const RESUME_STORAGE_KEY = AJA.RESUME_STORAGE_KEY;
@@ -24,15 +24,32 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 });
 
-// 收录查重：同链接或同公司同岗位视为同一条记录
+// 暂存箱去重：与网页端 index.html 的 findDuplicateRecord 同源（都基于 common/company-key.js 的归一化键）。
+// 此前这里是「公司名与岗位名原文精确相等」，导致「腾讯」与「腾讯 」（尾空格）、
+// 「腾讯」与「腾讯科技（深圳）有限公司」在暂存箱里堆成两条，推给网页端时要逐条弹窗确认。
+// 返回 { record, mode: 'duplicate' | 'variant' } 或 null：
+//   duplicate → 同链接，或同公司 + 岗位归一化严格相等 → 合并进已有暂存项
+//   variant   → 同公司 + 岗位宽松相等（括号里的城市/方向/批次不同）→ **不合并**，
+//               那是同一家公司的另一个岗位，入队并标 variantOf 供侧栏提示
 function findDuplicateRecord(records, incoming) {
-  const url = String(incoming.applicationUrl || '').trim();
-  const company = String(incoming.company || '').trim();
-  const position = String(incoming.position || '').trim();
-  return records.find(r => {
-    if (url && String(r.applicationUrl || '').trim() === url) return true;
-    return company && position && r.company === company && r.position === position;
-  });
+  const list = Array.isArray(records) ? records : [];
+  const url = String((incoming && incoming.applicationUrl) || '').trim();
+  if (url) {
+    const byUrl = list.find(r => String(r.applicationUrl || '').trim() === url);
+    if (byUrl) return { record: byUrl, mode: 'duplicate' };
+  }
+  const company = String((incoming && incoming.company) || '').trim();
+  const position = String((incoming && incoming.position) || '').trim();
+  if (!company || !position) return null;
+  const posKey = AJA.positionKey(position);
+  const looseKey = AJA.loosePositionKey(position);
+  let variant = null;
+  for (const r of list) {
+    if (!AJA.sameCompany(company, r.company)) continue;
+    if (AJA.positionKey(r.position) === posKey) return { record: r, mode: 'duplicate' };
+    if (!variant && looseKey.length >= 2 && AJA.loosePositionKey(r.position) === looseKey) variant = r;
+  }
+  return variant ? { record: variant, mode: 'variant' } : null;
 }
 
 async function getPendingQueue() {
@@ -111,9 +128,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           pendingAt: Date.now()
         };
 
-        // 查重：同链接或同公司同岗位 → 更新暂存项，否则入队
-        const existing = findDuplicateRecord(queue, staged);
-        if (existing) {
+        // 查重：duplicate（同链接或同公司同岗位）→ 更新暂存项；variant（同公司的另一个岗位）→ 入队
+        const hit = findDuplicateRecord(queue, staged);
+        if (hit && hit.mode === 'duplicate') {
+          const existing = hit.record;
           Object.assign(existing, {
             company: staged.company,
             position: staged.position,
@@ -129,6 +147,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           await chrome.storage.local.set({ [PENDING_KEY]: queue });
           sendResponse({ ok: true, record: existing, total: queue.length, updated: true });
         } else {
+          // 同一家公司的另一个岗位（括号里是不同城市/方向/批次）：不合并，
+          // 但标出 variantOf 让侧栏说明「这不是重复堆积」，避免用户以为暂存箱出了问题
+          if (hit && hit.mode === 'variant') staged.variantOf = `${hit.record.company} · ${hit.record.position}`;
           queue.unshift(staged);
           await chrome.storage.local.set({ [PENDING_KEY]: queue });
           sendResponse({ ok: true, record: staged, total: queue.length, updated: false });
@@ -151,7 +172,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const legacy = Array.isArray(legacyRes[RECORDS_STORAGE_KEY]) ? legacyRes[RECORDS_STORAGE_KEY] : [];
         if (legacy.length) {
           legacy.forEach(old => {
-            if (!findDuplicateRecord(queue, old)) {
+            // 只有 duplicate 才跳过；variant 是同一家公司的另一个岗位，必须保留入队
+            const hit = findDuplicateRecord(queue, old);
+            if (!hit || hit.mode !== 'duplicate') {
               queue.push({ ...old, id: old.id || ((self.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`), pendingAt: Number(old.updatedAt) || Date.now() });
             }
           });
