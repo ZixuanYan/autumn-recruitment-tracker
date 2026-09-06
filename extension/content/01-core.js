@@ -407,6 +407,25 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       font-size: 10px;
       margin-bottom: 2px;
     }
+    /* 采集结果置信提示：解析器「宁空勿错」，识别不出的字段留空并在这里明确告知需要人工补填 */
+    .detect-hint {
+      font-size: 11px;
+      line-height: 1.5;
+      border-radius: 6px;
+      padding: 5px 8px;
+      margin-top: 5px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #64748b;
+    }
+    .detect-hint.warn {
+      background: #fffbeb;
+      border-color: #fcd34d;
+      color: #92400e;
+    }
+    .detect-hint-src {
+      color: #94a3b8;
+    }
     .form-group {
       display: flex;
       flex-direction: column;

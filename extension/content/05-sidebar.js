@@ -75,6 +75,7 @@ function ensureSidebarUI() {
               <div class="title-hint-label">📄 网页标题（参考）</div>
               <div id="cap-title-text"></div>
             </div>
+            <div class="detect-hint" id="cap-detect-hint" hidden></div>
             <div class="form-group">
               <label>公司名称</label>
               <input type="text" id="cap-company" placeholder="例如：字节跳动">
@@ -143,6 +144,7 @@ function ensureSidebarUI() {
   // 阶段选项由 AJA.STAGES 统一生成（消除硬编码，与网页版预设单一事实源）
   capStage.innerHTML = AJA.STAGES.map(s => `<option value="${s}">${s}</option>`).join('');
   const capDate = shadow.getElementById('cap-date');
+  const capDetectHint = shadow.getElementById('cap-detect-hint');
   const capSaveBtn = shadow.getElementById('cap-save-btn');
   const capCancelBtn = shadow.getElementById('cap-cancel-btn');
   const capTitleHint = shadow.getElementById('cap-title-hint');
@@ -360,6 +362,43 @@ function ensureSidebarUI() {
     resumeSearchEl.addEventListener('input', () => { AJA.resumeSearchQuery = resumeSearchEl.value; applyResumeFilter(); });
   }
 
+  // 采集来源的中文标签：让用户知道每个字段是从页面哪里认出来的，便于判断该不该信
+  const DETECT_SOURCE_LABELS = {
+    jsonld: '结构化数据', domain: '官方域名', logo: '页面 Logo', selector: '页面元素',
+    breadcrumb: '面包屑', h1: '页面主标题', generic: '页面元素', og: 'OpenGraph',
+    title: '网页标题', 'document.title': '网页标题', subdomain: '子域名', detected: '页面内容'
+  };
+  function detectSourceLabel(source) {
+    const s = String(source || '');
+    if (!s) return '';
+    if (s.indexOf('ats:') === 0) return `${s.slice(4)} 解析器`;
+    return DETECT_SOURCE_LABELS[s] || s;
+  }
+
+  // 渲染采集置信提示：解析器「宁空勿错」，识别不出的字段会留空，这里明确告知需要人工补填
+  function renderDetectHint(detected) {
+    if (!capDetectHint) return;
+    const missing = [];
+    if (!detected.company) missing.push('公司名称');
+    if (!detected.position) missing.push('投递岗位');
+    if (!detected.city) missing.push('目标城市');
+    const sources = detected._sources || {};
+    const srcText = ['company', 'position', 'city']
+      .filter(k => detected[k] && sources[k])
+      .map(k => `${k === 'company' ? '公司' : k === 'position' ? '岗位' : '城市'}来自${detectSourceLabel(sources[k])}`)
+      .join(' · ');
+    if (missing.length) {
+      capDetectHint.className = 'detect-hint warn';
+      capDetectHint.innerHTML = `⚠️ 未能从页面识别出：<b>${missing.map(escapeHtml).join('、')}</b>，请手动补填后再保存。`
+        + (srcText ? `<div class="detect-hint-src">${escapeHtml(srcText)}</div>` : '');
+      capDetectHint.hidden = false;
+    } else {
+      capDetectHint.className = 'detect-hint';
+      capDetectHint.innerHTML = `已自动识别，请核对后保存。${srcText ? `<div class="detect-hint-src">${escapeHtml(srcText)}</div>` : ''}`;
+      capDetectHint.hidden = false;
+    }
+  }
+
   // 一键提取岗位并展示微调表单
   scanBtn.addEventListener('click', () => {
     const detected = extractPageJobData();
@@ -368,16 +407,19 @@ function ensureSidebarUI() {
     capCity.value = detected.city;
     capStage.value = detected.stage;
     capDate.value = detected.applicationDate;
+    if (detected._sources) console.debug('[秋招助手] 采集来源', detected._sources);
 
     // 显示网页标题作为参考，帮助用户快速修正
     const pageTitle = document.title || '';
     capTitleText.textContent = pageTitle;
     capTitleHint.title = `点击复制: ${pageTitle}`;
+    renderDetectHint(detected);
 
     captureForm.classList.remove('hidden');
 
-    // 自动聚焦公司名称输入框，方便快速修正
-    setTimeout(() => capCompany.focus(), 50);
+    // 自动聚焦到第一个没识别出来的字段（都识别出来则聚焦公司名），方便快速修正
+    const firstEmpty = !detected.company ? capCompany : (!detected.position ? capPosition : (!detected.city ? capCity : capCompany));
+    setTimeout(() => firstEmpty.focus(), 50);
   });
 
   // 点击标题参考栏 -> 复制到剪贴板
