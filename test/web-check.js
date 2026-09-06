@@ -126,7 +126,18 @@ function extractFunction(src, name) {
   if (start === -1) return '';
   // 带上 async 前缀，避免抽出异步函数时 await 变成语法错误
   if (src.slice(Math.max(0, start - 6), start) === 'async ') start -= 6;
-  let i = src.indexOf('{', start);
+  // 必须先配平参数列表的圆括号再找函数体的 '{'：默认参数写成 `options = {}` 时，
+  // 直接 indexOf('{') 会命中默认值里的 '{'，配平后只返回 56 字符的签名（踩过这个坑）。
+  let p = src.indexOf('(', start);
+  if (p === -1) return '';
+  let pDepth = 0;
+  let bodyStart = -1;
+  for (; p < src.length; p += 1) {
+    if (src[p] === '(') pDepth += 1;
+    else if (src[p] === ')') { pDepth -= 1; if (pDepth === 0) { bodyStart = p + 1; break; } }
+  }
+  if (bodyStart === -1) return '';
+  let i = src.indexOf('{', bodyStart);
   if (i === -1) return '';
   let depth = 0;
   for (; i < src.length; i += 1) {
@@ -161,9 +172,9 @@ const core = new Function(
    ${coreSrc}
    return {
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
-     companyKeyOf, companyGroupKey, groupRecordsByCompany, companyGroupIndex, companyColor, computeFunnel, computeStageDwell,
+     companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
-     normalizePositionSlug, findDuplicateRecord, normalizeRecord
+     normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
    };`
 )(globalThis);
 
@@ -306,7 +317,7 @@ check('buildIcs 全天截止用 VALUE=DATE', () => {
   assert.ok(ics.includes('DTEND;VALUE=DATE:20260921'), '全天事件 DTEND 为次日（RFC 排他）');
 });
 
-check('companyKeyOf + groupRecordsByCompany 把「腾讯」与「腾讯科技有限公司」归为一家', () => {
+check('companyGroupKey + groupRecordsByCompany 把「腾讯」与「腾讯科技有限公司」归为一家', () => {
   const groups = core.groupRecordsByCompany([
     { id: '1', company: '腾讯', position: '后端' },
     { id: '2', company: '腾讯科技有限公司', position: '前端' },
@@ -318,14 +329,35 @@ check('companyKeyOf + groupRecordsByCompany 把「腾讯」与「腾讯科技有
   assert.strictEqual(groups[0].key, '腾讯', '规范键取成员里最短的那个');
 });
 
-check('companyGroupKey 只剥法人形式后缀，保留行业词（与查重用的激进 slug 区分开）', () => {
+check('companyGroupKey 只剥法人形式后缀，保留行业词（查重与展示共用这一套键）', () => {
   assert.strictEqual(core.companyGroupKey({ company: '腾讯科技（深圳）有限公司' }), '腾讯科技深圳');
   assert.strictEqual(core.companyGroupKey({ company: '星海科技' }), '星海科技', '行业词「科技」不能被剥掉');
   assert.strictEqual(core.companyGroupKey({ company: '某集团股份有限公司' }), '某');
   assert.strictEqual(core.companyGroupKey({ company: 'Ｔｅｎｃｅｎｔ　Ｌｔｄ' }), 'tencent', '全角转半角 + 大小写归一 + 剥 Ltd');
   assert.strictEqual(core.companyGroupKey({ company: '' }), '');
-  // 查专用的激进键仍会把行业词剥掉（这是刻意的：查重允许多合并，有人工确认兜底）
-  assert.strictEqual(core.companyKeyOf({ company: '星海科技' }), '星海');
+});
+
+check('sameCompanyGroup：与 groupRecordsByCompany 的聚类语义完全一致（相等或互相包含）', () => {
+  assert.strictEqual(core.sameCompanyGroup('腾讯', '腾讯'), true);
+  assert.strictEqual(core.sameCompanyGroup('腾讯', '腾讯科技'), true, '互相包含 → 同一家（简称与全称）');
+  assert.strictEqual(core.sameCompanyGroup('字节', '字节跳动'), true);
+  assert.strictEqual(core.sameCompanyGroup('星海科技', '星海互娱'), false, '两家不同公司不得合并');
+  assert.strictEqual(core.sameCompanyGroup('小米科技', '小米智能'), false);
+  assert.strictEqual(core.sameCompanyGroup('', '腾讯'), false);
+  assert.strictEqual(core.sameCompanyGroup('腾', '腾讯'), false, '单字键不参与包含匹配，避免过度合并');
+});
+
+check('normalizePositionSlug 保留括号（区分性信息），loosePositionSlug 才去括号且只用于提示', () => {
+  assert.strictEqual(core.normalizePositionSlug('后端开发工程师（深圳）'), '后端开发工程师(深圳)', '全角括号归一为半角但内容保留');
+  assert.strictEqual(core.normalizePositionSlug('Java 开发工程师'), 'java开发工程师');
+  assert.strictEqual(core.normalizePositionSlug('Android开发'), 'android开发');
+  assert.notStrictEqual(
+    core.normalizePositionSlug('后端开发工程师（深圳）'),
+    core.normalizePositionSlug('后端开发工程师（北京）'),
+    '两个不同工作地的岗位必须可区分，否则第二个岗位会被判成重复而录不进去'
+  );
+  assert.strictEqual(core.loosePositionSlug('后端开发工程师（深圳）'), '后端开发工程师');
+  assert.strictEqual(core.loosePositionSlug('算法工程师-推荐'), '算法工程师');
 });
 
 check('分组不会把「星海科技」与「星海互娱」误并成一家（浏览器实证发现的缺陷）', () => {
@@ -466,23 +498,48 @@ check('findDuplicateRecord：同链接判重', () => {
 
 check('findDuplicateRecord：同公司+同岗位+同批次才算重复', () => {
   const recs = [{ id: '1', company: '腾讯科技有限公司', position: '后端开发', applicationUrl: '', batch: '提前批' }];
-  const dup = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发（提前批）', batch: '提前批' });
+  const dup = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发', batch: '提前批' });
   assert.strictEqual(dup.mode, 'duplicate');
   assert.strictEqual(dup.reason, 'company+position+batch');
+  assert.strictEqual(dup.matches[0].id, '1', '公司键统一后，简称与全称也能对上');
 });
 
-check('findDuplicateRecord：批次不同 → same-company（修复提前批/正式批被误合并）', () => {
+check('findDuplicateRecord：岗位名仅空格/大小写差异仍判重复（真重复不能漏）', () => {
+  const recs = [{ id: '1', company: '字节跳动', position: 'Java 开发工程师', applicationUrl: '', batch: '' }];
+  assert.strictEqual(core.findDuplicateRecord(recs, { company: '字节', position: 'Java开发工程师' }).mode, 'duplicate');
+  const recs2 = [{ id: '1', company: '小米', position: 'Android开发', applicationUrl: '', batch: '' }];
+  assert.strictEqual(core.findDuplicateRecord(recs2, { company: '小米', position: 'android开发' }).mode, 'duplicate');
+});
+
+check('findDuplicateRecord：括号里的城市/端/批次不同 → variant（修复「第二个岗位录不进去」）', () => {
+  const cases = [
+    ['后端开发工程师（深圳）', '后端开发工程师（北京）', '不同工作地'],
+    ['客户端开发（iOS）', '客户端开发（Android）', 'iOS 与 Android'],
+    ['产品经理（2026届校招）', '产品经理（社招）', '校招岗与社招岗'],
+    ['算法工程师-推荐', '算法工程师-广告', '不同方向']
+  ];
+  for (const [existing, incoming, note] of cases) {
+    const recs = [{ id: '1', company: '腾讯', position: existing, applicationUrl: '', batch: '' }];
+    const res = core.findDuplicateRecord(recs, { company: '腾讯', position: incoming });
+    assert.ok(res, `${note}：应有判定结果`);
+    assert.strictEqual(res.mode, 'variant', `${note}：「${existing}」vs「${incoming}」应为 variant 而非 duplicate`);
+    assert.strictEqual(res.reason, 'company+position-loose');
+  }
+});
+
+check('findDuplicateRecord：批次不同 → variant（提前批/正式批不再被误合并）', () => {
   const recs = [{ id: '1', company: '腾讯', position: '后端开发', applicationUrl: '', batch: '提前批' }];
   const res = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发', batch: '正式批' });
-  assert.strictEqual(res.mode, 'same-company');
+  assert.strictEqual(res.mode, 'variant');
   assert.strictEqual(res.matches.length, 1);
 });
 
-check('findDuplicateRecord：ignoreBatch=true 时批次不同也判重（插件收录路径）', () => {
+check('findDuplicateRecord：插件不传批次时不再误判为 duplicate（旧版 ignoreBatch:true 的后果）', () => {
   const recs = [{ id: '1', company: '腾讯', position: '后端开发', applicationUrl: '', batch: '提前批' }];
-  const res = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发' }, { ignoreBatch: true });
-  assert.strictEqual(res.mode, 'duplicate');
-  assert.strictEqual(res.reason, 'company+position');
+  // 插件收录路径没有批次字段 → seed.batch 恒为空 → 与已有「提前批」不等 → 非阻断放行
+  const res = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发' });
+  assert.strictEqual(res.mode, 'variant');
+  assert.notStrictEqual(res.mode, 'duplicate', '绝不能再强制打开旧记录编辑，否则会污染已有里程碑');
 });
 
 check('findDuplicateRecord：同公司不同岗位 → same-company；无关联 → null', () => {
@@ -490,6 +547,32 @@ check('findDuplicateRecord：同公司不同岗位 → same-company；无关联 
   assert.strictEqual(core.findDuplicateRecord(recs, { company: '腾讯', position: '前端' }).mode, 'same-company');
   assert.strictEqual(core.findDuplicateRecord(recs, { company: '阿里', position: '前端' }), null);
   assert.strictEqual(core.findDuplicateRecord(recs, { company: '' }), null);
+});
+
+check('展示分组与查重判定必须同源（修复前 5 个案例里 3 个自相矛盾，现在 0 个）', () => {
+  // 期望值按 companyGroupKey 的实际语义推导：LEGAL_SUFFIX_RE 会剥掉「集团/有限公司/股份」等法人后缀，
+  // 因此「商汤集团」→「商汤」，与「商汤科技」构成互相包含 → 判为同一家（保守键的既定取舍）。
+  const cases = [
+    ['星海科技', '星海互娱', false, '行业词不同 → 两家'],
+    ['字节', '字节跳动', true, '简称与全称'],
+    ['腾讯', '腾讯科技（深圳）有限公司', true, '简称与法人全称'],
+    ['商汤科技', '商汤集团', true, '「集团」是法人后缀被剥掉 → 商汤 ⊂ 商汤科技'],
+    ['小米科技', '小米智能', false, '行业词不同 → 两家']
+  ];
+  for (const [a, b, expectSame, note] of cases) {
+    const groups = core.groupRecordsByCompany([
+      { id: '1', company: a, position: '后端' }, { id: '2', company: b, position: '前端' }
+    ]);
+    const displaySame = groups.length === 1;
+    const dup = core.findDuplicateRecord(
+      [{ id: '1', company: a, position: '后端', batch: '' }],
+      { company: b, position: '前端' }
+    );
+    // 岗位不同 → 同公司时应命中（same-company），不同公司时应为 null
+    const dedupSame = !!dup;
+    assert.strictEqual(displaySame, expectSame, `${a} / ${b} 展示分组（${note}）`);
+    assert.strictEqual(dedupSame, expectSame, `${a} / ${b} 查重判定必须与展示分组一致（${note}）`);
+  }
 });
 
 check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、intent 夹取、notes 清洗', () => {
