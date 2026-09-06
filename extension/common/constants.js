@@ -9,7 +9,7 @@
   root.AJA = root.AJA || {};
 
   // 扩展版本（胶囊 title / 控制台均会展示，用于排查“是否已加载新代码”）
-  root.AJA.VERSION = '4.0.0';
+  root.AJA.VERSION = '4.1.0';
 
   // 招聘阶段预设（与网页版 autumn-recruitment-tracker 的 STAGE_PRESETS 保持一致，两端需同步；实际阶段可自定义）
   root.AJA.STAGES = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
