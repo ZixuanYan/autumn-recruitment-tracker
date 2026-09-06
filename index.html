@@ -4842,6 +4842,18 @@
           showToast(`插件已推送岗位，请检查信息后保存${decision.hint || ''}`);
           return;
         }
+        if (event.data.type === 'BRIDGE_BROKEN') {
+          // 插件的 chrome.runtime 上下文失效了：通常是扩展刚被重新加载或更新，而本页仍跑着旧的内容脚本，
+          // 旧脚本的 chrome.runtime 已成失效句柄。插件侧（06-bridge.js）已把这类失败收敛成一次性上报，
+          // 不再往控制台抛 "Extension context invalidated."；这里负责把它变成用户看得懂、点一下就能解决的提示。
+          // 插件自己不会自愈——必须刷新页面重新注入内容脚本，所以直接给一个「刷新页面」动作按钮。
+          showToast(String(event.data.detail || '插件连接已断开，刷新页面即可恢复'), {
+            actionLabel: '刷新页面',
+            duration: 10000,
+            onAction: () => window.location.reload()
+          });
+          return;
+        }
         if (event.data.type === 'CAPTURE_READY') {
           // CAPTURE_READY 仅由旧版 AUTUMN_JOB_CAPTURE 插件回应，据此确认其存在并恢复相关入口
           if (event.data.source === 'AUTUMN_JOB_CAPTURE') {

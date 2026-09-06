@@ -86,3 +86,4 @@
 - **属性提取与文本提取分离**：`alt`/`title` 优先原本只为 logo `<img>` 设计，此前被无差别用到 `h1` 与岗位标题上，导致带 tooltip 的元素取到属性而非用户看到的文本
 - **城市按文本出现位置选取**：城市库 31 → 100；排除页脚总部地址与城市切换器；全文兜底改为「工作地点/办公地点/base」后 40 字窗口
 - **暂存箱去重与网页端同源**：`common/company-key.js` 是网页版 `companyGroupKey` / `normalizePositionSlug` / `loosePositionSlug` / `sameCompanyGroup` 的镜像副本，**两处必须同步修改**（`autumn-mail-sync/test/company-dedup.js` 有逐值一致性断言，漂移即失败）
+- **与 background 的通信一律走 `safeSendMessage`**：扩展被重新加载后，页面上旧内容脚本的 `chrome.runtime` 已成失效句柄，直接调用会同步抛 `Extension context invalidated.` 冒到网页控制台。`06-bridge.js` 的三处通信（暂存出队 / 读暂存箱 / 简历下发）已全部改走封装（先用 `chrome.runtime.id` 探测、再 `try/catch` 兜底）。失败时经 postMessage 上报一次 `BRIDGE_BROKEN`，由网页版弹「刷新页面即可恢复」提示（带刷新按钮）；上报去重，但每次留 `console.warn`。**新增任何 `chrome.runtime.*` 调用都必须走封装**，`autumn-mail-sync/test/extension-bridge.js` 有一条静态守卫会拦截裸调用

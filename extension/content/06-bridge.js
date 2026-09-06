@@ -30,13 +30,40 @@ if (IS_TRACKER_PAGE) {
   let openCheckTimer = null;
   let openRetries = 0;
 
-  function removePendingRecord(id) {
+  // ================= 与 background 的通信：一律走安全封装 =================
+  // 为什么不能直接调 chrome.runtime.sendMessage：扩展被重新加载（手动重载 / 更新 / 浏览器停用后恢复）后，
+  // 页面上旧的内容脚本还活着，但它的 chrome.runtime 已成失效句柄，任何直接调用都会**同步抛出**
+  // "Uncaught Error: Extension context invalidated." 冒到网页控制台 —— 用户看到报错却不知该做什么。
+  // safeSendMessage 由先注入的 05-sidebar.js 提供（同一 isolated world，顶层函数跨文件可见），
+  // 它先用 chrome.runtime.id 探测上下文是否还在，再 try/catch 兜底，失败走回调而不是抛异常。
+  function sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+      safeSendMessage(message, resolve, reason => reject(reason));
+    });
+  }
+
+  // 桥接失效只上报一次：网页版会在 1s/3s 定时推送简历，失效后会连续触发，不能刷屏
+  let bridgeBrokenNotified = false;
+  function notifyBridgeBroken(reason, what) {
+    const text = typeof reason === 'string' ? reason : (reason && reason.message) || String(reason || '');
+    console.warn(`[秋招求职与简历助手] ${what}失败：${text}`);
+    if (bridgeBrokenNotified) return;
+    bridgeBrokenNotified = true;
+    // 插件在管理器页面无法直接调用页面的 toast（isolated world + 侧边栏未挂载时 showToast 会静默失效），
+    // 因此经既有的 postMessage 桥接把提示交给网页版，由它弹一次「刷新页面即可恢复」。
     try {
-      chrome.runtime.sendMessage({ type: MSG.REMOVE_PENDING_RECORD, id }, () => {
-        // 读取 lastError 避免 "Unchecked runtime.lastError" 刷屏；出队失败则下次打开重试
-        if (chrome.runtime.lastError) return;
-      });
+      window.postMessage({
+        source: AJA.BRIDGE_SOURCE,
+        type: 'BRIDGE_BROKEN',
+        detail: `${what}失败（${text}）。通常是扩展刚被重新加载或更新，刷新本页面即可恢复。`
+      }, '*');
     } catch (_) {}
+  }
+
+  function removePendingRecord(id) {
+    // 出队失败不影响数据安全：暂存项仍在队列里，下次打开页面会重试。
+    // 这里刻意不弹提示——桥接失效时上面的驱动流程会先报，重复提示只会吵。
+    sendRuntimeMessage({ type: MSG.REMOVE_PENDING_RECORD, id }).catch(() => {});
   }
 
   // 推送首条（只 peek 不删除）：等弹窗确实打开→用户处理→弹窗关闭后，才由 observer 出队
@@ -78,7 +105,7 @@ if (IS_TRACKER_PAGE) {
 
   (async () => {
     try {
-      const res = await chrome.runtime.sendMessage({ type: MSG.GET_PENDING_RECORDS });
+      const res = await sendRuntimeMessage({ type: MSG.GET_PENDING_RECORDS });
       pendingDrive = (res && res.ok && Array.isArray(res.records)) ? res.records : [];
       if (!pendingDrive.length) return;
 
@@ -106,7 +133,8 @@ if (IS_TRACKER_PAGE) {
       };
       startObserver();
     } catch (err) {
-      console.warn('[秋招求职与简历助手] 暂存箱驱动失败', err);
+      // 暂存队列保持原样（一条都没删），刷新页面即可重试；同时把可操作的提示交给网页版
+      notifyBridgeBroken(err, '读取暂存箱');
     }
   })();
 
@@ -114,7 +142,12 @@ if (IS_TRACKER_PAGE) {
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
     if (event.data?.source === 'AUTUMN_TRACKER' && event.data.type === 'RESUME_PUSH' && event.data.resume) {
-      chrome.runtime.sendMessage({ type: MSG.SAVE_RESUME, resume: event.data.resume });
+      // 这一行原先是裸调 chrome.runtime.sendMessage（全插件唯一没有任何防护的调用点）：
+      // 扩展重载后它会同步抛 "Extension context invalidated." 冒到网页控制台。
+      // 数据本身没丢（简历在网页端与本机 localStorage 都完好），只是插件这次没收到更新，
+      // 因此失败时给一次可操作的提示，而不是让用户对着红色报错猜。
+      sendRuntimeMessage({ type: MSG.SAVE_RESUME, resume: event.data.resume })
+        .catch(reason => notifyBridgeBroken(reason, '简历下发到插件'));
     }
   });
 
