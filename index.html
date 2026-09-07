@@ -1074,7 +1074,7 @@
               <option value="company-group">按公司聚合（同公司多岗位）</option>
             </select>
           </div>
-          <div class="table-scroll">
+          <div class="table-scroll" id="recordsTableScroll">
             <table>
               <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
               <tbody id="recordBody"></tbody>
@@ -3491,7 +3491,7 @@
         }
         els.body.innerHTML = rows.join('');
         els.empty.hidden = visible.length !== 0;
-        $('.table-scroll').hidden = visible.length === 0;
+        $('#recordsTableScroll').hidden = visible.length === 0;
       }
 
       function renderUpcoming() {
@@ -4213,7 +4213,7 @@
       // 切换按钮的选中态也在这里同步，避免启动时按 HTML 默认值显示成「表格」而实际是看板。
       function renderRecordsView() {
         const board = $('#boardView');
-        const scroll = $('.table-scroll');
+        const scroll = $('#recordsTableScroll');
         const isBoard = uiPrefs.recordsView === 'board';
         const tableBtn = $('#viewTableBtn'), boardBtn = $('#viewBoardBtn');
         if (tableBtn) { tableBtn.classList.toggle('is-active', !isBoard); tableBtn.setAttribute('aria-selected', String(!isBoard)); }
