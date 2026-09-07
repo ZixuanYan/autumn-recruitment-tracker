@@ -724,11 +724,17 @@
     .view-switch-btn:hover { color: var(--ink); }
     .view-switch-btn.is-active { background: var(--surface); color: var(--accent-ink); box-shadow: var(--ring); }
     .board { padding: 12px 16px 18px; }
-    .board-hint { margin-bottom: 12px; color: var(--muted); font-size: 12px; }
+    /* 看板顶部整宽推进投放区（v4.8.0）：常驻可见、不参与 .board-cols 的横向滚动，阶段列再多也始终可拖。
+       它自身设了 display:flex，但从不被 hidden 切换（父级 #boardView 隐藏时整体随之隐藏），故无需 [hidden] 守卫。 */
+    .board-drop-zone { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 54px; margin-bottom: 12px; padding: 11px 16px; border: 1.5px dashed var(--line-strong); border-radius: var(--r-lg); background: var(--surface-2); color: var(--muted); font-size: 12.5px; text-align: center; transition: border-color .18s var(--ease), background .18s var(--ease), color .18s var(--ease), box-shadow .18s var(--ease); }
+    .board-drop-zone .drop-icon { font-size: 17px; line-height: 1; }
+    .board-drop-zone.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+    .board-drop-zone.is-drop { border-style: solid; border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 2px var(--accent); }
     .board-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(232px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
     .board-col { min-width: 0; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: var(--ring); }
     .board-col.is-drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
-    .board-col-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    .board-col-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: var(--r-lg) var(--r-lg) 0 0; transition: background .16s var(--ease); }
+    .board-col-head:hover, .board-col-head:focus-visible { background: var(--accent-soft); outline: none; }
     .board-col-head .badge { flex: 0 0 auto; }
     .board-col-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
     .board-col-body { display: grid; gap: 8px; padding: 10px; min-height: 62px; }
@@ -738,6 +744,9 @@
     .board-card:active { cursor: grabbing; }
     .board-card.is-dragging { opacity: .45; }
     .board-card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--company-color, var(--accent)); }
+    /* 停滞标记（v4.8.0）：洞察算出的停滞 >14 天，在看板卡片上用警示色条 + chip 暴露，操作面一眼可见该跟进谁 */
+    .board-card.is-stalled::before { background: var(--warn); }
+    .board-chip.stalled { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
     .board-card-company { font-size: 13.5px; font-weight: 680; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .board-card-position { margin-top: 2px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .board-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
@@ -1089,7 +1098,10 @@
         </table>
       </div>
       <div class="board" id="boardView" hidden>
-        <div class="board-hint">拖卡片到目标阶段列即可推进（追加一条里程碑，向后拖会二次确认）· 点卡片看详情</div>
+        <div class="board-drop-zone" id="boardDropZone" title="拖到阶段列直接推进（追加里程碑，向后拖二次确认）；拖到这里可自由选择阶段，含当前没有列的阶段 · 点卡片看详情，聚焦卡片按 A 键推进">
+          <span class="drop-icon" aria-hidden="true">⤵</span>
+          <span class="drop-text" id="boardDropText">拖到这里，自由选择阶段（含没有列的阶段）</span>
+        </div>
         <div class="board-cols" id="boardCols"></div>
       </div>
       <div class="empty" id="emptyState" hidden></div>
@@ -1310,6 +1322,7 @@
       <div class="field"><label for="advanceDate">阶段日期</label><input class="control" id="advanceDate" type="date"></div>
       <div class="advance-stage-grid" id="advanceStageGrid"></div>
       <div class="field"><label for="advanceCustom">或自定义阶段</label><input class="control" id="advanceCustom" maxlength="20" placeholder="例如：加面、复试、意向书、测评"></div>
+      <div class="field"><label for="advanceNote">里程碑备注（可选）</label><input class="control" id="advanceNote" maxlength="60" placeholder="例如：HR 电话通知、腾讯会议二面"></div>
     </div>
     <div class="modal-actions"><button class="btn" id="cancelAdvanceDialog" type="button">取消</button><button class="btn btn-primary" id="confirmAdvanceBtn" type="button">确认推进</button></div>
   </dialog>
@@ -1542,7 +1555,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.7.0';
+      const APP_VERSION = '4.8.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -3454,7 +3467,6 @@
 
       function renderTable() {
         const visible = getVisibleRecords();
-        els.caption.textContent = visible.length === records.length ? `已投台账 · 共 ${records.length} 条记录` : `已投台账 · 显示 ${visible.length} 条，共 ${records.length} 条`;
         // 台账编号：按 updatedAt 从新到旧稳定编号（编辑不会重排，新增排最前）
         const recordNo = new Map(
           [...records].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || String(a.id).localeCompare(String(b.id)))
@@ -4208,6 +4220,26 @@
         saveUiPrefs();
         renderRecordsView();
       }
+      // 列头点击联动阶段筛选（v4.8.0）：把 #stageFilter 设为该阶段并切到表格视图，查看该阶段的全部明细。
+      // 看板列都来自「出现过的阶段 + Offer/已结束」，这些值一定在 refreshStageFilter 生成的选项里，不会落空。
+      function applyBoardColFilter(stage) {
+        const value = String(stage || '');
+        if (!value) return;
+        if (els.filter) els.filter.value = value;
+        setRecordsView('table');
+      }
+      // 记录视图工具条信息（v4.8.0）：台账移出总览后，这里补上「进行中 / 停滞」两个概览数字，
+      // 口径与洞察完全一致（isActive / findStalled），避免出现两套算法。
+      function updateResultCaption(visibleCount) {
+        if (!els.caption) return;
+        const now = new Date();
+        const active = records.filter(isActive).length;
+        const stalled = findStalled(records, now, 14).length;
+        const base = visibleCount === records.length
+          ? `已投台账 · 共 ${records.length} 条记录`
+          : `已投台账 · 显示 ${visibleCount} 条，共 ${records.length} 条`;
+        els.caption.textContent = `${base} · 进行中 ${active} · 停滞 ${stalled}`;
+      }
       // 台账渲染总入口：搜索/筛选/排序变化与 render() 都走这里，保证两种视图不会各渲染一半。
       // 切换按钮的选中态也在这里同步，避免启动时按 HTML 默认值显示成「表格」而实际是看板。
       function renderRecordsView() {
@@ -4222,6 +4254,7 @@
         if (isBoard) renderBoard(); else renderTable();
         // 空状态只在表格视图显示（看板自带列与「拖到这里」占位）；三态渲染见 renderEmptyState
         const visibleCount = getVisibleRecords().length;
+        updateResultCaption(visibleCount);
         if (isBoard) { if (els.empty) { els.empty.hidden = true; els.empty.innerHTML = ''; } } else { renderEmptyState(visibleCount); }
       }
 
@@ -4247,17 +4280,19 @@
         return [...present].sort((a, b) => stageOrder(a) - stageOrder(b) || String(a).localeCompare(String(b), 'zh-CN'));
       }
 
-      function boardCardHtml(record, groupKeyById) {
+      function boardCardHtml(record, groupKeyById, stalledDays) {
         const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
         const dl = deadlineInfo(record.deadline);
         const dlClosed = ['Offer', '已结束'].includes(record.stage);
         const schedule = parseLocal(record.scheduleAt);
+        const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
         const chips = [];
         if (record.batch) chips.push(`<span class="board-chip">${escapeHtml(record.batch)}</span>`);
         if (dl && !dlClosed) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
         if (schedule && !dlClosed) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
+        if (stalled) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
         const dots = intentDotsHtml(record.intent);
-        return `<button class="board-card" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
+        return `<button class="board-card${stalled ? ' is-stalled' : ''}" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
           <div class="board-card-company">${escapeHtml(record.company)}</div>
           <div class="board-card-position">${escapeHtml(record.position || '—')}</div>
           <div class="board-card-meta">${dots}${companyTypeChipHtml(record.companyType)}${chips.join('')}</div>
@@ -4271,11 +4306,13 @@
         const columns = boardColumns(visible);
         // 公司规范键建一次即可（不能在 map 回调里直接传 boardCardHtml，否则数组下标会被当成第二个参数）
         const groupKeyById = companyGroupIndex(records);
+        // 停滞天数一次算好（复用洞察的 findStalled 口径），卡片据此加警示标记——操作面一眼看到该跟进谁
+        const stalledById = new Map(findStalled(records, new Date(), 14).map(item => [item.record.id, item.days]));
         host.innerHTML = columns.map(stage => {
           const items = visible.filter(r => String(r.stage || '待投递') === stage);
           return `<section class="board-col" data-stage="${escapeHtml(stage)}" aria-label="${escapeHtml(stage)} 列">
-            <div class="board-col-head"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span><span class="board-col-count">${items.length}</span></div>
-            <div class="board-col-body">${items.length ? items.map(item => boardCardHtml(item, groupKeyById)).join('') : '<div class="board-empty">拖到这里</div>'}</div>
+            <div class="board-col-head" data-stage="${escapeHtml(stage)}" role="button" tabindex="0" title="点击在表格视图查看「${escapeHtml(stage)}」阶段的全部明细"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span><span class="board-col-count">${items.length}</span></div>
+            <div class="board-col-body">${items.length ? items.map(item => boardCardHtml(item, groupKeyById, stalledById.get(item.id))).join('') : '<div class="board-empty">拖到这里</div>'}</div>
           </section>`;
         }).join('');
       }
@@ -4292,13 +4329,62 @@
       async function handleBoardDrop(event) {
         const col = event.target.closest('.board-col');
         document.querySelectorAll('.board-col.is-drop').forEach(node => node.classList.remove('is-drop'));
+        clearBoardDropZone();
         if (!col) return;
         event.preventDefault();
         const id = (event.dataTransfer && event.dataTransfer.getData('text/plain')) || draggingRecordId;
         draggingRecordId = null;
         const record = records.find(item => item.id === id);
         if (!record) return;
+        // 拖到「已结束」列：改为打开推进弹窗并预填结束原因引导（拒信 / 主动放弃 / 超期未响应，对复盘有价值），
+        // 而不是像其它列那样一键直达；不新增字段、不改 schema，note 仍是既有里程碑字段。
+        if (col.dataset.stage === '已结束') {
+          openAdvanceDialog(record, { note: '结束原因（拒信 / 主动放弃 / 超期未响应）：' });
+          return;
+        }
         await advanceRecordTo(record, col.dataset.stage);
+      }
+
+      // ---- 看板顶部整宽推进投放区（v4.8.0）----
+      // 痛点：boardColumns 只生成「当前有记录的阶段 + Offer/已结束」，想推进到三面/交叉面这类当前无记录的
+      // 阶段时根本没有列可拖。投放区常驻看板顶部（不随 .board-cols 横向滚动），拖入后复用推进弹窗自由选阶段。
+      // 与「直接拖到阶段列」的快捷路径并存：投放区在 #boardView 内、.board-cols 外，单独绑事件。
+      function setBoardDropText(state) {
+        const text = $('#boardDropText');
+        if (text) text.textContent = state === 'drop' ? '松开以选择阶段' : state === 'active' ? '拖到这里选择阶段' : '拖到这里，自由选择阶段（含没有列的阶段）';
+      }
+      function activateBoardDropZone() {
+        const zone = $('#boardDropZone');
+        if (zone) zone.classList.add('is-active');
+        setBoardDropText('active');
+      }
+      function clearBoardDropZone() {
+        const zone = $('#boardDropZone');
+        if (zone) { zone.classList.remove('is-active'); zone.classList.remove('is-drop'); }
+        setBoardDropText('default');
+      }
+      function handleDropZoneOver(event) {
+        if (!draggingRecordId) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+        const zone = $('#boardDropZone');
+        if (zone) zone.classList.add('is-drop');
+        setBoardDropText('drop');
+      }
+      function handleDropZoneLeave() {
+        const zone = $('#boardDropZone');
+        if (zone) zone.classList.remove('is-drop');
+        if (draggingRecordId) setBoardDropText('active');
+      }
+      async function handleDropZoneDrop(event) {
+        event.preventDefault();
+        clearBoardDropZone();
+        const id = (event.dataTransfer && event.dataTransfer.getData('text/plain')) || draggingRecordId;
+        draggingRecordId = null;
+        const record = records.find(item => item.id === id);
+        // 复用现有推进弹窗（阶段网格已按 stageOrder 过滤出更靠后的阶段、支持自定义阶段与日期），
+        // 用户选定后走既有 applyAdvance → setTimeline / saveRecords / render / flashRow / 抽屉重渲 / Offer 印章全自动继承。
+        if (record) openAdvanceDialog(record);
       }
 
       // ---- 记录详情抽屉 ----
@@ -4576,6 +4662,14 @@
         const dialogOpen = document.querySelector('dialog[open]');
         if (dialogOpen) return; // 弹窗打开时不抢按键
         if (String(event.key).toLowerCase() === 'n') { event.preventDefault(); openDialog(null); return; }
+        // 键盘可达的推进路径（v4.8.0）：HTML5 拖拽对键盘用户完全不可用，看板卡片聚焦时按 A 直接打开推进弹窗。
+        // 统一走这个单入口，输入框内（isTypingTarget）与弹窗打开时都已在上面提前 return，不会误拦。
+        if (String(event.key).toLowerCase() === 'a') {
+          const card = event.target && event.target.closest && event.target.closest('.board-card[data-id]');
+          const record = card && records.find(item => item.id === card.dataset.id);
+          if (record) { event.preventDefault(); openAdvanceDialog(record); }
+          return;
+        }
         if (event.key === '/') {
           event.preventDefault();
           if (parseRoute() !== 'records') location.hash = '#/records';
@@ -5935,7 +6029,7 @@
 
       // ================= 推进阶段：弹出选择，追加为时间线里程碑（不再盲目 index+1）=================
       let advancingId = null;
-      function openAdvanceDialog(record) {
+      function openAdvanceDialog(record, options = {}) {
         advancingId = record.id;
         $('#advanceTitle').textContent = `推进阶段 · ${record.company || ''}`.trim();
         const curOrder = stageOrder(record.stage);
@@ -5944,6 +6038,9 @@
         $('#advanceStageGrid').innerHTML = candidates.map(s =>
           `<button class="btn btn-small advance-pick" type="button" data-stage="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('');
         $('#advanceCustom').value = '';
+        // 备注（v4.8.0）：拖到「已结束」列时预填结束原因引导，其余入口留空由用户自由填写
+        const noteEl = $('#advanceNote');
+        if (noteEl) noteEl.value = String(options.note || '');
         $('#advanceDate').value = (record.scheduleAt ? String(record.scheduleAt).slice(0, 10) : '') || localDateInput(new Date());
         $('#advanceDialog').showModal();
       }
@@ -5952,7 +6049,10 @@
         const s = String(stage || '').trim();
         if (!record || !s) { showToast('请选择或填写一个阶段'); return; }
         const at = $('#advanceDate').value || localDateInput(new Date());
-        setTimeline(record, [...(record.timeline || []), { stage: s, at, note: '' }]);
+        // 备注写进里程碑（上限 60 字，与输入框 maxlength 一致）；留空时保持 ''，不写 "undefined"
+        const noteEl = $('#advanceNote');
+        const note = noteEl ? String(noteEl.value || '').trim().slice(0, 60) : '';
+        setTimeline(record, [...(record.timeline || []), { stage: s, at, note }]);
         saveRecords(s === 'Offer' ? '已盖章：Offer' : `已推进到「${s}」并自动保存`);
         closeAdvanceDialog();
         render();
@@ -6365,6 +6465,7 @@
         if (!card) return;
         draggingRecordId = card.dataset.id;
         card.classList.add('is-dragging');
+        activateBoardDropZone(); // 有卡片被拖起 → 顶部投放区变为可投放态
         if (event.dataTransfer) {
           event.dataTransfer.effectAllowed = 'move';
           event.dataTransfer.setData('text/plain', card.dataset.id);
@@ -6374,20 +6475,31 @@
         draggingRecordId = null;
         boardCols.querySelectorAll('.board-card.is-dragging').forEach(node => node.classList.remove('is-dragging'));
         boardCols.querySelectorAll('.board-col.is-drop').forEach(node => node.classList.remove('is-drop'));
+        clearBoardDropZone();
       });
       boardCols.addEventListener('dragover', handleBoardDragOver);
       boardCols.addEventListener('drop', handleBoardDrop);
       boardCols.addEventListener('click', event => {
+        // 列头点击 → 切到表格视图并按该阶段筛选（查看该阶段全部明细）；优先级高于卡片
+        const head = event.target.closest('.board-col-head[data-stage]');
+        if (head) { applyBoardColFilter(head.dataset.stage); return; }
         const card = event.target.closest('.board-card[data-id]');
         if (card) openRecordFocus(card.dataset.id);
       });
       boardCols.addEventListener('keydown', event => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
+        const head = event.target.closest('.board-col-head[data-stage]');
+        if (head) { event.preventDefault(); applyBoardColFilter(head.dataset.stage); return; }
         const card = event.target.closest('.board-card[data-id]');
         if (!card) return;
         event.preventDefault();
         openRecordFocus(card.dataset.id);
       });
+      // 顶部整宽推进投放区：在 #boardView 内、.board-cols 外，单独绑 dragover/dragleave/drop
+      const boardDropZone = $('#boardDropZone');
+      boardDropZone.addEventListener('dragover', handleDropZoneOver);
+      boardDropZone.addEventListener('dragleave', handleDropZoneLeave);
+      boardDropZone.addEventListener('drop', handleDropZoneDrop);
       // 抽屉：关闭（按钮 / 遮罩）、笔记增删、同公司切换、底部操作
       $('#closeDrawerBtn').addEventListener('click', closeRecordDrawer);
       $('#drawerBackdrop').addEventListener('click', closeRecordDrawer);
