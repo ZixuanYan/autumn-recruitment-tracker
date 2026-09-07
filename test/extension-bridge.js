@@ -175,6 +175,63 @@ check('跨仓库契约：BRIDGE_BROKEN 的消息源必须能通过网页端的 B
   assert.ok(/reload\(\)/.test(body), '应提供「刷新页面」这个可执行动作（插件不会自愈）');
 });
 
+section('两端枚举契约与收录链路（v4.2.0 企业性质）');
+
+// 从源文件里抽出定义行中的数组字面量并求值，避免在测试里复制字面量（复制就会漂移）。
+// 两种写法都要支持：`root.AJA.X = [...]`（插件）与 `const X = [...]`（网页端），
+// 因此统一用「取行内第一个 [...] 求值」，而不是改写赋值目标名。
+function liveArray(src, pattern, name) {
+  const line = src.split('\n').find(l => pattern.test(l));
+  assert.ok(line, `未找到 ${name} 的定义行`);
+  const literal = /\[.*\]/.exec(line);
+  assert.ok(literal, `${name} 的定义行里没有数组字面量：${line.trim()}`);
+  return new Function(`return ${literal[0]};`)();
+}
+const constantsSrc2 = fs.readFileSync(path.join(EXT, 'common/constants.js'), 'utf8');
+const htmlSrc2 = fs.readFileSync(path.resolve(__dirname, '../../autumn-recruitment-tracker/index.html'), 'utf8');
+
+check('契约：AJA.STAGES 与网页端 STAGE_PRESETS 逐值相同（此前一直没有这条守卫）', () => {
+  const ext = liveArray(constantsSrc2, /root\.AJA\.STAGES\s*=/, 'AJA.STAGES');
+  const web = liveArray(htmlSrc2, /const STAGE_PRESETS\s*=/, 'STAGE_PRESETS');
+  assert.deepStrictEqual(ext, web,
+    '两端阶段枚举已漂移：插件收录表单的阶段选项与网页端 STAGE_PRESETS 不一致，'
+    + '用户选的阶段会被网页端当自定义阶段处理（stageOrder 返回 9000，排序与漏斗分组都会错）');
+});
+
+check('契约：AJA.COMPANY_TYPES 与网页端 COMPANY_TYPES 逐值相同', () => {
+  const ext = liveArray(constantsSrc2, /root\.AJA\.COMPANY_TYPES\s*=/, 'AJA.COMPANY_TYPES');
+  const web = liveArray(htmlSrc2, /const COMPANY_TYPES\s*=/, 'COMPANY_TYPES');
+  assert.deepStrictEqual(ext, web,
+    '两端企业性质枚举已漂移：网页端 normalizeRecord 做白名单校验，'
+    + '插件里多写/写错一个字 → 用户选了也等于没选（静默落回未设置），且洞察统计永远缺这一档');
+  assert.deepStrictEqual(ext, ['央国企', '民企', '外企'], '档位应为约定的 3 档');
+  const extUnset = /AJA\.COMPANY_TYPE_UNSET\s*=\s*'([^']+)'/.exec(constantsSrc2);
+  const webUnset = /const COMPANY_TYPE_UNSET\s*=\s*'([^']+)'/.exec(htmlSrc2);
+  assert.ok(extUnset && webUnset && extUnset[1] === webUnset[1], '「未设置」文案两端应一致');
+});
+
+check('收录链路：企业性质从插件表单一路透传到网页端 seed（任一环断了都等于功能没做）', () => {
+  // ① 表单里有下拉，且选项由 AJA.COMPANY_TYPES 生成（不是硬编码）
+  assert.ok(/<select id="cap-company-type"><\/select>/.test(sidebarSrc), '收录表单缺企业性质下拉');
+  assert.ok(/AJA\.COMPANY_TYPES\s*\|\|\s*\[\]\)\.map/.test(sidebarSrc), '下拉选项应由 AJA.COMPANY_TYPES 动态生成');
+  assert.ok(/<option value="">\$\{AJA\.COMPANY_TYPE_UNSET/.test(sidebarSrc), '首项必须是 value="" 的「未设置」');
+  // ② 保存 payload 带上（否则选了也传不出去）
+  assert.ok(/companyType:\s*capCompanyType\.value/.test(sidebarSrc), '保存 payload 未带 companyType');
+  // ③ 暂存箱回填也带上（否则「回填收录表单」会丢掉已选的性质）
+  assert.ok(/capCompanyType\.value\s*=\s*item\.companyType/.test(sidebarSrc), '暂存箱回填未带 companyType');
+  // ④ background 暂存与「重复收录合并」两处都要带（合并漏了会把已选值冲掉）
+  const bgSrc = fs.readFileSync(path.join(EXT, 'background.js'), 'utf8');
+  assert.ok(/companyType:\s*String\(request\.record\.companyType\s*\|\|\s*''\)/.test(bgSrc), 'staged 未带 companyType');
+  assert.ok(/companyType:\s*staged\.companyType\s*\|\|\s*existing\.companyType/.test(bgSrc),
+    '重复收录的合并分支未带 companyType：这次没选会把上次选好的冲掉');
+  // ⑤ 网页端 CAPTURE_SUBMIT 的 seed 必须接住（最容易漏的一环：前面全对，这里没接就全白费）
+  assert.ok(/companyType:\s*submitted\.companyType/.test(htmlSrc2), '网页端 handleCaptureMessage 的 seed 未接 companyType');
+  // ⑥ 表单回填清单也要有，否则「编辑」既有记录时该字段被静默清空
+  const refill = /for \(const field of \[([^\]]+)\]\) \{\s*\n\s*const input = document\.getElementById\(field\)/.exec(htmlSrc2);
+  assert.ok(refill, '未定位到 openDialog 的回填字段清单');
+  assert.ok(refill[1].includes("'companyType'"), 'openDialog 回填清单缺 companyType → 编辑时会静默清空');
+});
+
 section('扩展被重载后（用户报告的真实时序）');
 
 check('加载桥接脚本本身不抛异常，并完成暂存箱握手', async () => {

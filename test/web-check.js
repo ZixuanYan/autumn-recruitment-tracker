@@ -157,16 +157,28 @@ console.log('v4.4.0 核心纯函数单测（截止日 / 日程事件 / ICS / 公
 const coreSrc = extractBlock(html, '/*__CORE_PURE_START__*/', '/*__CORE_PURE_END__*/');
 check('找到 CORE 纯函数块标记', () => assert.ok(coreSrc.length > 500, `CORE 块过短或未找到：${coreSrc.length}`));
 
-const CORE_DEP_NAMES = ['stageOrder', 'parseLocal', 'localDateInput', 'localDateTimeInput', 'formatDate', 'formatDateTime', 'isActive', 'cryptoId', 'sanitizeTimeline', 'deriveStage', 'normalizeRecord'];
+const CORE_DEP_NAMES = ['stageOrder', 'parseLocal', 'localDateInput', 'localDateTimeInput', 'formatDate', 'formatDateTime', 'isActive', 'cryptoId', 'sanitizeTimeline', 'deriveStage', 'normalizeRecord', 'escapeHtml'];
 const coreDeps = CORE_DEP_NAMES.map(name => extractFunction(html, name));
 check('CORE 依赖函数全部从 index.html 抽取到（无复制实现，避免漂移）', () => {
   const missing = CORE_DEP_NAMES.filter((name, idx) => !coreDeps[idx]);
   assert.deepStrictEqual(missing, []);
 });
 
+// 顶层常量也现场抽取，不在测试里复制字面量：否则枚举漂移（如企业性质加减档位）后测试仍然「绿」。
+function extractConstLine(src, name) {
+  const line = src.split('\n').find(l => l.includes(`const ${name} =`));
+  return line ? line.trim() : '';
+}
+const CORE_CONST_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET'];
+const coreConsts = CORE_CONST_NAMES.map(name => extractConstLine(html, name));
+check('CORE 依赖的顶层常量全部从 index.html 抽取到', () => {
+  const missing = CORE_CONST_NAMES.filter((name, idx) => !coreConsts[idx]);
+  assert.deepStrictEqual(missing, []);
+});
+
 const core = new Function(
   'self',
-  `const STAGE_PRESETS = ['待投递','已投递','测评','笔试','机试','一面','二面','三面','四面','五面','交叉面','HR面','Offer','已结束'];
+  `${coreConsts.join('\n   ')}
    ${pureSrc}
    ${coreDeps.join('\n')}
    ${coreSrc}
@@ -174,6 +186,7 @@ const core = new Function(
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
+     normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
    };`
 )(globalThis);
@@ -575,6 +588,178 @@ check('展示分组与查重判定必须同源（修复前 5 个案例里 3 个�
   }
 });
 
+console.log('v4.6.0 城市分布与企业性质统计');
+
+check('洞察面板信息层级：概览 → 行动 → 转化 → 明细（重构后不得回退）', () => {
+  // 重构前指标条夹在两张图之后、最需要行动的「需要关注」被压到第 5 块。
+  // 这条断言把顺序钉住：以后往面板里加块时若插错位置会立刻失败，而不是靠人眼复核。
+  const panel = html.slice(html.indexOf('id="insightsBody"'), html.indexOf('id="distributionTitle"'));
+  assert.ok(panel.length > 500, '未定位到洞察面板 HTML');
+  const order = ['insightMetrics', 'alertList', 'funnelRow', 'insightDetails', 'cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'multiCompanyWrap', 'offerMatrixWrap'];
+  const positions = order.map(id => panel.indexOf(`id="${id}"`));
+  assert.ok(positions.every(p => p > 0), `有块缺失：${order.filter((id, i) => positions[i] < 0).join(', ')}`);
+  for (let i = 1; i < positions.length; i += 1) {
+    assert.ok(positions[i] > positions[i - 1], `${order[i]} 应排在 ${order[i - 1]} 之后（概览→行动→转化→明细）`);
+  }
+  // 明细块必须都在 insightDetails 容器内，精简模式才能整块折叠
+  const detailsStart = panel.indexOf('id="insightDetails"');
+  for (const id of ['cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'multiCompanyWrap', 'offerMatrixWrap']) {
+    assert.ok(panel.indexOf(`id="${id}"`) > detailsStart, `${id} 必须在 #insightDetails 内`);
+  }
+  // 概览与行动块不能被折进明细容器，否则精简模式会把最该看的信息一起藏掉
+  for (const id of ['insightMetrics', 'alertList', 'funnelRow']) {
+    assert.ok(panel.indexOf(`id="${id}"`) < detailsStart, `${id} 必须在 #insightDetails 之外`);
+  }
+});
+
+check('normalizeCityKey：剥行政后缀、全角归一、占位值等同未填', () => {
+  assert.strictEqual(core.normalizeCityKey('深圳市'), '深圳');
+  assert.strictEqual(core.normalizeCityKey('深圳'), '深圳');
+  assert.strictEqual(core.normalizeCityKey(' 上海 '), '上海');
+  assert.strictEqual(core.normalizeCityKey('上海'), '上海', '「海」不是行政后缀，不能被剥掉');
+  assert.strictEqual(core.normalizeCityKey('香港特别行政区'), '香港');
+  assert.strictEqual(core.normalizeCityKey('ＳＨＥＮＺＨＥＮ'), 'shenzhen', '全角字母 → 半角小写');
+  assert.strictEqual(core.normalizeCityKey('市'), '', '纯后缀输入不留残骸');
+  for (const unknown of ['待确认', '待定', '待补充', '未知', '不限', '', null, undefined, '   ', 'N/A', '-']) {
+    assert.strictEqual(core.normalizeCityKey(unknown), '', `${JSON.stringify(unknown)} 应归为未填`);
+  }
+});
+
+check('cityKeysOf：多城市拆分、归一化后去重、占位值不产出键', () => {
+  assert.deepStrictEqual(core.cityKeysOf({ city: '深圳/广州' }), ['深圳', '广州']);
+  assert.deepStrictEqual(core.cityKeysOf({ city: '北京、上海' }), ['北京', '上海']);
+  assert.deepStrictEqual(core.cityKeysOf({ city: '深圳,深圳市' }), ['深圳'], '归一化后重复要去掉');
+  assert.deepStrictEqual(core.cityKeysOf({ city: '待确认' }), []);
+  assert.deepStrictEqual(core.cityKeysOf({ city: '' }), []);
+  assert.deepStrictEqual(core.cityKeysOf({}), []);
+  assert.deepStrictEqual(core.cityKeysOf(null), []);
+});
+
+check('computeCityStats：多城市各计一次、Offer 率、未填桶排最后且不计入城市数', () => {
+  const recs = [
+    { id: '1', company: '腾讯', position: 'a', city: '深圳', stage: 'Offer' },
+    { id: '2', company: '腾讯科技', position: 'b', city: '深圳', stage: '一面' },
+    { id: '3', company: '阿里', position: 'c', city: '杭州/北京', stage: '已投递' },
+    { id: '4', company: '某司', position: 'd', city: '待确认', stage: '已投递' },
+    { id: '5', company: '某司2', position: 'e', city: '', stage: 'Offer' }
+  ];
+  const stats = core.computeCityStats(recs);
+  const byCity = Object.fromEntries(stats.map(row => [row.city, row]));
+  assert.strictEqual(byCity['深圳'].total, 2);
+  assert.strictEqual(byCity['深圳'].offers, 1);
+  assert.strictEqual(byCity['深圳'].offerRate, 0.5);
+  assert.strictEqual(byCity['深圳'].companies, 1, '腾讯与腾讯科技算同一家公司');
+  assert.strictEqual(byCity['杭州'].total, 1);
+  assert.strictEqual(byCity['北京'].total, 1, '一条记录写了两个城市 → 各计一次');
+  assert.strictEqual(byCity[''].total, 2, '「待确认」与空值都进未填桶');
+  assert.strictEqual(byCity[''].offers, 1, '未填桶的 Offer 数是真实统计，不是假 0');
+  assert.strictEqual(stats[0].city, '深圳', '按投递数降序');
+  assert.strictEqual(stats[stats.length - 1].city, '', '未填桶永远排最后');
+  assert.strictEqual(stats.filter(row => row.city).length, 3, '「覆盖 N 个城市」不含未填桶');
+  // 各城市之和 > 台账条数，这是刻意口径（多城市各计一次），面板必须写明，否则会被当成算错
+  assert.strictEqual(stats.reduce((sum, row) => sum + row.total, 0), 6);
+  assert.deepStrictEqual(core.computeCityStats([]), []);
+  assert.deepStrictEqual(core.computeCityStats(null), []);
+});
+
+check('computeCompanyTypeStats：固定 4 行顺序，非法值落未设置，空台账也给出 4 行', () => {
+  const recs = [
+    { id: '1', company: '国家电网', position: 'a', city: '北京', companyType: '央国企', stage: 'Offer' },
+    { id: '2', company: '字节', position: 'b', city: '北京', companyType: '民企', stage: '一面' },
+    { id: '3', company: '宝洁', position: 'c', city: '广州', companyType: '外企', stage: '已结束' },
+    { id: '4', company: '某司', position: 'd', city: '上海', companyType: '', stage: '已投递' },
+    { id: '5', company: '某司2', position: 'e', city: '上海', companyType: '国企', stage: '已投递' }
+  ];
+  const stats = core.computeCompanyTypeStats(recs);
+  assert.deepStrictEqual(stats.map(row => row.label), ['央国企', '民企', '外企', '未设置'], '顺序固定，面板结构才稳定');
+  assert.deepStrictEqual(stats.map(row => row.type), ['央国企', '民企', '外企', ''], 'type 用空串表示未设置，便于按值查色');
+  assert.strictEqual(stats[0].total, 1);
+  assert.strictEqual(stats[0].offers, 1);
+  assert.strictEqual(stats[0].offerRate, 1);
+  assert.strictEqual(stats[1].active, 1, '一面算在流程中');
+  assert.strictEqual(stats[2].active, 0, '已结束不算在流程中');
+  assert.strictEqual(stats[3].total, 2, '空值与非法值「国企」都落未设置');
+  assert.strictEqual(stats.reduce((sum, row) => sum + row.total, 0), recs.length, '四档之和 = 台账条数（不像城市那样会重复计）');
+  const empty = core.computeCompanyTypeStats([]);
+  assert.strictEqual(empty.length, 4, '空台账也必须给 4 行，用户才能分辨「这档没有」与「没渲染出来」');
+  assert.ok(empty.every(row => row.total === 0 && row.offers === 0 && row.offerRate === 0));
+});
+
+check('tipContentFor metric：每个指标都有口径说明，未知 key 返回空串', () => {
+  for (const key of ['companies', 'cities', 'flow', 'stalled', 'offers', 'alerts']) {
+    const out = core.tipContentFor([], 'metric', key);
+    assert.ok(out.includes('tip-note'), `${key} 应给出说明`);
+    assert.ok(out.length > 30, `${key} 的说明不能是一句空话`);
+  }
+  // 城市口径必须写明「多城市各计一次」，否则各城市之和 > 台账条数会被当成算错
+  assert.ok(core.tipContentFor([], 'metric', 'cities').includes('各计一次'));
+  assert.strictEqual(core.tipContentFor([], 'metric', 'nope'), '', '未知 key 不弹空壳');
+  assert.strictEqual(core.tipContentFor([], 'metric', ''), '');
+});
+
+check('tipContentFor city：头部给汇总、明细列到记录，未填桶也有内容，超量截断', () => {
+  const recs = [
+    { id: '1', company: '腾讯', position: '后端', city: '深圳', stage: 'Offer', batch: '提前批' },
+    { id: '2', company: '腾讯科技', position: '前端', city: '深圳市', stage: '一面', batch: '' },
+    { id: '3', company: '某司', position: '运营', city: '待确认', stage: '已投递' }
+  ];
+  const out = core.tipContentFor(recs, 'city', '深圳');
+  assert.ok(out.includes('深圳 · 2 条投递'), '「深圳市」归一化后与「深圳」同桶');
+  assert.ok(out.includes('1 家公司'), '腾讯与腾讯科技聚类为一家');
+  assert.ok(out.includes('1 个 Offer'));
+  assert.ok(out.includes('后端（提前批）'), '岗位带批次');
+  assert.ok(out.includes('data-stage="Offer"'), '每行带阶段徽章');
+  // 未填桶（key=''）也要能查，否则灰显那一行悬浮没反应像是坏了
+  const unknown = core.tipContentFor(recs, 'city', '');
+  assert.ok(unknown.includes('没填城市'), '用用户能懂的话，而不是空白标题');
+  assert.ok(unknown.includes('运营'));
+  assert.strictEqual(core.tipContentFor(recs, 'city', '成都'), '', '没有该城市不弹空壳');
+  // 超过上限要截断并交代还剩多少，不能悄悄丢掉
+  const many = Array.from({ length: 15 }, (_, i) => ({ id: `m${i}`, company: `公司${i}`, position: `岗位${i}`, city: '北京', stage: '已投递' }));
+  const big = core.tipContentFor(many, 'city', '北京');
+  assert.strictEqual((big.match(/tip-row/g) || []).length, 12, '最多列 12 条');
+  assert.ok(big.includes('另有 3 条'), '交代剩余条数');
+});
+
+check('tipContentFor ctype：按公司聚类列出并给最好阶段，空档返回空串', () => {
+  const recs = [
+    { id: '1', company: '国家电网', position: 'a', city: '北京', companyType: '央国企', stage: '一面' },
+    { id: '2', company: '国家电网', position: 'b', city: '上海', companyType: '央国企', stage: 'Offer' },
+    { id: '3', company: '字节', position: 'c', city: '北京', companyType: '民企', stage: '已投递' }
+  ];
+  const out = core.tipContentFor(recs, 'ctype', '央国企');
+  assert.ok(out.includes('央国企 · 2 条投递 · 1 家公司'), '同一家公司两个岗位只算一家');
+  assert.ok(out.includes('1 个 Offer'));
+  assert.ok(out.includes('2 个岗位'), '标出该公司岗位数');
+  assert.ok(out.includes('data-stage="Offer"'), '最好阶段取 stageOrder 最大的那个，而不是第一条');
+  assert.ok(core.tipContentFor(recs, 'ctype', '民企').includes('字节'));
+  assert.strictEqual(core.tipContentFor(recs, 'ctype', '外企'), '', '这一档没有记录 → 不弹空壳');
+  // 未设置档用空串做 key（与 data-ct="" 对应）
+  assert.ok(core.tipContentFor([{ id: '9', company: 'X', position: 'p', city: 'C', companyType: '', stage: '已投递' }], 'ctype', '').includes('未设置'));
+});
+
+check('tipContentFor record：只列有值的字段，企业性质未设置显式标注，未知 id 返回空串', () => {
+  const recs = [{ id: 'r1', company: '腾讯', position: '后端', city: '深圳', batch: '', companyType: '', stage: '一面', nextAction: '准备二面' }];
+  const out = core.tipContentFor(recs, 'record', 'r1');
+  assert.ok(out.includes('tip-head">腾讯'), '标题是公司名');
+  assert.ok(out.includes('准备二面'));
+  assert.ok(out.includes('未设置'), '企业性质没填也要显式说出来');
+  assert.ok(!out.includes('>批次<'), '空字段不占一行');
+  assert.strictEqual(core.tipContentFor(recs, 'record', 'nope'), '');
+  assert.strictEqual(core.tipContentFor(recs, 'unknown-kind', 'r1'), '', '未知 kind 不弹空壳');
+});
+
+check('tipContentFor：用户数据一律转义（悬浮层是 innerHTML 注入点）', () => {
+  const evil = '<img src=x onerror=alert(1)>';
+  const recs = [{ id: 'e1', company: evil, position: evil, city: '深圳', stage: '已投递', nextAction: evil }];
+  for (const out of [core.tipContentFor(recs, 'city', '深圳'), core.tipContentFor(recs, 'record', 'e1')]) {
+    assert.ok(!out.includes('<img'), '不得出现原始标签');
+    assert.ok(out.includes('&lt;img'), '应被转义');
+  }
+  const evilType = [{ id: 'e2', company: evil, position: 'p', city: 'C', companyType: '央国企', stage: '已投递' }];
+  assert.ok(!core.tipContentFor(evilType, 'ctype', '央国企').includes('<img'));
+});
+
 check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、intent 夹取、notes 清洗', () => {
   // 老数据（完全没有 v4.4.0 字段）
   const legacy = core.normalizeRecord({ id: 'old1', company: '星海科技', position: '产品', city: '上海', applicationDate: '2026-09-01', stage: '一面', updatedAt: 1 });
@@ -607,6 +792,24 @@ check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、
   assert.strictEqual(core.normalizeRecord({ company: 'x', intent: 99 }).intent, 5);
   assert.strictEqual(core.normalizeRecord({ company: 'x', intent: -3 }).intent, 0);
   assert.strictEqual(core.normalizeRecord({ company: 'x', intent: 'abc' }).intent, 0);
+});
+
+check('normalizeRecord companyType：白名单校验，老数据与非法值一律归「未设置」', () => {
+  // 老数据（v4.5.0 之前，完全没有该字段）→ ''，且不报错、其余字段零丢失
+  const legacy = core.normalizeRecord({ id: 'old2', company: '星海科技', position: '产品', city: '上海', applicationDate: '2026-09-01', stage: '一面', batch: '提前批', intent: 3 });
+  assert.strictEqual(legacy.companyType, '');
+  assert.strictEqual(legacy.batch, '提前批', '既有字段不受新字段影响');
+  assert.strictEqual(legacy.intent, 3);
+  // 三个合法档位原样保留
+  for (const type of ['央国企', '民企', '外企']) {
+    assert.strictEqual(core.normalizeRecord({ company: 'x', companyType: type }).companyType, type);
+  }
+  // 非法值一律归 ''：自由文本、近似写法、null、数字、带空格
+  for (const bad of ['国企', '央企', '民营企业', 'state-owned', null, undefined, 0, 1, {}, '央国企 ']) {
+    const got = core.normalizeRecord({ company: 'x', companyType: bad }).companyType;
+    // '央国企 ' 带尾空格应被 trim 后接受，其余全部归 ''
+    assert.strictEqual(got, bad === '央国企 ' ? '央国企' : '', `companyType=${JSON.stringify(bad)} 应归一，实际 ${JSON.stringify(got)}`);
+  }
 });
 
 console.log('hidden 与 display 的冲突守卫（防「幽灵占位 + 吞点击」）');
@@ -654,8 +857,10 @@ check('被 hidden 切换且设了 display 的容器都有 [hidden]{display:none}
     const cls = tagMatch ? /class="([^"]+)"/.exec(tagMatch[0]) : null;
     pushTarget(id, cls ? cls[1].trim().split(/\s+/) : []);
   }
-  // 由 JS 变量间接切换（如 body.hidden = showGuide）的容器：显式登记，避免漏检
+  // 由 JS 变量间接切换（如 body.hidden = showGuide、details.hidden = compact）的容器：显式登记，避免漏检。
+  // 这两个都设了作者层 display，是「幽灵占位 + 吞点击」的高危对象。
   pushTarget('insightsBody', ['insights-body']);
+  pushTarget('insightDetails', ['insight-details']);
 
   const problems = [];
   for (const target of targets) {

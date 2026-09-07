@@ -227,6 +227,12 @@ function extractBlock(src, startMark, endMark) {
   const e = src.indexOf(endMark);
   return (s !== -1 && e !== -1 && e > s) ? src.slice(s + startMark.length, e) : '';
 }
+// 顶层常量现场求值抽取（不在测试里复制字面量）：枚举漂移后测试会失败，而不是继续「绿」。
+function extractConst(src, name) {
+  const line = src.split('\n').find(l => l.includes(`const ${name} =`));
+  if (!line) throw new Error(`未在 index.html 找到 const ${name}`);
+  return new Function(`${line.trim()}\nreturn ${name};`)();
+}
 
 const CORE_START = '/*__CORE_PURE_START__*/';
 const CORE_END = '/*__CORE_PURE_END__*/';
@@ -265,13 +271,25 @@ function makeEl(sel) {
       add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); }, contains(c) { return this._s.has(c); },
       toggle(c, force) { const on = force === undefined ? !this._s.has(c) : !!force; if (on) this._s.add(c); else this._s.delete(c); return on; }
     },
-    setAttribute() {}, getAttribute() { return null; }, focus() {}, scrollIntoView() {},
+    // 属性用真实映射存：悬浮明细会给触发元素设 aria-describedby，隐藏时必须摘掉，需要能断言
+    _attrs: {},
+    setAttribute(k, v) { this._attrs[k] = String(v); },
+    getAttribute(k) { return Object.prototype.hasOwnProperty.call(this._attrs, k) ? this._attrs[k] : null; },
+    removeAttribute(k) { delete this._attrs[k]; },
+    focus() {}, scrollIntoView() {},
+    // 悬浮明细浮层的定位依赖实测尺寸：默认给一个可控的矩形，测试里改写 _rect 即可模拟「靠近视口右/下边缘」
+    _rect: { left: 100, top: 200, right: 260, bottom: 220, width: 160, height: 20 },
+    getBoundingClientRect() { return this._rect; },
     closest() { return null; }, querySelector() { return null; }, querySelectorAll() { return []; },
     contains() { return false; },
     addEventListener() {}, showModal() { this.open = true; }, close() { this.open = false; }
   };
 }
 const calls = { saveRecords: [], toast: [], openDialog: [], confirm: [], focus: [], advance: [], delete: [] };
+// 沙箱里的枚举一律取 index.html 的实时值（阶段预设 / 企业性质），避免测试复制字面量后与源码漂移
+const STAGE_PRESETS_LIVE = extractConst(html, 'STAGE_PRESETS');
+const COMPANY_TYPES_LIVE = extractConst(html, 'COMPANY_TYPES');
+const COMPANY_TYPE_UNSET_LIVE = extractConst(html, 'COMPANY_TYPE_UNSET');
 let confirmAnswer = true;
 // 确认框三态：'ok' | 'cancel' | 'dismiss'（Esc/点遮罩）。resolveDuplicate 靠 lastConfirmOutcome()
 // 区分「用户明确选了取消按钮」与「什么都没选就关掉」，后者必须中止入库而不是等同于某个按钮。
@@ -285,6 +303,8 @@ const sandbox2 = {
     sort: makeEl('#sortSelect'), dialog: makeEl('#recordDialog'), form: makeEl('#recordForm'), toast: makeEl('#toast')
   },
   document: { querySelector: () => null, querySelectorAll: () => [], body: { style: {} }, createElement: () => makeEl('tmp'), activeElement: null },
+  // 悬浮明细浮层的定位与触屏降级都要读 window：给可控视口尺寸，测试里改写即可模拟窄屏/溢出
+  window: { innerWidth: 1440, innerHeight: 900, matchMedia: () => ({ matches: false }) },
   localStorage: { _s: {}, getItem(k) { return Object.prototype.hasOwnProperty.call(this._s, k) ? this._s[k] : null; }, setItem(k, v) { this._s[k] = String(v); } },
   location: { hash: '#/overview' },
   requestAnimationFrame: fn => fn(),
@@ -295,11 +315,13 @@ const sandbox2 = {
   formatDateTime: v => (v ? `DT(${v})` : '暂未安排'),
   parseLocal: v => { if (!v) return null; const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d; },
   localDateInput: d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
-  stageOrder: s => { const i = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'].indexOf(s); return i === -1 ? 9000 : i; },
+  stageOrder: s => { const i = STAGE_PRESETS_LIVE.indexOf(s); return i === -1 ? 9000 : i; },
   isActive: r => !['待投递', 'Offer', '已结束'].includes(r.stage),
   cryptoId: () => `id-${Math.random().toString(16).slice(2, 8)}`,
   UI_STORAGE_KEY: 'test.ui.v1',
-  STAGE_PRESETS: ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'],
+  STAGE_PRESETS: STAGE_PRESETS_LIVE,
+  COMPANY_TYPES: COMPANY_TYPES_LIVE,
+  COMPANY_TYPE_UNSET: COMPANY_TYPE_UNSET_LIVE,
   syncConfig: { token: 'tok' },
   records: [],
   jobs: [], // 岗位库（handleJobAction 从这里按 data-job-id 取岗位）
@@ -482,6 +504,53 @@ check('recordRowHtml：同公司 +N 岗位 chip、批次、截止倒计时分级
   const solo = sandbox2.recordRowHtml(sandbox2.records[2], rowNo, index, groupKeyById);
   assert.ok(!solo.includes('company-chip'), '单独一家公司不显示 chip');
   sandbox2.records[0].deadline = '';
+});
+
+section('v4.6.0 企业性质在台账 / 看板 / 抽屉上的可见性');
+check('companyTypeChipHtml：三档各带 data-ct 配色，未设置返回空串不占位', () => {
+  for (const type of COMPANY_TYPES_LIVE) {
+    const chip = sandbox2.companyTypeChipHtml(type);
+    assert.ok(chip.includes('class="ct-chip"'), `${type} 应渲染 ct-chip`);
+    assert.ok(chip.includes(`data-ct="${type}"`), `${type} 应带 data-ct 驱动配色`);
+    assert.ok(chip.includes(`>${type}</span>`), `${type} 文案可见`);
+  }
+  // 未设置 / 非法值 / 空值都不渲染，避免台账里出现一排灰色「未设置」噪声
+  for (const bad of ['', null, undefined, '国企', '央国企x']) {
+    assert.strictEqual(sandbox2.companyTypeChipHtml(bad), '', `companyType=${JSON.stringify(bad)} 不应渲染徽章`);
+  }
+});
+
+check('表格行与看板卡片都带企业性质徽章', () => {
+  seedRecords();
+  sandbox2.records[0].companyType = '央国企';
+  sandbox2.records[2].companyType = '外企';
+  const groups = sandbox2.groupRecordsByCompany(sandbox2.records);
+  const index = new Map(groups.map(g => [g.key, g.records]));
+  const groupKeyById = sandbox2.companyGroupIndex(sandbox2.records);
+  const rowNo = new Map(sandbox2.records.map((r, i) => [r.id, String(i + 1).padStart(4, '0')]));
+  const row = sandbox2.recordRowHtml(sandbox2.records[0], rowNo, index, groupKeyById);
+  assert.ok(row.includes('data-ct="央国企"'), '表格公司名单元格带企业性质');
+  const rowNoType = sandbox2.recordRowHtml(sandbox2.records[1], rowNo, index, groupKeyById);
+  assert.ok(!rowNoType.includes('ct-chip'), '未设置的记录不渲染徽章');
+  const card = sandbox2.boardCardHtml(sandbox2.records[2], groupKeyById);
+  assert.ok(card.includes('data-ct="外企"'), '看板卡片带企业性质');
+  sandbox2.records[0].companyType = '';
+  sandbox2.records[2].companyType = '';
+});
+
+check('详情抽屉：副标题带色徽章 + 关键信息有「企业性质」一行', () => {
+  seedRecords();
+  sandbox2.records[0].companyType = '民企';
+  sandbox2.openRecordDrawer('r1');
+  assert.ok(els2['#drawerSub'].innerHTML.includes('data-ct="民企"'), '副标题阶段徽章后紧跟企业性质');
+  const body = els2['#drawerBody'].innerHTML;
+  assert.ok(body.includes('企业性质'), '关键信息列出企业性质');
+  assert.ok(body.includes('data-ct="民企"'), '关键信息里也用带色徽章');
+  // 未设置时给明确文案，而不是空白（用户要能分辨「没填」与「渲染漏了」）
+  sandbox2.records[0].companyType = '';
+  sandbox2.renderDrawer();
+  assert.ok(els2['#drawerBody'].innerHTML.includes('未设置'), '未设置显式标注');
+  sandbox2.closeRecordDrawer();
 });
 
 section('v4.4.0 详情抽屉');
@@ -1134,6 +1203,194 @@ check('删除笔记给 6 秒撤销，撤销后按原位置恢复', () => {
   sandbox2.deleteDrawerNote('not-exist');
   assert.strictEqual(sandbox2.records[0].notes.length, snapshot);
   sandbox2.closeRecordDrawer();
+});
+
+section('v4.6.0 洞察：城市分布 / 企业性质 / 精简模式');
+
+const cityListEl = () => sandbox2.$('#cityList');
+const cityNoteEl = () => sandbox2.$('#cityNote');
+const ctypeBarEl = () => sandbox2.$('#ctypeBar');
+const ctypeLegendEl = () => sandbox2.$('#ctypeLegend');
+const ctypeNoteEl = () => sandbox2.$('#ctypeNote');
+
+check('指标条扩到 6 项：新增「覆盖城市」与「已拿 Offer」，顺序为概览优先', () => {
+  seedRecords();
+  sandbox2.renderInsights();
+  const h = sandbox2.$('#insightMetrics').innerHTML;
+  const labels = [...h.matchAll(/insight-metric-label">([^<]+)</g)].map(m => m[1]);
+  // 标签经过 escapeHtml，「>」会变成 &gt;
+  assert.deepStrictEqual(labels, ['覆盖公司', '覆盖城市', '在流程中', '停滞 &gt;14 天', '已拿 Offer', '需要关注']);
+  const values = [...h.matchAll(/insight-metric-value">([^<]+)</g)].map(m => m[1]);
+  assert.strictEqual(values[0], '2', '腾讯与腾讯科技聚成一家 + 阿里 = 2 家');
+  assert.strictEqual(values[1], '2', '深圳 + 杭州');
+  assert.strictEqual(values[4], '1', '阿里那条是 Offer');
+  // 卡点清单已移到指标条上方，文案不能再指向下方
+  assert.ok(!h.includes('见下方清单'), '「见下方清单」已随布局重构失效');
+});
+
+check('城市分布：每行挂悬浮明细钩子，未填桶灰显且排最后，说明写明多城市口径', () => {
+  seedRecords();
+  sandbox2.renderCityStats();
+  const h = cityListEl().innerHTML;
+  assert.ok(h.includes('data-tip-kind="city"'), '每行都挂悬浮明细钩子');
+  assert.ok(h.includes('data-tip-key="深圳"'));
+  assert.ok(/city-name">深圳</.test(h));
+  assert.ok(h.includes('city-bar-offer'), '有 Offer 分层条');
+  assert.ok(!h.includes('is-unknown'), '三条都填了城市 → 不出现未填行');
+  assert.ok(cityNoteEl().textContent.includes('2 个城市'));
+  assert.ok(cityNoteEl().textContent.includes('各计一次'), '必须写明口径，否则各城市之和 > 台账条数会被当成算错');
+  // 有记录没填城市（含岗位库写入的「待确认」）时，未填行出现、灰显并排在最后
+  sandbox2.records[2].city = '待确认';
+  sandbox2.renderCityStats();
+  const h2 = cityListEl().innerHTML;
+  assert.ok(h2.includes('is-unknown'), '出现未填行');
+  assert.ok(h2.includes('没填城市'), '用用户能懂的话，而不是空白键');
+  assert.ok(h2.indexOf('is-unknown') > h2.indexOf('data-tip-key="深圳"'), '未填行排在所有真实城市之后');
+  sandbox2.records[2].city = '杭州';
+});
+
+check('企业性质：比例条只画非零段，图例固定 4 行，未设置占比写进说明提醒补填', () => {
+  seedRecords();
+  sandbox2.renderCompanyTypeStats();
+  const legend = ctypeLegendEl().innerHTML;
+  const rows = [...legend.matchAll(/ctype-label">([^<]+)</g)].map(m => m[1]);
+  assert.deepStrictEqual(rows, ['央国企', '民企', '外企', '未设置'], '图例固定 4 行，为 0 也出现');
+  assert.ok(legend.includes('is-empty'), '为 0 的档位灰显');
+  assert.strictEqual((ctypeBarEl().innerHTML.match(/ctype-seg/g) || []).length, 1, '只有未设置有数据 → 只画一段');
+  assert.ok(ctypeBarEl().innerHTML.includes('data-tip-kind="ctype"'), '每段挂悬浮明细钩子');
+  assert.ok(ctypeNoteEl().textContent.includes('3 条未设置'), '提醒去补填，否则这一维永远统计不出来');
+  // 标注后按占比分段
+  sandbox2.records[0].companyType = '央国企';
+  sandbox2.records[2].companyType = '外企';
+  sandbox2.renderCompanyTypeStats();
+  const bar = ctypeBarEl().innerHTML;
+  assert.ok(bar.includes('data-ct="央国企"') && bar.includes('data-ct="外企"') && bar.includes('data-ct=""'), '三段（含未设置）');
+  assert.ok(/style="width:33\.33%"/.test(bar), '1/3 占比');
+  assert.ok(ctypeNoteEl().textContent.includes('1 条未设置'), '还剩一条没标注');
+  sandbox2.records[0].companyType = '';
+  sandbox2.records[2].companyType = '';
+});
+
+check('精简模式：明细整块折叠、按钮文案切换、偏好写进 localStorage，折叠期间内容仍渲染', () => {
+  seedRecords();
+  vm.runInContext('uiPrefs.insightsCompact = false', sandbox2);
+  sandbox2.renderInsights();
+  assert.strictEqual(sandbox2.$('#insightDetails').hidden, false);
+  assert.strictEqual(sandbox2.$('#insightsCompactBtn').textContent, '精简');
+  vm.runInContext('toggleInsightsCompact()', sandbox2);
+  assert.strictEqual(sandbox2.$('#insightDetails').hidden, true, '城市/企业性质/节奏/停留/多岗位/Offer 对比整块折叠');
+  assert.strictEqual(sandbox2.$('#insightsCompactBtn').textContent, '完整');
+  assert.strictEqual(JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).insightsCompact, true, '偏好持久化');
+  // 折叠只是容器 hidden，明细照常渲染：切回完整时不需要重算，也不会出现半渲染状态
+  assert.ok(sandbox2.$('#cityList').innerHTML.includes('深圳'), '折叠期间内容仍在');
+  assert.ok(sandbox2.$('#insightMetrics').innerHTML.includes('覆盖城市'), '概览指标不受精简影响');
+  vm.runInContext('toggleInsightsCompact()', sandbox2);
+  assert.strictEqual(sandbox2.$('#insightDetails').hidden, false);
+  assert.strictEqual(JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).insightsCompact, false);
+});
+
+check('空台账：城市与企业性质都给空态文案，而不是渲染成一片空白', () => {
+  sandbox2.records = [];
+  sandbox2.renderCityStats();
+  assert.ok(cityListEl().innerHTML.includes('insight-empty'));
+  assert.strictEqual(cityNoteEl().textContent, '—');
+  sandbox2.renderCompanyTypeStats();
+  assert.strictEqual(ctypeBarEl().innerHTML, '', '没有数据不画比例条');
+  assert.ok(ctypeLegendEl().innerHTML.includes('insight-empty'));
+});
+
+check('悬浮明细：按需构建内容、无明细不弹空壳、隐藏时清空并摘掉 aria-describedby', () => {
+  seedRecords();
+  const layer = sandbox2.$('#tipLayer');
+  const row = makeEl('city-row');
+  row.dataset = { tipKind: 'city', tipKey: '深圳' };
+  sandbox2.showTipFor(row);
+  assert.strictEqual(layer.hidden, false);
+  assert.ok(layer.innerHTML.includes('深圳 · 2 条投递'), '内容在显示时才构建');
+  assert.ok(layer.innerHTML.includes('腾讯'), '列出该城市的投递明细');
+  assert.strictEqual(vm.runInContext('tipTarget', sandbox2), row, '记住当前触发元素');
+  assert.strictEqual(row.getAttribute('aria-describedby'), 'tipLayer', '读屏能关联到浮层');
+  sandbox2.hideTip();
+  assert.strictEqual(layer.hidden, true);
+  assert.strictEqual(layer.innerHTML, '', '隐藏时清空，避免下次显示残留上一条内容');
+  assert.strictEqual(vm.runInContext('tipTarget', sandbox2), null);
+  assert.strictEqual(row.getAttribute('aria-describedby'), null, '隐藏后必须摘掉，否则指向一个空浮层');
+  // 这一档一条记录都没有 → 不弹空壳（弹出来会是空白卡片，看着像坏了）
+  const emptySeg = makeEl('ctype-seg');
+  emptySeg.dataset = { tipKind: 'ctype', tipKey: '外企' };
+  sandbox2.showTipFor(emptySeg);
+  assert.strictEqual(layer.hidden, true);
+  assert.strictEqual(layer.innerHTML, '');
+  // 没有 data-tip-kind 的普通元素不触发
+  const plain = makeEl('div');
+  plain.dataset = {};
+  sandbox2.showTipFor(plain);
+  assert.strictEqual(layer.hidden, true);
+  sandbox2.showTipFor(null);
+  assert.strictEqual(layer.hidden, true, '传 null 不抛错');
+});
+
+check('悬浮明细定位：默认贴下方，右/下溢出时翻转并夹紧到视口内，窄屏不留负坐标', () => {
+  const layer = sandbox2.$('#tipLayer');
+  layer._rect = { left: 0, top: 0, width: 300, height: 120 }; // 浮层显示后实测到的尺寸
+  sandbox2.window.innerWidth = 1440;
+  sandbox2.window.innerHeight = 900;
+  sandbox2.positionTip({ left: 100, top: 200, right: 260, bottom: 220, width: 160, height: 20 });
+  assert.strictEqual(layer.style.left, '100px', '左对齐触发元素');
+  assert.strictEqual(layer.style.top, '228px', '贴在下方 8px');
+  sandbox2.positionTip({ left: 1300, top: 200, right: 1420, bottom: 220, width: 120, height: 20 });
+  assert.strictEqual(layer.style.left, `${1440 - 8 - 300}px`, '右侧放不下 → 贴右边缘而不是溢出');
+  sandbox2.positionTip({ left: 100, top: 820, right: 260, bottom: 860, width: 160, height: 40 });
+  assert.strictEqual(layer.style.top, `${820 - 8 - 120}px`, '下方放不下 → 翻到触发元素上方');
+  sandbox2.window.innerWidth = 200;
+  sandbox2.window.innerHeight = 100;
+  sandbox2.positionTip({ left: 180, top: 80, right: 195, bottom: 95, width: 15, height: 15 });
+  assert.ok(parseInt(layer.style.left, 10) >= 8, '窄屏也不留负坐标');
+  assert.ok(parseInt(layer.style.top, 10) >= 8);
+  sandbox2.positionTip(null);
+  assert.ok(layer.style.left, 'rect 缺失时安全空操作，不清掉已有定位');
+  sandbox2.window.innerWidth = 1440;
+  sandbox2.window.innerHeight = 900;
+});
+
+check('Esc 先关悬浮明细，第二次才关抽屉（浮层是最表层的临时 UI）', () => {
+  seedRecords();
+  sandbox2.openRecordDrawer('r1');
+  const row = makeEl('city-row');
+  row.dataset = { tipKind: 'city', tipKey: '深圳' };
+  sandbox2.showTipFor(row);
+  assert.strictEqual(sandbox2.$('#tipLayer').hidden, false);
+  const esc = () => sandbox2.handleGlobalKeydown({ key: 'Escape', metaKey: false, ctrlKey: false, altKey: false, target: { tagName: 'DIV' }, preventDefault() {} });
+  esc();
+  assert.strictEqual(sandbox2.$('#tipLayer').hidden, true, '浮层被关掉');
+  assert.strictEqual(els2['#recordDrawer'].hidden, false, '抽屉不受影响');
+  esc();
+  assert.strictEqual(els2['#recordDrawer'].hidden, true, '再按一次才关抽屉');
+});
+
+check('触屏降级：无 hover 时用点击切换，matchMedia 缺失也不抛错', () => {
+  sandbox2.window.matchMedia = () => ({ matches: true });
+  assert.strictEqual(sandbox2.isCoarsePointer(), true);
+  sandbox2.window.matchMedia = () => ({ matches: false });
+  assert.strictEqual(sandbox2.isCoarsePointer(), false);
+  sandbox2.window.matchMedia = undefined;
+  assert.strictEqual(sandbox2.isCoarsePointer(), false, '老浏览器没有 matchMedia 时按有 hover 处理');
+  sandbox2.window.matchMedia = () => ({ matches: false });
+});
+
+check('洞察里可悬浮的元素都挂了 data-tip-kind（指标卡 / 城市行 / 企业性质段 / 多岗位条目）', () => {
+  seedRecords();
+  sandbox2.renderInsights();
+  const metrics = sandbox2.$('#insightMetrics').innerHTML;
+  assert.strictEqual((metrics.match(/data-tip-kind="metric"/g) || []).length, 6, '6 个指标卡都能查口径');
+  assert.strictEqual((metrics.match(/tabindex="0"/g) || []).length, 6, '键盘用户也能触发');
+  for (const key of ['companies', 'cities', 'flow', 'stalled', 'offers', 'alerts']) {
+    assert.ok(metrics.includes(`data-tip-key="${key}"`), `缺 ${key} 的口径说明钩子`);
+  }
+  assert.ok((sandbox2.$('#cityList').innerHTML.match(/data-tip-kind="city"/g) || []).length >= 2, '每个城市行都有');
+  assert.ok(sandbox2.$('#ctypeBar').innerHTML.includes('data-tip-kind="ctype"'), '比例条每段都有');
+  assert.ok(sandbox2.$('#multiCompanyList').innerHTML.includes('data-tip-kind="record"'), '被省略号截断的岗位名可悬浮看全');
+  assert.ok(!sandbox2.$('#multiCompanyList').innerHTML.includes('title="'), '改用自绘浮层后不再留原生 title');
 });
 
 runAll();
