@@ -249,6 +249,8 @@ const submitFormSrc = extractFunction(html, 'submitForm');
 // 岗位库「记为已投递」入口：浏览器实证时岗位库为空（0 卡片）测不到，改由运行时测试覆盖。
 // 修复前这里是 `return showToast('这条岗位已经在投递记录中')` —— 硬拦截、点了没反应。
 const handleJobActionSrc = extractFunction(html, 'handleJobAction');
+// 时间线编辑器：新增表单的默认阶段就在这里决定（曾是「待投递」，会让记录在洞察里隐身）
+const timelineEditorSrc = ['timelineRowHtml', 'renderTimelineEditor'].map(name => extractFunction(html, name));
 // v4.5.0 区段：查重统一处置 resolveDuplicate + 录入时前置提示 updateSameCompanyHint。
 // 必须用真实现 —— 它决定了「同一家公司能不能录进第二个岗位」，桩掉就等于没测。
 const V45_START = '      // ================= 查重统一处置（v4.5.0）=================';
@@ -258,7 +260,7 @@ const v45Section = extractBlock(html, V45_START, V44_START);
 const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId']
   .map(name => extractFunction(html, name));
 
-for (const [label, src] of [['CORE 纯函数块', coreBlock], ['邮件纯函数块', mailPureBlock], ['洞察/台账渲染段', insightSection], ['台账视图增强段', v44Section], ['getVisibleRecords', getVisibleRecordsSrc], ['查重统一处置段(v4.5.0)', v45Section], ['handleJobAction', handleJobActionSrc]]) {
+for (const [label, src] of [['CORE 纯函数块', coreBlock], ['邮件纯函数块', mailPureBlock], ['洞察/台账渲染段', insightSection], ['台账视图增强段', v44Section], ['getVisibleRecords', getVisibleRecordsSrc], ['查重统一处置段(v4.5.0)', v45Section], ['handleJobAction', handleJobActionSrc], ...timelineEditorSrc.map((src, i) => [[ 'timelineRowHtml', 'renderTimelineEditor' ][i], src])]) {
   if (!src || src.length < 40) { console.error(`✗ 未定位到${label}`); process.exit(1); }
 }
 
@@ -365,7 +367,7 @@ sandbox2.globalThis = sandbox2;
 sandbox2.self = sandbox2; // cryptoId 用 self.crypto 探测
 vm.createContext(sandbox2);
 vm.runInContext(
-  [mailPureBlock, coreBlock, v45Section, normalizeRecordSrc.join('\n'), getVisibleRecordsSrc, applyAdvanceSrc, loadRecordsSrc, submitFormSrc, handleJobActionSrc, insightSection, v44Section].join('\n'),
+  [mailPureBlock, coreBlock, v45Section, normalizeRecordSrc.join('\n'), getVisibleRecordsSrc, applyAdvanceSrc, loadRecordsSrc, submitFormSrc, handleJobActionSrc, timelineEditorSrc.join('\n'), insightSection, v44Section].join('\n'),
   sandbox2,
   { filename: 'v44-sections.js' }
 );
@@ -1391,6 +1393,36 @@ check('洞察里可悬浮的元素都挂了 data-tip-kind（指标卡 / 城市�
   assert.ok(sandbox2.$('#ctypeBar').innerHTML.includes('data-tip-kind="ctype"'), '比例条每段都有');
   assert.ok(sandbox2.$('#multiCompanyList').innerHTML.includes('data-tip-kind="record"'), '被省略号截断的岗位名可悬浮看全');
   assert.ok(!sandbox2.$('#multiCompanyList').innerHTML.includes('title="'), '改用自绘浮层后不再留原生 title');
+});
+
+section('v4.6.0 新增表单的默认阶段');
+
+check('新增投递默认「已投递」而不是「待投递」（待投递会被 isActive 排除，记录在洞察里隐身）', () => {
+  sandbox2.$('#applicationDate').value = '2026-09-07';
+  sandbox2.renderTimelineEditor(null);
+  const h = sandbox2.$('#timelineEditor').innerHTML;
+  assert.ok(h.includes('value="已投递"'), '默认阶段应是已投递');
+  assert.ok(!h.includes('value="待投递"'), '不应再默认待投递');
+  assert.ok(h.includes('value="2026-09-07"'), '日期沿用表单里已填的投递日期');
+  assert.strictEqual((h.match(/tl-row/g) || []).length, 1, '默认只给一行');
+  // 与 isActive 的口径对齐：默认值存下来的记录必须算「在流程中」，否则不会进停滞提醒与卡点清单
+  assert.strictEqual(sandbox2.isActive({ stage: '已投递' }), true);
+  assert.strictEqual(sandbox2.isActive({ stage: '待投递' }), false, '这正是旧默认值的问题所在');
+});
+
+check('编辑与带 stage 的 seed 仍按来源回填，不被新默认值覆盖', () => {
+  sandbox2.$('#applicationDate').value = '2026-09-07';
+  sandbox2.renderTimelineEditor({ stage: '三面', applicationDate: '2026-08-01', timeline: [] });
+  assert.ok(sandbox2.$('#timelineEditor').innerHTML.includes('value="三面"'), 'seed 的 stage 优先于默认值');
+  assert.ok(sandbox2.$('#timelineEditor').innerHTML.includes('value="2026-08-01"'), '日期用 seed 的投递日期');
+  sandbox2.renderTimelineEditor({ timeline: [{ stage: '已投递', at: '2026-08-01', note: '' }, { stage: '笔试', at: '2026-08-09', note: '在线笔试' }] });
+  const h = sandbox2.$('#timelineEditor').innerHTML;
+  assert.strictEqual((h.match(/tl-row/g) || []).length, 2, '编辑时还原整条时间线');
+  assert.ok(h.includes('value="笔试"') && h.includes('在线笔试'), '里程碑与备注都在');
+  // 表单里没填投递日期时兜底为今天，不能留空（留空会导致 sanitizeTimeline 丢掉这一行）
+  sandbox2.$('#applicationDate').value = '';
+  sandbox2.renderTimelineEditor(null);
+  assert.ok(/value="\d{4}-\d{2}-\d{2}"/.test(sandbox2.$('#timelineEditor').innerHTML), '日期兜底为今天');
 });
 
 runAll();
