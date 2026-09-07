@@ -355,6 +355,37 @@ test('verdictOnAiResult：低置信丢弃、缺省视为相关、正常放行', 
   assert.strictEqual(ai.verdictOnAiResult({ confidence: 0.8 }, 0.3).accept, true);
   assert.strictEqual(ai.verdictOnAiResult(null, 0.3).accept, false);
 });
+test('aiAnalyze 网络失败时把 e.cause 与端点带进错误信息（否则用户只看到笼统的 fetch failed）', async () => {
+  const cfg = { ai: { baseUrl: 'https://ai.example/v1', apiKey: 'K', model: 'm' }, promptExtra: '' };
+  const mail = { from: 'a@b.c', fromName: '', subject: '面试邀请', receivedAt: '', textBody: 'x' };
+  // 实测场景：百炼专属端点从 GitHub runner 持续不可达，e.message 只有 "fetch failed"
+  const netErr = new Error('fetch failed');
+  netErr.cause = { code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND ai.example' };
+  await assert.rejects(
+    () => ai.aiAnalyze(mail, cfg, true, async () => { throw netErr; }),
+    (e) => {
+      assert.ok(e.message.includes('fetch failed'), '保留原始信息');
+      assert.ok(e.message.includes('ENOTFOUND'), '必须带出 cause 的错误码');
+      assert.ok(e.message.includes('getaddrinfo'), '必须带出 cause 的详情');
+      assert.ok(e.message.includes('https://ai.example/v1/chat/completions'), '必须带出端点，便于判断是哪个 AI 服务不可达');
+      return true;
+    }
+  );
+  // 没有 cause 时不得拼出 "cause: undefined" 这类噪声
+  await assert.rejects(
+    () => ai.aiAnalyze(mail, cfg, true, async () => { throw new Error('boom'); }),
+    (e) => {
+      assert.ok(e.message.includes('boom'));
+      assert.ok(!e.message.includes('cause'), '无 cause 时不该出现该字样');
+      return true;
+    }
+  );
+  // HTTP 错误仍走原有分支（不被网络错误包装吞掉）
+  await assert.rejects(
+    () => ai.aiAnalyze(mail, cfg, true, async () => ({ ok: false, status: 401, text: async () => 'invalid api key' })),
+    (e) => e.message.includes('HTTP 401') && e.message.includes('invalid api key')
+  );
+});
 test('SYSTEM_PROMPT 明确 confidence 语义为「是招聘邮件的置信度」而非「判断的确定性」', () => {
   // 修复前 prompt 写的是"你对本次判断的整体置信度"，AI 对"我确定这是营销邮件"给了 0.98，
   // 于是低置信阈值形同虚设。这条断言防止 prompt 被改回歧义表述。

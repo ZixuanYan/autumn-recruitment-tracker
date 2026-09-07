@@ -187,11 +187,23 @@ async function aiAnalyze(mail, cfg, useResponseFormat, fetchImpl) {
     ]
   };
   if (useResponseFormat) body.response_format = { type: 'json_object' };
-  const res = await doFetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.ai.apiKey}` },
-    body: JSON.stringify(body)
-  });
+  let res;
+  try {
+    res = await doFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.ai.apiKey}` },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    // 网络层失败时 e.message 只有笼统的 "fetch failed"，真正的原因（DNS 解析不到 /
+    // 连接被拒 / TLS 证书 / 超时）在 e.cause 里。不带上它，用户在网页端看到的就是
+    // 一句无法据以排查的 "AI 分析失败 6/6 封：fetch failed"（实测踩过：百炼专属端点
+    // 从 GitHub runner 持续不可达，但日志给不出任何可行动的线索）。
+    const cause = e && e.cause
+      ? ` | cause: ${(e.cause.code || '')} ${(e.cause.message || e.cause)}`.trim()
+      : '';
+    throw new Error(`${e.message}${cause}（端点 ${url}）`);
+  }
   if (!res.ok) {
     let detail = '';
     try { detail = (await res.text()).slice(0, 200); } catch (_) {}
