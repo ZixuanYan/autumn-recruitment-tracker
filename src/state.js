@@ -137,7 +137,7 @@ function mergeSuggestions(prevList, incoming, scannedUids) {
   return pruneSuggestions([...byUid.values()]);
 }
 
-function buildMeta({ prevMeta, watermark, status, lastError, newCount, pendingCount, lastDropped }) {
+function buildMeta({ prevMeta, watermark, status, lastError, newCount, pendingCount, lastDropped, promptSnapshot }) {
   // 丢弃统计：本轮有传入就用本轮的；没传（如 --report-error 兜底路径，本轮数据不可信）则保留旧值，
   // 避免硬崩溃时把上一次的诊断信息抹成空。老文件没有该字段时补一份全 0 结构，保证网页端读到的形状稳定。
   const dropped = (lastDropped && typeof lastDropped === 'object')
@@ -154,7 +154,12 @@ function buildMeta({ prevMeta, watermark, status, lastError, newCount, pendingCo
     lastUid: Number(watermark && watermark.lastUid) || Number(prevMeta && prevMeta.lastUid) || 0,
     newCount: Number(newCount) || 0,
     pendingCount: Number(pendingCount) || 0,
-    lastDropped: dropped
+    lastDropped: dropped,
+    // 本次**实际生效**的系统提示词全文（内置或用户 override 的解析偏好 + 附加要求 + 强制契约段）。
+    // 网页端设置面板只读展示的就是它——展示真实生效的那一份，而不是前端硬编码的副本，
+    // 否则 Action 改了提示词后前端展示的就是错的（这类漂移无法被任何测试发现）。
+    // 未传时（--report-error 兜底）保留上一次的值；上限 8000 字防止 Gist 文件膨胀。
+    promptSnapshot: String(promptSnapshot || (prevMeta && prevMeta.promptSnapshot) || '').slice(0, 8000)
   };
 }
 

@@ -72,6 +72,7 @@ async function runIndexOnce({ mails = [], prevGist = null, ai = 'ok', uidFrom = 
   // ---- 假依赖：网络（Gist GET/PATCH + AI）----
   const originalFetch = globalThis.fetch;
   let aiCalls = 0;
+  let lastSystemPrompt = '';
   globalThis.fetch = async (url, opts = {}) => {
     const u = String(url);
     const method = String(opts.method || 'GET').toUpperCase();
@@ -79,6 +80,8 @@ async function runIndexOnce({ mails = [], prevGist = null, ai = 'ok', uidFrom = 
       aiCalls += 1;
       if (ai === 'fail') throw new Error('fetch failed');
       const body = JSON.parse(opts.body);
+      // 记下实际发出去的 system prompt：用于验证「网页端展示的快照」与「真正生效的」逐字一致
+      lastSystemPrompt = String((body.messages[0] && body.messages[0].content) || '');
       const mailText = body.messages[body.messages.length - 1].content;
       const result = typeof ai === 'function' ? ai(mailText) : {
         isRecruitment: true, emailType: '面试邀请', company: '测试公司', position: '后端',
@@ -150,6 +153,7 @@ async function runIndexOnce({ mails = [], prevGist = null, ai = 'ok', uidFrom = 
     patchCount: patches.length,
     logs,
     aiCalls,
+    lastSystemPrompt,
     hardFailed: exitCodeAfter !== exitCodeBefore
   };
 }
@@ -315,6 +319,69 @@ test('mail-config.json 的 enabled=false 时直接跳过，不抓邮件不调 AI
   assert.strictEqual(r.aiCalls, 0);
   assert.strictEqual(r.patchCount, 0, '跳过时不应写 Gist');
   assert.ok(r.logs.some(l => l.includes('跳过本次（0 token）')));
+});
+
+// ===== 8) v0.4.0：提示词整体替换端到端 =====
+test('mail-config.json 的 promptOverride 真的传到 AI，且 meta.promptSnapshot 与实际发出的逐字一致', async () => {
+  const gist = gistWith([]);
+  gist.files['mail-config.json'] = {
+    content: JSON.stringify({
+      promptOverride: '只解析国企与事业单位的招聘邮件，忽略互联网大厂与培训机构。',
+      promptExtra: 'summary 用一句话概括'
+    })
+  };
+  const r = await runIndexOnce({
+    mails: [mail(3001, 'noreply@mokahr.com', '面试邀请：后端开发工程师', '诚邀您参加面试')],
+    prevGist: gist,
+    ai: 'ok'
+  });
+  assert.strictEqual(r.aiCalls, 1);
+  // override 与 extra 都要真的进到发出去的 system prompt 里
+  assert.ok(r.lastSystemPrompt.includes('只解析国企与事业单位'), 'override 应传到 AI');
+  assert.ok(r.lastSystemPrompt.includes('summary 用一句话概括'), 'extra 应同时生效');
+  // 契约不可被替换掉——这是开放整体替换的安全前提
+  assert.ok(r.lastSystemPrompt.includes('严格只返回一个 JSON 对象'), '输出契约仍强制附加');
+  assert.ok(r.lastSystemPrompt.includes('isRecruitment(bool)'), '字段清单仍在');
+  assert.ok(!r.lastSystemPrompt.includes('你是招聘邮件解析引擎'), '内置解析偏好已被整体替换');
+  // 关键：网页端只读展示的就是这份快照，必须与实际发给 AI 的完全相同，否则展示的是假的
+  const written = JSON.parse(r.patch.files['mail-suggestions.json'].content);
+  assert.strictEqual(written.meta.promptSnapshot, r.lastSystemPrompt, '快照必须与实际发出的 system prompt 逐字一致');
+  assert.ok(r.logs.some(l => l.includes('promptOverride=yes')), '日志应标明本次用的是自定义提示词');
+});
+test('未配置 promptOverride 时用内置提示词，快照同样写入 meta', async () => {
+  const r = await runIndexOnce({
+    mails: [mail(3002, 'noreply@mokahr.com', '面试邀请：后端', '诚邀面试')],
+    prevGist: gistWith([]),
+    ai: 'ok'
+  });
+  assert.ok(r.lastSystemPrompt.includes('你是招聘邮件解析引擎'), '用内置解析偏好');
+  assert.ok(r.lastSystemPrompt.includes('严格只返回一个 JSON 对象'));
+  const written = JSON.parse(r.patch.files['mail-suggestions.json'].content);
+  assert.strictEqual(written.meta.promptSnapshot, r.lastSystemPrompt);
+  assert.ok(r.logs.some(l => l.includes('promptOverride=no')), '日志应标明用的是内置提示词');
+});
+
+// ===== 9) v0.4.0：里程碑备注端到端（写进 Gist 的 proposed.milestone.note）=====
+test('AI 归为「其它」时，写进建议的 milestone.note 用 summary 而不是「邮件·其它」', async () => {
+  const r = await runIndexOnce({
+    mails: [
+      mail(4001, 'didiglobal-no-reply@mail.mokahr.co', '【滴滴招聘】简历成功投递通知', '您的简历已成功投递'),
+      mail(4002, '95555@message.cmbchina.com', '招商银行素质测评通知', '请完成测评')
+    ],
+    prevGist: gistWith([]),
+    // 第一封归「其它」（投递确认类），第二封归「测评」
+    ai: (text) => (text.includes('素质测评')
+      ? { isRecruitment: true, emailType: '测评', company: '招商银行', summary: '通知参加素质测评，截止9月20日12:00', confidence: 0.98, stage: '测评' }
+      : { isRecruitment: true, emailType: '其它', company: '滴滴', summary: '简历成功投递滴滴校招，等待后续流程推进', confidence: 0.95, stage: '已投递' })
+  });
+  const written = JSON.parse(r.patch.files['mail-suggestions.json'].content);
+  const didi = written.suggestions.find(s => s.sourceUid === 4001);
+  const cmb = written.suggestions.find(s => s.sourceUid === 4002);
+  assert.strictEqual(didi.proposed.milestone.note, '邮件·简历成功投递滴滴校招，等待后续流程推进',
+    '「其它」类必须用 summary —— 这条会被永久写进台账时间线');
+  assert.strictEqual(cmb.proposed.milestone.note, '邮件·测评', '有明确类型的保留简短类型名，便于扫读');
+  // isRecruitment 落盘备查（v4.6.1 加的字段）
+  assert.strictEqual(didi.isRecruitment, true);
 });
 
 // 直接运行时执行全部用例；被 require 时只导出工具（便于临时调试单个场景）

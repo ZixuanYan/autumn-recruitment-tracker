@@ -112,10 +112,15 @@ function buildConfig() {
     }),
     // 邮件建议加密密钥（可选）：设了则 mail-suggestions.json 加密存储；留空则明文（向后兼容）
     mailEncKey: strEnv('MAIL_ENC_KEY', ''),
-    // 以下三项默认值，可被 Gist 里的 mail-config.json 覆盖（见 applyMailConfigOverrides）
+    // 以下几项默认值，可被 Gist 里的 mail-config.json 覆盖（见 applyMailConfigOverrides）
     enabled: true,
     minIntervalHours: 0,
-    promptExtra: ''
+    promptExtra: '',
+    // 整体替换内置提示词的「解析偏好」部分（v0.4.0）。留空则用 ai.js 的 DEFAULT_PROMPT_BODY。
+    // 注意：无论这里写什么，ai.js 的 OUTPUT_CONTRACT（只返回 JSON、字段清单、枚举、格式）
+    // 都会被强制拼在最后，用户改不掉——否则 extractJson/normalizeAiResult 会拿不到数据，
+    // 整条链路静默失效（建议队列永远为空，而 Action 仍报 success）。
+    promptOverride: ''
   });
 }
 
@@ -133,7 +138,10 @@ function applyMailConfigOverrides(cfg, mailConfig) {
     maxPerRun: num(mc.maxPerRun, cfg.maxPerRun),
     enabled: mc.enabled === false ? false : true, // 仅显式 false 才禁用
     minIntervalHours: Math.max(0, num(mc.minIntervalHours, cfg.minIntervalHours)),
-    promptExtra: str(mc.promptExtra, cfg.promptExtra, 2000)
+    promptExtra: str(mc.promptExtra, cfg.promptExtra, 2000),
+    // 清空即回落内置提示词：str() 对空串返回 fallback（cfg.promptOverride 默认 ''），
+    // 而 buildSystemPrompt 见到空 override 就用 DEFAULT_PROMPT_BODY，语义天然正确
+    promptOverride: str(mc.promptOverride, cfg.promptOverride, 4000)
   });
 }
 

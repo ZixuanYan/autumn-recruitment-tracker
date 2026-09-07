@@ -16,7 +16,7 @@ const { classifyMail, DROP_REASONS } = require('./src/prefilter');
 const { parseMessage } = require('./src/parse');
 const { computeWatermark, buildSuggestion, mergeSuggestions, buildMeta, createDropTracker } = require('./src/state');
 const { gistGet, readMailFile, patchMailFile } = require('./src/gist');
-const { analyzeEmail, verdictOnAiResult } = require('./src/ai');
+const { analyzeEmail, verdictOnAiResult, buildSystemPrompt } = require('./src/ai');
 
 function assertGistSecrets(cfg) {
   const missing = [];
@@ -75,7 +75,7 @@ async function run() {
 
   const { mailConfig, prev } = await loadGistState(cfg0);
   const cfg = applyMailConfigOverrides(cfg0, mailConfig);
-  console.log(`[sync] 配置：enabled=${cfg.enabled} minIntervalHours=${cfg.minIntervalHours} keywords="${cfg.keywords}" minConf=${cfg.minConfidence} sinceDays=${cfg.sinceDays} maxPerRun=${cfg.maxPerRun} enc=${cfg.mailEncKey ? 'on' : 'off'} promptExtra=${cfg.promptExtra ? 'yes' : 'no'}`);
+  console.log(`[sync] 配置：enabled=${cfg.enabled} minIntervalHours=${cfg.minIntervalHours} keywords="${cfg.keywords}" minConf=${cfg.minConfidence} sinceDays=${cfg.sinceDays} maxPerRun=${cfg.maxPerRun} enc=${cfg.mailEncKey ? 'on' : 'off'} promptExtra=${cfg.promptExtra ? 'yes' : 'no'} promptOverride=${cfg.promptOverride ? 'yes（已整体替换解析偏好，输出契约仍强制附加）' : 'no（用内置）'}`);
 
   const skip = gateReason(cfg, prev.meta);
   if (skip) { console.log(`[sync] ⏭️ 跳过本次（0 token）：${skip}`); return; }
@@ -168,7 +168,9 @@ async function run() {
     lastError: softError ? `AI 分析失败 ${aiErrors}/${candidates} 封：${lastAiError}` : '',
     newCount: incoming.length,
     pendingCount: merged.length,
-    lastDropped: dropped
+    lastDropped: dropped,
+    // 与实际发给 AI 的 system prompt 用同一个函数、同一组参数计算，保证网页端展示的就是生效的那份
+    promptSnapshot: buildSystemPrompt(cfg.promptExtra, cfg.promptOverride)
   });
 
   await patchMailFile(cfg, { meta, suggestions: merged });

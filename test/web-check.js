@@ -41,7 +41,7 @@ const si = html.indexOf(startMark);
 const ei = html.indexOf(endMark);
 check('找到纯函数块标记', () => { assert.ok(si !== -1 && ei !== -1 && ei > si, '未找到 __MAIL_PURE_START__/__END__ 标记'); });
 const pureSrc = html.slice(si + startMark.length, ei);
-const helpers = new Function(`${pureSrc}; return { normalizeCompanySlug, diceCoefficient, companyMatchScore, matchRecordsByCompany, filterMailSuggestions, unionIdList, unionMailState, describeDropReason, normalizeDropStats };`)();
+const helpers = new Function(`${pureSrc}; return { normalizeCompanySlug, diceCoefficient, companyMatchScore, matchRecordsByCompany, filterMailSuggestions, unionIdList, unionMailState, describeDropReason, normalizeDropStats, mileNoteText };`)();
 
 check('normalizeCompanySlug 剥离后缀 + 全角转半角 + 小写', () => {
   const { normalizeCompanySlug, companyMatchScore } = helpers;
@@ -153,6 +153,48 @@ check('normalizeDropStats：total 缺失时退回分类求和，明细上限 20 
   assert.strictEqual(bad.noiseFrom, 0);
   assert.strictEqual(bad.recent.length, 1, '明细里的 null 被滤掉');
 });
+check('mileNoteText：把历史数据里的「邮件·其它」换成 summary，其余原样保留', () => {
+  const { mileNoteText } = helpers;
+  // 实测痛点：已入库的 5 条建议 note 都是「邮件·其它」（滴滴/字节/光大/中信/蚂蚁），
+  // 而它们的 summary 明明写着有用内容。这条兜底让历史数据不必重扫就立刻变好。
+  assert.strictEqual(
+    mileNoteText('邮件·其它', '简历成功投递滴滴校招，等待后续流程推进。'),
+    '邮件·简历成功投递滴滴校招，等待后续流程推进。'
+  );
+  assert.strictEqual(mileNoteText('邮件·其他', 'summary 内容'), '邮件·summary 内容', '「其他」写法也要认');
+  assert.strictEqual(mileNoteText('邮件 · 其它', 's'), '邮件·s', '分隔符两侧有空格也要认');
+  // 有明确类型的原样保留（更短、时间线里易扫读）
+  assert.strictEqual(mileNoteText('邮件·测评', '通知参加素质测评，截止9月20日'), '邮件·测评');
+  assert.strictEqual(mileNoteText('邮件·面试邀请', '二面通知'), '邮件·面试邀请');
+  // 「其它」但没有 summary → 保留原文，不能变成空串或半截「邮件·」
+  assert.strictEqual(mileNoteText('邮件·其它', ''), '邮件·其它');
+  assert.strictEqual(mileNoteText('邮件·其它', '   '), '邮件·其它');
+  assert.strictEqual(mileNoteText('邮件·其它', null), '邮件·其它');
+  // 用户自己写的备注绝不能被改写（只有精确匹配「邮件·其它」才兜底）
+  assert.strictEqual(mileNoteText('电话面试，面试官是张工', 'x'), '电话面试，面试官是张工');
+  assert.strictEqual(mileNoteText('', 'x'), '');
+  assert.strictEqual(mileNoteText(null, null), '');
+  // 长度上限与 Action 侧 milestoneNote 一致（48 字），否则台账时间线会被长文本挤坏
+  assert.ok(mileNoteText('邮件·其它', 'a'.repeat(120)).length <= 48);
+});
+check('跨仓库契约：网页端 mileNoteText 与 Action 侧 milestoneNote 对同一输入给出相同结果', () => {
+  // 两处各自实现同一套「其它→summary」规则：Action 管新数据，网页管历史数据兜底。
+  // 若规则漂移（比如一边截 48 字一边截 60 字），同一条建议在新旧两版下显示会不一致。
+  const ai = require('../src/ai');
+  const cases = [
+    ['其它', '简历成功投递滴滴校招，等待后续流程推进。'],
+    ['其它', ''],
+    ['测评', '通知参加素质测评，截止9月20日12:00'],
+    ['面试邀请', '二面通知'],
+    ['其它', 'x'.repeat(120)]
+  ];
+  for (const [emailType, summary] of cases) {
+    const actionSide = ai.milestoneNote({ emailType, summary });
+    // 网页端拿到的是旧版 Action 写的 note（即「邮件·<type>」），再叠加 summary 兜底
+    const webSide = helpers.mileNoteText(`邮件·${emailType}`, summary);
+    assert.strictEqual(webSide, actionSide, `emailType=${emailType} summary=${summary.slice(0, 12)}… 两端结果不一致`);
+  }
+});
 check('跨仓库契约：网页端 DROP_REASON_LABELS 的 key 必须与 Action 侧 DROP_REASONS 的值逐一对应', () => {
   // 两端各自维护一份 reason 字面量：Action 写进 meta.lastDropped.recent[].reason，
   // 网页端据此显示中文标签。任一侧增删档位而另一侧没跟上，用户就会看到英文原文
@@ -167,6 +209,28 @@ check('跨仓库契约：网页端 DROP_REASON_LABELS 的 key 必须与 Action �
   const literal = block.slice(start + 'const DROP_REASON_LABELS = '.length, end + 1);
   const webReasons = Object.keys(new Function(`return ${literal};`)()).sort();
   assert.deepStrictEqual(webReasons, actionReasons, '两端 reason 枚举必须完全一致');
+});
+check('跨仓库契约：网页端 MAIL_CFG_DEFAULTS 的键必须与 Action applyMailConfigOverrides 覆盖的键一致', () => {
+  // mail-config.json 是「网页写、Action 读」的单向契约，两端各维护一份字段清单。
+  // 任一侧加了字段而另一侧没跟上，失效是**静默**的：网页保存成功、Action 也照跑，
+  // 只是那个字段永远不起作用（v0.4.0 加 promptOverride 时两端都得改，正是这个风险）。
+  const cfgSrc = fs.readFileSync(path.join(__dirname, '../src/config.js'), 'utf8');
+  const fnSrc = extractFunction(cfgSrc, 'applyMailConfigOverrides');
+  assert.ok(fnSrc, '未在 src/config.js 找到 applyMailConfigOverrides');
+  const body = fnSrc.slice(fnSrc.indexOf('return Object.freeze({'));
+  assert.ok(body.length > 100, '未定位到 applyMailConfigOverrides 的返回对象');
+  // 只取返回对象里的顶层键（4 空格缩进）；`...cfg` 展开与注释行都不会被这个正则命中
+  const actionKeys = [...body.matchAll(/^\s{4}(\w+):/gm)].map(m => m[1]).sort();
+  const defaultsLine = html.split('\n').find(l => l.includes('const MAIL_CFG_DEFAULTS ='));
+  assert.ok(defaultsLine, '未在 index.html 找到 MAIL_CFG_DEFAULTS');
+  const webKeys = Object.keys(new Function(`return ${/\{.*\}/.exec(defaultsLine)[0]};`)()).sort();
+  assert.ok(actionKeys.length >= 8, `Action 侧应至少覆盖 8 个字段，实际 ${actionKeys.length}（正则可能失配）`);
+  assert.deepStrictEqual(webKeys, actionKeys, '两端 mail-config.json 字段清单必须完全一致');
+  // 逐个确认关键项都在（防止两边同时漏掉某项而断言仍然通过）
+  for (const key of ['keywords', 'minConfidence', 'sinceDays', 'maxPerRun', 'enabled', 'minIntervalHours', 'promptExtra', 'promptOverride']) {
+    assert.ok(webKeys.includes(key), `网页端 MAIL_CFG_DEFAULTS 缺 ${key}`);
+    assert.ok(actionKeys.includes(key), `Action applyMailConfigOverrides 缺 ${key}`);
+  }
 });
 check('unionIdList 去重且 cap 上限', () => {
   const { unionIdList } = helpers;

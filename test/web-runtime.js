@@ -33,7 +33,7 @@ const sandbox = {
   localDateInput: () => '2026-09-05',
   MAIL_STORAGE_KEY: 'test.mail.v1',
   MAIL_CONFIG_FILENAME: 'mail-config.json',
-  MAIL_CFG_DEFAULTS: { keywords: 'K', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 0, promptExtra: '' },
+  MAIL_CFG_DEFAULTS: { keywords: 'K', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 0, promptExtra: '', promptOverride: '' },
   localStorage: { _s: {}, getItem(k) { return Object.prototype.hasOwnProperty.call(this._s, k) ? this._s[k] : null; }, setItem(k, v) { this._s[k] = String(v); } },
   crypto: { getRandomValues: a => { for (let i = 0; i < a.length; i += 1) a[i] = Math.floor(Math.random() * 256); return a; } },
   records: [],
@@ -257,6 +257,66 @@ check('currentMailConfig 无云端配置时回落默认值', () => {
   assert.strictEqual(c.minConfidence, 0.3);
   assert.strictEqual(c.enabled, true);
   assert.strictEqual(c.sinceDays, 30);
+});
+
+section('v4.7.0 提示词展示与整体替换');
+check('currentMailConfig 读回 promptOverride；非字符串与超长值都要收敛', () => {
+  sandbox.mailConfig = { promptOverride: '只解析国企邮件' };
+  assert.strictEqual(sandbox.currentMailConfig().promptOverride, '只解析国企邮件');
+  // Gist 被手改成数字/null/数组时不得污染 textarea（否则界面上会出现 "undefined"）
+  for (const bad of [123, null, {}, ['x']]) {
+    sandbox.mailConfig = { promptOverride: bad };
+    assert.strictEqual(sandbox.currentMailConfig().promptOverride, '', `promptOverride=${JSON.stringify(bad)} 应回落空串`);
+  }
+  // 云端存了超长内容也要截到 4000，与 Action 侧 PROMPT_OVERRIDE_MAX 一致
+  sandbox.mailConfig = { promptOverride: 'p'.repeat(9000) };
+  assert.strictEqual(sandbox.currentMailConfig().promptOverride.length, 4000);
+  sandbox.mailConfig = null;
+  assert.strictEqual(sandbox.currentMailConfig().promptOverride, '', '无云端配置时回落默认（用内置提示词）');
+});
+check('renderPromptSnapshot：有快照则展示 Action 实际生效的全文，无快照则整块隐藏', () => {
+  const wrap = sandbox.$('#mailPromptSnapshotWrap');
+  const body = sandbox.$('#mailPromptSnapshot');
+  const note = sandbox.$('#mailPromptSnapshotNote');
+  const snapshot = '你是招聘邮件解析引擎。\n\n【输出契约 · 不可覆盖】\n1. 严格只返回一个 JSON 对象';
+  sandbox.mailMeta = { lastStatus: 'ok', lastRunAt: '2026-09-07T10:42:29Z', promptSnapshot: snapshot };
+  sandbox.renderPromptSnapshot();
+  assert.strictEqual(wrap.hidden, false);
+  assert.strictEqual(body.textContent, snapshot, '必须原样展示 Action 写入的那一份');
+  assert.ok(!body.innerHTML, '要用 textContent 而不是 innerHTML（提示词含 < > 会被当标签解析）');
+  assert.ok(note.textContent.includes('实际发给 AI'), '说明这份就是生效值');
+  assert.ok(note.textContent.includes('不可覆盖'), '要讲清契约段删不掉');
+  assert.ok(note.textContent.includes('CLK'), '带上次运行时间，便于判断快照新旧');
+  // 旧版 Action（<0.4.0）写的 meta 没有该字段 → 整块隐藏，不给用户看空框
+  sandbox.mailMeta = { lastStatus: 'ok', lastRunAt: '2026-09-07T10:42:29Z' };
+  sandbox.renderPromptSnapshot();
+  assert.strictEqual(wrap.hidden, true, '无快照时必须隐藏');
+  assert.strictEqual(body.textContent, '', '并清空，避免残留上一次的内容');
+  // mailMeta 整个为 null（还没同步过）也不得抛错
+  sandbox.mailMeta = null;
+  sandbox.renderPromptSnapshot();
+  assert.strictEqual(wrap.hidden, true);
+});
+check('mailCardHtml：历史数据的「邮件·其它」改用 summary 展示（不必重扫就变好）', () => {
+  sandbox.records = [{ id: 'r1', company: '滴滴', position: '后端', stage: '已投递' }];
+  const legacy = {
+    id: 'uid-1895', sourceUid: 1895, company: '滴滴', position: '后端', emailType: '其它',
+    confidence: 0.95, subject: '【滴滴招聘】简历成功投递通知',
+    summary: '简历成功投递滴滴校招，等待后续流程推进。',
+    from: 'didiglobal-no-reply@mail.mokahr.co', receivedAt: '2026-09-06T10:00:00Z',
+    proposed: { milestone: { stage: '已投递', at: '2026-09-06', note: '邮件·其它' }, scheduleAt: '', recentSchedule: '', nextAction: '查看邮件原文并按需跟进' }
+  };
+  const h = sandbox.mailCardHtml(legacy);
+  // 精确断言里程碑那一段：卡片本身另有摘要行会显示 summary，不能用「整个 HTML 含/不含」来判断
+  assert.ok(h.includes('推进里程碑：已投递（2026-09-06） · 邮件·简历成功投递滴滴校招'), '里程碑备注应是 summary');
+  assert.ok(!h.includes('邮件·其它'), '不该再出现零信息量的分类术语');
+  // 有明确类型的历史数据保持原样（更短、易扫读）
+  const typed = { ...legacy, emailType: '测评', summary: '通知参加素质测评', proposed: { milestone: { stage: '测评', at: '2026-09-04', note: '邮件·测评' } } };
+  const h2 = sandbox.mailCardHtml(typed);
+  assert.ok(h2.includes('推进里程碑：测评（2026-09-04） · 邮件·测评'), '类型明确的保留类型名，不换成 summary');
+  // 用户手写的备注绝不能被改写
+  const manual = { ...legacy, summary: 'x', proposed: { milestone: { stage: '一面', at: '2026-09-10', note: '电话面试，面试官是张工' } } };
+  assert.ok(sandbox.mailCardHtml(manual).includes('推进里程碑：一面（2026-09-10） · 电话面试，面试官是张工'));
 });
 
 // ============================================================================
