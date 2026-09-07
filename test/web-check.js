@@ -715,9 +715,11 @@ console.log('v4.6.0 城市分布与企业性质统计');
 check('洞察面板信息层级：概览 → 行动 → 转化 → 明细（重构后不得回退）', () => {
   // 重构前指标条夹在两张图之后、最需要行动的「需要关注」被压到第 5 块。
   // 这条断言把顺序钉住：以后往面板里加块时若插错位置会立刻失败，而不是靠人眼复核。
-  const panel = html.slice(html.indexOf('id="insightsBody"'), html.indexOf('id="distributionTitle"'));
+  // v4.8.0：阶段分布（stageGrid）从独立 panel 并入洞察常驻区，与转化漏斗同排；
+  // 面板结束边界随之从已删除的 distributionTitle 改为紧随其后的「未来安排」aside（id="upcoming"）。
+  const panel = html.slice(html.indexOf('id="insightsBody"'), html.indexOf('id="upcoming"'));
   assert.ok(panel.length > 500, '未定位到洞察面板 HTML');
-  const order = ['insightMetrics', 'alertList', 'funnelRow', 'insightDetails', 'cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'multiCompanyWrap', 'offerMatrixWrap'];
+  const order = ['insightMetrics', 'alertList', 'funnelRow', 'stageGrid', 'insightDetails', 'cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'multiCompanyWrap', 'offerMatrixWrap'];
   const positions = order.map(id => panel.indexOf(`id="${id}"`));
   assert.ok(positions.every(p => p > 0), `有块缺失：${order.filter((id, i) => positions[i] < 0).join(', ')}`);
   for (let i = 1; i < positions.length; i += 1) {
@@ -728,11 +730,27 @@ check('洞察面板信息层级：概览 → 行动 → 转化 → 明细（重�
   for (const id of ['cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'multiCompanyWrap', 'offerMatrixWrap']) {
     assert.ok(panel.indexOf(`id="${id}"`) > detailsStart, `${id} 必须在 #insightDetails 内`);
   }
-  // 概览与行动块不能被折进明细容器，否则精简模式会把最该看的信息一起藏掉
-  for (const id of ['insightMetrics', 'alertList', 'funnelRow']) {
-    assert.ok(panel.indexOf(`id="${id}"`) < detailsStart, `${id} 必须在 #insightDetails 之外`);
+  // 概览、行动、转化漏斗与阶段分布都是常驻区，不能被折进明细容器（否则精简模式会把它们一起藏掉）
+  for (const id of ['insightMetrics', 'alertList', 'funnelRow', 'stageGrid']) {
+    assert.ok(panel.indexOf(`id="${id}"`) < detailsStart, `${id} 必须在 #insightDetails 之外（常驻区）`);
   }
 });
+
+check('阶段分布已并入洞察常驻区：独立 .distribution panel 被移除、#stageGrid 唯一且与漏斗同排', () => {
+  // stageGrid 的 id 不变（els.stageGrid / renderDistribution 零改动），但外壳从总览的独立 panel
+  // 迁进洞察面板，与转化漏斗组成 .insight-grid 两列。旧的 <section class="panel distribution"> 必须消失，
+  // 否则会出现两个 stageGrid 或两处「阶段分布」标题。
+  assert.ok(!/class="panel distribution"/.test(html), '独立的 .distribution panel 外壳应已删除');
+  assert.ok(!/id="distributionTitle"/.test(html), '旧的 distributionTitle 应随外壳一起删除');
+  const stageGridCount = (html.match(/id="stageGrid"/g) || []).length;
+  assert.strictEqual(stageGridCount, 1, '#stageGrid 必须唯一');
+  // stageGrid 与 funnelRow 必须同在一个 .insight-grid 里（左右两列），且都在常驻区
+  const gridStart = html.lastIndexOf('class="insight-grid"', html.indexOf('id="funnelRow"'));
+  const gridSlice = html.slice(gridStart, html.indexOf('id="insightDetails"'));
+  assert.ok(gridSlice.includes('id="funnelRow"') && gridSlice.includes('id="stageGrid"'), '漏斗与阶段分布应同处一个 .insight-grid');
+  assert.ok(/阶段分布[\s\S]*?当前存量，按阶段计数/.test(gridSlice), '阶段分布块头应带口径说明，与漏斗的「累计转化」区分');
+});
+
 
 check('normalizeCityKey：剥行政后缀、全角归一、占位值等同未填', () => {
   assert.strictEqual(core.normalizeCityKey('深圳市'), '深圳');
@@ -1000,6 +1018,88 @@ check('被 hidden 切换且设了 display 的容器都有 [hidden]{display:none}
   assert.ok(hiddenGuards.has('.insights-body'), '.insights-body 的守卫应被识别到');
   assert.ok(hiddenGuards.has('.ocr-results'), '.ocr-results 的守卫应被识别到');
   assert.ok(targets.length >= 8, `应扫到足够多的 hidden 目标，实际 ${targets.length}`);
+});
+
+console.log('v4.8.0 投递记录独立视图：路由 / 导航 / 命令面板 / 视图容器');
+
+check('投递记录视图容器存在，且位于总览之后、岗位库之前（与导航顺序一致）', () => {
+  const overview = html.indexOf('data-view="overview"');
+  const records = html.indexOf('data-view="records"');
+  const jobPool = html.indexOf('data-view="jobPool"');
+  assert.ok(overview > 0 && records > 0 && jobPool > 0, '三个视图容器都应存在');
+  assert.ok(overview < records && records < jobPool, `顺序应为 overview < records < jobPool，实际 ${overview} / ${records} / ${jobPool}`);
+  // 记录视图默认隐藏，靠既有的 .view[hidden]{display:none} 守卫（下方 hidden 守卫会复核）
+  assert.ok(/<div class="view" data-view="records" hidden>/.test(html), 'records 视图初始应带 hidden');
+});
+
+check('记录面板迁移后所有既有 id 原样保留（els 映射与事件绑定零改动的前提）', () => {
+  // 迁移的铁律：id 一个都不能变，否则 els.* / addEventListener 全部失联
+  const ids = ['records', 'resultCaption', 'viewTableBtn', 'viewBoardBtn', 'searchInput', 'stageFilter', 'sortSelect', 'recordsTableScroll', 'recordBody', 'boardView', 'boardCols', 'emptyState'];
+  const missing = ids.filter(id => !new RegExp(`id="${id}"`).test(html));
+  assert.deepStrictEqual(missing, [], `记录面板缺失 id：${missing.join(', ')}`);
+  // 这些 id 都必须落在 records 视图容器内（而不是散落到别处）
+  const recStart = html.indexOf('data-view="records"');
+  const recEnd = html.indexOf('data-view="jobPool"');
+  const recSlice = html.slice(recStart, recEnd);
+  const outside = ids.filter(id => !recSlice.includes(`id="${id}"`));
+  assert.deepStrictEqual(outside, [], `这些 id 不在 records 视图内：${outside.join(', ')}`);
+});
+
+check('VIEW_META 新增 records、overview 副标题不再提「台账」', () => {
+  const start = html.indexOf('const VIEW_META = {');
+  assert.ok(start > -1, '未找到 VIEW_META');
+  const end = html.indexOf('};', start);
+  const meta = new Function(`return ${html.slice(start + 'const VIEW_META = '.length, end + 1)};`)();
+  assert.ok(meta.records, 'VIEW_META 应有 records 项');
+  assert.strictEqual(meta.records.title, '投递记录');
+  assert.strictEqual(meta.records.kicker, 'PIPELINE');
+  assert.ok(/看板|表格/.test(meta.records.subtitle), 'records 副标题应点出表格/看板双视图');
+  assert.ok(!meta.overview.subtitle.includes('台账'), '台账已移出总览，overview 副标题不应再提「台账」');
+});
+
+check('ROUTE_ALIASES：records 恢复为独立视图，upcoming 仍并入总览', () => {
+  const line = html.split('\n').find(l => l.includes('const ROUTE_ALIASES ='));
+  assert.ok(line, '未找到 ROUTE_ALIASES');
+  const aliases = new Function(`return ${/\{.*\}/.exec(line)[0]};`)();
+  assert.strictEqual(aliases.records, 'records', '#/records 应解析到 records 视图本身，而非重定向到 overview');
+  assert.strictEqual(aliases.upcoming, 'overview', '未来安排仍在总览');
+  assert.strictEqual(aliases.overview, 'overview');
+});
+
+check('导航 6 项且顺序为 总览 / 投递记录 / 邮件提醒 / 我的简历 / 岗位库 / 工具', () => {
+  const navStart = html.indexOf('<nav class="sidebar-nav">');
+  const navEnd = html.indexOf('</nav>', navStart);
+  const nav = html.slice(navStart, navEnd);
+  const routes = [...nav.matchAll(/data-route="([\w-]+)"/g)].map(m => m[1]);
+  const labels = [...nav.matchAll(/<span>([^<]+)<\/span>/g)].map(m => m[1]);
+  assert.deepStrictEqual(routes, ['overview', 'records', 'mail', 'resume', 'jobPool', 'tools']);
+  assert.deepStrictEqual(labels, ['总览', '投递记录', '邮件提醒', '我的简历', '岗位库', '工具']);
+  // 投递记录复用既有 #i-stack sprite，不新增 symbol
+  assert.ok(/data-route="records"[^>]*>[\s\S]*?#i-stack/.test(nav), 'records 导航项应复用 #i-stack 图标');
+});
+
+check('switchView 在切到 records 时触发 renderRecordsView（切回时台账/看板保持最新）', () => {
+  const start = html.indexOf('function switchView(');
+  assert.ok(start > -1, '未找到 switchView');
+  const body = html.slice(start, html.indexOf('\n      }', start));
+  assert.ok(/if \(route === 'records'\) renderRecordsView\(\);/.test(body), 'switchView 应包含 records → renderRecordsView 的调用');
+});
+
+check('⌘K 命令面板与 / 快捷键都指向 #/records（搜索框已随台账迁入记录视图）', () => {
+  assert.ok(html.includes("{ label: '投递记录', hash: '#/records' }"), '⌘K 视图跳转项应含投递记录');
+  // 搜索台账动作与 / 快捷键：搜索框现在在记录视图，必须切到 #/records 再 focus
+  assert.ok(/location\.hash = '#\/records'; if \(els\.search\) els\.search\.focus\(\);/.test(html), '搜索台账动作应切到 #/records');
+  assert.ok(/if \(parseRoute\(\) !== 'records'\) location\.hash = '#\/records';/.test(html), '/ 快捷键应切到 #/records');
+  // 不应再有把搜索/台账指向 overview 的残留
+  assert.ok(!/location\.hash = '#\/overview'; if \(els\.search\)/.test(html), '不应残留「切到 overview 再聚焦搜索」的旧逻辑');
+});
+
+check('台账列隐藏的中间断点从 1100px 下调到 900px（记录视图独占全宽后可用宽度更大）', () => {
+  assert.ok(/@media \(max-width: 900px\) and \(min-width: 561px\)/.test(html), '应存在 900px 的中间断点');
+  const block = html.slice(html.indexOf('@media (max-width: 900px) and (min-width: 561px)'));
+  const rule = block.slice(0, block.indexOf('}') + 1);
+  assert.ok(rule.includes('#records'), '该断点作用于台账表格 #records');
+  assert.ok(!/@media \(max-width: 1100px\) and \(min-width: 561px\)/.test(html), '旧的 1100px 台账断点应已下调');
 });
 
 console.log('单 class 选择器唯一性守卫（防「querySelector 命中错误元素」）');

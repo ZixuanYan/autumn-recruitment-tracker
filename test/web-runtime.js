@@ -862,6 +862,7 @@ check('buildCmdItems 空 query 给默认清单；有 query 时过滤记录/视�
   seedRecords();
   const all = sandbox2.buildCmdItems('');
   assert.ok(all.some(i => i.group === '跳转' && i.label === '总览'));
+  assert.ok(all.some(i => i.group === '跳转' && i.label === '投递记录' && i.sub === '#/records'), '⌘K 视图跳转项应含投递记录（v4.8.0 独立视图）');
   assert.ok(all.some(i => i.group === '动作' && i.label === '新增投递'));
   assert.ok(all.some(i => i.group === '记录'), '空 query 也给最近记录');
   const byName = sandbox2.buildCmdItems('阿里');
@@ -921,13 +922,15 @@ check('handleGlobalKeydown：⌘K 开面板、输入态不抢键、弹窗打开�
   sandbox2.handleGlobalKeydown(ev('n'));
   assert.strictEqual(calls.openDialog.length, 0, '弹窗打开时不抢键');
   sandbox2.document.querySelector = () => null;
-  // '/' 聚焦台账搜索：应切到总览并 focus
+  // '/' 聚焦台账搜索：搜索框已随台账迁入「投递记录」视图，应切到 #/records 再 focus
   let focused = false;
   sandbox2.els.search.focus = () => { focused = true; };
+  sandbox2.location.hash = '#/overview';
   const slash = ev('/');
   sandbox2.handleGlobalKeydown(slash);
   assert.strictEqual(focused, true, '/ 聚焦搜索框');
   assert.strictEqual(slash.defaultPrevented, true, '/ 应阻止默认行为');
+  assert.strictEqual(sandbox2.location.hash, '#/records', '/ 应切到投递记录视图（搜索框现在在那里，不再是总览）');
 });
 
 section('v4.4.0 洞察 / 空状态 / 首启引导');
@@ -1597,6 +1600,82 @@ check('编辑与带 stage 的 seed 仍按来源回填，不被新默认值覆盖
   sandbox2.$('#applicationDate').value = '';
   sandbox2.renderTimelineEditor(null);
   assert.ok(/value="\d{4}-\d{2}-\d{2}"/.test(sandbox2.$('#timelineEditor').innerHTML), '日期兜底为今天');
+});
+
+// ============================================================================
+// v4.8.0：视图路由（switchView / parseRoute）行为冒烟——投递记录独立成视图后，
+// 抽取真实源码放进第三个沙箱执行，验证 #/records 解析、切到 records 触发 renderRecordsView、
+// 以及只有目标视图可见（其余 hidden）。VIEW_META / ROUTE_ALIASES 现场从 index.html 抽取求值。
+// ============================================================================
+const els3 = {};
+const VIEW_META_SRC = (() => {
+  const s = html.indexOf('const VIEW_META = {');
+  const e = html.indexOf('};', s);
+  return html.slice(s, e + 2);
+})();
+const ROUTE_ALIASES_SRC = html.split('\n').find(l => l.includes('const ROUTE_ALIASES =')).trim();
+const parseRouteSrc = extractFunction(html, 'parseRoute');
+const switchViewSrc = extractFunction(html, 'switchView');
+for (const [label, src] of [['VIEW_META', VIEW_META_SRC], ['ROUTE_ALIASES', ROUTE_ALIASES_SRC], ['parseRoute', parseRouteSrc], ['switchView', switchViewSrc]]) {
+  if (!src || src.length < 20) { console.error(`✗ 未定位到路由源码 ${label}`); process.exit(1); }
+}
+const routeCalls = { renderRecordsView: 0, renderMailView: 0, renderToolCards: 0 };
+const viewStubs = ['overview', 'records', 'jobPool', 'resume', 'tools', 'mail']
+  .map(v => ({ dataset: { view: v }, hidden: false, offsetWidth: 0, classList: { remove() {}, add() {} } }));
+const navStubs = ['overview', 'records', 'mail', 'resume', 'jobPool', 'tools']
+  .map(r => {
+    const stub = { dataset: { route: r }, active: null, classList: {} };
+    stub.classList.toggle = (cls, on) => { stub.active = on; };
+    return stub;
+  });
+const sandbox3 = {
+  console,
+  $: sel => (els3[sel] || (els3[sel] = makeEl(sel))),
+  document: { title: '', querySelectorAll: sel => (String(sel).includes('.view') ? viewStubs : navStubs) },
+  location: { hash: '#/overview' },
+  history: { replaceState: (a, b, url) => { sandbox3.location.hash = url; } },
+  window: { scrollTo: () => {} },
+  renderToolCards: () => { routeCalls.renderToolCards += 1; },
+  renderMailView: () => { routeCalls.renderMailView += 1; },
+  renderRecordsView: () => { routeCalls.renderRecordsView += 1; }
+};
+vm.createContext(sandbox3);
+vm.runInContext([VIEW_META_SRC, ROUTE_ALIASES_SRC, parseRouteSrc, switchViewSrc].join('\n'), sandbox3, { filename: 'router-section.js' });
+
+section('\nv4.8.0 视图路由（投递记录独立视图）');
+check('switchView("records") 只显示记录视图、触发 renderRecordsView 并更新标题', () => {
+  routeCalls.renderRecordsView = 0; routeCalls.renderMailView = 0; routeCalls.renderToolCards = 0;
+  sandbox3.switchView('records');
+  const rec = viewStubs.find(v => v.dataset.view === 'records');
+  assert.strictEqual(rec.hidden, false, 'records 视图应显示');
+  assert.ok(viewStubs.filter(v => v.dataset.view !== 'records').every(v => v.hidden === true), '其余视图必须隐藏');
+  assert.strictEqual(routeCalls.renderRecordsView, 1, '切到 records 必须重渲台账/看板');
+  assert.strictEqual(routeCalls.renderMailView, 0, '不该连带渲染邮件视图');
+  assert.strictEqual(routeCalls.renderToolCards, 0, '不该连带渲染工具卡片');
+  assert.strictEqual(sandbox3.location.hash, '#/records', 'hash 同步到 #/records');
+  assert.strictEqual(els3['#viewTitle'].textContent, '投递记录');
+  assert.strictEqual(els3['#viewKicker'].textContent, 'PIPELINE');
+  assert.strictEqual(navStubs.find(n => n.dataset.route === 'records').active, true, 'records 导航项高亮');
+});
+
+check('switchView("overview") 不触发 renderRecordsView（台账已不在总览）', () => {
+  routeCalls.renderRecordsView = 0;
+  sandbox3.switchView('overview');
+  assert.strictEqual(routeCalls.renderRecordsView, 0);
+  assert.strictEqual(viewStubs.find(v => v.dataset.view === 'overview').hidden, false);
+  assert.strictEqual(viewStubs.find(v => v.dataset.view === 'records').hidden, true);
+  assert.strictEqual(els3['#viewTitle'].textContent, '投递总览');
+});
+
+check('parseRoute：#/records 解析到 records（旧书签不再被重定向到 overview），#/upcoming 仍回总览', () => {
+  sandbox3.location.hash = '#/records';
+  assert.strictEqual(sandbox3.parseRoute(), 'records');
+  sandbox3.location.hash = '#/upcoming';
+  assert.strictEqual(sandbox3.parseRoute(), 'overview', '未来安排旧书签仍回总览');
+  sandbox3.location.hash = '#/jobPool';
+  assert.strictEqual(sandbox3.parseRoute(), 'jobPool');
+  sandbox3.location.hash = '#/不存在';
+  assert.strictEqual(sandbox3.parseRoute(), 'overview', '未知路由回退总览');
 });
 
 runAll();
