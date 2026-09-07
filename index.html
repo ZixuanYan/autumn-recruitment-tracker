@@ -846,9 +846,10 @@
     .offer-row { cursor: pointer; }
     .offer-matrix th:last-child, .offer-matrix td:last-child { max-width: 220px; }
     .muted-text { color: var(--muted); font-size: 12px; }
-    /* 中间断点（561–1100px）：台账 8 列太挤，隐藏「编号」「城市」并收窄最小宽度，避免横向滚动。
+    /* 中间断点（561–900px）：台账 8 列太挤，隐藏「编号」「城市」并收窄最小宽度，避免横向滚动。
+       投递记录独立成视图后可用宽度变大，断点从 1100px 下调到 900px（不必那么早隐藏列）。
        只作用于台账表格（#records），不影响洞察里的 Offer 矩阵；≤560px 的卡片化布局也不受影响。 */
-    @media (max-width: 1100px) and (min-width: 561px) {
+    @media (max-width: 900px) and (min-width: 561px) {
       #records table { min-width: 780px; }
       #records thead th:nth-child(1), #records tbody td:nth-child(1):not([colspan]),
       #records thead th:nth-child(3), #records tbody td:nth-child(3) { display: none; }
@@ -949,6 +950,7 @@
       </div>
       <nav class="sidebar-nav">
         <a class="nav-item is-active" data-route="overview" href="#/overview"><span class="nav-icon"><svg><use href="#i-grid"/></svg></span><span>总览</span></a>
+        <a class="nav-item" data-route="records" href="#/records"><span class="nav-icon"><svg><use href="#i-stack"/></svg></span><span>投递记录</span></a>
         <a class="nav-item" data-route="mail" href="#/mail"><span class="nav-icon"><svg><use href="#i-mail"/></svg></span><span>邮件提醒</span><span class="nav-badge" id="mailNavBadge" hidden></span></a>
         <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon"><svg><use href="#i-file"/></svg></span><span>我的简历</span></a>
         <a class="nav-item" data-route="jobPool" href="#/jobPool"><span class="nav-icon"><svg><use href="#i-briefcase"/></svg></span><span>岗位库</span></a>
@@ -1005,10 +1007,16 @@
           <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
           <div class="alert-list" id="alertList"></div>
         </div>
-        <div class="insight-block">
-          <div class="insight-block-head"><h3>转化漏斗</h3><span class="insight-note" id="funnelNote">按记录口径</span></div>
-          <div class="funnel-row" id="funnelRow"></div>
-          <button class="text-button insight-toggle" id="funnelScopeBtn" type="button">切换为公司去重口径</button>
+        <div class="insight-grid">
+          <div class="insight-block">
+            <div class="insight-block-head"><h3>转化漏斗</h3><span class="insight-note" id="funnelNote">按记录口径</span></div>
+            <div class="funnel-row" id="funnelRow"></div>
+            <button class="text-button insight-toggle" id="funnelScopeBtn" type="button">切换为公司去重口径</button>
+          </div>
+          <div class="insight-block">
+            <div class="insight-block-head"><h3>阶段分布</h3><span class="insight-note">当前存量，按阶段计数</span></div>
+            <div class="stage-grid" id="stageGrid"></div>
+          </div>
         </div>
         <!-- ④~⑦ 分析明细：精简模式整块折叠（偏好存本机 ui.v1，不进云同步 envelope） -->
         <div class="insight-details" id="insightDetails">
@@ -1046,55 +1054,46 @@
       </div>
     </section>
 
-    <section class="panel distribution" aria-labelledby="distributionTitle">
+    <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
       <div class="panel-head">
-        <div><h2 class="panel-title" id="distributionTitle">阶段分布</h2><div class="panel-caption">快速看看投递主要停留在哪一步</div></div>
+        <div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">面试安排与截止日期合并排序，逾期项置顶 · 最多 6 项</div></div>
+        <button class="btn btn-small" id="exportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出日历</button>
       </div>
-      <div class="stage-grid" id="stageGrid"></div>
-    </section>
-
-    <div class="dashboard">
-      <section class="main-column">
-        <section class="panel" id="records">
-          <div class="panel-head">
-            <div><h2 class="panel-title">投递记录</h2><div class="panel-caption" id="resultCaption">共 0 条记录</div></div>
-            <div class="view-switch" role="tablist" aria-label="台账显示方式">
-              <button class="view-switch-btn is-active" id="viewTableBtn" type="button" role="tab" aria-selected="true" title="表格视图">表格</button>
-              <button class="view-switch-btn" id="viewBoardBtn" type="button" role="tab" aria-selected="false" title="看板视图：按阶段分列，可拖拽推进">看板</button>
-            </div>
-          </div>
-          <div class="filters">
-            <div class="search-wrap"><span class="search-glyph">⌕</span><input class="control" id="searchInput" type="search" placeholder="搜索公司或岗位" aria-label="搜索公司或岗位"></div>
-            <select class="control" id="stageFilter" aria-label="按阶段筛选"><option value="all">全部阶段</option></select>
-            <select class="control" id="sortSelect" aria-label="排序方式">
-              <option value="schedule">最近安排优先</option>
-              <option value="applied-desc">投递日期：从新到旧</option>
-              <option value="updated-desc">最近更新优先</option>
-              <option value="company">公司名称排序</option>
-              <option value="company-group">按公司聚合（同公司多岗位）</option>
-            </select>
-          </div>
-          <div class="table-scroll" id="recordsTableScroll">
-            <table>
-              <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
-              <tbody id="recordBody"></tbody>
-            </table>
-          </div>
-          <div class="board" id="boardView" hidden>
-            <div class="board-hint">拖卡片到目标阶段列即可推进（追加一条里程碑，向后拖会二次确认）· 点卡片看详情</div>
-            <div class="board-cols" id="boardCols"></div>
-          </div>
-          <div class="empty" id="emptyState" hidden></div>
-        </section>
-      </section>
-      <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
-        <div class="panel-head">
-          <div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">面试安排与截止日期合并排序，逾期项置顶 · 最多 6 项</div></div>
-          <button class="btn btn-small" id="exportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出日历</button>
-        </div>
-        <div class="schedule-list" id="upcomingList"></div>
-      </aside>
+      <div class="schedule-list" id="upcomingList"></div>
+    </aside>
     </div>
+<div class="view" data-view="records" hidden>
+    <section class="panel" id="records">
+      <div class="panel-head">
+        <div><h2 class="panel-title">投递记录</h2><div class="panel-caption" id="resultCaption">共 0 条记录</div></div>
+        <div class="view-switch" role="tablist" aria-label="台账显示方式">
+          <button class="view-switch-btn is-active" id="viewTableBtn" type="button" role="tab" aria-selected="true" title="表格视图">表格</button>
+          <button class="view-switch-btn" id="viewBoardBtn" type="button" role="tab" aria-selected="false" title="看板视图：按阶段分列，可拖拽推进">看板</button>
+        </div>
+      </div>
+      <div class="filters">
+        <div class="search-wrap"><span class="search-glyph">⌕</span><input class="control" id="searchInput" type="search" placeholder="搜索公司或岗位" aria-label="搜索公司或岗位"></div>
+        <select class="control" id="stageFilter" aria-label="按阶段筛选"><option value="all">全部阶段</option></select>
+        <select class="control" id="sortSelect" aria-label="排序方式">
+          <option value="schedule">最近安排优先</option>
+          <option value="applied-desc">投递日期：从新到旧</option>
+          <option value="updated-desc">最近更新优先</option>
+          <option value="company">公司名称排序</option>
+          <option value="company-group">按公司聚合（同公司多岗位）</option>
+        </select>
+      </div>
+      <div class="table-scroll" id="recordsTableScroll">
+        <table>
+          <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
+          <tbody id="recordBody"></tbody>
+        </table>
+      </div>
+      <div class="board" id="boardView" hidden>
+        <div class="board-hint">拖卡片到目标阶段列即可推进（追加一条里程碑，向后拖会二次确认）· 点卡片看详情</div>
+        <div class="board-cols" id="boardCols"></div>
+      </div>
+      <div class="empty" id="emptyState" hidden></div>
+    </section>
     </div>
 <div class="view" data-view="jobPool" hidden>
     <section class="panel job-pool" id="jobPool" aria-labelledby="jobPoolTitle">
@@ -4484,7 +4483,7 @@
           });
         }
         const views = [
-          { label: '总览', hash: '#/overview' }, { label: '邮件提醒', hash: '#/mail' },
+          { label: '总览', hash: '#/overview' }, { label: '投递记录', hash: '#/records' }, { label: '邮件提醒', hash: '#/mail' },
           { label: '我的简历', hash: '#/resume' }, { label: '岗位库', hash: '#/jobPool' }, { label: '工具', hash: '#/tools' }
         ];
         for (const view of views) {
@@ -4502,7 +4501,7 @@
           { label: '打开数据安全', sub: '工具', run: () => { location.hash = '#/tools'; openSafetyDialog(); } },
           { label: '打开云同步设置', sub: '工具', run: () => openSyncDialog() },
           { label: '打开邮件提醒设置', sub: '邮件', run: () => { location.hash = '#/mail'; openMailSettings(); } },
-          { label: '搜索台账', sub: '/', run: () => { location.hash = '#/overview'; if (els.search) els.search.focus(); } }
+          { label: '搜索台账', sub: '/', run: () => { location.hash = '#/records'; if (els.search) els.search.focus(); } }
         ];
         for (const action of actions) {
           if (q && !`${action.label} ${action.sub}`.toLowerCase().includes(q)) continue;
@@ -4579,7 +4578,7 @@
         if (String(event.key).toLowerCase() === 'n') { event.preventDefault(); openDialog(null); return; }
         if (event.key === '/') {
           event.preventDefault();
-          if (parseRoute() !== 'overview') location.hash = '#/overview';
+          if (parseRoute() !== 'records') location.hash = '#/records';
           if (els.search) els.search.focus();
           return;
         }
@@ -5082,14 +5081,16 @@
 
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
       const VIEW_META = {
-        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、台账与未来安排——从银十到金九，每一步都在这里' },
+        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、洞察与未来安排——从银十到金九，每一步都在这里' },
+        records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
         jobPool: { kicker: 'JOB POOL', title: '岗位库', subtitle: '从每日更新的招聘文档发现岗位，确认后再加入台账' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
         mail: { kicker: 'INBOX', title: '邮件提醒', subtitle: '招聘邮件解析结果，逐项复核后并入台账' }
       };
-      // 旧路由 records / upcoming 已并入总览，重定向兼容旧书签
-      const ROUTE_ALIASES = { overview: 'overview', jobPool: 'jobPool', jobpool: 'jobPool', resume: 'resume', tools: 'tools', mail: 'mail', records: 'overview', upcoming: 'overview' };
+      // records 恢复为独立视图（更早版本本就是，v4.4.0 曾并入总览并重定向，v4.8.0 拆回）；
+      // upcoming（未来安排）仍留在总览，旧书签重定向兼容。
+      const ROUTE_ALIASES = { overview: 'overview', records: 'records', jobPool: 'jobPool', jobpool: 'jobPool', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
 
       // ================= 工具页卡片状态：云同步连接情况与快照数量 =================
       async function renderToolCards() {
@@ -5158,6 +5159,9 @@
         }
         if (route === 'tools') renderToolCards();
         if (route === 'mail') renderMailView();
+        // 从别的视图切回投递记录时重渲台账/看板：数据可能在别处变更过（如邮件应用、抽屉推进），
+        // 隐藏视图多渲染一次无副作用，换取各视图始终一致。
+        if (route === 'records') renderRecordsView();
         window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
       }
 
