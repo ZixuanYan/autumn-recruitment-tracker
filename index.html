@@ -5050,10 +5050,17 @@
       }
       function renderTimelineEditor(source) {
         const appDate = $('#applicationDate').value || localDateInput(new Date());
+        // 新增（无 source）时默认「已投递」而不是「待投递」：点「新增投递」的场景几乎总是
+        // 「我刚投了 / 我要记一条已经投出去的」，默认待投递等于每次都要多改一次；
+        // 更要紧的是 isActive 把「待投递」排除在外，照默认值存下来的记录不会进「在流程中」，
+        // 也不会被停滞提醒和卡点清单抓到——等于这条投递在洞察里隐身。
+        // 「待投递」仍然是合法阶段（在 STAGE_PRESETS 里），想记候选岗位请走岗位库。
+        // 注意：这里只改新增表单的默认值；normalizeRecord / deriveStage 里的 '待投递' 兜底
+        // 是「既无 timeline 又无 stage」的防御与老数据迁移路径，语义不同，保持不动。
         const tl = Array.isArray(source && source.timeline) && source.timeline.length
           ? source.timeline
           : (source && source.stage ? [{ stage: source.stage, at: source.applicationDate || appDate, note: '' }]
-            : [{ stage: '待投递', at: appDate, note: '' }]);
+            : [{ stage: '已投递', at: appDate, note: '' }]);
         $('#timelineEditor').innerHTML = tl.map(timelineRowHtml).join('');
       }
       function collectTimeline() {
