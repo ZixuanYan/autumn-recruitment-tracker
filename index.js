@@ -102,10 +102,23 @@ async function run() {
     console.log(`[sync] 本次抓取 ${fetched.length} 封（上限 ${cfg.maxPerRun}），INBOX exists=${mailbox.exists}`);
 
     const kw = keywordRegex(cfg.keywords);
+    // 已成功完成裁决的 UID（预筛判定 或 AI 判定，无论结论是入选还是丢弃）。
+    //
+    // 为什么不能用「本轮抓取的全部 UID」：AI 调用失败（fetch failed / 超时 / 超额）属于
+    // **未能裁决**，不是「裁决为不该在队列里」。用抓取全集会让 AI 抖动时把已有的正确建议删掉——
+    // 实测过一次：回溯重扫 20 封时百炼端点 6/6 全部 fetch failed，incoming=0，
+    // 于是 uid 1881/1885/1887 三条已有建议（含招行素质测评通知 conf=0.98）被"重新裁决"删除，
+    // 建议从 10 条掉到 7 条。AI 失败的邮件必须保留旧建议，等下次运行重试。
+    const adjudicated = new Set();
     for (const msg of fetched) {
       const mail = await parseMessage(msg);
       const verdict = classifyMail(mail, kw);
-      if (!verdict.pass) { drops.note(mail, verdict.reason); continue; }
+      if (!verdict.pass) {
+        drops.note(mail, verdict.reason);
+        // 预筛丢弃是明确的裁决结论（规则变了就该按新规则清掉旧建议），计入已裁决
+        if (mail.sourceUid) adjudicated.add(mail.sourceUid);
+        continue;
+      }
       candidates += 1;
       let result;
       try {
@@ -115,8 +128,9 @@ async function run() {
         lastAiError = e.message;
         drops.note(mail, DROP_REASONS.AI_ERROR);
         console.warn(`[sync] AI 分析失败 uid=${mail.sourceUid}：${e.message}`);
-        continue;
+        continue; // 刻意不计入 adjudicated：本轮未能裁决，保留已有建议
       }
+      if (mail.sourceUid) adjudicated.add(mail.sourceUid);
       // AI 结果的两道过滤（isRecruitment + 置信度）统一走 ai.verdictOnAiResult，
       // 判定逻辑只有一处、可单测。isRecruitment 那道在 v4.6.1 之前完全不存在：
       // 字段被 prompt 要求返回、被 normalizeAiResult 归一，却没有任何代码检查它，
@@ -138,10 +152,9 @@ async function run() {
   }
 
   const dropped = drops.summary();
-  // 本次扫描过的 UID 集合：mergeSuggestions 据此做「重扫即重新裁决」——
-  // 扫过但本轮未入选的旧建议会被删除（否则用 UID_FROM 回溯时无法纠正已入库的营销邮件）。
-  const scannedUids = fetched.map(m => Number(m.uid) || 0).filter(Boolean);
-  const merged = mergeSuggestions(prev.suggestions, incoming, scannedUids);
+  // 「重扫即重新裁决」只作用于**成功裁决过**的 UID：本轮扫过且判定为不该入队的旧建议会被移除
+  // （这样 UID_FROM 回溯才能纠正已入库的营销邮件）；AI 失败而未能裁决的一律保留旧建议。
+  const merged = mergeSuggestions(prev.suggestions, incoming, [...adjudicated]);
   const watermark = computeWatermark(mailbox, fetched.map(m => m.uid), prev.meta);
   const softError = aiErrors > 0;
   const meta = buildMeta({

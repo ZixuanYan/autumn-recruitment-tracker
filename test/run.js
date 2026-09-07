@@ -257,6 +257,37 @@ test('mergeSuggestions 不传 scannedUids 时退回旧语义（全保留，向�
   assert.strictEqual(state.mergeSuggestions(prev, [], undefined).length, 1);
   assert.strictEqual(state.mergeSuggestions(prev, [], []).length, 1);
 });
+// 真实事故回归：v0.3.0 首次上线时 index.js 把「本轮抓取的全部 UID」当 scannedUids，
+// 结果回溯重扫 20 封时百炼端点 6/6 全部 fetch failed、incoming 为空，
+// uid 1881/1885/1887 三条已有建议（含招行素质测评通知 conf=0.98）被"重新裁决"删除，
+// 建议从 10 条掉到 7 条。AI 失败属于**未能裁决**，不是「裁决为不该在队列里」。
+test('AI 失败的 UID 不得计入 scannedUids（否则 AI 抖动会删掉已有的正确建议）', () => {
+  const at = new Date().toISOString();
+  const prev = [
+    { sourceUid: 1881, id: 'uid-1881', company: '蚂蚁', subject: '蚂蚁27届秋招空宣', receivedAt: at },
+    { sourceUid: 1885, id: 'uid-1885', company: '招商银行', subject: '素质测评通知', receivedAt: at },
+    { sourceUid: 1887, id: 'uid-1887', company: '中信银行', subject: '招聘系统邮箱认证', receivedAt: at }
+  ];
+  // 正确行为：AI 全部失败 → adjudicated 为空 → 三条建议全部保留，等下次运行重试
+  assert.strictEqual(state.mergeSuggestions(prev, [], []).length, 3);
+  // 对照错误行为：把抓取全集当 scannedUids 会清空建议（这正是要避免的）
+  assert.strictEqual(state.mergeSuggestions(prev, [], [1881, 1885, 1887]).length, 0);
+  // 混合场景：1885 成功裁决为营销（未入选）→ 只删它；1881/1887 AI 失败 → 保留
+  const mixed = state.mergeSuggestions(prev, [], [1885]);
+  assert.deepStrictEqual(mixed.map(s => s.sourceUid).sort((a, b) => a - b), [1881, 1887]);
+});
+test('index.js 传给 mergeSuggestions 的必须是「已裁决 UID」而非抓取全集（静态守卫）', () => {
+  const src = fs.readFileSync(nodePath.join(__dirname, '..', 'index.js'), 'utf8');
+  assert.ok(
+    /mergeSuggestions\(prev\.suggestions, incoming, \[\.\.\.adjudicated\]\)/.test(src),
+    '第三参数必须是 [...adjudicated]；改用 fetched.map(m => m.uid) 会在 AI 失败时删掉已有建议'
+  );
+  assert.ok(!/mergeSuggestions\([^)]*fetched\.map/.test(src), '不得把抓取全集当 scannedUids');
+  // AI 失败分支必须显式 continue 且不计入 adjudicated（注释即契约，防后人"顺手补上"）
+  assert.ok(/catch \(e\) \{[\s\S]{0,500}?continue; \/\/ 刻意不计入 adjudicated/.test(src), 'AI 失败分支必须不计入 adjudicated');
+  // 预筛丢弃与 AI 判定完成这两处必须计入 adjudicated（否则回溯无法纠正已入库的营销邮件）
+  assert.strictEqual((src.match(/adjudicated\.add\(mail\.sourceUid\)/g) || []).length, 2, '应恰有两处计入：预筛丢弃 + AI 判定完成');
+});
 
 // ===== v4.6.1：丢弃可观测性 =====
 test('createDropTracker 分类计数、明细按 uid 倒序、上限 DROP_RECENT_MAX 条', () => {
