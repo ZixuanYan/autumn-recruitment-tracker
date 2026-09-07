@@ -13,7 +13,7 @@
     "sync": "node index.js",
     "report-error": "node index.js --report-error",
     "check": "node --check index.js && node --check src/config.js && node --check src/crypto.js && node --check src/imap.js && node --check src/prefilter.js && node --check src/parse.js && node --check src/state.js && node --check src/gist.js && node --check src/ai.js && node --check src/connectivity-test.js",
-    "test": "node test/run.js && node test/web-check.js && node test/web-runtime.js"
+    "test": "node test/run.js && node test/integration.js && node test/web-check.js && node test/web-runtime.js"
   },
   "dependencies": {
     "imapflow": "^1.0.164",

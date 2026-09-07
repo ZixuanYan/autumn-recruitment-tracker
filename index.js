@@ -94,6 +94,18 @@ async function run() {
   const drops = createDropTracker((mail, reason) => {
     console.log(`[sync] 丢弃 uid=${mail.sourceUid} reason=${reason} from=${mail.from || '-'} subj=${String(mail.subject || '').slice(0, 60)}`);
   });
+  // 已成功完成裁决的 UID（预筛判定 或 AI 判定，无论结论是入选还是丢弃）。
+  //
+  // 为什么不能用「本轮抓取的全部 UID」：AI 调用失败（fetch failed / 超时 / 超额）属于
+  // **未能裁决**，不是「裁决为不该在队列里」。用抓取全集会让 AI 抖动时把已有的正确建议删掉——
+  // 实测过一次：回溯重扫 20 封时百炼端点 6/6 全部 fetch failed，incoming=0，
+  // 于是 uid 1881/1885/1887 三条已有建议（含招行素质测评通知 conf=0.98）被"重新裁决"删除，
+  // 建议从 10 条掉到 7 条。AI 失败的邮件必须保留旧建议，等下次运行重试。
+  //
+  // 必须声明在 try 块**外**：下面的 mergeSuggestions 在 finally 之后才用到它，
+  // 声明在 try 内会因块级作用域在运行时抛 ReferenceError（这个错误 node --check 与
+  // vm.Script 都抓不到，只有真实执行才会暴露，曾导致整次 workflow failure）。
+  const adjudicated = new Set();
 
   try {
     const plan = planFetch(mailbox, prev.meta, cfg.sinceDays, cfg.uidFrom);
@@ -102,14 +114,6 @@ async function run() {
     console.log(`[sync] 本次抓取 ${fetched.length} 封（上限 ${cfg.maxPerRun}），INBOX exists=${mailbox.exists}`);
 
     const kw = keywordRegex(cfg.keywords);
-    // 已成功完成裁决的 UID（预筛判定 或 AI 判定，无论结论是入选还是丢弃）。
-    //
-    // 为什么不能用「本轮抓取的全部 UID」：AI 调用失败（fetch failed / 超时 / 超额）属于
-    // **未能裁决**，不是「裁决为不该在队列里」。用抓取全集会让 AI 抖动时把已有的正确建议删掉——
-    // 实测过一次：回溯重扫 20 封时百炼端点 6/6 全部 fetch failed，incoming=0，
-    // 于是 uid 1881/1885/1887 三条已有建议（含招行素质测评通知 conf=0.98）被"重新裁决"删除，
-    // 建议从 10 条掉到 7 条。AI 失败的邮件必须保留旧建议，等下次运行重试。
-    const adjudicated = new Set();
     for (const msg of fetched) {
       const mail = await parseMessage(msg);
       const verdict = classifyMail(mail, kw);
