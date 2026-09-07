@@ -626,7 +626,7 @@
     .dwell-row:last-child { border-bottom: 0; }
     .dwell-days { margin-left: auto; font-family: var(--font-mono); font-weight: 700; }
     .dwell-count { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; }
-    .insight-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .insight-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
     .insight-metric { padding: 11px 13px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); }
     .insight-metric-label { color: var(--muted); font-size: 11.5px; font-weight: 600; }
     .insight-metric-value { margin-top: 2px; font-family: var(--font-mono); font-size: 21px; font-weight: 700; letter-spacing: -.02em; }
@@ -652,6 +652,42 @@
       .insight-grid { grid-template-columns: minmax(0, 1fr); }
       .insight-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
+
+    /* ===== v4.6.0：洞察明细折叠容器 + 城市分布 + 企业性质 ===== */
+    .insight-details { display: grid; gap: 16px; min-width: 0; }
+    /* 关键守卫：作者层的 display:grid 会覆盖 UA 的 [hidden]{display:none}。
+       漏了这条，精简模式下明细块仍然占位并吞掉下方台账的点击（.drawer / .insights-body / .ocr-* 踩过同一个坑）。 */
+    .insight-details[hidden] { display: none; }
+    .city-list { display: grid; gap: 2px; }
+    .city-row { display: grid; grid-template-columns: minmax(52px, auto) minmax(0, 1fr) 26px 62px; align-items: center; gap: 9px; padding: 5px 6px; border-radius: var(--r-sm); font-size: 12.5px; }
+    .city-row:hover, .city-row:focus-visible { background: var(--surface-2); box-shadow: var(--ring); outline: none; }
+    .city-name { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .city-bar { position: relative; display: block; height: 6px; border-radius: 999px; background: rgba(11, 13, 16, .06); overflow: hidden; }
+    /* 双层条：底色 = 该城市投递量占最大城市的比例，实色 = 其中拿到 Offer 的部分 */
+    .city-bar-total { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--accent); opacity: .26; }
+    .city-bar-offer { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--ok); }
+    .city-num { text-align: right; font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .city-offer { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
+    .city-offer.has { color: var(--ok); font-weight: 700; }
+    .city-row.is-unknown { color: var(--muted); }
+    .city-row.is-unknown .city-name { font-weight: 600; }
+    .ctype-bar { display: flex; height: 10px; border-radius: 999px; background: var(--ct-none-soft); box-shadow: var(--ring); overflow: hidden; }
+    .ctype-seg { display: block; height: 100%; min-width: 3px; background: var(--ct-none); }
+    .ctype-seg[data-ct="央国企"] { background: var(--ct-soe); }
+    .ctype-seg[data-ct="民企"] { background: var(--ct-private); }
+    .ctype-seg[data-ct="外企"] { background: var(--ct-foreign); }
+    .ctype-seg:hover, .ctype-seg:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+    .ctype-legend { display: grid; gap: 2px; margin-top: 9px; }
+    .ctype-legend-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto 62px; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--r-sm); font-size: 12.5px; }
+    .ctype-legend-row.is-empty { color: var(--muted); }
+    .ctype-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ct-none); }
+    .ctype-legend-row[data-ct="央国企"] .ctype-dot { background: var(--ct-soe); }
+    .ctype-legend-row[data-ct="民企"] .ctype-dot { background: var(--ct-private); }
+    .ctype-legend-row[data-ct="外企"] .ctype-dot { background: var(--ct-foreign); }
+    .ctype-label { overflow: hidden; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+    .ctype-num { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .ctype-offer { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
+    .ctype-offer.has { color: var(--ok); font-weight: 700; }
 
     /* ===== v4.4.0：记录表单「更多字段」折叠区 ===== */
     .form-more { border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); overflow: hidden; }
@@ -909,7 +945,8 @@
 
     <section class="panel insights" id="insights" aria-labelledby="insightsTitle">
       <div class="panel-head">
-        <div><h2 class="panel-title" id="insightsTitle">洞察</h2><div class="panel-caption">全部由你的阶段时间线本机算出：转化漏斗、投递节奏、各阶段停留与卡点提醒</div></div>
+        <div><h2 class="panel-title" id="insightsTitle">洞察</h2><div class="panel-caption">全部由你的记录与阶段时间线本机算出：卡点提醒、转化漏斗、城市分布、企业性质、投递节奏与各阶段停留</div></div>
+        <button class="btn btn-small" id="insightsCompactBtn" type="button" title="精简模式只保留概览、需要关注与转化漏斗，把城市 / 企业性质 / 节奏 / 停留等明细折起来">精简</button>
       </div>
       <div class="guide" id="firstRunGuide" hidden>
         <div class="guide-note" id="guideNote"></div>
@@ -921,34 +958,50 @@
         <div class="guide-actions" id="guideActions"></div>
       </div>
       <div class="insights-body" id="insightsBody">
+        <!-- 信息层级：① 概览数字 → ② 需要行动 → ③ 转化 → ④~⑦ 分析明细。
+             此前指标条夹在两张图之后、最需要行动的「需要关注」被压到第 5 块，读起来要来回跳。 -->
+        <div class="insight-metrics" id="insightMetrics"></div>
+        <div class="insight-block">
+          <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
+          <div class="alert-list" id="alertList"></div>
+        </div>
         <div class="insight-block">
           <div class="insight-block-head"><h3>转化漏斗</h3><span class="insight-note" id="funnelNote">按记录口径</span></div>
           <div class="funnel-row" id="funnelRow"></div>
           <button class="text-button insight-toggle" id="funnelScopeBtn" type="button">切换为公司去重口径</button>
         </div>
-        <div class="insight-grid">
-          <div class="insight-block">
-            <div class="insight-block-head"><h3>近 14 天投递节奏</h3><span class="insight-note" id="sparkSummary">—</span></div>
-            <svg class="spark" id="sparkSvg" viewBox="0 0 280 46" preserveAspectRatio="none" role="img" aria-label="近 14 天每日投递数量"></svg>
-            <div class="spark-axis"><span id="sparkStart">—</span><span id="sparkEnd">—</span></div>
+        <!-- ④~⑦ 分析明细：精简模式整块折叠（偏好存本机 ui.v1，不进云同步 envelope） -->
+        <div class="insight-details" id="insightDetails">
+          <div class="insight-grid">
+            <div class="insight-block">
+              <div class="insight-block-head"><h3>城市分布</h3><span class="insight-note" id="cityNote">—</span></div>
+              <div class="city-list" id="cityList"></div>
+            </div>
+            <div class="insight-block">
+              <div class="insight-block-head"><h3>企业性质</h3><span class="insight-note" id="ctypeNote">—</span></div>
+              <div class="ctype-bar" id="ctypeBar" role="img" aria-label="企业性质占比"></div>
+              <div class="ctype-legend" id="ctypeLegend"></div>
+            </div>
           </div>
-          <div class="insight-block">
-            <div class="insight-block-head"><h3>各阶段平均停留</h3><span class="insight-note">相邻里程碑日期差</span></div>
-            <div class="dwell-list" id="dwellList"></div>
+          <div class="insight-grid">
+            <div class="insight-block">
+              <div class="insight-block-head"><h3>近 14 天投递节奏</h3><span class="insight-note" id="sparkSummary">—</span></div>
+              <svg class="spark" id="sparkSvg" viewBox="0 0 280 46" preserveAspectRatio="none" role="img" aria-label="近 14 天每日投递数量"></svg>
+              <div class="spark-axis"><span id="sparkStart">—</span><span id="sparkEnd">—</span></div>
+            </div>
+            <div class="insight-block">
+              <div class="insight-block-head"><h3>各阶段平均停留</h3><span class="insight-note">相邻里程碑日期差</span></div>
+              <div class="dwell-list" id="dwellList"></div>
+            </div>
           </div>
-        </div>
-        <div class="insight-metrics" id="insightMetrics"></div>
-        <div class="insight-block" id="multiCompanyWrap" hidden>
-          <div class="insight-block-head"><h3>多岗位公司</h3><span class="insight-note" id="multiCompanyNote"></span></div>
-          <div class="multi-company-list" id="multiCompanyList"></div>
-        </div>
-        <div class="insight-block">
-          <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
-          <div class="alert-list" id="alertList"></div>
-        </div>
-        <div class="insight-block" id="offerMatrixWrap" hidden>
-          <div class="insight-block-head"><h3>Offer 对比</h3><span class="insight-note">按意向度排序</span></div>
-          <div class="table-scroll"><table class="offer-matrix" id="offerMatrix"></table></div>
+          <div class="insight-block" id="multiCompanyWrap" hidden>
+            <div class="insight-block-head"><h3>多岗位公司</h3><span class="insight-note" id="multiCompanyNote"></span></div>
+            <div class="multi-company-list" id="multiCompanyList"></div>
+          </div>
+          <div class="insight-block" id="offerMatrixWrap" hidden>
+            <div class="insight-block-head"><h3>Offer 对比</h3><span class="insight-note">按意向度排序</span></div>
+            <div class="table-scroll"><table class="offer-matrix" id="offerMatrix"></table></div>
+          </div>
         </div>
       </div>
     </section>
@@ -2985,6 +3038,9 @@
       function renderInsights() {
         const body = $('#insightsBody');
         if (!body) return;
+        // 精简/完整的按钮文案与折叠态先同步：首启引导分支会提前 return，
+        // 放在后面会导致引导期间的按钮文案停留在 HTML 默认值「精简」而实际已是完整模式
+        applyInsightsCompact();
         const guide = $('#firstRunGuide');
         // 首启引导：台账为空、或当前是自动塞入的示例数据时，用三步引导替换洞察内容（可「不再显示」）
         const showGuide = (records.length === 0 || sampleDataMode) && !uiPrefs.hideGuide;
@@ -3044,11 +3100,23 @@
         const avgFlowDays = flowDays.length ? Math.round(flowDays.reduce((a, b) => a + b, 0) / flowDays.length) : 0;
         const alerts = collectAlerts(records, now, 5);
         const stalledCount = findStalled(records, now, 14).length;
+        const cityStats = computeCityStats(records);
+        const namedCities = cityStats.filter(row => row.city);
+        const unknownCity = cityStats.find(row => !row.city);
+        const offerCount = records.filter(record => record.stage === 'Offer').length;
         $('#insightMetrics').innerHTML = [
           { label: '覆盖公司', value: groups.length, sub: multiCompanies ? `${multiCompanies} 家投了多个岗位` : '每家一个岗位' },
+          {
+            label: '覆盖城市', value: namedCities.length,
+            sub: namedCities.length
+              ? `最多 ${namedCities[0].city} · ${namedCities[0].total} 条${unknownCity ? `，${unknownCity.total} 条没填` : ''}`
+              : (unknownCity ? `${unknownCity.total} 条都还没填城市` : '还没填城市')
+          },
           { label: '在流程中', value: inFlow.length, sub: flowDays.length ? `平均已 ${avgFlowDays} 天` : '暂无进行中' },
           { label: '停滞 >14 天', value: stalledCount, sub: stalledCount ? '建议主动跟进' : '节奏正常' },
-          { label: '需要关注', value: alerts.length, sub: alerts.length ? '见下方清单' : '暂无卡点' }
+          { label: '已拿 Offer', value: offerCount, sub: offerCount && records.length ? `占投递的 ${Math.round(offerCount / records.length * 100)}%` : '还没有 Offer' },
+          // 卡点清单现在排在指标条上方（② 行动紧跟 ① 概览），文案不能再写「见下方」
+          { label: '需要关注', value: alerts.length, sub: alerts.length ? '见上方清单' : '暂无卡点' }
         ].map(metric => `<div class="insight-metric">
             <div class="insight-metric-label">${escapeHtml(metric.label)}</div>
             <div class="insight-metric-value">${metric.value}</div>
@@ -3060,8 +3128,95 @@
           ? alerts.map(alert => `<button class="alert-item ${escapeHtml(alert.level)}" data-id="${escapeHtml(alert.id)}" type="button">${escapeHtml(alert.text)}</button>`).join('')
           : '<div class="insight-empty">没有逾期、临期或停滞的投递</div>';
 
+        renderCityStats();
+        renderCompanyTypeStats();
         renderOfferMatrix();
         renderMultiCompanies();
+      }
+
+      // 城市分布：行式条形（城市 | 双色条 | 投递 N | Offer M），Offer 段用 Offer 绿。
+      // 明细挂在悬浮层上（data-tip-kind="city"），行本身不承载长清单，避免面板被撑高。
+      function renderCityStats() {
+        const list = $('#cityList'), note = $('#cityNote');
+        if (!list) return;
+        const stats = computeCityStats(records);
+        const named = stats.filter(row => row.city);
+        const unknown = stats.find(row => !row.city);
+        if (!stats.length) { list.innerHTML = '<div class="insight-empty">还没有记录</div>'; if (note) note.textContent = '—'; return; }
+        const max = Math.max(...named.map(row => row.total), 1);
+        const rows = named.map(row => `
+          <div class="city-row" tabindex="0" data-tip-kind="city" data-tip-key="${escapeHtml(row.city)}" role="button" aria-label="${escapeHtml(row.city)}：投递 ${row.total} 条，Offer ${row.offers} 条，查看明细">
+            <span class="city-name">${escapeHtml(row.city)}</span>
+            <span class="city-bar"><i class="city-bar-total" style="width:${Math.round(row.total / max * 100)}%"></i><i class="city-bar-offer" style="width:${Math.round(row.offers / max * 100)}%"></i></span>
+            <span class="city-num">${row.total}</span>
+            <span class="city-offer ${row.offers ? 'has' : ''}">${row.offers ? `Offer ${row.offers}` : '—'}</span>
+          </div>`).join('');
+        // 「没填城市」不是一座城市：灰显单列，并给出可执行的提示（补填后才能按城市看转化）
+        const unknownRow = unknown && unknown.total
+          ? `<div class="city-row is-unknown" tabindex="0" data-tip-kind="city" data-tip-key="" role="button" aria-label="${unknown.total} 条记录没填城市，查看明细">
+              <span class="city-name">没填城市</span>
+              <span class="city-bar"></span>
+              <span class="city-num">${unknown.total}</span>
+              <span class="city-offer">${unknown.offers ? `Offer ${unknown.offers}` : '—'}</span>
+            </div>`
+          : '';
+        list.innerHTML = rows + unknownRow;
+        if (note) {
+          note.textContent = named.length
+            ? `${named.length} 个城市 · 一条记录写了多个城市会各计一次`
+            : (unknown && unknown.total ? `${unknown.total} 条都还没填城市` : '—');
+        }
+      }
+
+      // 企业性质：一条 100% 堆叠比例条 + 图例数字。固定 4 段（含未设置），
+      // 未设置占比高本身就是有用信息——它在提醒你去补填，否则这一维统计不出来。
+      function renderCompanyTypeStats() {
+        const bar = $('#ctypeBar'), legend = $('#ctypeLegend'), note = $('#ctypeNote');
+        if (!bar || !legend) return;
+        const stats = computeCompanyTypeStats(records);
+        const total = stats.reduce((sum, row) => sum + row.total, 0);
+        if (!total) {
+          bar.innerHTML = '';
+          legend.innerHTML = '<div class="insight-empty">还没有记录</div>';
+          if (note) note.textContent = '—';
+          return;
+        }
+        bar.innerHTML = stats.filter(row => row.total).map(row => `
+          <i class="ctype-seg" data-ct="${escapeHtml(row.type)}" style="width:${(row.total / total * 100).toFixed(2)}%"
+             tabindex="0" role="button" data-tip-kind="ctype" data-tip-key="${escapeHtml(row.type)}"
+             aria-label="${escapeHtml(row.label)}：${row.total} 条，占 ${Math.round(row.total / total * 100)}%，查看公司清单"></i>`).join('');
+        legend.innerHTML = stats.map(row => `
+          <div class="ctype-legend-row ${row.total ? '' : 'is-empty'}" data-ct="${escapeHtml(row.type)}">
+            <span class="ctype-dot"></span>
+            <span class="ctype-label">${escapeHtml(row.label)}</span>
+            <span class="ctype-num">${row.total} 条</span>
+            <span class="ctype-offer ${row.offers ? 'has' : ''}">${row.offers ? `Offer ${row.offers}` : '—'}</span>
+          </div>`).join('');
+        const unset = stats[stats.length - 1];
+        if (note) {
+          note.textContent = unset && unset.total
+            ? `${unset.total} 条未设置（占 ${Math.round(unset.total / total * 100)}%），编辑记录即可补填`
+            : '全部记录都已标注';
+        }
+      }
+
+      // 精简 / 完整切换：明细块（城市 / 企业性质 / 节奏 / 停留 / 多岗位 / Offer 对比）整体折叠。
+      // 明细仍然照常渲染（只是容器 hidden），切回完整时不需要重算，也不会出现半渲染状态。
+      function toggleInsightsCompact() {
+        uiPrefs.insightsCompact = !uiPrefs.insightsCompact;
+        saveUiPrefs();
+        renderInsights();
+      }
+      function applyInsightsCompact() {
+        const details = $('#insightDetails'), button = $('#insightsCompactBtn');
+        const compact = !!uiPrefs.insightsCompact;
+        if (details) details.hidden = compact;
+        if (button) {
+          button.textContent = compact ? '完整' : '精简';
+          button.title = compact
+            ? '展开完整洞察：城市分布 / 企业性质 / 投递节奏 / 各阶段停留 / 多岗位公司 / Offer 对比'
+            : '精简模式只保留概览、需要关注与转化漏斗，把明细折起来';
+        }
       }
 
       // Offer 对比矩阵：手里有 ≥2 个 Offer 时才出现，按意向度降序、同分按签约截止近的先
@@ -3656,6 +3811,96 @@
         }
         return { mode: 'same-company', reason: 'company', matches: sameCompany };
       }
+
+      // ----- 城市维度统计（v4.6.0）-----
+      // 城市写法很脏：「深圳」/「深圳市」/「 上海 」/ 全角字母都可能出现，岗位库「记为已投递」
+      // 还会写入默认值「待确认」。先归一化再分桶，否则同一座城市会裂成好几行、统计看着像算错了。
+      const CITY_UNKNOWN_RE = /^(待确认|待定|待补充|待完善|未知|不限|无|none|n\/?a|-+)$/i;
+      const CITY_SUFFIX_RE = /(特别行政区|自治区|市)$/;
+      function normalizeCityKey(city) {
+        const raw = String(city == null ? '' : city).trim();
+        if (!raw) return '';
+        // 与公司键同款归一化：全角 ASCII → 半角、去括号标点空白、latin 小写
+        let key = raw
+          .replace(/[\uff01-\uff5e]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+          .replace(/[（）()[\]【】·・,，.。、\-—_\s]/g, '')
+          .toLowerCase();
+        if (!key || CITY_UNKNOWN_RE.test(key)) return ''; // 占位值等同「未填」，不给它单独开一桶
+        // 循环剥行政后缀直到不再变化；用 key 非空做守卫，这样「市」这种纯后缀输入会归为未填而不是留下残骸
+        let prev = null;
+        while (key && key !== prev) { prev = key; key = key.replace(CITY_SUFFIX_RE, ''); }
+        return key;
+      }
+      // 一条记录可能写了多个城市（「深圳/广州」「北京、上海」）：拆开各计一次。
+      // 面板会明写这条口径，否则各城市投递数之和 > 台账条数会被当成算错。
+      function cityKeysOf(record) {
+        const raw = String((record && record.city) || '');
+        if (!raw.trim()) return [];
+        const out = [];
+        for (const part of raw.split(/[\/、,，|;；]+/)) {
+          const key = normalizeCityKey(part);
+          if (key && !out.includes(key)) out.push(key);
+        }
+        return out;
+      }
+      // 城市统计 → [{ city, total, offers, offerRate, active, companies, records }]
+      //   city === '' 是「未填 / 待确认」桶，固定排在最后，且不计入「覆盖 N 个城市」
+      function computeCityStats(records) {
+        const list = Array.isArray(records) ? records : [];
+        const map = new Map();
+        for (const record of list) {
+          const keys = cityKeysOf(record);
+          // 没填城市的记录也要进桶（''），否则「未填」这一行的投递/Offer 数会是假的 0
+          for (const key of (keys.length ? keys : [''])) {
+            if (!map.has(key)) map.set(key, { city: key, total: 0, offers: 0, active: 0, records: [] });
+            const bucket = map.get(key);
+            bucket.total += 1;
+            if (record && record.stage === 'Offer') bucket.offers += 1;
+            if (isActive(record)) bucket.active += 1;
+            bucket.records.push(record);
+          }
+        }
+        return [...map.values()]
+          .map(bucket => ({
+            city: bucket.city,
+            total: bucket.total,
+            offers: bucket.offers,
+            offerRate: bucket.total ? bucket.offers / bucket.total : 0,
+            active: bucket.active,
+            // 公司数必须走 groupRecordsByCompany 的「互相包含」聚类，不能用键精确相等的 Set：
+            // 否则「腾讯」与「腾讯科技」会被算成两家，与多岗位公司块、漏斗公司口径自相矛盾
+            companies: groupRecordsByCompany(bucket.records).length,
+            records: bucket.records
+          }))
+          .sort((a, b) => {
+            if (!a.city !== !b.city) return a.city ? -1 : 1; // 未填桶永远最后
+            return b.total - a.total || b.offers - a.offers || String(a.city).localeCompare(String(b.city), 'zh-CN');
+          });
+      }
+      // 企业性质统计 → **固定 4 行**（三档 + 未设置），为 0 也出现。
+      // 面板结构因此稳定，用户能分辨「这一档我一条都没有」和「这块没渲染出来」。
+      function computeCompanyTypeStats(records) {
+        const list = Array.isArray(records) ? records : [];
+        const buckets = [...COMPANY_TYPES, ''].map(type => ({ type, total: 0, offers: 0, active: 0, records: [] }));
+        for (const record of list) {
+          const index = COMPANY_TYPES.indexOf(String((record && record.companyType) || '').trim());
+          const bucket = buckets[index === -1 ? buckets.length - 1 : index]; // 非法/缺失一律落「未设置」
+          bucket.total += 1;
+          if (record && record.stage === 'Offer') bucket.offers += 1;
+          if (isActive(record)) bucket.active += 1;
+          bucket.records.push(record);
+        }
+        return buckets.map(bucket => ({
+          type: bucket.type,
+          label: bucket.type || COMPANY_TYPE_UNSET,
+          total: bucket.total,
+          offers: bucket.offers,
+          offerRate: bucket.total ? bucket.offers / bucket.total : 0,
+          active: bucket.active,
+          companies: groupRecordsByCompany(bucket.records).length, // 同城市统计：走聚类口径，不用键精确相等
+          records: bucket.records
+        }));
+      }
       /*__CORE_PURE_END__*/
 
       // ================= 查重统一处置（v4.5.0）=================
@@ -3742,10 +3987,12 @@
           return {
             recordsView: parsed.recordsView === 'board' ? 'board' : 'table',
             collapsedGroups: Array.isArray(parsed.collapsedGroups) ? parsed.collapsedGroups.map(String) : [],
-            hideGuide: !!parsed.hideGuide
+            hideGuide: !!parsed.hideGuide,
+            // 洞察精简模式（v4.6.0）：只显示概览 / 需要关注 / 转化漏斗，明细块整体折叠
+            insightsCompact: !!parsed.insightsCompact
           };
         } catch (_) {
-          return { recordsView: 'table', collapsedGroups: [], hideGuide: false };
+          return { recordsView: 'table', collapsedGroups: [], hideGuide: false, insightsCompact: false };
         }
       }
       function saveUiPrefs() {
@@ -5766,6 +6013,8 @@
         funnelScope = funnelScope === 'company' ? 'record' : 'company';
         renderInsights();
       });
+      // 洞察精简 / 完整切换（偏好存本机 ui.v1）
+      $('#insightsCompactBtn').addEventListener('click', toggleInsightsCompact);
       $('#alertList').addEventListener('click', event => {
         const item = event.target.closest('.alert-item[data-id]');
         if (item) openRecordFocus(item.dataset.id);
