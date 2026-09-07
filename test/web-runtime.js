@@ -416,6 +416,33 @@ function makeEl(sel) {
   };
 }
 const calls = { saveRecords: [], toast: [], openDialog: [], confirm: [], focus: [], advance: [], delete: [] };
+// 让桩 $ 表达真实 querySelector 语义：纯单 class 选择器命中文档里「第一个」带该 class 的元素，
+// 且同一元素无论用 #id 还是 .class 访问都返回同一个桩。这样 $('.table-scroll') 与
+// $('#recordsTableScroll') 会落到不同桩上——正是 v4.6.0 复用 .table-scroll 后「切换器选错元素」
+// 缺陷的真实成因（旧桩按选择器字符串索引，天然无法暴露它，所以当初漏过）。
+const DOM_ORDER = (() => {
+  const order = [];
+  const tagRe = /<([a-z][\w-]*)([^>]*)>/gi;
+  let mm;
+  while ((mm = tagRe.exec(html)) !== null) {
+    const attrs = mm[2];
+    const cls = /class="([^"]+)"/.exec(attrs);
+    if (!cls) continue;
+    const id = /(?:^|\s)id="([\w-]+)"/.exec(attrs);
+    order.push({ id: id ? id[1] : null, classes: cls[1].trim().split(/\s+/) });
+  }
+  return order;
+})();
+function resolveEl(sel) {
+  const cm = /^\.([\w-]+)$/.exec(sel);
+  if (cm) {
+    const first = DOM_ORDER.find(el => el.classes.includes(cm[1]));
+    // 第一个匹配元素若带 id，则与 $('#thatId') 共享同一个桩（真实 DOM 里本就是同一个节点）
+    const key = first && first.id ? `#${first.id}` : sel;
+    return els2[key] || (els2[key] = makeEl(key));
+  }
+  return els2[sel] || (els2[sel] = makeEl(sel));
+}
 // 沙箱里的枚举一律取 index.html 的实时值（阶段预设 / 企业性质），避免测试复制字面量后与源码漂移
 const STAGE_PRESETS_LIVE = extractConst(html, 'STAGE_PRESETS');
 const COMPANY_TYPES_LIVE = extractConst(html, 'COMPANY_TYPES');
@@ -426,7 +453,7 @@ let confirmAnswer = true;
 let confirmOutcomeValue = 'ok';
 const sandbox2 = {
   console,
-  $: sel => (els2[sel] || (els2[sel] = makeEl(sel))),
+  $: resolveEl,
   els: {
     empty: makeEl('#emptyState'), body: makeEl('#recordBody'), caption: makeEl('#resultCaption'),
     upcoming: makeEl('#upcomingList'), search: makeEl('#searchInput'), filter: makeEl('#stageFilter'),
@@ -503,7 +530,9 @@ vm.runInContext(
 section('\nv4.4.0 台账视图（表格 / 看板 / 拖拽推进）');
 const boardColsEl = () => els2['#boardCols'];
 const boardView = () => els2['#boardView'];
-const tableScroll = () => els2['.table-scroll'];
+// 台账表格容器（唯一 id）与文档第一个 .table-scroll（洞察的 Offer 对比矩阵容器）必须是两个不同的桩
+const recordsScroll = () => sandbox2.$('#recordsTableScroll');
+const offerScroll = () => sandbox2.$('.table-scroll');
 
 function seedRecords() {
   // getVisibleRecords 依赖筛选控件的值：filter 必须是 'all'，否则桩里的空字符串会筛掉全部记录
@@ -555,16 +584,33 @@ check('setRecordsView 切换容器可见性 / 按钮态，并把偏好写进 loc
   seedRecords();
   sandbox2.setRecordsView('board');
   assert.strictEqual(boardView().hidden, false);
-  assert.strictEqual(tableScroll().hidden, true);
+  assert.strictEqual(recordsScroll().hidden, true);
   assert.ok(els2['#viewBoardBtn'].classList.contains('is-active'));
   assert.ok(!els2['#viewTableBtn'].classList.contains('is-active'));
   assert.strictEqual(JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).recordsView, 'board');
   assert.ok(boardColsEl().innerHTML.includes('board-col'), '切到看板时确实渲染了列');
   sandbox2.setRecordsView('table');
   assert.strictEqual(boardView().hidden, true);
-  assert.strictEqual(tableScroll().hidden, false);
+  assert.strictEqual(recordsScroll().hidden, false);
   assert.ok(els2['#viewTableBtn'].classList.contains('is-active'));
   assert.strictEqual(JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).recordsView, 'table');
+});
+
+check('切换器命中台账表格而非 Offer 矩阵（.table-scroll 被两个容器复用导致的选错元素缺陷回归）', () => {
+  // 真实 DOM 里 $('.table-scroll') 只返回文档中第一个（洞察的 Offer 对比矩阵），台账表格是第二个。
+  // v4.6.0 复用同一 class 后，renderRecordsView 的 $('.table-scroll') 一直在隐藏 Offer 矩阵、
+  // 台账表格从未被隐藏（表格与看板叠加）。修复后台账走唯一 id，Offer 矩阵不再被误伤。
+  seedRecords();
+  const offer = offerScroll();
+  const records = recordsScroll();
+  assert.notStrictEqual(offer, records, '两个 .table-scroll 必须是不同的桩（ Offer 矩阵 vs 台账表格）');
+  offer.hidden = false; // Offer 对比矩阵容器初始可见
+  sandbox2.setRecordsView('board');
+  assert.strictEqual(recordsScroll().hidden, true, '切到看板时台账表格容器必须被隐藏');
+  assert.strictEqual(offer.hidden, false, 'Offer 对比矩阵容器的 hidden 全程不得被台账切换改动');
+  sandbox2.setRecordsView('table');
+  assert.strictEqual(recordsScroll().hidden, false, '切回表格时台账表格容器恢复可见');
+  assert.strictEqual(offer.hidden, false, '切回表格后 Offer 矩阵仍不受影响');
 });
 
 check('advanceRecordTo 前进追加里程碑并落库；同阶段不动', async () => {

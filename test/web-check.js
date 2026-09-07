@@ -1002,5 +1002,47 @@ check('被 hidden 切换且设了 display 的容器都有 [hidden]{display:none}
   assert.ok(targets.length >= 8, `应扫到足够多的 hidden 目标，实际 ${targets.length}`);
 });
 
+console.log('单 class 选择器唯一性守卫（防「querySelector 命中错误元素」）');
+// $('.xxx') 只返回文档里第一个匹配元素。一旦同一个 class 被两个容器复用（如 v4.6.0 的
+// Offer 对比矩阵与台账表格都用 .table-scroll），$('.table-scroll') 就会静默命中错误的那个——
+// 运行时不报错，只表现为「隐藏错了元素」（台账切看板时表格不消失、Offer 矩阵反被藏起来）。
+// 这类缺陷人工复核发现不了，必须用静态守卫钉死：凡是纯单 class 选择器命中的 class，
+// 在 HTML 里只能出现一次，否则要求改用唯一 id。（querySelectorAll 的多元素查询不在此列。）
+check('$(\'.xxx\') 纯单 class 选择器命中的 class 在 HTML 里必须唯一', () => {
+  const styleStart = html.indexOf('<style>');
+  const styleEnd = html.indexOf('</style>');
+  // 只在标记与脚本之外的 HTML 结构里数 class，避免把 CSS 选择器（.table-scroll{}）当成元素
+  const markup = html.slice(0, styleStart) + html.slice(styleEnd);
+  const classCount = new Map();
+  const classAttrRe = /class="([^"]*)"/g;
+  let match;
+  while ((match = classAttrRe.exec(markup)) !== null) {
+    for (const tok of match[1].trim().split(/\s+/)) {
+      if (tok) classCount.set(tok, (classCount.get(tok) || 0) + 1);
+    }
+  }
+  const singleClassSelRe = /\$\('\.([\w-]+)'\)/g;
+  const offenders = [];
+  const seen = new Set();
+  while ((match = singleClassSelRe.exec(html)) !== null) {
+    const cls = match[1];
+    if (seen.has(cls)) continue;
+    seen.add(cls);
+    const n = classCount.get(cls) || 0;
+    if (n >= 2) offenders.push(`$('.${cls}') 命中 ${n} 个元素，querySelector 只返回第一个会选错，应改用唯一 id`);
+  }
+  assert.deepStrictEqual(offenders, []);
+  // 自检①：守卫确实数到了 class（正则没失配）——.table-scroll 天生有两个容器（Offer 矩阵 + 台账）
+  assert.ok((classCount.get('table-scroll') || 0) >= 2, '应数到两个 .table-scroll 容器，否则计数正则失配');
+  // 自检②：把判定逻辑跑在合成样本上，确认它真能把 $('.table-scroll') 判为不合格（守卫不是空过）
+  const sample = "$('.table-scroll').hidden = true; $('#recordsTableScroll').hidden = false; $('.some-unique-block').focus();";
+  const sampleOffenders = [];
+  const sampleRe = /\$\('\.([\w-]+)'\)/g;
+  while ((match = sampleRe.exec(sample)) !== null) {
+    if ((classCount.get(match[1]) || 0) >= 2) sampleOffenders.push(match[1]);
+  }
+  assert.deepStrictEqual(sampleOffenders, ['table-scroll'], '守卫必须拦下对 .table-scroll 的单 class 选择器，且不误伤 id 与唯一 class');
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;
