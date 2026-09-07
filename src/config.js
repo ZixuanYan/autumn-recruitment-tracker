@@ -22,8 +22,45 @@ const EMAIL_TYPES = ['测评', '笔试', '机试', '面试邀请', 'Offer', '拒
 //       真正的招聘邮件仍会被 面试/笔试/录用/招聘/校招/应聘/网申/入职/简历/interview 命中。
 const DEFAULT_KEYWORDS = '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview';
 
-// 发件人/主题噪声排除（营销、退订、系统信使等），命中即丢弃，不进 AI
-const NOISE_PATTERN = 'unsubscribe|退订|newsletter|no-?reply|donotreply|do-not-reply|营销|推广|广告|postmaster|mailer-daemon|noreply|通知中心|服务通知';
+// ===== 噪声排除：拆成「发件人」与「主题」两张表，各自只作用于该作用的对象 =====
+//
+// 为什么必须拆开（v4.6.1 修复的核心缺陷）：
+// 旧版只有一张 NOISE_PATTERN，同时匹配 from 与 subject，其中含 no-?reply|donotreply|noreply。
+// 而招聘系统的通知邮件几乎全部由机器地址发出——实测 21 个真实招聘发件地址
+// （Moka / 北森 iTalent / 牛客 / 智联 / 猎聘 / 实习僧 / 腾讯校招 / 阿里校招 / 字节 / 美团 /
+//   京东 / 大易 / 24Talent / 用友 …）在主题明确写着「【面试邀请】…」的情况下，18 个被误杀。
+// 更要命的是误杀不可逆：computeWatermark 会把水位推过这些邮件，后续运行永不回看。
+//
+// 取舍原则：预筛只为省 token，准确性由 AI 把关。
+//   漏掉一封真面邀 = 不可逆的损失（水位推过就永久跳过，且用户无从察觉）；
+//   多放行一封营销邮件 = 几分钱 token，且后面还有 AI 的 isRecruitment 判定、
+//   MIN_CONFIDENCE 阈值、以及网页端人工复核三道拦截。
+// 因此这两张表只保留「高确定性的垃圾特征」，绝不用「机器发件人」这种招聘常态当噪声。
+
+// 只匹配发件人：确定性垃圾/邮件系统标记。刻意不含 noreply 家族。
+const FROM_NOISE_PATTERN = 'postmaster|mailer-daemon|newsletter|unsubscribe|list-?subscribe';
+
+// 只匹配主题：营销与金融推销特征。金融词直接针对实测已入库的 3 条纯营销邮件
+// （汇丰「開立…定期存款享額外現金獎賞」/ 恒生「立即申請…信用卡」/ 汇丰「卓越理財…教育峰会」）。
+// 刻意不含「服务通知|通知中心」：那是招聘门户常用的主题前缀，会把真通知一起丢掉。
+const SUBJECT_NOISE_PATTERN = '营销|推廣|推广|廣告|广告|退订|退訂|unsubscribe|newsletter|限時|限时|優惠|优惠|現金獎賞|现金奖赏|签賬|簽賬|開立|开立|定期存款|理財|理财|信用卡|貸款|贷款';
+
+// 强招聘信号：主题命中即**无条件放行**，不受上面两张噪声表影响。
+// 这是防误杀的最后一道保险——即便日后有人往噪声表里加了过宽的词，
+// 明确写着「面试邀请 / 笔试通知 / 录用通知」的邮件也不会被丢掉。
+const STRONG_SIGNAL_PATTERN = '面试邀请|面試邀請|面试通知|面試通知|笔试通知|筆試通知|机试通知|機試通知|测评通知|測評通知|評估通知|录用通知|錄用通知|意向书|意向書|入职通知|入職通知|复试通知|複試通知|终面|終面|体检通知|體檢通知|网申|網申|校园招聘|校園招聘|offer';
+
+// 丢弃原因枚举：预筛（prefilter）与 AI 结果判定（ai.verdictOnAiResult）共用同一套字面量，
+// 三处消费——Action 计数、Gist 的 meta.lastDropped、网页端 describeDropReason 的中文映射。
+// 放在 config.js（唯一配置入口）而不是 prefilter.js，避免 ai.js 反向依赖 prefilter.js。
+const DROP_REASONS = Object.freeze({
+  NOISE_FROM: 'noise-from',       // 发件人命中 FROM_NOISE_PATTERN
+  NOISE_SUBJECT: 'noise-subject', // 主题命中 SUBJECT_NOISE_PATTERN
+  NO_KEYWORD: 'no-keyword',       // 主题+正文都没命中关键词
+  AI_NOT_RECRUIT: 'ai-not-recruit', // AI 明确判定 isRecruitment=false
+  LOW_CONF: 'low-conf',           // AI 置信度低于 MIN_CONFIDENCE
+  AI_ERROR: 'ai-error'            // AI 调用失败（同时会写进 meta.lastError）
+});
 
 function strEnv(name, fallback = '') {
   const raw = process.env[name];
@@ -55,6 +92,10 @@ function buildConfig() {
     }),
     sinceDays: intEnv('SINCE_DAYS', 30),
     maxPerRun: intEnv('MAX_PER_RUN', 30),
+    // 回溯起点（仅手动 dispatch 传）：>0 时忽略云端水位，从该 UID 起重新扫描。
+    // 用途：捞回被旧噪声规则误杀、且水位已永久越过的邮件（水位推过就不会再回看）。
+    // 注意配合 MAX_PER_RUN 一起调大，否则一次只能重扫 maxPerRun 封。
+    uidFrom: intEnv('UID_FROM', 0),
     minConfidence: floatEnv('MIN_CONFIDENCE', 0.3),
     keywords: strEnv('KEYWORDS', DEFAULT_KEYWORDS),
     ai: Object.freeze({
@@ -120,8 +161,16 @@ function keywordRegex(keywords) {
   return new RegExp(parts.map(escapeRegExp).join('|'), 'i');
 }
 
-function noiseRegex() {
-  return new RegExp(NOISE_PATTERN, 'i');
+function fromNoiseRegex() {
+  return new RegExp(FROM_NOISE_PATTERN, 'i');
+}
+
+function subjectNoiseRegex() {
+  return new RegExp(SUBJECT_NOISE_PATTERN, 'i');
+}
+
+function strongSignalRegex() {
+  return new RegExp(STRONG_SIGNAL_PATTERN, 'i');
 }
 
 module.exports = {
@@ -130,11 +179,16 @@ module.exports = {
   MAIL_SUGGEST_FILENAME,
   MAIL_CONFIG_FILENAME,
   DEFAULT_KEYWORDS,
-  NOISE_PATTERN,
+  FROM_NOISE_PATTERN,
+  SUBJECT_NOISE_PATTERN,
+  STRONG_SIGNAL_PATTERN,
+  DROP_REASONS,
   buildConfig,
   applyMailConfigOverrides,
   gateReason,
   keywordRegex,
-  noiseRegex,
+  fromNoiseRegex,
+  subjectNoiseRegex,
+  strongSignalRegex,
   escapeRegExp
 };

@@ -15,6 +15,10 @@ on:
         description: '单次最多处理邮件数（覆盖默认 30）'
         required: false
         type: string
+      UID_FROM:
+        description: '回溯起点 UID：忽略云端水位，从该 UID 起重新扫描（用于捞回被误杀的邮件；建议同时调大 MAX_PER_RUN）'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -53,6 +57,8 @@ jobs:
           IMAP_PORT: '993'
           SINCE_DAYS: ${{ github.event.inputs.SINCE_DAYS || '30' }}
           MAX_PER_RUN: ${{ github.event.inputs.MAX_PER_RUN || '30' }}
+          # 留空 = 正常按云端水位增量；填 UID 则忽略水位从该处重扫（回溯被误杀的邮件）
+          UID_FROM: ${{ github.event.inputs.UID_FROM || '' }}
           MIN_CONFIDENCE: '0.3'
           # 可选：设置 KEYWORDS Secret 即可覆盖默认关键词（留空则用 src/config.js 的 DEFAULT_KEYWORDS）
           KEYWORDS: ${{ secrets.KEYWORDS }}

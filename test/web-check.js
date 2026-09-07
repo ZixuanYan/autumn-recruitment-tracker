@@ -41,7 +41,7 @@ const si = html.indexOf(startMark);
 const ei = html.indexOf(endMark);
 check('找到纯函数块标记', () => { assert.ok(si !== -1 && ei !== -1 && ei > si, '未找到 __MAIL_PURE_START__/__END__ 标记'); });
 const pureSrc = html.slice(si + startMark.length, ei);
-const helpers = new Function(`${pureSrc}; return { normalizeCompanySlug, diceCoefficient, companyMatchScore, matchRecordsByCompany, filterMailSuggestions, unionIdList, unionMailState };`)();
+const helpers = new Function(`${pureSrc}; return { normalizeCompanySlug, diceCoefficient, companyMatchScore, matchRecordsByCompany, filterMailSuggestions, unionIdList, unionMailState, describeDropReason, normalizeDropStats };`)();
 
 check('normalizeCompanySlug 剥离后缀 + 全角转半角 + 小写', () => {
   const { normalizeCompanySlug, companyMatchScore } = helpers;
@@ -109,6 +109,64 @@ check('unionMailState 远端为 null（老 payload）时=本地不变', () => {
   const m = unionMailState(local, null);
   assert.deepStrictEqual(m.appliedIds, ['a']);
   assert.deepStrictEqual(m.dismissedIds, ['b']);
+});
+
+// ===== v4.6.1：邮件丢弃诊断 =====
+check('describeDropReason 六种 reason 都有中文标签，未知 reason 回退原文', () => {
+  const { describeDropReason } = helpers;
+  const expected = {
+    'noise-from': '发件人是邮件系统 / 订阅地址',
+    'noise-subject': '主题像营销或金融推销',
+    'no-keyword': '主题与正文都没命中预筛关键词',
+    'ai-not-recruit': 'AI 判定为非招聘邮件',
+    'low-conf': 'AI 置信度低于阈值',
+    'ai-error': 'AI 调用失败'
+  };
+  for (const reason of Object.keys(expected)) {
+    assert.strictEqual(describeDropReason(reason), expected[reason]);
+  }
+  // 未知 reason 回退原文而不是吞掉：两端枚举漂移时用户至少能看到原始值，便于报障
+  assert.strictEqual(describeDropReason('some-new-reason'), 'some-new-reason');
+  assert.strictEqual(describeDropReason(''), '未知原因');
+  assert.strictEqual(describeDropReason(null), '未知原因');
+  assert.strictEqual(describeDropReason(undefined), '未知原因');
+});
+check('normalizeDropStats：老 Gist 文件无 lastDropped / 结构非法 / 全 0 → 返回 null（状态栏不显示该段）', () => {
+  const { normalizeDropStats } = helpers;
+  assert.strictEqual(normalizeDropStats(undefined), null, 'v4.6.0 及更早的 Gist 文件没有该字段');
+  assert.strictEqual(normalizeDropStats(null), null);
+  assert.strictEqual(normalizeDropStats('oops'), null);
+  assert.strictEqual(normalizeDropStats({}), null, '空对象无 total 也无明细 → 不显示');
+  assert.strictEqual(normalizeDropStats({ total: 0, recent: [] }), null, '本次一封没丢时显示「丢弃 0 封」只是噪声');
+});
+check('normalizeDropStats：total 缺失时退回分类求和，明细上限 20 条', () => {
+  const { normalizeDropStats } = helpers;
+  const s = normalizeDropStats({ noiseFrom: 2, noKeyword: 3, recent: [] });
+  assert.strictEqual(s.total, 5, 'Action 没给 total 时用分类求和');
+  assert.strictEqual(s.noiseFrom, 2);
+  assert.strictEqual(s.aiNotRecruit, 0, '缺失的分类补 0，网页端读取不会得到 undefined');
+  const many = { total: 30, recent: Array.from({ length: 30 }, (_, i) => ({ uid: i + 1, from: 'f', subject: 's', reason: 'no-keyword' })) };
+  assert.strictEqual(normalizeDropStats(many).recent.length, 20, '明细条数与 Action 侧 DROP_RECENT_MAX 一致');
+  // 非法值一律夹到 0，负数不得出现
+  const bad = normalizeDropStats({ total: -5, noiseFrom: 'abc', recent: [null, { uid: 1 }] });
+  assert.strictEqual(bad.total, 1, 'total 非法时退回明细条数');
+  assert.strictEqual(bad.noiseFrom, 0);
+  assert.strictEqual(bad.recent.length, 1, '明细里的 null 被滤掉');
+});
+check('跨仓库契约：网页端 DROP_REASON_LABELS 的 key 必须与 Action 侧 DROP_REASONS 的值逐一对应', () => {
+  // 两端各自维护一份 reason 字面量：Action 写进 meta.lastDropped.recent[].reason，
+  // 网页端据此显示中文标签。任一侧增删档位而另一侧没跟上，用户就会看到英文原文
+  // （describeDropReason 回退），因此这里把契约钉死。
+  const actionConfig = require('../src/config');
+  const actionReasons = Object.values(actionConfig.DROP_REASONS).sort();
+  // 从 index.html 的纯函数块里取出 DROP_REASON_LABELS 的 key
+  const block = pureSrc;
+  const start = block.indexOf('const DROP_REASON_LABELS = {');
+  assert.ok(start > -1, '未在 index.html 找到 DROP_REASON_LABELS');
+  const end = block.indexOf('};', start);
+  const literal = block.slice(start + 'const DROP_REASON_LABELS = '.length, end + 1);
+  const webReasons = Object.keys(new Function(`return ${literal};`)()).sort();
+  assert.deepStrictEqual(webReasons, actionReasons, '两端 reason 枚举必须完全一致');
 });
 check('unionIdList 去重且 cap 上限', () => {
   const { unionIdList } = helpers;

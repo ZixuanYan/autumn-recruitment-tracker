@@ -5,7 +5,10 @@
 // （htmlToText / truncateBody / pickReceivedAt）时无需安装依赖也能被 require。
 // ============================================================================
 
-const MAX_BODY = 4000;
+// 正文上限：8000 字（v4.6.1 由 4000 提到 8000）。
+// 招聘邮件的关键信息常在正文靠后位置——长邮件底部的「请于 X 日前完成测评」「点击链接确认参加面试」
+// 在 4000 字截断下会丢失，导致 AI 解析不出 scheduleAt。8000 字对 token 成本影响很小。
+const MAX_BODY = 8000;
 
 let _simpleParser = null;
 function getSimpleParser() {

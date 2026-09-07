@@ -12,11 +12,11 @@
 
 const { buildConfig, keywordRegex, applyMailConfigOverrides, gateReason, MAIL_CONFIG_FILENAME } = require('./src/config');
 const { openInbox, closeInbox, planFetch, fetchMessages } = require('./src/imap');
-const { isCandidate } = require('./src/prefilter');
+const { classifyMail, DROP_REASONS } = require('./src/prefilter');
 const { parseMessage } = require('./src/parse');
-const { computeWatermark, buildSuggestion, mergeSuggestions, buildMeta } = require('./src/state');
+const { computeWatermark, buildSuggestion, mergeSuggestions, buildMeta, createDropTracker } = require('./src/state');
 const { gistGet, readMailFile, patchMailFile } = require('./src/gist');
-const { analyzeEmail } = require('./src/ai');
+const { analyzeEmail, verdictOnAiResult } = require('./src/ai');
 
 function assertGistSecrets(cfg) {
   const missing = [];
@@ -89,17 +89,23 @@ async function run() {
   let candidates = 0;
   let aiErrors = 0;
   let lastAiError = '';
+  // 丢弃收集器：每封被丢的邮件都逐条打日志（只进 Actions 日志），汇总写进 meta.lastDropped（进 Gist、网页端可展开）。
+  // 修复前这里是静默 continue，用户只能靠"感觉没拉到"来怀疑漏了邮件。
+  const drops = createDropTracker((mail, reason) => {
+    console.log(`[sync] 丢弃 uid=${mail.sourceUid} reason=${reason} from=${mail.from || '-'} subj=${String(mail.subject || '').slice(0, 60)}`);
+  });
 
   try {
-    const plan = planFetch(mailbox, prev.meta, cfg.sinceDays);
-    console.log(`[sync] 抓取模式=${plan.mode}${plan.mode === 'uid' ? ` startUid=${plan.startUid}` : ` since=${plan.since.toISOString()}`}${plan.resetWatermark ? '（UIDVALIDITY 变化→重置水位）' : ''}`);
+    const plan = planFetch(mailbox, prev.meta, cfg.sinceDays, cfg.uidFrom);
+    console.log(`[sync] 抓取模式=${plan.mode}${plan.mode === 'uid' ? ` startUid=${plan.startUid}` : ` since=${plan.since.toISOString()}`}${plan.forced ? '（UID_FROM 强制回溯：已忽略云端水位）' : ''}${plan.resetWatermark ? '（UIDVALIDITY 变化→重置水位）' : ''}`);
     fetched = await fetchMessages(client, plan, cfg.maxPerRun);
     console.log(`[sync] 本次抓取 ${fetched.length} 封（上限 ${cfg.maxPerRun}），INBOX exists=${mailbox.exists}`);
 
     const kw = keywordRegex(cfg.keywords);
     for (const msg of fetched) {
       const mail = await parseMessage(msg);
-      if (!isCandidate(mail, kw)) continue;
+      const verdict = classifyMail(mail, kw);
+      if (!verdict.pass) { drops.note(mail, verdict.reason); continue; }
       candidates += 1;
       let result;
       try {
@@ -107,11 +113,22 @@ async function run() {
       } catch (e) {
         aiErrors += 1;
         lastAiError = e.message;
+        drops.note(mail, DROP_REASONS.AI_ERROR);
         console.warn(`[sync] AI 分析失败 uid=${mail.sourceUid}：${e.message}`);
         continue;
       }
-      if (Number(result.confidence) < cfg.minConfidence) {
-        console.log(`[sync] 丢弃低置信 uid=${mail.sourceUid} conf=${result.confidence} < ${cfg.minConfidence}`);
+      // AI 结果的两道过滤（isRecruitment + 置信度）统一走 ai.verdictOnAiResult，
+      // 判定逻辑只有一处、可单测。isRecruitment 那道在 v4.6.1 之前完全不存在：
+      // 字段被 prompt 要求返回、被 normalizeAiResult 归一，却没有任何代码检查它，
+      // 导致纯营销邮件照样入库（实测 10 条建议里 3 条是汇丰存款/恒生信用卡/理财峰会）。
+      const aiVerdict = verdictOnAiResult(result, cfg.minConfidence);
+      if (!aiVerdict.accept) {
+        drops.note(mail, aiVerdict.reason);
+        if (aiVerdict.reason === DROP_REASONS.LOW_CONF) {
+          console.log(`[sync] 丢弃低置信 uid=${mail.sourceUid} conf=${result.confidence} < ${cfg.minConfidence}`);
+        } else {
+          console.log(`[sync] 丢弃 AI 判非招聘 uid=${mail.sourceUid} type=${result.emailType} conf=${result.confidence}`);
+        }
         continue;
       }
       incoming.push(buildSuggestion(mail, result));
@@ -120,7 +137,11 @@ async function run() {
     await closeInbox(client, lock);
   }
 
-  const merged = mergeSuggestions(prev.suggestions, incoming);
+  const dropped = drops.summary();
+  // 本次扫描过的 UID 集合：mergeSuggestions 据此做「重扫即重新裁决」——
+  // 扫过但本轮未入选的旧建议会被删除（否则用 UID_FROM 回溯时无法纠正已入库的营销邮件）。
+  const scannedUids = fetched.map(m => Number(m.uid) || 0).filter(Boolean);
+  const merged = mergeSuggestions(prev.suggestions, incoming, scannedUids);
   const watermark = computeWatermark(mailbox, fetched.map(m => m.uid), prev.meta);
   const softError = aiErrors > 0;
   const meta = buildMeta({
@@ -129,11 +150,13 @@ async function run() {
     status: softError ? 'error' : 'ok',
     lastError: softError ? `AI 分析失败 ${aiErrors}/${candidates} 封：${lastAiError}` : '',
     newCount: incoming.length,
-    pendingCount: merged.length
+    pendingCount: merged.length,
+    lastDropped: dropped
   });
 
   await patchMailFile(cfg, { meta, suggestions: merged });
   console.log(`[sync] ✅ 完成：候选 ${candidates}，新增/更新 ${incoming.length}，合并后 ${merged.length} 条，lastUid→${meta.lastUid}，lastStatus=${meta.lastStatus}`);
+  console.log(`[sync] 丢弃 ${dropped.total} 封：噪声发件人 ${dropped.noiseFrom} / 营销主题 ${dropped.noiseSubject} / 无关键词 ${dropped.noKeyword} / AI判非招聘 ${dropped.aiNotRecruit} / 低置信 ${dropped.lowConf} / AI失败 ${dropped.aiError}`);
   if (softError) console.warn('[sync] ⚠️ 存在 AI 软失败，已写入 meta.lastError（网页端会上屏提示），本轮抓取/水位正常。');
 }
 

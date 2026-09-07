@@ -15,7 +15,35 @@ const state = require('../src/state');
 const ai = require('../src/ai');
 const gist = require('../src/gist');
 const crypto = require('../src/crypto');
-const nodeCrypto = require('crypto'); // 用于「跨端兼容」验证：以浏览器同款算法的经典实现解密 Action 密文
+const nodeCrypto = require('crypto'); // 用于「跨端兼容」验证：以浏览器同款算法 的经典实现解密 Action 密文
+
+// 从源码里抽取一个纯函数并求值。用于 imap.js —— 它顶部 require('imapflow')，
+// 本地无 node_modules 时整个模块无法 require，但 planFetch 是纯函数，单独抽出来就能测。
+// 与 web-check.js / web-runtime.js 同款实现，含两处踩过的坑：
+//   1) 必须带 async 前缀，否则抽出异步函数时 await 变成语法错误；
+//   2) 必须先配平参数列表的圆括号再找函数体的 '{'，否则默认参数写成 `options = {}` 时
+//      直接 indexOf('{') 会命中默认值里的 '{'，只抽到一小段签名。
+function extractPureFunction(src, name) {
+  const marker = `function ${name}(`;
+  let start = src.indexOf(marker);
+  if (start === -1) throw new Error(`未找到函数 ${name}`);
+  if (src.slice(Math.max(0, start - 6), start) === 'async ') start -= 6;
+  let p = src.indexOf('(', start);
+  let pDepth = 0;
+  let bodyStart = -1;
+  for (; p < src.length; p += 1) {
+    if (src[p] === '(') pDepth += 1;
+    else if (src[p] === ')') { pDepth -= 1; if (pDepth === 0) { bodyStart = p + 1; break; } }
+  }
+  if (bodyStart === -1) throw new Error(`${name} 的参数列表未配平`);
+  let i = src.indexOf('{', bodyStart);
+  let depth = 0;
+  for (; i < src.length; i += 1) {
+    if (src[i] === '{') depth += 1;
+    else if (src[i] === '}') { depth -= 1; if (depth === 0) return src.slice(start, i + 1); }
+  }
+  throw new Error(`${name} 的函数体未配平`);
+}
 
 let passed = 0;
 let failed = 0;
@@ -36,6 +64,53 @@ test('STAGE_PRESETS 恰好 14 项且含 Offer/已结束', () => {
   assert.ok(config.STAGE_PRESETS.includes('Offer'));
   assert.ok(config.STAGE_PRESETS.includes('已结束'));
 });
+
+// ===== 静态守卫：语法可编译 + 跨模块导出契约 =====
+// 为什么需要：index.js / imap.js / connectivity-test.js 依赖 imapflow、mailparser，
+// 本地无 node_modules 时无法 require，于是 npm test 完全跳过了它们的语法检查——
+// v4.6.1 开发时 index.js 里出现过一处真实的重复声明（两个 const verdict），
+// 41 项测试全绿，只有单独跑 node --check 才暴露。这里用 vm.Script 只编译不执行
+// （同 web-check.js 对 index.html 内联脚本的做法），把语法检查纳入 npm test。
+const vm = require('vm');
+const fs = require('fs');
+const nodePath = require('path');
+const ALL_SOURCES = [
+  'index.js', 'src/config.js', 'src/imap.js', 'src/prefilter.js', 'src/parse.js',
+  'src/state.js', 'src/gist.js', 'src/ai.js', 'src/crypto.js', 'src/connectivity-test.js'
+];
+test('全部 Action 源文件语法可编译（含无法 require 的 index.js / imap.js）', () => {
+  const broken = [];
+  for (const rel of ALL_SOURCES) {
+    const src = fs.readFileSync(nodePath.join(__dirname, '..', rel), 'utf8');
+    try { new vm.Script(src, { filename: rel }); } catch (e) { broken.push(`${rel}: ${e.message}`); }
+  }
+  assert.deepStrictEqual(broken, [], `语法错误：\n    ${broken.join('\n    ')}`);
+});
+test('index.js 从各模块解构的每个符号都真实存在于该模块的导出中（防改名漂移）', () => {
+  // 只检查能被 require 的模块（imap.js 依赖 imapflow，无法加载）；
+  // 这类漂移不会报语法错，只会在运行时抛 "x is not a function"，且往往在主流程深处。
+  const loadable = {
+    './src/config': config, './src/prefilter': prefilter, './src/parse': parse,
+    './src/state': state, './src/gist': gist, './src/ai': ai
+  };
+  const indexSrc = fs.readFileSync(nodePath.join(__dirname, '..', 'index.js'), 'utf8');
+  const re = /const\s*\{([^}]+)\}\s*=\s*require\('(\.\/src\/[a-z-]+)'\)/g;
+  const missing = [];
+  let checked = 0;
+  let m;
+  while ((m = re.exec(indexSrc)) !== null) {
+    const mod = loadable[m[2]];
+    if (!mod) continue;
+    for (const raw of m[1].split(',')) {
+      const name = raw.trim();
+      if (!name) continue;
+      checked += 1;
+      if (!(name in mod)) missing.push(`${m[2]} 未导出 ${name}`);
+    }
+  }
+  assert.ok(checked >= 12, `应至少检查 12 个解构符号，实际 ${checked}（正则可能失配）`);
+  assert.deepStrictEqual(missing, []);
+});
 test('keywordRegex 大小写不敏感、按 | 分隔', () => {
   const re = config.keywordRegex('面试|offer|测评');
   assert.ok(re.test('请你来面试'));
@@ -43,15 +118,87 @@ test('keywordRegex 大小写不敏感、按 | 分隔', () => {
   assert.ok(!re.test('天气预报'));
 });
 
-test('噪声发件人被排除', () => {
-  assert.ok(prefilter.isNoise('no-reply@marketing.com', '面试通知'));
+test('机器发件人不再被误杀（v4.6.1 核心修复：旧版把 no-?reply 当噪声，实测 21 个招聘地址误杀 18 个）', () => {
+  // noreply 家族是招聘系统通知的常态发件人，绝不能当噪声
+  assert.strictEqual(prefilter.isNoise('no-reply@marketing.com', '面试通知'), false);
+  assert.strictEqual(prefilter.isNoise('noreply@mokahr.com', '笔试通知'), false);
+  assert.strictEqual(prefilter.isNoise('donotreply@campus.tencent.com', '校园招聘'), false);
+  // 营销判定改由主题承担
+  assert.ok(prefilter.isNoise('hr@shop.com', '限时优惠 退订'));
   assert.ok(prefilter.isNoise('hr@x.com', '退订请点此处'));
+  // 发件人侧只保留确定性垃圾标记
+  assert.ok(prefilter.isNoise('postmaster@x.com', '任意主题'));
+  assert.ok(prefilter.isNoise('mailer-daemon@x.com', '任意主题'));
+  assert.ok(prefilter.isNoise('news@newsletter.x.com', '任意主题'));
+  assert.ok(prefilter.isNoise('list-unsubscribe@x.com', '任意主题'));
 });
 test('候选：命中关键词且非噪声', () => {
   const re = config.keywordRegex(config.DEFAULT_KEYWORDS);
   assert.ok(prefilter.isCandidate({ from: 'hr@bytedance.com', subject: '面试邀请', textBody: '你好' }, re));
-  assert.ok(!prefilter.isCandidate({ from: 'noreply@shop.com', subject: '面试技巧课程促销 退订', textBody: '面试' }, re));
+  // 主题含营销词仍被丢；from 刻意改成非 noreply 以隔离变量（丢弃原因是主题，不是发件人）
+  assert.ok(!prefilter.isCandidate({ from: 'hr@shop.com', subject: '面试技巧课程促销 退订', textBody: '面试' }, re));
   assert.ok(!prefilter.isCandidate({ from: 'hr@x.com', subject: '你的订单已发货', textBody: '物流信息' }, re));
+  // noreply + 明确面邀主题 → 必须通过（这正是旧版误杀的场景）
+  assert.ok(prefilter.isCandidate({ from: 'noreply@mokahr.com', subject: '面试邀请：后端开发工程师', textBody: '诚邀您参加面试' }, re));
+});
+
+// ===== v4.6.1 守卫：把取证基线固化，任何人再把 noreply 加回噪声表都会立刻失败 =====
+const REAL_RECRUIT_SENDERS = [
+  'noreply@mokahr.com', 'no-reply@mokahr.com', 'noreply@italent.cn', 'noreply@nowcoder.com',
+  'noreply@zhaopin.com', 'no-reply@liepin.com', 'noreply@shixiseng.com',
+  'donotreply@campus.tencent.com', 'noreply@campus.alibaba.com', 'no-reply@bytedance.com',
+  'noreply@hr.meituan.com', 'noreply@163.com', 'donotreply@zhaopin.jd.com', 'noreply@baidu.com',
+  'no_reply@campus.huawei.com', 'noreply@xiaomi.com', 'noreply@dayee.com', 'noreply@24talent.com',
+  'noreply@yonyou.com', 'job@citicbank.com', 'campus@kuaishou.com'
+];
+test('21 个真实招聘系统发件地址全部通过预筛（修复前 18 个被误杀）', () => {
+  const re = config.keywordRegex(config.DEFAULT_KEYWORDS);
+  const killed = [];
+  for (const from of REAL_RECRUIT_SENDERS) {
+    const mail = { from, subject: '【面试邀请】后端开发工程师一面通知', textBody: '诚邀您参加面试，时间 2026-09-12 14:00' };
+    if (!prefilter.isCandidate(mail, re)) killed.push(from);
+  }
+  assert.deepStrictEqual(killed, [], `以下招聘发件地址被误杀：${killed.join(', ')}`);
+});
+test('真实招聘地址 + 不含强信号词的普通主题也仍能通过（靠关键词，不靠强信号兜底）', () => {
+  const re = config.keywordRegex(config.DEFAULT_KEYWORDS);
+  // 主题只有「校招」这类关键词、没有「面试邀请」这类强信号
+  const mail = { from: 'noreply@mokahr.com', subject: '您有一条新的应聘进展', textBody: '请登录系统查看' };
+  assert.strictEqual(prefilter.classifyMail(mail, re).pass, true);
+});
+test('已入库的 3 条真实营销主题在新规则下会被拦掉', () => {
+  const re = config.keywordRegex(config.DEFAULT_KEYWORDS);
+  const marketingSubjects = [
+    '[專屬優惠] 開立滙豐智安存定期存款享額外現金獎賞🎉',
+    '立即申請恒生MMPOWER 卡 | 於GU 線上線下簽賬賺高達 8% +FUN Dollars',
+    '誠邀出席｜匯豐卓越理財呈獻：全球教育峰會 2026'
+  ];
+  for (const subject of marketingSubjects) {
+    const mail = { from: 'hsbc.communications@message.hsbc.com.hk', subject, textBody: '立即申請 優惠 詳情' };
+    const v = prefilter.classifyMail(mail, re);
+    // 强信号优先：主题若含 offer/校园招聘 等词仍会放行，交给 AI 判 isRecruitment（这是既定取舍）
+    if (v.pass) assert.ok(prefilter.hasStrongSignal(subject), `主题「${subject}」被放行但不含强信号，规则有漏洞`);
+    else assert.strictEqual(v.reason, config.DROP_REASONS.NOISE_SUBJECT);
+  }
+});
+test('强信号优先于噪声表：postmaster 发件 + 明确面邀主题仍放行', () => {
+  const re = config.keywordRegex(config.DEFAULT_KEYWORDS);
+  const mail = { from: 'postmaster@x.com', subject: '面试邀请：算法工程师', textBody: '时间 9 月 12 日' };
+  assert.strictEqual(prefilter.classifyMail(mail, re).pass, true);
+  // 主题同时含营销词与强信号 → 强信号赢（代价是几分钱 token，收益是不漏真面邀）
+  const mixed = { from: 'hr@x.com', subject: '【限时】面试邀请与课程优惠', textBody: '面试' };
+  assert.strictEqual(prefilter.classifyMail(mixed, re).pass, true);
+});
+test('classifyMail 四种 reason 各自命中', () => {
+  const re = config.keywordRegex(config.DEFAULT_KEYWORDS);
+  const R = config.DROP_REASONS;
+  assert.strictEqual(prefilter.classifyMail({ from: 'postmaster@x.com', subject: '随便', textBody: '随便' }, re).reason, R.NOISE_FROM);
+  assert.strictEqual(prefilter.classifyMail({ from: 'hr@x.com', subject: '限时优惠 退订', textBody: '面试' }, re).reason, R.NOISE_SUBJECT);
+  assert.strictEqual(prefilter.classifyMail({ from: 'hr@x.com', subject: '你的订单已发货', textBody: '物流信息' }, re).reason, R.NO_KEYWORD);
+  assert.strictEqual(prefilter.classifyMail({ from: 'hr@x.com', subject: '面试邀请', textBody: '' }, re).reason, '');
+  assert.strictEqual(prefilter.classifyMail(null, re).pass, false);
+  // 无关键词配置时保守放行（交 AI 判定）
+  assert.strictEqual(prefilter.classifyMail({ from: 'hr@x.com', subject: '随便', textBody: '随便' }, null).pass, true);
 });
 
 test('htmlToText 剥标签/解实体/去脚本', () => {
@@ -61,11 +208,14 @@ test('htmlToText 剥标签/解实体/去脚本', () => {
   assert.ok(!t.includes('var a'));
   assert.ok(!t.includes('<'));
 });
-test('truncateBody 截断到 4000 字并加省略号', () => {
-  const long = 'a'.repeat(5000);
+test('truncateBody 截断到 MAX_BODY 并加省略号（断言用常量，避免上限调整后测试与实现漂移）', () => {
+  const long = 'a'.repeat(parse.MAX_BODY + 1000);
   const out = parse.truncateBody(long);
   assert.ok(out.length <= parse.MAX_BODY + 1);
   assert.ok(out.endsWith('…'));
+  // 未超上限时原样返回，不加省略号
+  assert.strictEqual(parse.truncateBody('短文本'), '短文本');
+  assert.ok(parse.MAX_BODY >= 8000, 'MAX_BODY 应已提到 8000（长邮件底部的测评截止时间不再被截断）');
 });
 
 test('computeWatermark 推进到已抓取最大 UID（含非候选）', () => {
@@ -84,6 +234,147 @@ test('mergeSuggestions 按 sourceUid 去重、incoming 覆盖、id 稳定', () =
   assert.strictEqual(merged.length, 2);
   const one = merged.find(s => s.sourceUid === 1);
   assert.strictEqual(one.company, '新');
+});
+
+// ===== v4.6.1：重扫即重新裁决（UID_FROM 回溯的正确性依赖这条语义）=====
+test('mergeSuggestions 三态：扫过且未入选→删除；扫过且入选→覆盖；没扫到→保留', () => {
+  const at = new Date().toISOString();
+  const prev = [
+    { sourceUid: 10, id: 'uid-10', company: '本轮会重扫并保留', receivedAt: at },
+    { sourceUid: 11, id: 'uid-11', company: '本轮重扫后判为营销', receivedAt: at },
+    { sourceUid: 12, id: 'uid-12', company: '本轮没扫到', receivedAt: at }
+  ];
+  const incoming = [{ sourceUid: 10, id: 'uid-10', company: '重新分析后的结果', receivedAt: at }];
+  const merged = state.mergeSuggestions(prev, incoming, [10, 11]); // 本轮只扫了 10 与 11
+  assert.deepStrictEqual(merged.map(s => s.sourceUid).sort((a, b) => a - b), [10, 12]);
+  assert.strictEqual(merged.find(s => s.sourceUid === 10).company, '重新分析后的结果', '入选的以本轮结果覆盖');
+  assert.ok(!merged.some(s => s.sourceUid === 11), '扫过但重新裁决后未入选 → 删除（否则回溯无法纠正已入库的营销邮件）');
+  assert.ok(merged.some(s => s.sourceUid === 12), '本轮没扫到的不下结论，保留');
+});
+test('mergeSuggestions 不传 scannedUids 时退回旧语义（全保留，向后兼容）', () => {
+  const at = new Date().toISOString();
+  const prev = [{ sourceUid: 11, id: 'uid-11', receivedAt: at }];
+  assert.strictEqual(state.mergeSuggestions(prev, [], undefined).length, 1);
+  assert.strictEqual(state.mergeSuggestions(prev, [], []).length, 1);
+});
+
+// ===== v4.6.1：丢弃可观测性 =====
+test('createDropTracker 分类计数、明细按 uid 倒序、上限 DROP_RECENT_MAX 条', () => {
+  const logs = [];
+  const tracker = state.createDropTracker((mail, reason) => logs.push(`${mail.sourceUid}:${reason}`));
+  const R = config.DROP_REASONS;
+  tracker.note({ sourceUid: 5, from: 'postmaster@x.com', subject: 'a' }, R.NOISE_FROM);
+  tracker.note({ sourceUid: 9, from: 'hr@x.com', subject: 'b' }, R.NO_KEYWORD);
+  tracker.note({ sourceUid: 7, from: 'hr@y.com', subject: '限时优惠' }, R.NOISE_SUBJECT);
+  tracker.note({ sourceUid: 8, from: 'noreply@z.com', subject: 'c' }, R.AI_NOT_RECRUIT);
+  const sum = tracker.summary();
+  assert.strictEqual(sum.total, 4);
+  assert.strictEqual(sum.noiseFrom, 1);
+  assert.strictEqual(sum.noiseSubject, 1);
+  assert.strictEqual(sum.noKeyword, 1);
+  assert.strictEqual(sum.aiNotRecruit, 1);
+  assert.strictEqual(sum.lowConf, 0);
+  assert.strictEqual(sum.aiError, 0);
+  assert.deepStrictEqual(sum.recent.map(r => r.uid), [9, 8, 7, 5], '按 uid 倒序：留下的是最新被丢的');
+  assert.strictEqual(logs.length, 4, '每封都回调打日志');
+  assert.ok(logs[0] === '5:noise-from');
+  // 明细条数上限：塞 30 条只留 20 条（防 Gist 文件膨胀）
+  const big = state.createDropTracker();
+  for (let i = 1; i <= 30; i += 1) big.note({ sourceUid: i, from: 'f', subject: 's' }, R.NO_KEYWORD);
+  const bigSum = big.summary();
+  assert.strictEqual(bigSum.total, 30, '计数是全量的');
+  assert.strictEqual(bigSum.recent.length, state.DROP_RECENT_MAX, '明细只留上限条数');
+  assert.strictEqual(bigSum.recent[0].uid, 30, '留的是最新的');
+});
+test('createDropTracker 明细截断超长 from/subject，未知 reason 不计入分类但仍留明细', () => {
+  const tracker = state.createDropTracker();
+  tracker.note({ sourceUid: 1, from: 'f'.repeat(200), subject: 's'.repeat(200) }, 'weird-reason');
+  const sum = tracker.summary();
+  assert.strictEqual(sum.recent[0].from.length, 80);
+  assert.strictEqual(sum.recent[0].subject.length, 60);
+  assert.strictEqual(sum.total, 0, '未知 reason 不进任何分类计数');
+});
+test('buildMeta 带 lastDropped；未传时保留旧值（--report-error 兜底不抹掉上次诊断）', () => {
+  const dropped = { total: 2, noiseFrom: 1, noiseSubject: 0, noKeyword: 1, aiNotRecruit: 0, lowConf: 0, aiError: 0, recent: [] };
+  const meta = state.buildMeta({ prevMeta: {}, watermark: { lastUid: 9, lastUidValidity: 3 }, status: 'ok', newCount: 1, pendingCount: 4, lastDropped: dropped });
+  assert.deepStrictEqual(meta.lastDropped, dropped);
+  // 未传 lastDropped：沿用 prevMeta 里的（硬崩溃时本轮数据不可信，不能抹成空）
+  const kept = state.buildMeta({ prevMeta: { lastDropped: dropped, lastUid: 9 }, watermark: { lastUid: 9, lastUidValidity: 3 }, status: 'error', lastError: 'boom' });
+  assert.deepStrictEqual(kept.lastDropped, dropped);
+  // prevMeta 也没有（老文件首次升级）：补一份全 0 结构，保证网页端读到的形状稳定
+  const fresh = state.buildMeta({ prevMeta: {}, watermark: {}, status: 'ok' });
+  assert.strictEqual(fresh.lastDropped.total, 0);
+  assert.deepStrictEqual(fresh.lastDropped.recent, []);
+  assert.strictEqual(fresh.lastDropped.noiseFrom, 0);
+});
+
+// ===== v4.6.1：AI 结果的两道过滤（isRecruitment 此前从未被检查）=====
+test('verdictOnAiResult：isRecruitment=false 丢弃（这道过滤修复前不存在）', () => {
+  const R = config.DROP_REASONS;
+  assert.deepStrictEqual(ai.verdictOnAiResult({ isRecruitment: false, confidence: 0.98 }, 0.3), { accept: false, reason: R.AI_NOT_RECRUIT });
+  // 高置信也不能豁免：AI 说"我很确定这是营销邮件"时 confidence 往往很高，这正是修复前的漏洞
+  assert.strictEqual(ai.verdictOnAiResult({ isRecruitment: false, confidence: 1 }, 0.3).accept, false);
+});
+test('verdictOnAiResult：低置信丢弃、缺省视为相关、正常放行', () => {
+  const R = config.DROP_REASONS;
+  assert.deepStrictEqual(ai.verdictOnAiResult({ isRecruitment: true, confidence: 0.2 }, 0.3), { accept: false, reason: R.LOW_CONF });
+  assert.deepStrictEqual(ai.verdictOnAiResult({ isRecruitment: true, confidence: 0.3 }, 0.3), { accept: true, reason: '' });
+  assert.deepStrictEqual(ai.verdictOnAiResult({ isRecruitment: true, confidence: 0.95 }, 0.3), { accept: true, reason: '' });
+  // AI 未返回 isRecruitment 字段 → 不丢（漏掉真面邀不可逆，宁可放行）
+  assert.strictEqual(ai.verdictOnAiResult({ confidence: 0.8 }, 0.3).accept, true);
+  assert.strictEqual(ai.verdictOnAiResult(null, 0.3).accept, false);
+});
+test('SYSTEM_PROMPT 明确 confidence 语义为「是招聘邮件的置信度」而非「判断的确定性」', () => {
+  // 修复前 prompt 写的是"你对本次判断的整体置信度"，AI 对"我确定这是营销邮件"给了 0.98，
+  // 于是低置信阈值形同虚设。这条断言防止 prompt 被改回歧义表述。
+  assert.ok(ai.SYSTEM_PROMPT.includes('是招聘相关邮件'));
+  assert.ok(ai.SYSTEM_PROMPT.includes('不是"你对自己判断有多确定"') || ai.SYSTEM_PROMPT.includes('这不是'));
+  assert.ok(/<= ?0\.1/.test(ai.SYSTEM_PROMPT), '必须要求非招聘邮件给极低置信度');
+});
+
+// ===== v4.6.1：UID_FROM 回溯 =====
+// imap.js 顶部 require('imapflow')，本地无 node_modules 无法直接 require；
+// planFetch 是纯函数，按项目既有做法（web-check.js / extension-parsers.js）从源码抽取求值。
+const imapSrc = require('fs').readFileSync(require('path').join(__dirname, '../src/imap.js'), 'utf8');
+const planFetch = new Function(`${extractPureFunction(imapSrc, 'planFetch')}\nreturn planFetch;`)();
+test('planFetch 传 UID_FROM 时忽略水位与 UIDVALIDITY 变化，强制从该 UID 重扫', () => {
+  const mailbox = { uidValidity: 100 };
+  const meta = { lastUid: 1895, lastUidValidity: 100 };
+  const forced = planFetch(mailbox, meta, 30, 1877);
+  assert.strictEqual(forced.mode, 'uid');
+  assert.strictEqual(forced.startUid, 1877, '从指定 UID 起，而不是 lastUid+1');
+  assert.strictEqual(forced.forced, true);
+  assert.strictEqual(forced.resetWatermark, false);
+  // 即便 UIDVALIDITY 变了（正常会走 since 全量重扫），UID_FROM 仍优先
+  const forced2 = planFetch({ uidValidity: 999 }, { lastUid: 1895, lastUidValidity: 100 }, 30, 500);
+  assert.strictEqual(forced2.mode, 'uid');
+  assert.strictEqual(forced2.startUid, 500);
+});
+test('planFetch 不传 UID_FROM（或传 0/非法值）时维持既有增量语义', () => {
+  const meta = { lastUid: 1895, lastUidValidity: 100 };
+  const inc = planFetch({ uidValidity: 100 }, meta, 30);
+  assert.strictEqual(inc.mode, 'uid');
+  assert.strictEqual(inc.startUid, 1896);
+  assert.strictEqual(inc.forced, false);
+  assert.strictEqual(planFetch({ uidValidity: 100 }, meta, 30, 0).startUid, 1896);
+  assert.strictEqual(planFetch({ uidValidity: 100 }, meta, 30, -5).startUid, 1896);
+  // 首次运行（无水位）仍走日期窗口
+  assert.strictEqual(planFetch({ uidValidity: 100 }, {}, 30).mode, 'since');
+  // UIDVALIDITY 变化仍走日期窗口并重置水位
+  const reset = planFetch({ uidValidity: 999 }, meta, 30);
+  assert.strictEqual(reset.mode, 'since');
+  assert.strictEqual(reset.resetWatermark, true);
+});
+test('buildConfig 读取 UID_FROM，留空/非法回落 0', () => {
+  const old = process.env.UID_FROM;
+  process.env.UID_FROM = '1877';
+  assert.strictEqual(config.buildConfig().uidFrom, 1877);
+  process.env.UID_FROM = '';
+  assert.strictEqual(config.buildConfig().uidFrom, 0);
+  process.env.UID_FROM = 'abc';
+  assert.strictEqual(config.buildConfig().uidFrom, 0);
+  if (old === undefined) delete process.env.UID_FROM; else process.env.UID_FROM = old;
+  assert.strictEqual(config.buildConfig().uidFrom, 0);
 });
 test('pruneSuggestions 上限 100 条、丢弃 30 天前', () => {
   const now = Date.now();

@@ -104,6 +104,74 @@ check('meta 正常 → ok 条 + 统计', () => {
   sandbox.renderMailView();
   assert.ok(bar().className.includes('ok'));
   assert.ok(list().innerHTML.includes('mail-card'));
+  // v4.6.0 及更早的 Gist 文件没有 lastDropped：状态栏必须与升级前完全一致，不出现「丢弃」字样
+  assert.ok(!bar().innerHTML.includes('丢弃'), '老文件不应显示丢弃段');
+  assert.ok(bar().innerHTML.includes('已读取邮件建议'), '既有标题不变');
+});
+
+section('邮件丢弃诊断（v4.6.1）');
+check('有 lastDropped → 状态栏显示丢弃数，并可展开分类计数与逐封明细', () => {
+  sandbox.mailMeta = {
+    lastStatus: 'ok', lastRunAt: '2026-09-07T04:54:03Z', newCount: 0, pendingCount: 10,
+    lastDropped: {
+      total: 14, noiseFrom: 1, noiseSubject: 3, noKeyword: 8, aiNotRecruit: 1, lowConf: 1, aiError: 0,
+      recent: [
+        { uid: 1894, from: 'noreply@mokahr.com', subject: '面试邀请：后端开发工程师', reason: 'no-keyword' },
+        { uid: 1888, from: 'postmaster@qq.com', subject: '退信', reason: 'noise-from' }
+      ]
+    }
+  };
+  sandbox.mailSuggestions = [];
+  sandbox.renderMailView();
+  const h = bar().innerHTML;
+  assert.ok(bar().className.includes('ok'), '诊断信息不改变状态栏的成功语义');
+  assert.ok(h.includes('丢弃 14 封'), '主行给出丢弃总数');
+  assert.ok(h.includes('<details'), '明细可折叠展开（复用 error 分支的 .mail-help 样式）');
+  assert.ok(h.includes('主题与正文都没命中预筛关键词') && h.includes('<b>8</b>'), '分类计数用中文标签');
+  assert.ok(h.includes('noreply@mokahr.com'), '明细列出发件人');
+  assert.ok(h.includes('面试邀请：后端开发工程师'), '明细列出主题');
+  assert.ok(h.includes('#1894'), '明细带邮件编号，便于用 UID_FROM 精准回溯');
+  assert.ok(h.includes('UID_FROM'), '给出可执行的补救办法，而不只是报数');
+  // 计数为 0 的分类不显示，避免一排 0
+  assert.ok(!h.includes('AI 调用失败'), 'aiError=0 的分类不出现');
+});
+check('lastDropped 全 0 / 结构非法时静默降级，不报错也不显示空壳', () => {
+  sandbox.mailSuggestions = [];
+  for (const dropped of [{ total: 0, recent: [] }, {}, null, 'oops', { total: -3 }]) {
+    sandbox.mailMeta = { lastStatus: 'ok', lastRunAt: '2026-09-07T04:54:03Z', newCount: 1, pendingCount: 2, lastDropped: dropped };
+    sandbox.renderMailView(); // 不得抛错
+    assert.ok(!bar().innerHTML.includes('丢弃'), `lastDropped=${JSON.stringify(dropped)} 时不应显示丢弃段`);
+    assert.ok(bar().innerHTML.includes('本次新增 1 封'), '其余统计照常');
+  }
+});
+check('mailDroppedHtml(null) 返回空串（状态栏拼接时不产生 "null" 字样）', () => {
+  assert.strictEqual(sandbox.mailDroppedHtml(null), '');
+  assert.strictEqual(sandbox.mailDroppedHtml(undefined), '');
+});
+check('丢弃明细里的 from / subject 必须转义（外部邮件内容不得成为注入入口）', () => {
+  sandbox.mailMeta = {
+    lastStatus: 'ok', newCount: 0, pendingCount: 0,
+    lastDropped: {
+      total: 1, noiseFrom: 0, noiseSubject: 0, noKeyword: 1, aiNotRecruit: 0, lowConf: 0, aiError: 0,
+      recent: [{ uid: 1, from: '<script>alert(1)</script>@evil.com', subject: '<img src=x onerror=alert(2)>', reason: 'no-keyword' }]
+    }
+  };
+  sandbox.mailSuggestions = [];
+  sandbox.renderMailView();
+  const h = bar().innerHTML;
+  assert.ok(!h.includes('<script>'), '发件人里的 script 标签必须被转义');
+  assert.ok(!h.includes('<img src=x'), '主题里的 img/onerror 必须被转义');
+  assert.ok(h.includes('&lt;script&gt;'), '以转义后的文本呈现');
+  assert.ok(h.includes('&lt;img src=x onerror=alert(2)&gt;'));
+});
+check('未知 reason 回退显示原文，便于发现两端枚举漂移', () => {
+  sandbox.mailMeta = {
+    lastStatus: 'ok', newCount: 0, pendingCount: 0,
+    lastDropped: { total: 1, recent: [{ uid: 7, from: 'a@b.com', subject: 's', reason: 'brand-new-reason' }] }
+  };
+  sandbox.mailSuggestions = [];
+  sandbox.renderMailView();
+  assert.ok(bar().innerHTML.includes('brand-new-reason'), '不吞掉未知原因');
 });
 
 section('mailCardHtml 匹配分支');

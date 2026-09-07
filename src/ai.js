@@ -6,7 +6,7 @@
 // 未配 AI_API_KEY 时退化为 M1 占位启发式（保证链路可跑），配了则走 M2 真实分析。
 // ============================================================================
 
-const { STAGE_PRESETS, EMAIL_TYPES } = require('./config');
+const { STAGE_PRESETS, EMAIL_TYPES, DROP_REASONS } = require('./config');
 
 const SYSTEM_PROMPT = [
   '你是招聘邮件解析引擎。只依据用户给出的邮件内容做判断，严禁编造任何未在邮件中出现的信息。',
@@ -19,7 +19,7 @@ const SYSTEM_PROMPT = [
   '5. scheduleAt：面试/笔试/测评的时间，格式必须为 "YYYY-MM-DDTHH:mm"（24 小时制，本地时间）；邮件未给出明确时间就留空 ""，不要猜测。',
   '6. company/position/location/round：邮件里明确出现才填，否则留空；round 如「一面」「技术面」「HR 面」等原文轮次描述。',
   '7. summary：≤60 字的中文要点，概括这封邮件说了什么（如「通知 9 月 12 日 14:00 线上二面」）。',
-  '8. confidence：你对本次判断的整体置信度（0~1）。招聘意图越明确、字段越齐全越高；模糊/疑似营销/无法归属则低。',
+  '8. confidence：这封邮件「是招聘相关邮件、且你的字段解析正确」的置信度（0~1）。注意：这不是"你对自己判断有多确定"。若判定为非招聘邮件（营销/账单/订阅/系统通知/理财推销/课程促销），必须给 <= 0.1，即使你非常确定它不是招聘邮件。',
   '9. 拒信（含「遗憾」「未通过」「进入人才库」等）→ emailType「拒信」、stage 可填「已结束」、confidence 偏低。'
 ].join('\n');
 
@@ -119,7 +119,11 @@ function normalizeAiResult(raw, mail) {
   const emailType = normalizeEmailType(r.emailType);
   const sched = normalizeScheduleAt(r.scheduleAt);
   const n = {
-    isRecruitment: r.isRecruitment !== false, // 缺省视为相关（预筛已滤噪）
+    // 缺省视为相关：AI 未返回该字段时不丢弃（预筛已滤掉确定性垃圾，且漏掉真面邀不可逆）。
+    // 只有 AI **明确**返回 false 才判为非招聘 —— index.js 会据此丢弃并计入 meta.lastDropped.aiNotRecruit。
+    // v4.6.1 之前这个字段被归一了却从未被任何代码检查，导致 AI 判定的营销邮件照样入库
+    // （实测 10 条建议里 3 条是汇丰存款/恒生信用卡/理财峰会这类纯营销，emailType 全为「其它」）。
+    isRecruitment: r.isRecruitment !== false,
     emailType,
     company: cleanStr(r.company, 60),
     position: cleanStr(r.position, 80),
@@ -133,6 +137,18 @@ function normalizeAiResult(raw, mail) {
   };
   n.proposed = buildProposed(n, mail);
   return n;
+}
+
+// AI 结果是否可入库（纯函数，便于单测）。两道判定：
+//   ① AI 明确返回 isRecruitment=false → 丢（ai-not-recruit）
+//   ② 置信度低于 MIN_CONFIDENCE      → 丢（low-conf）
+// ①在 v4.6.1 之前完全不存在：字段被 prompt 要求返回、被 normalizeAiResult 归一，
+// 却没有任何代码检查它，导致 AI 判定为营销的邮件照样入库（实测 10 条里 3 条是纯营销）。
+function verdictOnAiResult(result, minConfidence) {
+  if (!result || typeof result !== 'object') return { accept: false, reason: DROP_REASONS.AI_NOT_RECRUIT };
+  if (result.isRecruitment === false) return { accept: false, reason: DROP_REASONS.AI_NOT_RECRUIT };
+  if (Number(result.confidence) < Number(minConfidence)) return { accept: false, reason: DROP_REASONS.LOW_CONF };
+  return { accept: true, reason: '' };
 }
 
 // 去掉 ```json 围栏，截取首个 { 到末个 } 后 JSON.parse
@@ -154,7 +170,7 @@ function buildUserContent(mail) {
       fromName: mail.fromName || '',
       subject: mail.subject || '',
       receivedAt: mail.receivedAt || '',
-      body: String(mail.textBody || '').slice(0, 4000)
+      body: String(mail.textBody || '').slice(0, 8000) // 与 parse.js 的 MAX_BODY 对齐
     }
   });
 }
@@ -236,6 +252,7 @@ module.exports = {
   aiAnalyze,
   placeholderAnalyze,
   normalizeAiResult,
+  verdictOnAiResult,
   normalizeEmailType,
   normalizeStage,
   normalizeScheduleAt,
