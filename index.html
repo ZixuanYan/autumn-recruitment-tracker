@@ -438,6 +438,13 @@
       /* 历史遗留的 --gold* 别名已删除（名为金色实为蓝色，误导）：一律改引 --accent* 家族。
          --offer-gold 是唯一的真实金色，仅用于 Offer 强调点缀（统计卡图标、Offer 对比矩阵表头），不参与常规状态语义。 */
       --offer-gold: #b7791f; --offer-gold-soft: #fdf5e6;
+      /* v4.6.0 企业性质专用色（央国企 / 民企 / 外企 / 未设置）。
+         刻意与阶段色阶、状态色分离：这套色只出现在 ct-chip 与洞察的「企业性质」块里，
+         不参与任何阶段或成功/警告语义，避免用户在台账里把颜色当成进度信号。 */
+      --ct-soe: #a13d2d; --ct-soe-soft: #fbeeeb;
+      --ct-private: #2447e0; --ct-private-soft: #eceffd;
+      --ct-foreign: #0f766e; --ct-foreign-soft: #e7f4f2;
+      --ct-none: #9aa1ab; --ct-none-soft: #f4f4f5;
       --primary: #2447e0; --primary-dark: #1a35b0; --primary-soft: #eceffd;
       --seal: #c0362c; --seal-soft: #fdecea; --silver: #6b7280; --silver-soft: #f1f2f4;
       --green: #0e7a5f; --green-soft: #e6f4ef; --amber: #9a5b00; --amber-soft: #fdf3e3; --red: #c0362c; --red-soft: #fdecea;
@@ -751,6 +758,11 @@
 
     /* ===== v4.4.0：同公司多岗位（chip / 聚合组头）、空状态三态、首启引导、Offer 矩阵 ===== */
     .company-chip { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink-2); font-size: 11px; font-weight: 700; white-space: nowrap; border-left: 3px solid var(--company-color, var(--accent)); }
+    /* ===== v4.6.0：企业性质徽章（台账 / 看板 / 抽屉 / Offer 矩阵共用）===== */
+    .ct-chip { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--ct-none-soft); color: var(--ct-none); font-size: 10.5px; font-weight: 700; white-space: nowrap; vertical-align: 1px; }
+    .ct-chip[data-ct="央国企"] { background: var(--ct-soe-soft); color: var(--ct-soe); }
+    .ct-chip[data-ct="民企"] { background: var(--ct-private-soft); color: var(--ct-private); }
+    .ct-chip[data-ct="外企"] { background: var(--ct-foreign-soft); color: var(--ct-foreign); }
     /* 录入表单里的「该公司已有 N 个岗位」前置提示（挂在 #sameCompanyHint 内，
        注意不要给 #sameCompanyHint 本身设 display，否则会盖掉 hidden 属性） */
     .same-company-item { display: inline-block; margin: 3px 5px 0 0; padding: 1px 8px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: var(--ring); color: var(--ink-2); font-size: 11.5px; font-weight: 620; }
@@ -1132,7 +1144,26 @@
           <div class="field"><label for="company">公司 <span class="required">*</span></label><input class="control" id="company" name="company" required maxlength="60" placeholder="例如：星海科技"><div class="hint" id="sameCompanyHint" hidden></div></div>
           <div class="field"><label for="position">岗位 <span class="required">*</span></label><input class="control" id="position" name="position" required maxlength="80" placeholder="例如：产品经理校招生"></div>
           <div class="field"><label for="city">城市 <span class="required">*</span></label><input class="control" id="city" name="city" required maxlength="30" placeholder="例如：上海"></div>
+          <div class="field">
+            <label for="companyType">企业性质</label>
+            <select class="control" id="companyType" name="companyType"><option value="">未设置</option></select>
+            <div class="hint">用于洞察里的央国企 / 民企 / 外企统计；插件一键收录时也能直接选</div>
+          </div>
           <div class="field"><label for="applicationDate">投递日期 <span class="required">*</span></label><input class="control" id="applicationDate" name="applicationDate" type="date" required></div>
+          <div class="field"><label for="scheduleAt">安排时间</label><input class="control" id="scheduleAt" name="scheduleAt" type="datetime-local"><div class="hint">有面试、笔试或跟进时间时填写</div></div>
+          <div class="field"><label for="deadline">截止日期</label><input class="control" id="deadline" name="deadline" type="date"><div class="hint">网申 / 测评 / 笔试 / 签约的截止时间，会进入「未来安排」并可导出到日历</div></div>
+          <div class="field">
+            <label for="intent">意向度</label>
+            <select class="control" id="intent" name="intent">
+              <option value="">未设</option>
+              <option value="1">1 · 保底</option>
+              <option value="2">2 · 一般</option>
+              <option value="3">3 · 愿意去</option>
+              <option value="4">4 · 很想去</option>
+              <option value="5">5 · 首选</option>
+            </select>
+            <div class="hint">用于 Offer 对比排序与看板标记</div>
+          </div>
           <div class="field full">
             <label>阶段时间线 <span class="required">*</span></label>
             <div class="hint">按时间顺序记录这条投递走过的阶段——可跳过笔试、可多面、可自定义；当前阶段 = 最后一条。</div>
@@ -1140,14 +1171,12 @@
             <div class="timeline-editor" id="timelineEditor"></div>
             <button class="btn btn-small" id="addTimelineBtn" type="button">＋ 添加阶段</button>
           </div>
-          <div class="field"><label for="scheduleAt">安排时间</label><input class="control" id="scheduleAt" name="scheduleAt" type="datetime-local"><div class="hint">有面试、笔试或跟进时间时填写</div></div>
-          <div class="field"><label for="deadline">截止日期</label><input class="control" id="deadline" name="deadline" type="date"><div class="hint">网申 / 测评 / 笔试 / 签约的截止时间，会进入「未来安排」并可导出到日历</div></div>
           <div class="field full"><label for="applicationUrl">投递网址</label><input class="control" id="applicationUrl" name="applicationUrl" type="url" maxlength="1000" placeholder="https://jobs.example.com/position/123"><div class="hint">通过一键收录插件添加时会自动填写</div></div>
           <div class="field full"><label for="recentSchedule">最近安排</label><input class="control" id="recentSchedule" name="recentSchedule" maxlength="100" placeholder="例如：线上一面（腾讯会议）"></div>
           <div class="field full"><label for="nextAction">下一步行动</label><textarea class="control" id="nextAction" name="nextAction" maxlength="200" placeholder="例如：准备项目复盘，提前测试摄像头"></textarea></div>
           <div class="field full">
             <details class="form-more" id="formMore">
-              <summary>更多字段（批次 / 渠道 / 内推人 / 意向度 / 薪资）· 可选</summary>
+              <summary>更多字段（批次 / 渠道 / 内推人 / 薪资）· 可选</summary>
               <div class="form-grid form-more-grid">
                 <div class="field">
                   <label for="batch">批次</label>
@@ -1161,18 +1190,6 @@
                   <datalist id="channelPresets"></datalist>
                 </div>
                 <div class="field"><label for="referral">内推人 / 联系方式</label><input class="control" id="referral" name="referral" maxlength="60" placeholder="例如：学长张三（微信 zhangsan）"></div>
-                <div class="field">
-                  <label for="intent">意向度</label>
-                  <select class="control" id="intent" name="intent">
-                    <option value="">未设</option>
-                    <option value="1">1 · 保底</option>
-                    <option value="2">2 · 一般</option>
-                    <option value="3">3 · 愿意去</option>
-                    <option value="4">4 · 很想去</option>
-                    <option value="5">5 · 首选</option>
-                  </select>
-                  <div class="hint">用于 Offer 对比排序与看板标记</div>
-                </div>
                 <div class="field"><label for="salary">薪资 / 待遇</label><input class="control" id="salary" name="salary" maxlength="40" placeholder="例如：25k×16 或 面议"></div>
               </div>
             </details>
@@ -1362,6 +1379,11 @@
       // v4.4.0 批次与渠道候选（datalist，允许自由输入，不做强约束）
       const BATCH_PRESETS = ['提前批', '正式批', '补录', '内推批', '春招', '实习转正'];
       const CHANNEL_PRESETS = ['官网', '内推', 'BOSS直聘', '猎聘', '智联招聘', '实习僧', '牛客', '校园宣讲', '学长推荐', '其他'];
+      // v4.6.0 企业性质（封闭枚举，白名单校验，非法值归 ''=未设置）。
+      // 与插件端 extension/common/constants.js 的 AJA.COMPANY_TYPES 是同一份约定，两处必须同步修改
+      // （autumn-mail-sync/test/extension-bridge.js 有一条逐值一致性契约断言，漂移即失败）。
+      const COMPANY_TYPES = ['央国企', '民企', '外企'];
+      const COMPANY_TYPE_UNSET = '未设置';
       // 阶段排序：预设返回索引；自定义/未知返回大值（视为“更靠后”），用 9000 规避 2^53 精度问题
       function stageOrder(stage) {
         const i = STAGE_PRESETS.indexOf(stage);
@@ -1559,6 +1581,9 @@
           referral: String(item.referral || ''),            // 内推人或联系方式
           salary: String(item.salary || ''),                // 薪资文本（Offer 对比用）
           intent: Math.min(5, Math.max(0, Number(item.intent) || 0)), // 意向度 0-5，0=未设
+          // v4.6.0：企业性质（央国企/民企/外企）。封闭枚举 + 白名单校验，非法值一律归 ''（未设置），
+          // 避免插件旧版本或手工改 JSON 塞进自由文本后污染洞察统计的分桶。
+          companyType: COMPANY_TYPES.includes(String(item.companyType || '').trim()) ? String(item.companyType).trim() : '',
           notes: (Array.isArray(item.notes) ? item.notes : [])
             .filter(n => n && String(n.text || '').trim())
             .map(n => ({ id: String(n.id || cryptoId()), at: Number(n.at) || Date.now(), text: String(n.text).trim() }))
@@ -3054,7 +3079,7 @@
             const notes = Array.isArray(record.notes) ? record.notes : [];
             const lastNote = notes.length ? notes[notes.length - 1].text : (record.nextAction || '—');
             return `<tr class="offer-row" data-id="${escapeHtml(record.id)}">
-              <td data-label="公司 / 岗位"><div class="company">${escapeHtml(record.company)}</div><div class="position">${escapeHtml(record.position || '—')}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+              <td data-label="公司 / 岗位"><div class="company">${escapeHtml(record.company)}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position || '—')}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
               <td data-label="城市">${escapeHtml(record.city || '—')}</td>
               <td data-label="薪资 / 待遇">${escapeHtml(record.salary || '—')}</td>
               <td data-label="意向度">${intentDotsHtml(record.intent) || '<span class="muted-text">未设</span>'}</td>
@@ -3151,7 +3176,7 @@
           : '';
         return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}" data-company="${escapeHtml(key)}">
           <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
-          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${chipHtml}</div><div class="position">${escapeHtml(record.position)}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
@@ -3789,6 +3814,14 @@
         return `<span class="intent-dots" title="意向度 ${n}/5">${Array.from({ length: 5 }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</span>`;
       }
 
+      // 企业性质小徽章（v4.6.0）：未设置时返回空串，不占位。
+      // data-ct 驱动配色（--ct-soe/--ct-private/--ct-foreign），与阶段色阶完全独立，避免两套语义混色。
+      function companyTypeChipHtml(companyType) {
+        const value = String(companyType || '').trim();
+        if (!COMPANY_TYPES.includes(value)) return '';
+        return `<span class="ct-chip" data-ct="${escapeHtml(value)}">${escapeHtml(value)}</span>`;
+      }
+
       // 看板列 = 当前可见记录里出现过的阶段（按 stageOrder 排序）+ 末尾固定 Offer / 已结束（便于拖入）
       function boardColumns(visible) {
         const present = new Set(visible.map(r => String(r.stage || '待投递')));
@@ -3810,7 +3843,7 @@
         return `<button class="board-card" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
           <div class="board-card-company">${escapeHtml(record.company)}</div>
           <div class="board-card-position">${escapeHtml(record.position || '—')}</div>
-          <div class="board-card-meta">${dots}${chips.join('')}</div>
+          <div class="board-card-meta">${dots}${companyTypeChipHtml(record.companyType)}${chips.join('')}</div>
         </button>`;
       }
 
@@ -3917,12 +3950,18 @@
         if (title) title.textContent = `${record.company} · ${record.position || '未填岗位'}`;
         if (sub) {
           const bits = [record.city, record.batch, record.channel].filter(Boolean);
-          sub.innerHTML = `<span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span> ${escapeHtml(bits.join(' · '))}`;
+          // 企业性质用带色徽章紧跟阶段徽章；facts 里的 value 是 HTML，两处都能安全注入
+          sub.innerHTML = `<span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>${companyTypeChipHtml(record.companyType)} ${escapeHtml(bits.join(' · '))}`;
         }
         const dl = deadlineInfo(record.deadline);
+        // facts 的 value 默认会被 escapeHtml；只有这两个是「我们自己生成的、内部已转义过的 HTML」，
+        // 需要原样注入。新增可信 HTML 行时必须显式加进这个白名单，否则会被转义成字面标签文本
+        // （企业性质徽章第一次加进来时就踩了：抽屉里显示成 &lt;span class="ct-chip"…）。
+        const HTML_FACT_LABELS = ['投递网址', '企业性质'];
         const facts = [
           { label: '投递日期', value: formatDate(record.applicationDate) },
           { label: '批次', value: record.batch || '—' },
+          { label: '企业性质', value: companyTypeChipHtml(record.companyType) || '<span class="muted-text">未设置</span>' },
           { label: '安排时间', value: record.scheduleAt ? formatDateTime(record.scheduleAt) : '—' },
           { label: '截止日期', value: record.deadline ? `${formatDate(record.deadline)}${dl ? `（${dl.text.replace('截止 · ', '')}）` : ''}` : '—' },
           { label: '意向度', value: record.intent ? `${record.intent} / 5` : '未设' },
@@ -3939,7 +3978,7 @@
         if (body) {
           body.innerHTML = `
             <div class="drawer-section"><h3>里程碑时间线</h3>${stepsHtml(record)}</div>
-            <div class="drawer-section"><h3>关键信息</h3><dl class="drawer-facts">${facts.map(fact => `<div class="drawer-fact"><dt>${escapeHtml(fact.label)}</dt><dd>${fact.label === '投递网址' ? fact.value : escapeHtml(fact.value)}</dd></div>`).join('')}</dl></div>
+            <div class="drawer-section"><h3>关键信息</h3><dl class="drawer-facts">${facts.map(fact => `<div class="drawer-fact"><dt>${escapeHtml(fact.label)}</dt><dd>${HTML_FACT_LABELS.includes(fact.label) ? fact.value : escapeHtml(fact.value)}</dd></div>`).join('')}</dl></div>
             <div class="drawer-section"><h3>下一步行动</h3><div class="note-text">${escapeHtml(record.nextAction || '—')}</div></div>
             <div class="drawer-section">
               <h3>笔记 / 面经（${notes.length}）</h3>
@@ -4597,6 +4636,12 @@
         if (batchList) batchList.innerHTML = BATCH_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
         const channelList = $('#channelPresets');
         if (channelList) channelList.innerHTML = CHANNEL_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+        // 企业性质（v4.6.0）：选项由 COMPANY_TYPES 生成，HTML 里只留「未设置」，避免两处枚举漂移
+        const companyTypeSelect = $('#companyType');
+        if (companyTypeSelect) {
+          companyTypeSelect.innerHTML = `<option value="">${escapeHtml(COMPANY_TYPE_UNSET)}</option>`
+            + COMPANY_TYPES.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+        }
         refreshStageFilter();
       }
       // 筛选下拉 = 预设 ∪ 记录中实际出现的自定义阶段（保留当前选择）
@@ -4648,7 +4693,7 @@
         renderTimelineEditor(source);
         // 回填字段清单：新增任何表单字段都必须同步加进这里，否则「编辑」时该字段会被静默清空。
         // 取不到元素时跳过（null 安全），便于分阶段加字段。
-        for (const field of ['company', 'position', 'city', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
+        for (const field of ['company', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
           const input = document.getElementById(field);
           if (!input) continue;
           // intent 是下拉框：0（未设）要映射成空字符串，否则 select 会落在无匹配项的状态
@@ -4656,8 +4701,9 @@
           input.value = field === 'intent' ? (Number(raw) > 0 ? String(Number(raw)) : '') : (raw ?? '');
         }
         // 已填过任一「更多字段」时自动展开折叠区，避免用户以为数据丢了
+        // （意向度与企业性质已上移到主网格，不再参与这里的判定）
         const more = $('#formMore');
-        if (more) more.open = !!source && ['batch', 'channel', 'referral', 'salary'].some(f => String(source[f] || '').trim()) || (!!source && Number(source.intent) > 0);
+        if (more) more.open = !!source && ['batch', 'channel', 'referral', 'salary'].some(f => String(source[f] || '').trim());
         updateSameCompanyHint(); // 打开即显示「该公司已有哪几个岗位」，录入第二个岗位时心里有数
         els.dialog.showModal();
         requestAnimationFrame(() => $('#company').focus());
