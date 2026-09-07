@@ -881,6 +881,15 @@
     .drop-meta { margin-top: 2px; color: var(--muted); font-size: 11px; font-family: var(--font-mono); }
     .drop-note { margin-top: 9px; color: var(--muted); font-size: 11.5px; line-height: 1.65; }
     .drop-note code { padding: 0 4px; border-radius: 4px; background: var(--surface-2); box-shadow: var(--ring); font-family: var(--font-mono); font-size: 11px; }
+    /* ===== v4.7.0：AI 提示词快照（只读展示 Action 实际生效的那一份）=====
+       details/pre 都不设作者层 display，因此 hidden 属性能正常生效；
+       仍显式补一条 [hidden] 守卫，防止日后有人给它加 display 时踩「幽灵占位」的坑。 */
+    .prompt-snapshot { border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); overflow: hidden; }
+    .prompt-snapshot[hidden] { display: none; }
+    .prompt-snapshot summary { padding: 10px 13px; color: var(--ink-2); font-size: 12.5px; font-weight: 650; cursor: pointer; }
+    .prompt-snapshot summary:hover { color: var(--accent-ink); }
+    .prompt-snapshot-body { margin: 0; padding: 12px 13px; border-top: 1px solid var(--line); max-height: 320px; overflow: auto; background: var(--surface); color: var(--ink-2); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
+    .prompt-snapshot .hint { padding: 8px 13px 10px; border-top: 1px solid var(--line); }
     .mail-list { display: grid; gap: 12px; }
     .mail-empty { padding: 30px 16px; text-align: center; color: var(--muted); }
     .mail-card { padding: 14px 16px; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--hi), var(--ring), var(--sh-ambient); }
@@ -1418,7 +1427,19 @@
         <div class="field"><label for="mailCfgMaxPerRun">单次上限</label><input class="control" id="mailCfgMaxPerRun" type="number" min="1" max="200"><div class="hint">单次最多处理多少封</div></div>
         <div class="field"><label for="mailCfgInterval">最小间隔（小时）</label><input class="control" id="mailCfgInterval" type="number" min="0" max="168"><div class="hint">0=每次定时都跑；&gt;0 则距上次不足该小时数时跳过（0 token）</div></div>
         <div class="field full"><label class="mail-field" for="mailCfgEnabled"><input type="checkbox" id="mailCfgEnabled"><span>启用邮件同步（关闭后 Action 直接跳过，0 token）</span></label></div>
-        <div class="field full"><label for="mailCfgPrompt">AI 附加指令（可选）</label><textarea class="control" id="mailCfgPrompt" maxlength="2000" rows="3" placeholder="例如：只关注互联网/国企岗位；忽略培训机构"></textarea><div class="hint">在内置提示词基础上追加，不要要求改变输出格式（否则可能解析失败）。</div></div>
+        <div class="field full"><label for="mailCfgPrompt">AI 附加指令（可选）</label><textarea class="control" id="mailCfgPrompt" maxlength="2000" rows="3" placeholder="例如：只关注互联网/国企岗位；忽略培训机构"></textarea><div class="hint">在提示词后<strong>追加</strong>你的个性化要求，内置规则保持不变。不要要求改变输出格式（输出契约无法被覆盖）。</div></div>
+        <div class="field full">
+          <label for="mailCfgPromptOverride">整体替换解析提示词（高级，可选）</label>
+          <textarea class="control" id="mailCfgPromptOverride" maxlength="4000" rows="5" placeholder="留空 = 用内置提示词。例如：你是校招邮件助手，只关注国企与事业单位的招聘邮件，忽略互联网大厂与培训机构；summary 用一句话概括并写明截止时间。"></textarea>
+          <div class="hint">替换内置的「解析偏好」部分（怎么理解邮件、summary 写多长、拒信怎么归类）。<strong>输出契约会被强制附加在最后、无法删除</strong>——它规定只返回 JSON、字段清单、阶段仅限 14 个预设、不得编造；一旦被改掉，Action 会解析不到任何字段，建议队列将永远为空却仍报成功。<strong>清空此框即恢复内置提示词。</strong></div>
+        </div>
+        <div class="field full">
+          <details class="prompt-snapshot" id="mailPromptSnapshotWrap">
+            <summary>查看当前实际生效的完整提示词</summary>
+            <pre class="prompt-snapshot-body" id="mailPromptSnapshot"></pre>
+            <div class="hint" id="mailPromptSnapshotNote"></div>
+          </details>
+        </div>
         <div class="field full"><label for="mailCfgEncKey">邮件解密密钥（MAIL_ENC_KEY，可选）</label><div class="mail-key-row"><input class="control" id="mailCfgEncKey" type="password" autocomplete="off" spellcheck="false" maxlength="200" placeholder="留空=邮件建议不加密"><button class="btn btn-small" id="mailGenEncKeyBtn" type="button">生成</button></div><div class="hint">若 Action 配了 MAIL_ENC_KEY 加密邮件建议，这里填<strong>完全相同</strong>的密钥才能解密查看；只存本机 localStorage，不上传 Gist。</div></div>
       </div>
       <div class="capture-status" id="mailCfgStatus" role="status" aria-live="polite"></div>
@@ -1522,7 +1543,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.6.1';
+      const APP_VERSION = '4.7.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1536,7 +1557,7 @@
       const UI_STORAGE_KEY = 'autumnRecruitmentTracker.ui.v1';
       // 网页写、Action 读的配置文件（明文，不含任何密钥）；默认值与 Action src/config.js 保持一致
       const MAIL_CONFIG_FILENAME = 'mail-config.json';
-      const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 0, promptExtra: '' };
+      const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 0, promptExtra: '', promptOverride: '' };
       const TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
       const $ = (selector) => document.querySelector(selector);
       const els = {
@@ -4705,6 +4726,23 @@
         if (!total) return null;
         return { total, ...counts, recent };
       }
+
+      // 里程碑备注的展示兜底（v4.7.0）。
+      // 旧版 Action 生成的 note 是「邮件·其它」——emailType 的内部分类术语，对用户零信息量，
+      // 而这条备注勾选后会**永久写进台账时间线**。实测 6 封新建议里 5 封都是「邮件·其它」
+      // （滴滴/字节的投递成功通知、光大的投递感谢、中信的邮箱认证、蚂蚁的宣讲预告），
+      // 而同一封邮件的 summary 写的是「简历成功投递滴滴校招，等待后续流程推进」这种有用内容。
+      // 新版 Action 已在生成 proposed 时就用 summary，这里只是给**已入库的历史数据**兜底，
+      // 让它们不必重扫就立刻变好。
+      function mileNoteText(note, summary) {
+        const n = String(note == null ? '' : note).trim();
+        if (!n) return '';
+        if (/^邮件\s*[·・]\s*(其它|其他)$/.test(n)) {
+          const s = String(summary == null ? '' : summary).trim();
+          if (s) return `邮件·${s}`.slice(0, 48); // 与 Action 侧 milestoneNote 同款长度上限
+        }
+        return n;
+      }
       /*__MAIL_PURE_END__*/
 
       // syncNow 读到邮件文件后调用：存原始建议 + meta，再按本机 mailState 过滤（缺失/损坏已在调用方静默处理）
@@ -4753,7 +4791,11 @@
         }
 
         const fields = [];
-        if (mile.stage) fields.push({ key: 'milestone', label: `推进里程碑：${mile.stage}${mile.at ? `（${mile.at}）` : ''}${mile.note ? ` · ${mile.note}` : ''}` });
+        // note 走 mileNoteText 兜底：历史数据里的「邮件·其它」改用同一条建议的 summary 展示
+        if (mile.stage) {
+          const noteText = mileNoteText(mile.note, s.summary);
+          fields.push({ key: 'milestone', label: `推进里程碑：${mile.stage}${mile.at ? `（${mile.at}）` : ''}${noteText ? ` · ${noteText}` : ''}` });
+        }
         if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: `安排时间：${formatDateTime(p.scheduleAt)}` });
         if (p.recentSchedule) fields.push({ key: 'recentSchedule', label: `最近安排：${p.recentSchedule}` });
         if (p.nextAction) fields.push({ key: 'nextAction', label: `下一步行动：${p.nextAction}` });
@@ -4938,8 +4980,35 @@
           maxPerRun: num(c.maxPerRun, MAIL_CFG_DEFAULTS.maxPerRun),
           minIntervalHours: num(c.minIntervalHours, MAIL_CFG_DEFAULTS.minIntervalHours),
           enabled: c.enabled === false ? false : true,
-          promptExtra: typeof c.promptExtra === 'string' ? c.promptExtra : MAIL_CFG_DEFAULTS.promptExtra
+          promptExtra: typeof c.promptExtra === 'string' ? c.promptExtra : MAIL_CFG_DEFAULTS.promptExtra,
+          // 整体替换提示词（v4.7.0）：只接受字符串，其它类型（Gist 被手改成数字/null）一律回落空串=用内置
+          promptOverride: typeof c.promptOverride === 'string' ? c.promptOverride.slice(0, 4000) : MAIL_CFG_DEFAULTS.promptOverride
         };
+      }
+
+      // 展示 Action 上次运行时写入云端的、**真正生效**的完整提示词（meta.promptSnapshot）。
+      // 为什么不在前端硬编码一份提示词文本：那样 Action 侧改了提示词后，这里展示的就是过期的副本，
+      // 而这种漂移无法被任何测试发现（前端副本与 Action 源码之间没有约束关系）。
+      // 让 Action 把它实际发出去的那一份写进 meta，展示就永远等于生效值——
+      // test/integration.js 有一条断言钉死这个等价关系（快照必须与 AI 请求体里的 system prompt 逐字相同）。
+      function renderPromptSnapshot() {
+        const wrap = $('#mailPromptSnapshotWrap'), body = $('#mailPromptSnapshot'), note = $('#mailPromptSnapshotNote');
+        if (!wrap || !body) return;
+        const snap = String((mailMeta && mailMeta.promptSnapshot) || '').trim();
+        if (!snap) {
+          // 旧版 Action（<0.4.0）写的 meta 里没有这个字段：整块隐藏，不给用户看一个空框
+          wrap.hidden = true;
+          body.textContent = '';
+          if (note) note.textContent = '';
+          return;
+        }
+        wrap.hidden = false;
+        // 必须用 textContent：提示词里含 < > 「」 等字符，用 innerHTML 会把它们当标签解析
+        body.textContent = snap;
+        if (note) {
+          const at = mailMeta && mailMeta.lastRunAt ? (formatClock(mailMeta.lastRunAt) || '') : '';
+          note.textContent = `这是 Action 上次运行${at ? `（${at}）` : ''}实际发给 AI 的完整内容，由 Action 自己写入云端，因此与真正生效的版本永远一致。末尾「输出契约 · 不可覆盖」那一段无法被上面的替换框删掉。修改后需等 Action 下次运行，这里才会更新。`;
+        }
       }
 
       function openMailSettings() {
@@ -4952,6 +5021,8 @@
         $('#mailCfgInterval').value = c.minIntervalHours;
         $('#mailCfgEnabled').checked = c.enabled;
         $('#mailCfgPrompt').value = c.promptExtra;
+        $('#mailCfgPromptOverride').value = c.promptOverride;
+        renderPromptSnapshot();
         $('#mailCfgEncKey').value = mailState.encKey || '';
         const st = $('#mailCfgStatus');
         st.className = 'capture-status';
@@ -4979,6 +5050,8 @@
           minIntervalHours: Math.round(clampNum($('#mailCfgInterval').value, 0, 168, MAIL_CFG_DEFAULTS.minIntervalHours)),
           enabled: $('#mailCfgEnabled').checked,
           promptExtra: String($('#mailCfgPrompt').value || '').trim().slice(0, 2000),
+          // 清空即恢复内置提示词：Action 侧 applyMailConfigOverrides 见到空串会回落到 DEFAULT_PROMPT_BODY
+          promptOverride: String($('#mailCfgPromptOverride').value || '').trim().slice(0, 4000),
           updatedAt: new Date().toISOString()
         };
         // 解密密钥只存本机 localStorage，绝不写进 mail-config.json（它明文存在 Gist）
