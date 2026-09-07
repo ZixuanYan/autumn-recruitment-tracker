@@ -415,7 +415,7 @@ function makeEl(sel) {
     addEventListener() {}, showModal() { this.open = true; }, close() { this.open = false; }
   };
 }
-const calls = { saveRecords: [], toast: [], openDialog: [], confirm: [], focus: [], advance: [], delete: [] };
+const calls = { saveRecords: [], toast: [], openDialog: [], confirm: [], focus: [], advance: [], delete: [], openAdvance: [] };
 // 让桩 $ 表达真实 querySelector 语义：纯单 class 选择器命中文档里「第一个」带该 class 的元素，
 // 且同一元素无论用 #id 还是 .class 访问都返回同一个桩。这样 $('.table-scroll') 与
 // $('#recordsTableScroll') 会落到不同桩上——正是 v4.6.0 复用 .table-scroll 后「切换器选错元素」
@@ -502,6 +502,8 @@ const sandbox2 = {
   flashRow: () => {}, playOfferStamp: () => {},
   // applyAdvance 的外部依赖（推进弹窗的状态与关闭动作不在被抽取的区段里）
   advancingId: null, closeAdvanceDialog: () => {},
+  // openAdvanceDialog 不在被抽取区段（它在推进弹窗那段），用间谍桩：投放区 / 已结束列 drop 会调用它
+  openAdvanceDialog: (rec, opts) => calls.openAdvance.push({ id: rec && rec.id, note: (opts && opts.note) || '' }),
   // loadRecords / submitForm 的外部依赖
   STORAGE_KEY: 'test.records.v1',
   primaryLoadState: 'unknown',
@@ -1600,6 +1602,127 @@ check('编辑与带 stage 的 seed 仍按来源回填，不被新默认值覆盖
   sandbox2.$('#applicationDate').value = '';
   sandbox2.renderTimelineEditor(null);
   assert.ok(/value="\d{4}-\d{2}-\d{2}"/.test(sandbox2.$('#timelineEditor').innerHTML), '日期兜底为今天');
+});
+
+// ============================================================================
+// v4.8.0：看板推进投放区 + P1 增强（停滞标记 / 列头筛选 / 备注 / 工具条信息）
+// 这些函数都在被抽取的 v4.4.0 台账视图增强段里，直接用 sandbox2 真实执行。
+// ============================================================================
+section('\nv4.8.0 看板推进投放区 + P1 增强');
+
+check('投放区三态：activate→is-active、dragover→preventDefault+is-drop、drop→openAdvanceDialog 并清拖拽态', async () => {
+  seedRecords();
+  const zone = () => sandbox2.$('#boardDropZone');
+  const text = () => sandbox2.$('#boardDropText');
+  calls.openAdvance.length = 0;
+  vm.runInContext('draggingRecordId = "r1"', sandbox2);
+  sandbox2.activateBoardDropZone();
+  assert.ok(zone().classList.contains('is-active'), '拖起卡片后投放区进入可投放态');
+  assert.strictEqual(text().textContent, '拖到这里选择阶段');
+  let prevented = false;
+  const dt = { getData: () => 'r1', dropEffect: '' };
+  sandbox2.handleDropZoneOver({ preventDefault() { prevented = true; }, dataTransfer: dt });
+  assert.strictEqual(prevented, true, 'dragover 必须 preventDefault 才允许放置');
+  assert.strictEqual(dt.dropEffect, 'move');
+  assert.ok(zone().classList.contains('is-drop'), '卡片悬停其上时高亮');
+  assert.strictEqual(text().textContent, '松开以选择阶段');
+  await sandbox2.handleDropZoneDrop({ preventDefault() {}, dataTransfer: { getData: () => 'r1' } });
+  assert.strictEqual(calls.openAdvance.length, 1, 'drop 复用推进弹窗（不新建弹窗）');
+  assert.strictEqual(calls.openAdvance[0].id, 'r1');
+  assert.strictEqual(vm.runInContext('draggingRecordId', sandbox2), null, 'drop 后清空拖拽态');
+  assert.ok(!zone().classList.contains('is-active') && !zone().classList.contains('is-drop'), 'drop 后投放区复位');
+  assert.strictEqual(text().textContent, '拖到这里，自由选择阶段（含没有列的阶段）');
+});
+
+check('投放区 dragover 在无拖拽时不放行；dragend/drop 之外不误清（dragleave 仅在拖拽中回到 active）', () => {
+  seedRecords();
+  const zone = () => sandbox2.$('#boardDropZone');
+  vm.runInContext('draggingRecordId = null', sandbox2);
+  let prevented = false;
+  sandbox2.handleDropZoneOver({ preventDefault() { prevented = true; }, dataTransfer: { dropEffect: '' } });
+  assert.strictEqual(prevented, false, '没有卡片被拖起时不应 preventDefault（不接收放置）');
+  assert.ok(!zone().classList.contains('is-drop'), '无拖拽时不高亮');
+  // 拖拽中 dragleave：从 is-drop 回到 is-active 文案
+  vm.runInContext('draggingRecordId = "r2"', sandbox2);
+  sandbox2.activateBoardDropZone();
+  sandbox2.handleDropZoneOver({ preventDefault() {}, dataTransfer: { dropEffect: '' } });
+  sandbox2.handleDropZoneLeave();
+  assert.ok(!zone().classList.contains('is-drop'), '离开后取消高亮');
+  assert.strictEqual(sandbox2.$('#boardDropText').textContent, '拖到这里选择阶段', '仍在拖拽中，回到可投放文案');
+  sandbox2.clearBoardDropZone();
+  vm.runInContext('draggingRecordId = null', sandbox2);
+});
+
+check('handleBoardDrop：普通列走 advanceRecordTo（既有路径不回归），「已结束」列改为打开弹窗预填结束原因', async () => {
+  seedRecords();
+  calls.openAdvance.length = 0;
+  const colEvent = (stage, id) => ({ target: { closest: sel => (sel === '.board-col' ? { dataset: { stage } } : null) }, preventDefault() {}, dataTransfer: { getData: () => id } });
+  vm.runInContext('draggingRecordId = "r1"', sandbox2);
+  await sandbox2.handleBoardDrop(colEvent('二面', 'r1'));
+  assert.strictEqual(sandbox2.records[0].stage, '二面', '拖到普通列直接推进');
+  assert.strictEqual(calls.openAdvance.length, 0, '普通列不打开弹窗');
+  // 已结束列：不直接推进，改为打开弹窗并预填结束原因引导
+  seedRecords();
+  calls.openAdvance.length = 0;
+  vm.runInContext('draggingRecordId = "r1"', sandbox2);
+  await sandbox2.handleBoardDrop(colEvent('已结束', 'r1'));
+  assert.strictEqual(calls.openAdvance.length, 1, '拖到已结束列打开推进弹窗');
+  assert.ok(calls.openAdvance[0].note.includes('结束原因'), '预填结束原因引导');
+  assert.strictEqual(sandbox2.records[0].stage, '一面', '不直接推进，等用户在弹窗里确认');
+});
+
+check('boardCardHtml 停滞标记：传入停滞天数才加 is-stalled 与「停滞 N 天」chip', () => {
+  seedRecords();
+  const stalled = sandbox2.boardCardHtml(sandbox2.records[0], null, 20);
+  assert.ok(stalled.includes('is-stalled'), '停滞卡片加 is-stalled 类');
+  assert.ok(stalled.includes('board-chip stalled">停滞 20 天'), '显示停滞天数 chip');
+  const normal = sandbox2.boardCardHtml(sandbox2.records[0], null, 0);
+  assert.ok(!normal.includes('is-stalled') && !normal.includes('停滞'), '未停滞不加标记');
+  const legacy = sandbox2.boardCardHtml(sandbox2.records[0]);
+  assert.ok(!legacy.includes('is-stalled'), '不传停滞天数（旧调用签名）保持无标记');
+});
+
+check('applyBoardColFilter：列头点击把 #stageFilter 设为该阶段并切到表格视图', () => {
+  seedRecords();
+  sandbox2.setRecordsView('board');
+  sandbox2.applyBoardColFilter('一面');
+  assert.strictEqual(sandbox2.els.filter.value, '一面', '阶段筛选被设为该列');
+  assert.strictEqual(JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).recordsView, 'table', '切到表格视图');
+  assert.strictEqual(els2['#boardView'].hidden, true, '看板隐藏');
+  assert.ok(sandbox2.els.body.innerHTML.includes('data-id="r1"'), '表格里显示该阶段记录');
+  assert.ok(!sandbox2.els.body.innerHTML.includes('data-id="r3"'), '其它阶段被筛掉');
+  sandbox2.els.filter.value = 'all';
+});
+
+check('applyAdvance 把备注写进里程碑；留空保持空串（绝不写 undefined）', () => {
+  seedRecords();
+  sandbox2.advancingId = 'r1';
+  sandbox2.$('#advanceNote').value = '  HR 电话通知二面  ';
+  sandbox2.$('#advanceDate').value = '2026-09-08';
+  sandbox2.applyAdvance('二面');
+  const tl = sandbox2.records[0].timeline;
+  assert.strictEqual(tl[tl.length - 1].stage, '二面');
+  assert.strictEqual(tl[tl.length - 1].note, 'HR 电话通知二面', '备注 trim 后写进里程碑');
+  seedRecords();
+  sandbox2.advancingId = 'r2';
+  sandbox2.$('#advanceNote').value = '';
+  sandbox2.applyAdvance('一面');
+  const tl2 = sandbox2.records[1].timeline;
+  assert.strictEqual(tl2[tl2.length - 1].note, '', '留空保持空串');
+  assert.ok(tl2[tl2.length - 1].note !== undefined && tl2[tl2.length - 1].note !== 'undefined');
+  sandbox2.advancingId = null;
+  sandbox2.$('#advanceNote').value = '';
+});
+
+check('updateResultCaption 补上「进行中 M · 停滞 K」，进行中口径 = isActive', () => {
+  seedRecords();
+  sandbox2.updateResultCaption(3);
+  const cap = sandbox2.els.caption.textContent;
+  assert.ok(cap.includes('已投台账'), '保留原有台账口径');
+  assert.ok(/进行中 \d+/.test(cap) && /停滞 \d+/.test(cap), '补上进行中与停滞数字');
+  assert.ok(cap.includes('进行中 2'), '进行中 = isActive（r1 一面 / r2 已投递 活跃，r3 Offer 不算）');
+  sandbox2.updateResultCaption(1);
+  assert.ok(sandbox2.els.caption.textContent.includes('显示 1 条，共 3 条'), '筛选后显示条数与总数分开写');
 });
 
 // ============================================================================

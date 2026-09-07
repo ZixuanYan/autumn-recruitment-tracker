@@ -1144,5 +1144,21 @@ check('$(\'.xxx\') 纯单 class 选择器命中的 class 在 HTML 里必须唯�
   assert.deepStrictEqual(sampleOffenders, ['table-scroll'], '守卫必须拦下对 .table-scroll 的单 class 选择器，且不误伤 id 与唯一 class');
 });
 
+console.log('版本号一致性（发版链 5 处，防漏改导致缓存不刷新 / 文档与实现漂移）');
+check('网页版本号 5 处一致：APP_VERSION / service-worker CACHE_NAME / download 页脚 / README / 使用说明', () => {
+  const root = path.resolve(__dirname, '../../autumn-recruitment-tracker');
+  const read = f => fs.readFileSync(path.join(root, f), 'utf8');
+  const appVersion = /const APP_VERSION = '([^']+)'/.exec(html)[1];
+  const cacheVersion = /autumn-tracker-app-v([0-9.]+)/.exec(read('service-worker.js'))[1];
+  const footerVersion = /网页 v([0-9.]+)/.exec(read('download.html'))[1];
+  const readmeVersion = /网页：v([0-9.]+)/.exec(read('README.md'))[1];
+  const usageVersion = /网页 v([0-9.]+)/.exec(read('使用说明.txt'))[1];
+  assert.strictEqual(cacheVersion, appVersion, `service-worker CACHE_NAME (${cacheVersion}) 必须与 APP_VERSION (${appVersion}) 一致，否则旧缓存不刷新`);
+  assert.strictEqual(footerVersion, appVersion, `download.html 页脚 (${footerVersion}) 必须与 APP_VERSION 一致`);
+  assert.strictEqual(readmeVersion, appVersion, `README (${readmeVersion}) 必须与 APP_VERSION 一致`);
+  assert.strictEqual(usageVersion, appVersion, `使用说明.txt (${usageVersion}) 必须与 APP_VERSION 一致`);
+  assert.strictEqual(appVersion, '4.8.0', '本轮发版网页版本应为 4.8.0');
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;
