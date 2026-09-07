@@ -4858,6 +4858,9 @@
             city: submitted.city,
             applicationDate: submitted.applicationDate || '',
             stage: String(submitted.stage || '').trim() || '已投递',
+            // 插件收录表单里选的企业性质直接透传；normalizeRecord 会做白名单校验，
+            // 因此旧版插件（不传该字段）或异常值都会安全落回「未设置」
+            companyType: submitted.companyType,
             applicationUrl: submitted.applicationUrl,
             recentSchedule: submitted.recentSchedule || '',
             nextAction: submitted.nextAction || ''
@@ -4952,6 +4955,7 @@
             city: captured.city,
             applicationDate: captured.applicationDate || '',
             stage: String(captured.stage || '').trim() || '已投递',
+            companyType: captured.companyType, // 识别链路拿不到就留空，由用户在弹窗里选
             applicationUrl: captured.applicationUrl,
             nextAction: '关注消息并及时跟进投递进度'
           });
@@ -5591,6 +5595,7 @@
             city: captured.city,
             applicationDate: captured.applicationDate || '',
             stage: String(captured.stage || '').trim() || '已投递',
+            companyType: captured.companyType, // 识别链路拿不到就留空，由用户在弹窗里选
             applicationUrl: captured.applicationUrl,
             nextAction: '关注消息并及时跟进投递进度'
           });

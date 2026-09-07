@@ -120,6 +120,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           city: String(request.record.city || '').trim(),
           applicationDate: String(request.record.applicationDate || new Date().toISOString().slice(0, 10)),
           stage: String(request.record.stage || '已投递'),
+          // 企业性质（v4.2.0）：只做透传与类型收敛，不做白名单校验——
+          // 网页端 normalizeRecord 才是唯一真相源，插件侧再维护一份枚举只会增加漂移面。
+          companyType: String(request.record.companyType || ''),
           applicationUrl: String(request.record.applicationUrl || ''),
           scheduleAt: String(request.record.scheduleAt || ''),
           recentSchedule: String(request.record.recentSchedule || ''),
@@ -138,6 +141,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             city: staged.city || existing.city,
             applicationDate: staged.applicationDate || existing.applicationDate,
             stage: staged.stage || existing.stage,
+            // 已选过的企业性质不能被「这次没选」冲掉（与 city 同款语义），否则重复收录同一岗位会丢字段
+            companyType: staged.companyType || existing.companyType || '',
             applicationUrl: staged.applicationUrl || existing.applicationUrl,
             recentSchedule: staged.recentSchedule || existing.recentSchedule,
             nextAction: staged.nextAction || existing.nextAction,

@@ -94,9 +94,15 @@ function ensureSidebarUI() {
                 <select id="cap-stage"></select>
               </div>
             </div>
-            <div class="form-group">
-              <label>投递日期</label>
-              <input type="date" id="cap-date">
+            <div class="form-row">
+              <div class="form-group">
+                <label>投递日期</label>
+                <input type="date" id="cap-date">
+              </div>
+              <div class="form-group">
+                <label>企业性质</label>
+                <select id="cap-company-type"></select>
+              </div>
             </div>
             <div class="form-actions">
               <button class="btn-save-record" id="cap-save-btn">✓ 确认存入看板</button>
@@ -144,6 +150,11 @@ function ensureSidebarUI() {
   // 阶段选项由 AJA.STAGES 统一生成（消除硬编码，与网页版预设单一事实源）
   capStage.innerHTML = AJA.STAGES.map(s => `<option value="${s}">${s}</option>`).join('');
   const capDate = shadow.getElementById('cap-date');
+  // 企业性质（v4.2.0）：选项由 AJA.COMPANY_TYPES 生成，首项固定「未设置」（value=''）。
+  // 解析器不猜企业性质（无可靠依据，猜错比留空更糟），因此这里始终由用户手动选一次。
+  const capCompanyType = shadow.getElementById('cap-company-type');
+  capCompanyType.innerHTML = `<option value="">${AJA.COMPANY_TYPE_UNSET || '未设置'}</option>`
+    + (AJA.COMPANY_TYPES || []).map(t => `<option value="${t}">${t}</option>`).join('');
   const capDetectHint = shadow.getElementById('cap-detect-hint');
   const capSaveBtn = shadow.getElementById('cap-save-btn');
   const capCancelBtn = shadow.getElementById('cap-cancel-btn');
@@ -170,7 +181,7 @@ function ensureSidebarUI() {
         <div class="pending-item" data-id="${escapeHtml(item.id)}">
           <div class="pending-item-main" data-fill="${escapeHtml(item.id)}" title="点击回填收录表单，可修改后重新保存">
             <div class="pending-item-title">${escapeHtml(item.company)} · ${escapeHtml(item.position)}</div>
-            <div class="pending-item-meta">${escapeHtml(item.applicationDate || '')} · ${escapeHtml(item.stage || '已投递')}</div>
+            <div class="pending-item-meta">${escapeHtml(item.applicationDate || '')} · ${escapeHtml(item.stage || '已投递')}${item.companyType ? ` · ${escapeHtml(item.companyType)}` : ''}</div>
             ${item.variantOf ? `<div class="pending-item-variant" title="这不是重复堆积：同一家公司的岗位名相近（括号里通常是城市/方向/批次），已作为独立一条暂存">≈ 与「${escapeHtml(item.variantOf)}」是同公司的相近岗位</div>` : ''}
           </div>
           <button class="pending-item-discard" data-discard="${escapeHtml(item.id)}" title="丢弃这条暂存">✕</button>
@@ -206,6 +217,8 @@ function ensureSidebarUI() {
         capCity.value = item.city || '';
         capStage.value = item.stage || '已投递';
         capDate.value = item.applicationDate || '';
+        // 企业性质：暂存项里没有该选项时 select.value 会落回 ''（未设置），不会抛错
+        capCompanyType.value = item.companyType || '';
         captureForm.classList.remove('hidden');
         showToast('已回填收录表单，可修改后重新保存');
       });
@@ -395,7 +408,10 @@ function ensureSidebarUI() {
       capDetectHint.hidden = false;
     } else {
       capDetectHint.className = 'detect-hint';
-      capDetectHint.innerHTML = `已自动识别，请核对后保存。${srcText ? `<div class="detect-hint-src">${escapeHtml(srcText)}</div>` : ''}`;
+      // 企业性质从来不自动识别（页面上没有可靠依据，猜错比留空更糟），
+      // 所以识别全中时也要提一句，否则用户不会注意到新增的下拉，洞察统计就一直缺这一维。
+      capDetectHint.innerHTML = `已自动识别，请核对后保存；「企业性质」需手动选一次（央国企 / 民企 / 外企）。`
+        + (srcText ? `<div class="detect-hint-src">${escapeHtml(srcText)}</div>` : '');
       capDetectHint.hidden = false;
     }
   }
@@ -462,6 +478,8 @@ function ensureSidebarUI() {
       position: capPosition.value.trim() || '待确认岗位',
       city: capCity.value.trim(),
       stage: capStage.value,
+      // 企业性质：收录时一并选掉，网页端就不用再打开编辑弹窗补填（''=未设置）
+      companyType: capCompanyType.value,
       applicationDate: capDate.value || new Date().toISOString().slice(0, 10),
       applicationUrl: location.href,
       recentSchedule: '已完成网申投递',

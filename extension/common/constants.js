@@ -14,6 +14,13 @@
   // 招聘阶段预设（与网页版 autumn-recruitment-tracker 的 STAGE_PRESETS 保持一致，两端需同步；实际阶段可自定义）
   root.AJA.STAGES = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
 
+  // 企业性质（与网页版的 COMPANY_TYPES 保持一致，两端需同步；封闭枚举，不像阶段那样允许自定义）
+  // 收录表单的「企业性质」下拉由本数组动态生成，首项固定为「未设置」（value=''）。
+  // 网页端 normalizeRecord 会做白名单校验：不在 COMPANY_TYPES 里的值一律归为未设置，
+  // 因此这里多写/写错一个字，用户选了就等于没选（autumn-mail-sync/test/extension-bridge.js 有逐值一致性契约断言）。
+  root.AJA.COMPANY_TYPES = ['央国企', '民企', '外企'];
+  root.AJA.COMPANY_TYPE_UNSET = '未设置';
+
   // 存储键（与网页版保持同名，保证 JSON 备份格式互通；插件侧存储域为 chrome.storage.local）
   root.AJA.RECORDS_STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';   // 旧版遗留，仅一次性迁移源
   root.AJA.RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
