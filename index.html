@@ -689,6 +689,24 @@
     .ctype-offer { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
     .ctype-offer.has { color: var(--ok); font-weight: 700; }
 
+    /* ===== v4.6.0：悬浮明细浮层（自绘 tooltip）===== */
+    .tip { position: fixed; z-index: 60; left: 0; top: 0; display: block; max-width: min(360px, calc(100vw - 16px)); padding: 9px 11px; border-radius: var(--r-md); background: var(--surface); box-shadow: var(--sh-ambient), var(--ring); font-size: 12px; line-height: 1.55; pointer-events: none; }
+    /* 关键守卫：.tip 自身设了 display:block，会覆盖 UA 的 [hidden]{display:none}。
+       漏了这条就会常驻一个隐形浮层盖在页面上（.drawer 曾因此吞掉 7 个可交互元素的点击）。
+       pointer-events:none 也是必需的：否则鼠标移到浮层上会触发 mouseout → 隐藏 → 又触发 mouseover，来回闪。 */
+    .tip[hidden] { display: none; }
+    .tip-head { margin-bottom: 6px; font-size: 12.5px; font-weight: 700; }
+    .tip-list { display: grid; gap: 3px; }
+    .tip-row { display: flex; align-items: center; gap: 8px; }
+    .tip-k { flex: 0 0 auto; color: var(--muted); }
+    .tip-v { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tip-more { margin-top: 5px; color: var(--muted); font-size: 11.5px; }
+    .tip-note { color: var(--ink-2); }
+    /* 可悬浮读取明细的元素给一致的可发现性：help 光标 + 悬浮/聚焦时描边加深 */
+    .city-row, .ctype-seg, .insight-metric[data-tip-kind] { cursor: help; }
+    .insight-metric[data-tip-kind]:hover, .insight-metric[data-tip-kind]:focus-visible { box-shadow: var(--ring), var(--sh-ambient); outline: none; }
+    .multi-company-item[data-tip-kind] { cursor: pointer; }
+
     /* ===== v4.4.0：记录表单「更多字段」折叠区 ===== */
     .form-more { border-radius: var(--r-md); background: var(--surface-2); box-shadow: var(--ring); overflow: hidden; }
     .form-more summary { padding: 10px 13px; color: var(--ink-2); font-size: 12.5px; font-weight: 650; cursor: pointer; list-style: none; }
@@ -1176,6 +1194,11 @@
     <div class="drawer-actions" id="drawerActions"></div>
   </aside>
 
+  <!-- ===== 悬浮明细浮层（v4.6.0）：全站共用一个，内容按需构建 =====
+       放在抽屉之后、弹窗之前：z-index 高于抽屉(41)，而 dialog 属于顶层元素(top layer)，
+       因此弹窗打开时浮层自然被盖住，不需要额外处理层级。 -->
+  <div class="tip" id="tipLayer" role="tooltip" hidden></div>
+
   <!-- ===== ⌘K 命令面板（v4.4.0）：搜记录 / 跳视图 / 执行动作 ===== -->
   <dialog id="cmdPalette" aria-label="命令面板">
     <div class="cmd-inner">
@@ -1486,7 +1509,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.5.0';
+      const APP_VERSION = '4.6.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -3105,19 +3128,20 @@
         const unknownCity = cityStats.find(row => !row.city);
         const offerCount = records.filter(record => record.stage === 'Offer').length;
         $('#insightMetrics').innerHTML = [
-          { label: '覆盖公司', value: groups.length, sub: multiCompanies ? `${multiCompanies} 家投了多个岗位` : '每家一个岗位' },
+          { label: '覆盖公司', value: groups.length, sub: multiCompanies ? `${multiCompanies} 家投了多个岗位` : '每家一个岗位', tip: 'companies' },
           {
             label: '覆盖城市', value: namedCities.length,
             sub: namedCities.length
               ? `最多 ${namedCities[0].city} · ${namedCities[0].total} 条${unknownCity ? `，${unknownCity.total} 条没填` : ''}`
-              : (unknownCity ? `${unknownCity.total} 条都还没填城市` : '还没填城市')
+              : (unknownCity ? `${unknownCity.total} 条都还没填城市` : '还没填城市'),
+            tip: 'cities'
           },
-          { label: '在流程中', value: inFlow.length, sub: flowDays.length ? `平均已 ${avgFlowDays} 天` : '暂无进行中' },
-          { label: '停滞 >14 天', value: stalledCount, sub: stalledCount ? '建议主动跟进' : '节奏正常' },
-          { label: '已拿 Offer', value: offerCount, sub: offerCount && records.length ? `占投递的 ${Math.round(offerCount / records.length * 100)}%` : '还没有 Offer' },
+          { label: '在流程中', value: inFlow.length, sub: flowDays.length ? `平均已 ${avgFlowDays} 天` : '暂无进行中', tip: 'flow' },
+          { label: '停滞 >14 天', value: stalledCount, sub: stalledCount ? '建议主动跟进' : '节奏正常', tip: 'stalled' },
+          { label: '已拿 Offer', value: offerCount, sub: offerCount && records.length ? `占投递的 ${Math.round(offerCount / records.length * 100)}%` : '还没有 Offer', tip: 'offers' },
           // 卡点清单现在排在指标条上方（② 行动紧跟 ① 概览），文案不能再写「见下方」
-          { label: '需要关注', value: alerts.length, sub: alerts.length ? '见上方清单' : '暂无卡点' }
-        ].map(metric => `<div class="insight-metric">
+          { label: '需要关注', value: alerts.length, sub: alerts.length ? '见上方清单' : '暂无卡点', tip: 'alerts' }
+        ].map(metric => `<div class="insight-metric" tabindex="0" data-tip-kind="metric" data-tip-key="${escapeHtml(metric.tip)}" aria-label="${escapeHtml(metric.label)} ${metric.value}，查看口径说明">
             <div class="insight-metric-label">${escapeHtml(metric.label)}</div>
             <div class="insight-metric-value">${metric.value}</div>
             <div class="insight-metric-sub">${escapeHtml(metric.sub)}</div>
@@ -3219,6 +3243,56 @@
         }
       }
 
+      // ---- 悬浮明细浮层（v4.6.0）----
+      // 全站共用一个浮层，内容在显示时按需构建：不预生成 DOM，记录变多也不会拖慢渲染。
+      // 为什么不用原生 title：外观不可控、无法显示结构化明细（阶段徽章 / 两列键值）、
+      // 有约 1 秒延迟、且移动端完全不生效——而城市与企业性质的明细正是多行结构。
+      let tipTarget = null;
+      function showTipFor(target) {
+        const layer = $('#tipLayer');
+        if (!layer || !target || !target.dataset) return;
+        const kind = target.dataset.tipKind;
+        if (!kind) return;
+        const content = tipContentFor(records, kind, target.dataset.tipKey || '');
+        // 没有明细可显示时不要弹一个空壳（例如未设置那一档一条都没有）
+        if (!content) { hideTip(); return; }
+        if (tipTarget && tipTarget !== target && tipTarget.removeAttribute) tipTarget.removeAttribute('aria-describedby');
+        tipTarget = target;
+        layer.innerHTML = content;
+        layer.hidden = false;
+        if (target.setAttribute) target.setAttribute('aria-describedby', 'tipLayer');
+        // 必须在 hidden=false 之后量尺寸，否则拿到的是 0×0
+        positionTip(target.getBoundingClientRect ? target.getBoundingClientRect() : null);
+      }
+      function hideTip() {
+        if (tipTarget && tipTarget.removeAttribute) tipTarget.removeAttribute('aria-describedby');
+        tipTarget = null;
+        const layer = $('#tipLayer');
+        if (!layer) return;
+        layer.hidden = true;
+        layer.innerHTML = '';
+      }
+      // 定位：默认贴在触发元素下方、左对齐；右侧或下方放不下时翻转/夹紧到视口内。
+      // 用 fixed + getBoundingClientRect，因此不受洞察面板所在滚动容器的影响。
+      function positionTip(rect) {
+        const layer = $('#tipLayer');
+        if (!layer || !rect) return;
+        const gap = 8, edge = 8;
+        const viewWidth = window.innerWidth || 1440;
+        const viewHeight = window.innerHeight || 900;
+        const box = layer.getBoundingClientRect ? layer.getBoundingClientRect() : { width: 0, height: 0 };
+        let left = rect.left;
+        let top = rect.bottom + gap;
+        if (left + box.width > viewWidth - edge) left = Math.max(edge, viewWidth - edge - box.width);
+        if (top + box.height > viewHeight - edge) top = Math.max(edge, rect.top - gap - box.height);
+        layer.style.left = `${Math.round(left)}px`;
+        layer.style.top = `${Math.round(top)}px`;
+      }
+      // 触屏没有 hover：点击切换显隐（再点一次同一个则关闭）
+      function isCoarsePointer() {
+        return !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
+      }
+
       // Offer 对比矩阵：手里有 ≥2 个 Offer 时才出现，按意向度降序、同分按签约截止近的先
       function renderOfferMatrix() {
         const wrap = $('#offerMatrixWrap'), table = $('#offerMatrix');
@@ -3257,7 +3331,7 @@
           const items = group.records.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
           return `<div class="multi-company" style="--company-color:${companyColor(group.key)}">
             <div class="multi-company-head"><strong>${escapeHtml(group.label)}</strong><span class="multi-company-count">${group.records.length} 个岗位</span></div>
-            <div class="multi-company-items">${items.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}">
+            <div class="multi-company-items">${items.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" data-tip-kind="record" data-tip-key="${escapeHtml(record.id)}" aria-label="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}，悬浮看详情，点击打开抽屉">
               <span class="multi-company-pos">${escapeHtml(record.position || '未填岗位')}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</span>
               <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
             </button>`).join('')}</div>
@@ -3901,6 +3975,69 @@
           records: bucket.records
         }));
       }
+
+      // ----- 悬浮明细（v4.6.0）-----
+      // 面板上只放结论（数字 / 比例条），明细放进悬浮层：这样块的高度不随记录数膨胀，
+      // 又不用为了看清「深圳那 2 条到底是哪两条」再跳去台账搜索。
+      // 指标口径必须能就地查：否则「停滞 >14 天 = 3」这种数字，用户没法判断它算的是投递日期还是最新里程碑。
+      const TIP_METRIC_NOTES = {
+        companies: '覆盖公司 = 按公司名聚类去重后的家数（「腾讯」与「腾讯科技（深圳）有限公司」算同一家）。',
+        cities: '覆盖城市 = 归一化后的城市数（「深圳市」等同「深圳」）。一条记录写了多个城市时，会在每个城市各计一次，因此各城市投递数之和可能大于台账条数；「待确认 / 不限」这类占位值算未填。',
+        flow: '在流程中 = 当前阶段不是「待投递 / Offer / 已结束」的记录数；平均天数按投递日期算到今天。',
+        stalled: '停滞 = 仍在流程中，且最新一条里程碑（没有里程碑时按投递日期）距今 ≥14 天。',
+        offers: '已拿 Offer = 当前阶段为 Offer 的记录数；占比按台账总条数计算。',
+        alerts: '需要关注 = 截止逾期或 3 天内临期、安排时间已过但阶段没推进、停滞超 14 天、同公司多岗位同时在流程。同一条记录可能命中多项，所以这里的条数可能大于记录数。'
+      };
+      const TIP_MAX_ROWS = 12;
+      // 返回 HTML 字符串（内部所有用户数据都经 escapeHtml）；无内容时返回 ''，调用方据此不显示浮层。
+      // kind: 'city' 某城市的投递清单 | 'ctype' 某档企业性质的公司清单 | 'metric' 指标口径 | 'record' 单条记录摘要
+      function tipContentFor(records, kind, key) {
+        const list = Array.isArray(records) ? records : [];
+        const value = String(key == null ? '' : key);
+        if (kind === 'metric') {
+          const note = TIP_METRIC_NOTES[value];
+          return note ? `<div class="tip-note">${escapeHtml(note)}</div>` : '';
+        }
+        if (kind === 'record') {
+          const record = list.find(item => String(item.id) === value);
+          if (!record) return '';
+          const rows = [
+            ['公司', record.company],
+            ['岗位', record.position || '未填岗位'],
+            ['批次', record.batch],
+            ['城市', record.city],
+            ['企业性质', record.companyType || COMPANY_TYPE_UNSET],
+            ['当前阶段', record.stage],
+            ['下一步', record.nextAction]
+          ].filter(([, text]) => String(text || '').trim());
+          return `<div class="tip-head">${escapeHtml(record.company || '未填公司')}</div>
+            <div class="tip-list">${rows.map(([label, text]) => `<div class="tip-row"><span class="tip-k">${escapeHtml(label)}</span><span class="tip-v">${escapeHtml(text)}</span></div>`).join('')}</div>`;
+        }
+        if (kind === 'city') {
+          const bucket = computeCityStats(list).find(row => row.city === value);
+          if (!bucket || !bucket.total) return '';
+          const title = bucket.city || '没填城市';
+          const items = bucket.records.slice(0, TIP_MAX_ROWS).map(record => `
+            <div class="tip-row"><span class="tip-v">${escapeHtml(record.company || '未填公司')} · ${escapeHtml(record.position || '未填岗位')}${record.batch ? `（${escapeHtml(record.batch)}）` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span></div>`).join('');
+          const rest = bucket.records.length - TIP_MAX_ROWS;
+          return `<div class="tip-head">${escapeHtml(title)} · ${bucket.total} 条投递 · ${bucket.companies} 家公司${bucket.offers ? ` · ${bucket.offers} 个 Offer` : ''}</div>
+            <div class="tip-list">${items}${rest > 0 ? `<div class="tip-more">另有 ${rest} 条，去台账按城市搜索查看</div>` : ''}</div>`;
+        }
+        if (kind === 'ctype') {
+          const bucket = computeCompanyTypeStats(list).find(row => row.type === value);
+          if (!bucket || !bucket.total) return '';
+          // 按公司聚类列出：这一档我投了哪几家、各家几条、最好走到哪一步
+          const groups = groupRecordsByCompany(bucket.records).slice(0, TIP_MAX_ROWS);
+          const items = groups.map(group => {
+            const best = group.records.reduce((acc, record) => (stageOrder(record.stage) > stageOrder(acc) ? record.stage : acc), group.records[0].stage);
+            return `<div class="tip-row"><span class="tip-v">${escapeHtml(group.label)}${group.records.length > 1 ? ` · ${group.records.length} 个岗位` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(best)}">${escapeHtml(best)}</span></div>`;
+          }).join('');
+          const rest = bucket.companies - groups.length;
+          return `<div class="tip-head">${escapeHtml(bucket.label)} · ${bucket.total} 条投递 · ${bucket.companies} 家公司${bucket.offers ? ` · ${bucket.offers} 个 Offer` : ''}</div>
+            <div class="tip-list">${items}${rest > 0 ? `<div class="tip-more">另有 ${rest} 家公司</div>` : ''}</div>`;
+        }
+        return '';
+      }
       /*__CORE_PURE_END__*/
 
       // ================= 查重统一处置（v4.5.0）=================
@@ -4394,6 +4531,8 @@
           return;
         }
         if (event.key === 'Escape') {
+          // 悬浮明细优先关：它是当前最表层的临时 UI，先关它才不会连带把抽屉也关掉
+          if (tipTarget) { hideTip(); return; }
           if (drawerRecordId) { closeRecordDrawer(); return; }
           return; // 其余 Esc 交给原生 dialog
         }
@@ -6015,6 +6154,36 @@
       });
       // 洞察精简 / 完整切换（偏好存本机 ui.v1）
       $('#insightsCompactBtn').addEventListener('click', toggleInsightsCompact);
+      // 悬浮明细：事件委托。mouseenter/mouseleave 不冒泡，所以用 mouseover/mouseout + relatedTarget 判定，
+      // 否则在触发元素内部子节点之间移动时会反复闪烁。
+      const insightsHost = $('#insightsBody');
+      insightsHost.addEventListener('mouseover', event => {
+        const target = event.target.closest('[data-tip-kind]');
+        if (!target || target === tipTarget) return;
+        showTipFor(target);
+      });
+      insightsHost.addEventListener('mouseout', event => {
+        const target = event.target.closest('[data-tip-kind]');
+        if (!target) return;
+        if (event.relatedTarget && target.contains && target.contains(event.relatedTarget)) return;
+        hideTip();
+      });
+      // 键盘用户同样能读到明细：城市行 / 指标卡 / 比例条分段都带 tabindex="0"
+      insightsHost.addEventListener('focusin', event => {
+        const target = event.target.closest('[data-tip-kind]');
+        if (target) showTipFor(target);
+      });
+      insightsHost.addEventListener('focusout', () => hideTip());
+      insightsHost.addEventListener('click', event => {
+        if (!isCoarsePointer()) return; // 有 hover 的设备交给 mouseover，点击留给「打开抽屉」等原有动作
+        const target = event.target.closest('[data-tip-kind]');
+        if (!target) return;
+        if (target === tipTarget) { hideTip(); return; }
+        showTipFor(target);
+      });
+      // 滚动后浮层位置就不再贴着触发元素了：直接隐藏，比跟着重算更省事也更不容易错位。
+      // capture=true 才能收到面板内部滚动容器（.table-scroll 等）的 scroll 事件。
+      window.addEventListener('scroll', () => { if (tipTarget) hideTip(); }, true);
       $('#alertList').addEventListener('click', event => {
         const item = event.target.closest('.alert-item[data-id]');
         if (item) openRecordFocus(item.dataset.id);

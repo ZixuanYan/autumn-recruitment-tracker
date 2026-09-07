@@ -1,4 +1,4 @@
-const CACHE_NAME = 'autumn-tracker-app-v4.5.0';
+const CACHE_NAME = 'autumn-tracker-app-v4.6.0';
 const APP_SHELL = [
   './',
   './index.html',

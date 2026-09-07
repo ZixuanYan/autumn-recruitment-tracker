@@ -1,4 +1,4 @@
-# 秋招求职与简历助手（Chrome/Edge 扩展 v4.1.0）
+# 秋招求职与简历助手（Chrome/Edge 扩展 v4.2.0）
 
 网申页采集端浏览器扩展（Manifest V3）：**简历字段点击速填 + 岗位一键收录 + 暂存箱**。与网页版 [秋招投递管理器](https://github.com/ZixuanYan/autumn-recruitment-tracker) 配套使用，插件负责采集与速填，网页版负责管理与跨设备同步。
 
@@ -21,6 +21,7 @@
    - **宁空勿错**：识别不出的字段留空，收录表单会用黄色提示条明确列出「未能识别：公司名称 / 目标城市」并要求人工补填，同时标注每个已识别字段来自页面哪里
    - **岗位名保留括号修饰**：`后端开发工程师（深圳）`、`客户端开发（iOS）`、`产品经理（提前批）` 原样保留——括号里是同一家公司多个岗位的关键区分维度，删掉会导致第二个岗位被判成重复而录不进去
    - 收录时自动查重：同链接或「同公司 + 同岗位」的记录更新而非重复堆积；同公司的**另一个**岗位正常入库
+   - **企业性质可直接选**（v4.2.0）：收录表单有「央国企 / 民企 / 外企」下拉，选完随记录一起进网页端台账，网页端洞察的「企业性质」统计就有数据了。**刻意不做自动识别**——页面上没有可靠依据判断企业性质，猜错比留空更糟；因此识别全中时提示条会写「企业性质需手动选一次」，免得用户注意不到这个下拉。暂存箱条目会显示已选的性质，回填表单时带回，重复收录同一条岗位时「这次没选」不会冲掉上次选好的值
 3. **暂存箱**
    - 网页版管理器未打开时，收录的岗位自动进入暂存箱排队
    - 打开网页版管理器后逐条弹出确认，人工核对后入库并云同步
@@ -74,7 +75,7 @@
 
 ## 版本
 
-- 扩展：v4.1.0（采集端 + 简历字段点击速填；已移除整页自动填充与 AI 辅助填写）
+- 扩展：v4.2.0（采集端 + 简历字段点击速填；已移除整页自动填充与 AI 辅助填写）
 - 存储键：`autumnRecruitmentTracker.resume.v1` / `autumnRecruitmentTracker.pending.v1`
 
 ### v4.1.0 解析与判重规则要点
@@ -87,3 +88,10 @@
 - **城市按文本出现位置选取**：城市库 31 → 100；排除页脚总部地址与城市切换器；全文兜底改为「工作地点/办公地点/base」后 40 字窗口
 - **暂存箱去重与网页端同源**：`common/company-key.js` 是网页版 `companyGroupKey` / `normalizePositionSlug` / `loosePositionSlug` / `sameCompanyGroup` 的镜像副本，**两处必须同步修改**（`autumn-mail-sync/test/company-dedup.js` 有逐值一致性断言，漂移即失败）
 - **与 background 的通信一律走 `safeSendMessage`**：扩展被重新加载后，页面上旧内容脚本的 `chrome.runtime` 已成失效句柄，直接调用会同步抛 `Extension context invalidated.` 冒到网页控制台。`06-bridge.js` 的三处通信（暂存出队 / 读暂存箱 / 简历下发）已全部改走封装（先用 `chrome.runtime.id` 探测、再 `try/catch` 兜底）。失败时经 postMessage 上报一次 `BRIDGE_BROKEN`，由网页版弹「刷新页面即可恢复」提示（带刷新按钮）；上报去重，但每次留 `console.warn`。**新增任何 `chrome.runtime.*` 调用都必须走封装**，`autumn-mail-sync/test/extension-bridge.js` 有一条静态守卫会拦截裸调用
+
+### v4.2.0 企业性质字段要点
+
+- **两端枚举必须逐值相同**：`AJA.COMPANY_TYPES`（`common/constants.js`）与网页版 `COMPANY_TYPES`（`index.html`）是同一份约定。网页端 `normalizeRecord` 做白名单校验，插件里多写或写错一个字，用户选了也等于没选（静默落回「未设置」），且洞察统计永远缺这一档。`autumn-mail-sync/test/extension-bridge.js` 有逐值一致性契约断言（同时覆盖一直缺失的 `AJA.STAGES` vs `STAGE_PRESETS`）
+- **收录链路 6 环，断一环就等于功能没做**：收录表单下拉 → 保存 payload → 暂存箱条目与回填 → `background.js` 的 `staged` 与「重复收录合并」两处 → 网页端 `handleCaptureMessage` 的 seed → `openDialog` 回填字段清单。上述测试对这 6 环逐条断言
+- **插件侧不做白名单校验**：只做透传与类型收敛（`String(... || '')`），唯一真相源是网页端 `normalizeRecord`；插件再维护一份枚举只会增加漂移面
+- **表单布局约束**：侧栏宽 350px，`.form-row` 两列各约 155px，塞不下第三列。新增字段要与既有字段配对成行（企业性质与投递日期一行），不要往现有行里加第三列
