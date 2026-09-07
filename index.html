@@ -868,6 +868,19 @@
     .mail-help { margin-top: 8px; }
     .mail-help summary { cursor: pointer; font-weight: 600; }
     .mail-help ol { margin: 8px 0 0 18px; line-height: 1.7; }
+    /* ===== v4.6.1：邮件丢弃明细（状态栏折叠区内）=====
+       这些容器都不由 hidden 属性切换显隐，因此无需 [hidden] 守卫；
+       刻意不给 .mail-help 本身设 display，避免覆盖 details 的原生行为。 */
+    .drop-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .drop-counts span { padding: 2px 9px; border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--ring); font-size: 11.5px; }
+    .drop-counts b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .drop-list { margin: 9px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+    .drop-list li { padding: 6px 9px; border-radius: var(--r-sm); background: var(--surface); box-shadow: var(--ring); }
+    .drop-mail { font-size: 12px; line-height: 1.5; word-break: break-all; }
+    .drop-mail b { display: block; color: var(--ink); font-weight: 680; }
+    .drop-meta { margin-top: 2px; color: var(--muted); font-size: 11px; font-family: var(--font-mono); }
+    .drop-note { margin-top: 9px; color: var(--muted); font-size: 11.5px; line-height: 1.65; }
+    .drop-note code { padding: 0 4px; border-radius: 4px; background: var(--surface-2); box-shadow: var(--ring); font-family: var(--font-mono); font-size: 11px; }
     .mail-list { display: grid; gap: 12px; }
     .mail-empty { padding: 30px 16px; text-align: center; color: var(--muted); }
     .mail-card { padding: 14px 16px; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--hi), var(--ring), var(--sh-ambient); }
@@ -1509,7 +1522,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.6.0';
+      const APP_VERSION = '4.6.1';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -4649,6 +4662,49 @@
           dismissedIds: unionIdList(l && l.dismissedIds, r && r.dismissedIds)
         };
       }
+
+      // ===== 邮件丢弃诊断（v4.6.1）=====
+      // reason 字面量与 Action 侧 autumn-mail-sync/src/config.js 的 DROP_REASONS 一一对应，两处必须同步。
+      // 为什么要把丢弃情况搬到网页上：修复前预筛是静默 continue，实测某次「抓取 17 封 → 候选 3」，
+      // 那 14 封为什么被丢、发件人是谁，只能去 GitHub Actions 翻日志。而旧噪声规则把 noreply 类
+      // 发件人（Moka/北森/牛客等招聘系统的常态地址）当营销噪声，21 个真实地址误杀 18 个，
+      // 且水位推过就永不回看——用户唯一的线索就是"感觉没拉到"。现在每封被丢的都有原因可查。
+      const DROP_REASON_LABELS = {
+        'noise-from': '发件人是邮件系统 / 订阅地址',
+        'noise-subject': '主题像营销或金融推销',
+        'no-keyword': '主题与正文都没命中预筛关键词',
+        'ai-not-recruit': 'AI 判定为非招聘邮件',
+        'low-conf': 'AI 置信度低于阈值',
+        'ai-error': 'AI 调用失败'
+      };
+      function describeDropReason(reason) {
+        const key = String(reason == null ? '' : reason).trim();
+        if (!key) return '未知原因';
+        return DROP_REASON_LABELS[key] || key; // 未知 reason 回退原文，便于发现两端枚举漂移
+      }
+
+      // 归一化 meta.lastDropped：老 Gist 文件没有该字段、或结构非法时返回 null（状态栏不显示该段）。
+      // total 为 0 时也返回 null——本次一封没丢却显示「丢弃 0 封」只是噪声。
+      function normalizeDropStats(dropped) {
+        if (!dropped || typeof dropped !== 'object') return null;
+        const num = value => (Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0);
+        const recent = (Array.isArray(dropped.recent) ? dropped.recent : [])
+          .filter(item => item && typeof item === 'object')
+          .slice(0, 20);
+        const counts = {
+          noiseFrom: num(dropped.noiseFrom),
+          noiseSubject: num(dropped.noiseSubject),
+          noKeyword: num(dropped.noKeyword),
+          aiNotRecruit: num(dropped.aiNotRecruit),
+          lowConf: num(dropped.lowConf),
+          aiError: num(dropped.aiError)
+        };
+        const summed = Object.keys(counts).reduce((sum, key) => sum + counts[key], 0);
+        // total 优先取 Action 给的值；缺失或为 0 时退回分类求和，最后退回明细条数
+        const total = num(dropped.total) || summed || recent.length;
+        if (!total) return null;
+        return { total, ...counts, recent };
+      }
       /*__MAIL_PURE_END__*/
 
       // syncNow 读到邮件文件后调用：存原始建议 + meta，再按本机 mailState 过滤（缺失/损坏已在调用方静默处理）
@@ -4726,6 +4782,31 @@
         </article>`;
       }
 
+      // 丢弃明细 HTML（状态栏 ok 分支用）。from / subject 一律走 escapeHtml：
+      // 邮件主题可以含任意 HTML，直接拼接等于给外部发件人一个注入本页面的入口。
+      // 复用 error 分支已有的 .mail-help 折叠样式，不新增交互范式。
+      function mailDroppedHtml(stats) {
+        if (!stats) return '';
+        const pairs = [
+          ['noise-from', stats.noiseFrom],
+          ['noise-subject', stats.noiseSubject],
+          ['no-keyword', stats.noKeyword],
+          ['ai-not-recruit', stats.aiNotRecruit],
+          ['low-conf', stats.lowConf],
+          ['ai-error', stats.aiError]
+        ].filter(pair => Number(pair[1]) > 0);
+        const countsHtml = pairs.length
+          ? `<div class="drop-counts">${pairs.map(pair => `<span>${escapeHtml(describeDropReason(pair[0]))} <b>${Number(pair[1])}</b></span>`).join('')}</div>`
+          : '';
+        const listHtml = stats.recent.length
+          ? `<ul class="drop-list">${stats.recent.map(item => `<li>
+              <div class="drop-mail"><b>${escapeHtml(String(item.from || '（无发件人）'))}</b>${escapeHtml(String(item.subject || '（无主题）'))}</div>
+              <div class="drop-meta">#${escapeHtml(String(item.uid || '0'))} · ${escapeHtml(describeDropReason(item.reason))}</div>
+            </li>`).join('')}</ul>`
+          : '';
+        return `<details class="mail-help"><summary>本次丢弃 ${stats.total} 封，怀疑漏了可以展开看</summary>${countsHtml}${listHtml}<div class="drop-note">丢弃只发生在自动预筛与 AI 判定阶段，被丢的邮件不会进建议队列，也不影响你已投递的记录。若发现某封招聘邮件被误丢：在 autumn-mail-sync 仓库手动运行 mail-sync、填 <code>UID_FROM</code>（回溯起点，见下方邮件编号）重新扫描即可捞回——常规增量运行不会回头看已被水位越过的邮件。</div></details>`;
+      }
+
       function renderMailView() {
         const list = $('#mailList');
         const bar = $('#mailStatusBar');
@@ -4748,7 +4829,10 @@
           bar.innerHTML = `<strong>上次邮件同步失败</strong>${escapeHtml(mailMeta.lastError || '未知错误')}<details class="mail-help"><summary>怎么修复？</summary><ol><li>最常见：改过 QQ 密码后 <strong>16 位授权码失效</strong> → 到 QQ 邮箱重新生成，更新私有仓库 autumn-mail-sync 的 QQ_AUTHCODE Secret。</li><li>AI 超额/密钥无效 → 检查 AI_API_KEY / AI_BASE_URL / AI_MODEL。</li><li>被 QQ 风控（Unsafe Login）→ 需把定时任务迁到国内宿主。</li><li>修复后在仓库手动重跑 mail-sync，再回本页点「重新读取」。</li></ol></details>`;
         } else if (mailMeta) {
           bar.className = 'mail-statusbar ok';
-          bar.innerHTML = `<strong>已读取邮件建议</strong>上次运行 ${escapeHtml(formatClock(mailMeta.lastRunAt) || '—')} · 本次新增 ${Number(mailMeta.newCount) || 0} 封 · 云端候选 ${Number(mailMeta.pendingCount) || 0} 条 · 待你复核 ${mailSuggestions.length} 条`;
+          // 丢弃统计（v4.6.1）：老 Gist 文件没有 lastDropped、或本次一封没丢时 normalizeDropStats 返回 null，
+          // 这一段就不出现，状态栏与 v4.6.0 完全一致。
+          const drops = normalizeDropStats(mailMeta.lastDropped);
+          bar.innerHTML = `<strong>已读取邮件建议</strong>上次运行 ${escapeHtml(formatClock(mailMeta.lastRunAt) || '—')} · 本次新增 ${Number(mailMeta.newCount) || 0} 封 · 云端候选 ${Number(mailMeta.pendingCount) || 0} 条 · 待你复核 ${mailSuggestions.length} 条${drops ? ` · 丢弃 ${drops.total} 封` : ''}${mailDroppedHtml(drops)}`;
         } else {
           bar.className = 'mail-statusbar';
           bar.innerHTML = '<strong>暂无邮件建议</strong>定时任务可能还没运行，或你的 Gist 里还没有 mail-suggestions.json。确认 autumn-mail-sync 的 mail-sync 已跑通后，点「重新读取」。';
