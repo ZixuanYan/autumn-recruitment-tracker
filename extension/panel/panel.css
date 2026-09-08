@@ -42,6 +42,11 @@ body {
   border-bottom: 1px solid var(--aja-border-soft);
   background: var(--aja-bg);
 }
+/* Side Panel 的顶栏是 sticky chrome，用设计资源的 glass-nav 配方（.72 + saturate(180%) blur(20px)）。
+   面板内容从它下面滚过时会有磨砂透出；不支持 backdrop-filter 时留在上面的纯 bg。 */
+@supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
+  .p-header { background: var(--aja-glass); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+}
 .p-logo {
   display: grid;
   place-items: center;
@@ -189,7 +194,7 @@ body {
   color: #fff;
   background: var(--aja-accent);
   border: 1px solid var(--aja-accent);
-  border-radius: var(--aja-radius-md);
+  border-radius: var(--aja-radius-pill);
   cursor: pointer;
   transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
               border-color var(--aja-motion-fast) var(--aja-motion-ease);
@@ -214,7 +219,7 @@ body {
   padding: 0 var(--aja-space-3);
   background: var(--aja-bg);
   border: 1px solid var(--aja-border);
-  border-radius: var(--aja-radius-md);
+  border-radius: var(--aja-radius-pill);
   transition: border-color var(--aja-motion-fast) var(--aja-motion-ease);
 }
 .p-search:focus-within { border-color: var(--aja-accent); }

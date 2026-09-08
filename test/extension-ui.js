@@ -136,10 +136,13 @@ const LEGACY_COLORS = [
   '#5367e9', '#4053cb', '#6275f0', '#4c5fd6', '#4f64ee', '#3d51cc', '#5b6cfa', '#4338ca',
   '#24a475', '#1e8b63', '#eff6ff', '#93c5fd', '#1d4ed8', '#dbeafe', '#eef2ff', '#a5b4fc',
   '#c7d2fe', '#e0e7ff', '#f0f4ff', '#e6edff', '#c7d7fe', '#bfdbfe', '#eef2f7', '#dc2626',
-  '#fee2e2', '#fecaca', '#fffbeb', '#fcd34d', '#92400e'
+  '#fee2e2', '#fecaca', '#fffbeb', '#fcd34d', '#92400e',
+  // v5.0.0-v5.1.0 的橙色系（v5.2.0 已统一为 Apple 蓝）。退场的配色必须进黑名单，
+  // 否则将来有人"怀念旧橙"改回去不会被拦。rgba 用前缀匹配即可覆盖 soft 档。
+  '#e8552d', '#cf4a26', 'rgba(232,85,45', '#c0392b', 'rgba(192,57,43', '#8a6118', 'rgba(178,140,20'
 ];
 
-check('旧版蓝紫/绿/琥珀配色零残留（29 个历史色值黑名单）', () => {
+check('旧版蓝紫/绿/琥珀/橙配色零残留（36 个历史色值黑名单）', () => {
   // 刻意不区分注释与代码：先解析并排除注释会引入误删风险（字符串里的 // 、模板里的 /* 等），
   // 而「整个文件不许出现这些色值」这条规则简单可靠。代价是注释里提到旧配色时只能写「蓝紫色」
   // 这类文字描述、不能写出 hex——tokens.js 的 accent 注释就是这么写的。
@@ -162,10 +165,39 @@ check('零渐变：linear/radial/conic-gradient 一处都不许有', () => {
   assert.ok(!SRC.panelJs.includes('gradient'), 'panel.js 里出现了 gradient');
 });
 
-check('零毛玻璃：backdrop-filter / filter: blur 不许有', () => {
+check('毛玻璃只允许 4 个浮层选择器，且必须有 @supports 降级（v5.2.0 从全面禁令改为白名单）', () => {
+  // 为什么放宽：胶囊浮在别人的招聘页面上、Side Panel 是浏览器 UI 的一部分，
+  // 玻璃是这两处最合适的分离手段，也最符合 Apple 语言（glass-nav 配方 .72 + saturate(180%) blur(20px)）。
+  // 为什么不全放开：blur 用在密集小元素上会糊且掉帧（低端机），v5.0.0 的全面禁令正是为此。
+  // 白名单是**四个具体选择器名**而不是"允许 backdrop-filter"，所以放宽面是可控的。
+  const GLASS_OK = ['#aja-toggle', '#aja-capture-pop', '.p-header', '.aja-toast'];
   for (const { name, css } of ALL_CSS) {
-    assert.ok(!/backdrop-filter/.test(css), `${name} 里出现了 backdrop-filter`);
-    assert.ok(!/filter\s*:\s*blur/.test(css), `${name} 里出现了 filter: blur`);
+    const rules = css.match(/[^{}]*\{[^}]*backdrop-filter[^}]*\}/g) || [];
+    for (const rule of rules) {
+      // 两个提取陷阱：① 注释文本会被 [^{}]* 粘进"选择器"，先剥掉；
+      // ② @supports 的条件文本里本身就含 backdrop-filter，正则会把 @supports 的外层括号
+      //    当成规则块——此时真正的选择器在块内部第一个 { 之前。
+      const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+      let sel = strip(rule.slice(0, rule.indexOf('{')));
+      if (/@supports/.test(sel)) {
+        const inner = rule.slice(rule.indexOf('{') + 1);
+        sel = strip(inner.slice(0, inner.indexOf('{')));
+      }
+      assert.ok(GLASS_OK.some(g => sel.includes(g)),
+        `${name} 的 backdrop-filter 用在了非白名单选择器「${sel}」上——玻璃只允许浮层容器`);
+    }
+    if (/backdrop-filter/.test(css)) {
+      assert.ok(/@supports[^{]*backdrop-filter/.test(css),
+        `${name} 用了 backdrop-filter 但没有 @supports 包裹：不支持的浏览器必须退回不透明降级值，`
+        + '否则浮层变半透明与宿主内容糊在一起不可读');
+    }
+    // filter: blur 是給元素**本身**加模糊（会把文字也糊掉），与玻璃无关，仍然全禁。
+    // 检查前先剥掉 @supports 条件与 backdrop-filter 声明——它们的文本里天然含
+    // "filter: blur"（如 @supports (backdrop-filter: blur(20px))），不剥会误报。
+    const noGlassText = css
+      .replace(/@supports[^{]*\{/g, '')
+      .replace(/(?:-webkit-)?backdrop-filter\s*:[^;}]+/g, '');
+    assert.ok(!/filter\s*:\s*blur/.test(noGlassText), `${name} 里出现了元素级 filter: blur`);
   }
 });
 
@@ -180,23 +212,28 @@ check('零 emoji：18 处 emoji 图标已全部换成内联 SVG', () => {
   }
 });
 
-check('圆角只允许令牌四档（2/3/4/6px）与 0，旧版 8 种混用值不许回来', () => {
-  const allowed = new Set(['0', '2px', '3px', '4px', '6px']);
+check('圆角只允许令牌档位（v5.2.0 起五档：4/6/10/14/999px）与 0，旧版混用值不许回来', () => {
+  // 白名单直接读 RADIUS_WHITELIST（= Object.values(TOKENS.radius)），加档后自动跟随，
+  // 不用改守卫逻辑——v5.0.0 硬编码四档值，加 pill 时就会漏改这里。
+  const allowed = new Set(['0', ...AJA.RADIUS_WHITELIST]);
   for (const { name, css } of ALL_CSS) {
     const rules = css.match(/border-radius\s*:\s*([^;}]+)/g) || [];
     assert.ok(rules.length > 0, `${name} 里一条 border-radius 都没有（提取失败？）`);
     for (const rule of rules) {
       const value = rule.slice(rule.indexOf(':') + 1).trim();
       for (const part of value.split(/\s+/)) {
-        const ok = allowed.has(part) || /^var\(--aja-radius-(xs|sm|md|lg)\)$/.test(part);
+        const varKey = /^var\(--aja-radius-([a-z]+)\)$/.exec(part);
+        const ok = allowed.has(part) || (varKey && Object.prototype.hasOwnProperty.call(AJA.TOKENS.radius, varKey[1]));
         assert.ok(ok, `${name} 的 border-radius 分量「${part}」不在白名单（原值：${value}）`);
       }
     }
   }
 });
 
-check('动效不超过 150ms，且时长只能取令牌变量', () => {
-  const allowedVars = new Set(['--aja-motion-fast', '--aja-motion-base', '--aja-motion-ease']);
+check('动效不超过 320ms（抽屉/toast/卡片展开档），且时长只能取令牌变量', () => {
+  // 从 TOKENS.motion 的键生成，加 slow 档后自动跟随。上限读 AJA.MOTION_MAX_MS（=320）。
+  // hover 类仍应走 base 180ms——320ms 用在 hover 上会显得迟钝，但那是评审问题不是守卫问题。
+  const allowedVars = new Set(Object.keys(AJA.TOKENS.motion).map(k => `--aja-motion-${k}`));
   for (const { name, css } of ALL_CSS) {
     const rules = css.match(/(?:transition|animation)\s*:[^;}]+/g) || [];
     for (const rule of rules) {
@@ -295,7 +332,8 @@ check('light 与 dark 的键集合完全一致（少一个键就会在某个主�
   const l = Object.keys(AJA.TOKENS.light).sort();
   const d = Object.keys(AJA.TOKENS.dark).sort();
   assert.deepStrictEqual(l, d, `light/dark 键不一致：${l.join(',')} vs ${d.join(',')}`);
-  assert.ok(l.length >= 9, `调色板只有 ${l.length} 个键，可能漏了层次`);
+  // v5.2.0 起 accent/danger/warn/glass 移入两套主题，键数 9→17
+  assert.ok(l.length >= 17, `调色板只有 ${l.length} 个键（v5.2.0 起应 17），可能漏了层次`);
 });
 
 check('每个色值都是合法 hex 或 rgba（写错一个字符整块 UI 就变透明）', () => {
@@ -306,9 +344,8 @@ check('每个色值都是合法 hex 或 rgba（写错一个字符整块 UI 就�
       assert.ok(hexOrRgba.test(v), `${scheme}.${k} = ${v} 不是合法颜色`);
     }
   }
-  for (const k of ['accent', 'accentHover', 'accentSoft', 'danger', 'dangerSoft', 'warn', 'warnSoft']) {
-    assert.ok(hexOrRgba.test(AJA.TOKENS[k]), `${k} = ${AJA.TOKENS[k]} 不是合法颜色`);
-  }
+  // v5.2.0 起 accent/danger/warn 已移入 light/dark 两套，上面的循环已覆盖全部色值，
+  // 外层不再有这些键（旧版这里单独遍历 7 个单值，结构改动后会拿到 undefined 而误报）。
 });
 
 check('tokensToCssVars 两套主题都生成完整变量，且选择器可指定', () => {
@@ -328,14 +365,19 @@ check('tokensToCssVars 两套主题都生成完整变量，且选择器可指定
   assert.ok(AJA.tokensToCssVars('dark').includes(AJA.TOKENS.dark.bg), 'dark 未取到 dark 调色板');
 });
 
-check('强调色刻意不同于网页版的蓝紫 accent（防止有人"顺手统一"回 AI 感配色）', () => {
+check('插件 light accent 必须与网页版 --accent 一致，dark 必须用暗背景强调色（v5.2.0 两端已统一）', () => {
+  // 这条守卫的目的从「防止统一」反转为「防止只改一端」：v5.2.0 之前两端品牌色分叉
+  // （网页蓝紫 / 插件橙），统一之后若有人只改一端，分叉会悄悄回来。
   const webCss = fs.readFileSync(WEB, 'utf8');
   const m = /--accent:\s*(#[0-9a-fA-F]{3,8})/.exec(webCss);
   assert.ok(m, '网页版 index.html 里找不到 --accent');
-  assert.notStrictEqual(AJA.TOKENS.accent.toLowerCase(), m[1].toLowerCase(),
-    `插件强调色与网页版 --accent(${m[1]}) 撞成了同一个蓝紫：那正是本次要消除的 AI 感来源。`
-    + '若要统一品牌色，请两端一起改设计语言，而不是把插件改回蓝紫');
-  assert.strictEqual(AJA.TOKENS.accent, '#e8552d', '插件强调色被改动，请同步更新 tokens.js 的注释说明');
+  assert.strictEqual(AJA.TOKENS.light.accent.toLowerCase(), m[1].toLowerCase(),
+    `插件 light accent(${AJA.TOKENS.light.accent}) 与网页版 --accent(${m[1]}) 不一致：`
+    + '两端已统一 Apple 设计语言，改一端必须改另一端');
+  // 暗背景强调色必须是 #2997ff：#0071e3 在 #1c1c1e 上对比度约 3.4:1，不达标。
+  // 设计资源写得很明确：「Accent #2997ff，暗背景上的链接与高亮」。
+  assert.strictEqual(AJA.TOKENS.dark.accent, '#2997ff',
+    'dark accent 必须是 #2997ff；#0071e3 在暗底对比不足，不能直接复用 light 的值');
 });
 
 check('currentScheme 与 onSchemeChange 在无 matchMedia 环境下不抛错', () => {

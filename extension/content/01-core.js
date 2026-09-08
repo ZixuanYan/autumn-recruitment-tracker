@@ -227,8 +227,8 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       font-size: var(--aja-font-sm);
       font-weight: 600;
       line-height: 1.4;
-      border: 1px solid var(--aja-border);
-      border-radius: var(--aja-radius-lg);
+      border: 1px solid var(--aja-border-soft);
+      border-radius: var(--aja-radius-pill);
       box-shadow: 0 2px 8px var(--aja-shadow);
       cursor: pointer;
       user-select: none;
@@ -242,15 +242,22 @@ document.getElementById('autumn-job-assistant-host')?.remove();
     /* hover 只改颜色，绝不改 padding/transform——旧版 hover 时 padding-left 从 10px 变 14px，
        按钮会"跳"一下，是廉价感的典型来源 */
     #aja-toggle:hover { background: var(--aja-bg-hover); border-color: var(--aja-accent); color: var(--aja-accent); }
+    /* 玻璃：胶囊浮在别人的招聘页面上，.72 半透明 + blur 让它与宿主内容自然分离，
+       这是插件里玻璃收益最大的一处（比 Side Panel 顶栏更明显，因为背后是真实网页内容）。
+       hover 时玻璃会让 hover 底色透出宿主内容，所以 @supports 内把 hover 恢复成不透明。 */
+    @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
+      #aja-toggle { background: var(--aja-glass); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+      #aja-toggle:hover { background: var(--aja-bg-hover); }
+    }
     /* 吸边：贴住的一侧去掉圆角与边框，视觉上像从屏幕边缘抽出的标签 */
-    #aja-toggle.is-right { border-right: 0; border-radius: var(--aja-radius-lg) 0 0 var(--aja-radius-lg); }
-    #aja-toggle.is-left  { border-left: 0;  border-radius: 0 var(--aja-radius-lg) var(--aja-radius-lg) 0; }
+    #aja-toggle.is-right { border-right: 0; border-radius: var(--aja-radius-pill) 0 0 var(--aja-radius-pill); }
+    #aja-toggle.is-left  { border-left: 0;  border-radius: 0 var(--aja-radius-pill) var(--aja-radius-pill) 0; }
     #aja-toggle.is-dragging {
       transition: none;
       cursor: grabbing;
       opacity: .92;
       border-width: 1px;
-      border-radius: var(--aja-radius-lg);
+      border-radius: var(--aja-radius-pill);
     }
     #aja-toggle .toggle-label { white-space: nowrap; }
 
@@ -263,10 +270,15 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       overflow-y: auto;
       background: var(--aja-bg);
       color: var(--aja-text);
-      border: 1px solid var(--aja-border);
+      border: 1px solid var(--aja-border-soft);
       border-radius: var(--aja-radius-lg);
-      box-shadow: 0 2px 8px var(--aja-shadow);
+      box-shadow: 0 12px 40px var(--aja-shadow);
       padding: var(--aja-space-4);
+    }
+    /* 迷你卡片同样用玻璃（浮在招聘页面上）；阴影从 2px/8px 升档到 lift（12px/40px），
+       因为卡片面积大、需要比胶囊更强的分离感。降级同胶囊：不支持时留在上面的不透明 bg。 */
+    @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
+      #aja-capture-pop { background: var(--aja-glass); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
     }
     /* [hidden] 守卫：本规则块设了 display，必须显式压回 none，否则收起后仍占据空间并吞掉点击
        （网页版踩过四次同类缺陷，见 test/web-check.js 的同款守卫） */
@@ -311,22 +323,29 @@ document.getElementById('autumn-job-assistant-host')?.remove();
        由下方 applyTheme() 拼接注入。迷你卡片与 Side Panel 共用同一份，避免样式各自漂移。 */
 
     /* ---------- Toast ---------- */
+    /* toast 从黑底白字改为玻璃白（与网页版 v4.10.0 的 toast 同语言）：
+       圆角用矩形档 lg 而非胶囊（toast 常是标题+副文本两行，胶囊会压行）、
+       时长走 slow 档 320ms（设计资源 SpecList 明确 toast 属 320ms 档）、玻璃配方同胶囊。 */
     .aja-toast {
       position: fixed;
       top: 16px;
       left: 50%;
       transform: translateX(-50%);
       max-width: 80vw;
-      background: var(--aja-text);
-      color: var(--aja-bg);
-      padding: 7px 14px;
-      border-radius: var(--aja-radius-md);
+      background: var(--aja-bg);
+      color: var(--aja-text);
+      border: 1px solid var(--aja-border-soft);
+      padding: 8px 16px;
+      border-radius: var(--aja-radius-lg);
       font-size: var(--aja-font-sm);
       font-weight: 500;
-      box-shadow: 0 2px 8px var(--aja-shadow);
+      box-shadow: 0 12px 40px var(--aja-shadow);
       pointer-events: none;
       z-index: 2147483647;
-      animation: aja-fade-in var(--aja-motion-base) var(--aja-motion-ease);
+      animation: aja-fade-in var(--aja-motion-slow) var(--aja-motion-ease);
+    }
+    @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
+      .aja-toast { background: var(--aja-glass); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
     }
     @keyframes aja-fade-in {
       from { opacity: 0; }

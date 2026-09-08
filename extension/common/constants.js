@@ -10,7 +10,7 @@
 
   // 扩展版本（胶囊 title / 控制台均会展示，用于排查“是否已加载新代码”）
   // 必须与 manifest.json 的 version 一致，test/extension-ui.js 有契约断言
-  root.AJA.VERSION = '5.1.0';
+  root.AJA.VERSION = '5.2.0';
 
   // 招聘阶段预设（实际阶段可自定义，允许跳过笔试、支持三/四/五面、交叉面等）
   // v4.9.0 起值来自 shared/stages.js —— 它**必须先于本文件加载**（见 manifest.json 的

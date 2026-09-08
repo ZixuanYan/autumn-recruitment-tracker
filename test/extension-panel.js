@@ -295,7 +295,9 @@ check('设计令牌与表单样式确实注入到了 <style>，深色主题取�
   assert.strictEqual(styles.length, 1, '应注入且仅注入一个 <style>');
   const css = styles[0].textContent;
   assert.ok(css.startsWith(':root {'), 'panel 侧令牌应挂在 :root（Shadow DOM 才用 :host）');
-  assert.ok(css.includes('--aja-accent: #e8552d'), '令牌里没有强调色');
+  // 强调色读令牌值而不是硬编码 hex：v5.2.0 起 accent 在 light/dark 两套里，
+  // 硬编码旧值会在每次换设计语言时误报（这条断言的目的只是"令牌真的注入了"）。
+  assert.ok(css.includes(`--aja-accent: ${light.AJA.TOKENS.light.accent}`), '令牌里没有强调色');
   assert.ok(css.includes(`--aja-bg: ${light.AJA.TOKENS.light.bg}`), '默认应取浅色调色板');
   assert.ok(css.includes('.capture-form'), '表单样式未随模板一起注入');
   assert.ok(css.includes('.btn-save-record'), '表单样式缺保存按钮');

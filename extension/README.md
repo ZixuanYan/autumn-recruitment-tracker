@@ -1,4 +1,4 @@
-# 秋招求职与简历助手（Chrome/Edge 扩展 v5.1.0）
+# 秋招求职与简历助手（Chrome/Edge 扩展 v5.2.0）
 
 网申页采集端浏览器扩展（Manifest V3）：**简历字段点击速填 + 岗位一键收录 + 暂存箱**。与网页版 [秋招投递管理器](https://github.com/ZixuanYan/autumn-recruitment-tracker) 配套使用，插件负责采集与速填，网页版负责管理与跨设备同步。
 
@@ -138,7 +138,7 @@ v5.1.0 起 `common/` 里不再有 `company-key.js` 与 `default-resume.js`——
 
 ## 版本
 
-- 扩展：v5.1.0（阶段/企业性质/归一化/默认简历改为消费仓库根 `shared/` 的单一事实源；Side Panel + 可拖拽胶囊 + 设计令牌化样式自 v5.0.0 起）
+- 扩展：v5.2.0（阶段/企业性质/归一化/默认简历改为消费仓库根 `shared/` 的单一事实源；Side Panel + 可拖拽胶囊 + 设计令牌化样式自 v5.0.0 起）
 - 存储键：`autumnRecruitmentTracker.resume.v1` / `autumnRecruitmentTracker.pending.v1` / `autumnRecruitmentTracker.ui.v1`（胶囊位置）
 
 ### v5.0.0 UI 重构要点

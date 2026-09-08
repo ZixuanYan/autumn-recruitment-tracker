@@ -152,7 +152,7 @@
       color: var(--aja-text);
       background: var(--aja-bg);
       border: 1px solid var(--aja-border);
-      border-radius: var(--aja-radius-md);
+      border-radius: var(--aja-radius-pill);
       outline: none;
       transition: border-color var(--aja-motion-fast) var(--aja-motion-ease);
     }
@@ -178,7 +178,7 @@
       color: #fff;
       background: var(--aja-accent);
       border: 1px solid var(--aja-accent);
-      border-radius: var(--aja-radius-md);
+      border-radius: var(--aja-radius-pill);
       font-size: var(--aja-font-sm);
       font-weight: 600;
       font-family: inherit;
@@ -192,7 +192,7 @@
       color: var(--aja-text-sub);
       background: var(--aja-bg);
       border: 1px solid var(--aja-border);
-      border-radius: var(--aja-radius-md);
+      border-radius: var(--aja-radius-pill);
       font-size: var(--aja-font-sm);
       font-family: inherit;
       cursor: pointer;
