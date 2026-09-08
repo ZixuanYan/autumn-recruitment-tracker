@@ -308,113 +308,8 @@ document.getElementById('autumn-job-assistant-host')?.remove();
     .pop-close:hover { background: var(--aja-bg-hover); color: var(--aja-text); }
     .pop-actions { display: flex; align-items: center; gap: var(--aja-space-1); }
 
-    /* ---------- 收录表单（与 Side Panel 共用 common/capture-form.js 的模板）---------- */
-    .capture-form {
-      display: flex;
-      flex-direction: column;
-      gap: var(--aja-space-3);
-    }
-    .title-hint {
-      padding: var(--aja-space-2) var(--aja-space-3);
-      background: var(--aja-bg-sub);
-      border: 1px solid var(--aja-border-soft);
-      border-radius: var(--aja-radius-md);
-      font-size: var(--aja-font-xs);
-      color: var(--aja-text-sub);
-      line-height: 1.45;
-      word-break: break-all;
-      cursor: pointer;
-      transition: border-color var(--aja-motion-fast) var(--aja-motion-ease);
-    }
-    .title-hint:hover { border-color: var(--aja-accent); }
-    .title-hint-label {
-      display: flex;
-      align-items: center;
-      gap: var(--aja-space-1);
-      color: var(--aja-text-mute);
-      font-size: 10px;
-      margin-bottom: 2px;
-    }
-    /* 解析器「宁空勿错」，识别不出的字段留空并在这里明确告知需要人工补填 */
-    .detect-hint {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: var(--aja-space-1);
-      padding: var(--aja-space-2) var(--aja-space-3);
-      background: var(--aja-bg-sub);
-      border: 1px solid var(--aja-border-soft);
-      border-radius: var(--aja-radius-md);
-      font-size: var(--aja-font-xs);
-      line-height: 1.5;
-      color: var(--aja-text-sub);
-    }
-    .detect-hint[hidden] { display: none; }
-    .detect-hint.warn {
-      background: var(--aja-warn-soft);
-      border-color: var(--aja-warn);
-      color: var(--aja-warn);
-    }
-    .detect-hint-src { width: 100%; color: var(--aja-text-mute); }
-
-    .form-group { display: flex; flex-direction: column; gap: 3px; }
-    .form-group label {
-      font-size: var(--aja-font-xs);
-      font-weight: 600;
-      color: var(--aja-text-sub);
-    }
-    .form-group input, .form-group select {
-      padding: 5px var(--aja-space-3);
-      font-size: var(--aja-font-sm);
-      font-family: inherit;
-      border: 1px solid var(--aja-border);
-      border-radius: var(--aja-radius-md);
-      background: var(--aja-bg);
-      color: var(--aja-text);
-      outline: none;
-      transition: border-color var(--aja-motion-fast) var(--aja-motion-ease);
-    }
-    .form-group input:focus, .form-group select:focus {
-      border-color: var(--aja-accent);
-      box-shadow: 0 0 0 2px var(--aja-accent-soft);
-    }
-    /* 关键修复（v4.x 遗留，必须保留）：容器整体 user-select:none 会让输入框里已有的文本
-       无法选中/替换，表现为"配置存了就改不了"；输入控件必须可选可编辑 */
-    #aja-capture-pop input, #aja-capture-pop textarea, #aja-capture-pop select {
-      user-select: text;
-      -webkit-user-select: text;
-    }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--aja-space-2); }
-    .form-actions { display: flex; gap: var(--aja-space-2); margin-top: var(--aja-space-1); }
-    .btn-save-record {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--aja-space-1);
-      padding: 6px;
-      background: var(--aja-accent);
-      color: #fff;
-      border: 1px solid var(--aja-accent);
-      border-radius: var(--aja-radius-md);
-      font-size: var(--aja-font-sm);
-      font-weight: 600;
-      cursor: pointer;
-      transition: background-color var(--aja-motion-fast) var(--aja-motion-ease);
-    }
-    .btn-save-record:hover { background: var(--aja-accent-hover); border-color: var(--aja-accent-hover); }
-    .btn-cancel-capture {
-      padding: 6px 10px;
-      background: var(--aja-bg);
-      color: var(--aja-text-sub);
-      border: 1px solid var(--aja-border);
-      border-radius: var(--aja-radius-md);
-      font-size: var(--aja-font-sm);
-      cursor: pointer;
-      transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
-                  color var(--aja-motion-fast) var(--aja-motion-ease);
-    }
-    .btn-cancel-capture:hover { background: var(--aja-bg-hover); color: var(--aja-text); }
+    /* 收录表单的组件样式不在这里：它与表单模板同源，放在 common/capture-form.js 的 css()，
+       由下方 applyTheme() 拼接注入。迷你卡片与 Side Panel 共用同一份，避免样式各自漂移。 */
 
     /* ---------- Toast ---------- */
     .aja-toast {
@@ -445,7 +340,7 @@ document.getElementById('autumn-job-assistant-host')?.remove();
   // 后者依赖字符串定位，组件样式一改就会静默错位（拼出半截 CSS，界面直接花掉）。
   const style = document.createElement('style');
   function applyTheme(scheme) {
-    style.textContent = AJA.tokensToCssVars(scheme, ':host') + COMPONENT_CSS;
+    style.textContent = AJA.tokensToCssVars(scheme, ':host') + COMPONENT_CSS + AJA.CaptureForm.css();
   }
   applyTheme(AJA.currentScheme());
   AJA.onSchemeChange(applyTheme);
@@ -630,14 +525,6 @@ document.getElementById('autumn-job-assistant-host')?.remove();
   // background 中转到这里。解析引擎 extractPageJobData 在 03-parsers.js，零改动复用。
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!request || !request.type || window.self !== window.top) return;
-
-    // 过渡分支：Side Panel 落地前，工具栏图标与浏览器级快捷键仍走 TOGGLE_SIDEBAR，
-    // 语义从「开合全高抽屉」变为「开合迷你收录卡片」，避免出现图标点了没反应的真空期。
-    // Side Panel 上线后此分支与 MSG.TOGGLE_SIDEBAR 常量一并移除（图标改由 openPanelOnActionClick 接管）。
-    if (request.type === MSG.TOGGLE_SIDEBAR) {
-      openCapture();
-      return;
-    }
 
     if (request.type === MSG.SCAN_CURRENT_PAGE) {
       try {

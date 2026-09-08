@@ -1,0 +1,451 @@
+/*
+ * 秋招求职助手 - Side Panel 样式（v5.0.0）
+ *
+ * 三条硬规则（test/extension-ui.js 的静态守卫会逐项断言）：
+ * 1. 颜色与圆角一律走 var(--aja-*)，令牌由 panel.js 从 common/tokens.js 注入并跟随系统深浅主题；
+ *    本文件里唯一允许的字面色是 #fff（强调色按钮上的文字，深浅主题下都需要白字）。
+ * 2. 零渐变、零毛玻璃、零 emoji、零阴影。Side Panel 是浏览器 UI 的一部分，
+ *    靠 1px 边框分层就够；阴影只会让它看起来像"贴在浏览器上的第三方浮层"。
+ * 3. 动效不超过 150ms，且 hover/active 一律不改盒模型（padding/margin/transform/width/height），
+ *    否则鼠标划过时元素会"跳"。
+ *
+ * 收录表单的样式不在此文件：它与表单模板同源，见 common/capture-form.js 的 css()，
+ * 由 panel.js 一并注入，迷你卡片与面板因此不会各自漂移。
+ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: var(--aja-font-md);
+  line-height: 1.5;
+  color: var(--aja-text);
+  background: var(--aja-bg);
+}
+
+.aja-ico { flex: 0 0 auto; display: block; }
+
+/* ---------------- 顶栏 ---------------- */
+.p-header {
+  display: flex;
+  align-items: center;
+  gap: var(--aja-space-2);
+  flex: 0 0 auto;
+  padding: var(--aja-space-3) var(--aja-space-4);
+  border-bottom: 1px solid var(--aja-border-soft);
+  background: var(--aja-bg);
+}
+.p-logo {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--aja-accent);
+  background: var(--aja-accent-soft);
+  border-radius: var(--aja-radius-md);
+}
+.p-title {
+  font-size: var(--aja-font-lg);
+  font-weight: 650;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.p-ver {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: .02em;
+  color: var(--aja-text-mute);
+  border: 1px solid var(--aja-border-soft);
+  border-radius: var(--aja-radius-xs);
+}
+
+/* ---------------- 当前页状态条 ---------------- */
+/* Side Panel 跨标签页保持打开，用户切页后必须知道面板现在对着哪个页面，
+   否则会在 A 公司的页面上点了收录、存进去的却是 B 公司的链接 */
+.p-pagestate {
+  display: flex;
+  align-items: baseline;
+  gap: var(--aja-space-2);
+  flex: 0 0 auto;
+  padding: var(--aja-space-2) var(--aja-space-4);
+  font-size: var(--aja-font-xs);
+  color: var(--aja-text-sub);
+  background: var(--aja-bg-sub);
+  border-bottom: 1px solid var(--aja-border-soft);
+  word-break: break-all;
+}
+.p-pagestate[hidden] { display: none; }
+.p-pagestate.is-warn { color: var(--aja-warn); background: var(--aja-warn-soft); }
+.p-pagestate b { font-weight: 650; color: inherit; }
+
+/* ---------------- 主体 ---------------- */
+.p-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--aja-space-3) var(--aja-space-4) var(--aja-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--aja-space-3);
+}
+.p-body::-webkit-scrollbar { width: 6px; }
+.p-body::-webkit-scrollbar-thumb { background: var(--aja-border); border-radius: var(--aja-radius-sm); }
+
+.p-section {
+  border: 1px solid var(--aja-border-soft);
+  border-radius: var(--aja-radius-md);
+  background: var(--aja-bg);
+  overflow: hidden;
+}
+.p-sec-head {
+  display: flex;
+  align-items: center;
+  gap: var(--aja-space-2);
+  width: 100%;
+  padding: var(--aja-space-3);
+  font-size: var(--aja-font-sm);
+  font-weight: 650;
+  font-family: inherit;
+  color: var(--aja-text);
+  background: var(--aja-bg-sub);
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-sec-head:hover { background: var(--aja-bg-hover); }
+.p-sec-title { flex: 0 0 auto; }
+.p-badge {
+  min-width: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 16px;
+  text-align: center;
+  color: var(--aja-accent);
+  background: var(--aja-accent-soft);
+  border-radius: var(--aja-radius-xs);
+}
+.p-badge[hidden] { display: none; }
+.p-sec-arrow {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  color: var(--aja-text-mute);
+  transition: transform var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-sec-head[aria-expanded="false"] .p-sec-arrow { transform: rotate(-90deg); }
+
+.p-sec-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aja-space-3);
+  padding: var(--aja-space-3);
+  border-top: 1px solid var(--aja-border-soft);
+}
+/* [hidden] 守卫：上面设了 display:flex，必须显式压回 none，
+   否则收起的段仍占据高度并吞掉点击（网页版踩过四次同类缺陷） */
+.p-sec-body[hidden] { display: none; }
+
+.p-hint {
+  font-size: var(--aja-font-xs);
+  line-height: 1.55;
+  color: var(--aja-text-mute);
+}
+.p-hint b { color: var(--aja-text-sub); font-weight: 600; }
+.p-status {
+  padding: var(--aja-space-2) var(--aja-space-3);
+  font-size: var(--aja-font-xs);
+  color: var(--aja-text-sub);
+  background: var(--aja-bg-sub);
+  border: 1px solid var(--aja-border-soft);
+  border-radius: var(--aja-radius-md);
+}
+.p-status.is-empty { color: var(--aja-accent); cursor: pointer; }
+
+/* ---------------- 按钮 ---------------- */
+.p-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--aja-space-2);
+  width: 100%;
+  padding: 7px var(--aja-space-3);
+  font-size: var(--aja-font-sm);
+  font-weight: 600;
+  font-family: inherit;
+  color: #fff;
+  background: var(--aja-accent);
+  border: 1px solid var(--aja-accent);
+  border-radius: var(--aja-radius-md);
+  cursor: pointer;
+  transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
+              border-color var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-primary:hover { background: var(--aja-accent-hover); border-color: var(--aja-accent-hover); }
+.p-primary:disabled {
+  color: var(--aja-text-mute);
+  background: var(--aja-bg-sub);
+  border-color: var(--aja-border-soft);
+  cursor: not-allowed;
+}
+.p-btn-ico { display: grid; place-items: center; }
+
+.p-form-host { display: flex; flex-direction: column; }
+.p-form-host:empty { display: none; }
+
+/* ---------------- 搜索框 ---------------- */
+.p-search {
+  display: flex;
+  align-items: center;
+  gap: var(--aja-space-2);
+  padding: 0 var(--aja-space-3);
+  background: var(--aja-bg);
+  border: 1px solid var(--aja-border);
+  border-radius: var(--aja-radius-md);
+  transition: border-color var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-search:focus-within { border-color: var(--aja-accent); }
+.p-search-ico { display: grid; place-items: center; color: var(--aja-text-mute); }
+.p-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 0;
+  font-size: var(--aja-font-sm);
+  font-family: inherit;
+  color: var(--aja-text);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+.p-search input::placeholder { color: var(--aja-text-mute); }
+
+/* ---------------- 暂存箱 ---------------- */
+.p-pend-list { display: flex; flex-direction: column; }
+.p-pend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--aja-space-2);
+  padding: var(--aja-space-2) 0;
+  border-bottom: 1px solid var(--aja-border-soft);
+}
+.p-pend-item:last-child { border-bottom: 0; }
+.p-pend-main { flex: 1 1 auto; min-width: 0; cursor: pointer; }
+.p-pend-title {
+  font-size: var(--aja-font-sm);
+  font-weight: 600;
+  color: var(--aja-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-pend-main:hover .p-pend-title { color: var(--aja-accent); }
+.p-pend-meta {
+  margin-top: 1px;
+  font-size: var(--aja-font-xs);
+  color: var(--aja-text-mute);
+}
+/* 「同公司相近岗位」说明：让用户知道这不是重复堆积，而是刻意保留的第二个岗位 */
+.p-pend-variant {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--aja-warn);
+  background: var(--aja-warn-soft);
+  border-radius: var(--aja-radius-xs);
+}
+.p-pend-discard {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--aja-danger);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--aja-radius-sm);
+  cursor: pointer;
+  transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
+              border-color var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-pend-discard:hover { background: var(--aja-danger-soft); border-color: var(--aja-danger); }
+
+/* ---------------- 简历字段库 ---------------- */
+.p-resume-list { display: flex; flex-direction: column; gap: var(--aja-space-2); }
+.p-res-sec {
+  border: 1px solid var(--aja-border-soft);
+  border-radius: var(--aja-radius-md);
+  background: var(--aja-bg);
+  overflow: hidden;
+}
+.p-res-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--aja-space-2);
+  width: 100%;
+  padding: var(--aja-space-2) var(--aja-space-3);
+  font-size: var(--aja-font-sm);
+  font-weight: 650;
+  font-family: inherit;
+  color: var(--aja-text);
+  background: var(--aja-bg-sub);
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-res-head:hover { background: var(--aja-bg-hover); }
+.p-res-arrow {
+  display: grid;
+  place-items: center;
+  color: var(--aja-text-mute);
+  transition: transform var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-res-sec.is-collapsed .p-res-arrow { transform: rotate(-90deg); }
+.p-res-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aja-space-2);
+  padding: var(--aja-space-2) var(--aja-space-3);
+}
+.p-res-body[hidden] { display: none; }
+
+.p-exp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--aja-space-1);
+  padding: var(--aja-space-2);
+  background: var(--aja-bg-sub);
+  border: 1px solid var(--aja-border-soft);
+  border-radius: var(--aja-radius-sm);
+}
+.p-exp-title {
+  width: 100%;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
+  font-size: var(--aja-font-xs);
+  font-weight: 650;
+  color: var(--aja-text-sub);
+  border-bottom: 1px solid var(--aja-border-soft);
+}
+
+/* 字段 chip：左键填入宿主页面聚焦框，右键复制 */
+.p-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 7px;
+  font-size: var(--aja-font-xs);
+  font-family: inherit;
+  color: var(--aja-text);
+  background: var(--aja-bg);
+  border: 1px solid var(--aja-border);
+  border-radius: var(--aja-radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
+              border-color var(--aja-motion-fast) var(--aja-motion-ease),
+              color var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-chip:hover {
+  color: var(--aja-accent);
+  background: var(--aja-accent-soft);
+  border-color: var(--aja-accent);
+}
+.p-chip-key {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  font-size: 10px;
+  color: var(--aja-text-mute);
+  white-space: nowrap;
+}
+.p-chip-key::after { content: ':'; }
+.p-chip-val {
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+
+/* ---------------- 空态 ---------------- */
+.p-empty {
+  padding: var(--aja-space-4) var(--aja-space-3);
+  font-size: var(--aja-font-xs);
+  line-height: 1.6;
+  color: var(--aja-text-mute);
+  text-align: center;
+  background: var(--aja-bg-sub);
+  border: 1px dashed var(--aja-border);
+  border-radius: var(--aja-radius-md);
+}
+
+/* ---------------- 底栏 ---------------- */
+.p-footer {
+  flex: 0 0 auto;
+  padding: var(--aja-space-3) var(--aja-space-4);
+  border-top: 1px solid var(--aja-border-soft);
+  background: var(--aja-bg);
+}
+.p-footer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--aja-space-2);
+  width: 100%;
+  padding: 7px var(--aja-space-3);
+  font-size: var(--aja-font-sm);
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--aja-text-sub);
+  background: var(--aja-bg);
+  border: 1px solid var(--aja-border);
+  border-radius: var(--aja-radius-md);
+  cursor: pointer;
+  transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
+              border-color var(--aja-motion-fast) var(--aja-motion-ease),
+              color var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-footer-btn:hover {
+  color: var(--aja-accent);
+  background: var(--aja-bg-hover);
+  border-color: var(--aja-accent);
+}
+
+/* ---------------- Toast ---------------- */
+.p-toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--aja-space-5);
+  transform: translateX(-50%);
+  max-width: calc(100% - 24px);
+  padding: 7px var(--aja-space-4);
+  font-size: var(--aja-font-sm);
+  font-weight: 500;
+  color: var(--aja-bg);
+  background: var(--aja-text);
+  border-radius: var(--aja-radius-md);
+  pointer-events: none;
+  animation: p-fade-in var(--aja-motion-base) var(--aja-motion-ease);
+}
+.p-toast[hidden] { display: none; }
+@keyframes p-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

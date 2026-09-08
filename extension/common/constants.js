@@ -52,8 +52,9 @@
     // 都要 panel -> background -> tabs.sendMessage -> content 走一趟。background 只做转发与
     // 「当前页没有 content script」的错误收敛（edge:// 内部页、扩展商店页等）。
     SCAN_CURRENT_PAGE: 'SCAN_CURRENT_PAGE',       // panel -> background -> content：解析当前页岗位信息
-    FILL_FOCUSED_FIELD: 'FILL_FOCUSED_FIELD',     // panel -> background -> content：把值填入宿主页面聚焦框
-    TOGGLE_SIDEBAR: 'TOGGLE_SIDEBAR'              // background -> content：图标/快捷键开合迷你收录卡片
+    FILL_FOCUSED_FIELD: 'FILL_FOCUSED_FIELD'      // panel -> background -> content：把值填入宿主页面聚焦框
+    // 注：旧版的 TOGGLE_SIDEBAR 已移除。图标点击由 sidePanel.setPanelBehavior({openPanelOnActionClick})
+    // 接管，快捷键由 background 直接调 sidePanel.open()，都不再需要往 content script 发消息。
   };
 
   // 网页版 postMessage 桥接标识（独立于原作者旧插件的 AUTUMN_JOB_CAPTURE，避免协议撞车）

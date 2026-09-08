@@ -57,30 +57,66 @@ async function getPendingQueue() {
   return Array.isArray(res[PENDING_KEY]) ? res[PENDING_KEY] : [];
 }
 
-// ================= 在当前活动标签页唤起侧边栏（图标点击与浏览器快捷键共用）=================
-async function toggleSidebarOnActiveTab() {
+// ================= Side Panel 入口（v5.0.0）=================
+// 点工具栏图标直接打开侧边面板。注意：一旦设置 openPanelOnActionClick，
+// chrome.action.onClicked 就**不再触发**（两者互斥），所以旧版那个 onClicked 监听必须删掉，
+// 留着就是永远不执行的死代码，还会让人误以为图标点击走的是它。
+if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+}
+
+// 浏览器级快捷键（chrome.commands）：比页面内监听可靠，不受焦点/iframe/保留键影响。
+// commands 的触发算 user gesture，所以这里可以调 sidePanel.open()；而 content script 里点胶囊
+// 再转发过来就丢了手势、open() 会失败——这正是胶囊不承担「打开面板」职责、只做收录的原因。
+// command id 仍叫 toggle-sidebar（改 id 会让用户已自定义的快捷键绑定失效），但语义已变为「打开面板」：
+// Side Panel 没有提供关闭 API，关闭走面板右上角浏览器自带的 X。
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== 'toggle-sidebar') return;
+  if (!chrome.sidePanel || !chrome.sidePanel.open) return;
+  try {
+    const win = await chrome.windows.getCurrent();
+    if (win && typeof win.id === 'number') await chrome.sidePanel.open({ windowId: win.id });
+  } catch (_) {
+    // 浏览器版本过低（Side Panel 需 Chrome/Edge 114+）或窗口不可用：静默忽略。
+    // 胶囊与迷你收录卡片不依赖 Side Panel，收录功能仍然完整。
+  }
+});
+
+// 取当前活动标签页 id（panel 没带 tabId 时的兜底）
+async function getActiveTabId() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && typeof tab.id === 'number') {
-      await chrome.tabs.sendMessage(tab.id, { type: MSG.TOGGLE_SIDEBAR });
-    }
+    return tab && typeof tab.id === 'number' ? tab.id : null;
   } catch (_) {
-    // 当前页面没有注入 content script（edge:// 内部页、商店页等），忽略
+    return null;
   }
 }
 
-// 点击扩展图标 -> 在当前页唤起/收起侧边栏
-chrome.action.onClicked.addListener(() => {
-  toggleSidebarOnActiveTab();
-});
-
-// 浏览器级快捷键（chrome.commands）：比页面内监听可靠，不受焦点/iframe/保留键影响
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command === 'toggle-sidebar') toggleSidebarOnActiveTab();
-});
-
 // ================= 监听各页面消息 =================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+
+  // Side Panel → 目标标签页的 content script：解析当前页 / 把值填入宿主页面聚焦框。
+  // Side Panel 是扩展页面（chrome-extension:// 源），拿不到宿主页 DOM，只能经这里中转。
+  // 失败一律收敛成 reason 字符串，让面板能翻成人话（见 panel.js 的 reasonText），
+  // 否则用户只会看到「点了没反应」——这是 Side Panel 形态最容易出的体验问题。
+  if (request.type === MSG.SCAN_CURRENT_PAGE || request.type === MSG.FILL_FOCUSED_FIELD) {
+    (async () => {
+      const requested = Number(request.tabId);
+      const tabId = Number.isInteger(requested) ? requested : await getActiveTabId();
+      if (!Number.isInteger(tabId)) {
+        sendResponse({ ok: false, reason: 'no-tab' });
+        return;
+      }
+      try {
+        const res = await chrome.tabs.sendMessage(tabId, request);
+        sendResponse(res || { ok: false, reason: 'no-response' });
+      } catch (err) {
+        // 当前页没有注入 content script：edge:// 内部页、扩展商店页、页面刚打开还没注入完
+        sendResponse({ ok: false, reason: 'no-content-script', message: err && err.message ? err.message : String(err) });
+      }
+    })();
+    return true;
+  }
 
   // 推送记录到网页版管理器：定位其标签页 → 激活 → 中继给页面弹窗人工确认
   if (request.type === MSG.PUSH_TO_TRACKER) {

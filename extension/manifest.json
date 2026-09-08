@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "秋招求职与简历助手",
   "version": "5.0.0",
-  "description": "秋招网申采集端：岗位一键提取收录与暂存 + 简历字段点击速填（左键填入聚焦框、右键复制、可搜索），配合网页版管理器实现跨设备同步。",
+  "description": "秋招网申采集端：侧边面板内一键提取收录岗位与暂存、简历字段点击速填（左键填入聚焦框、右键复制、可搜索），页面上只留一个可拖拽的收录胶囊。配合网页版管理器实现跨设备同步。",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -12,7 +12,8 @@
     "storage",
     "tabs",
     "activeTab",
-    "scripting"
+    "scripting",
+    "sidePanel"
   ],
   "host_permissions": [
     "http://*/*",
@@ -21,8 +22,11 @@
   "background": {
     "service_worker": "background.js"
   },
+  "side_panel": {
+    "default_path": "panel/panel.html"
+  },
   "action": {
-    "default_title": "收录当前岗位",
+    "default_title": "打开秋招求职助手侧边面板",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -51,7 +55,7 @@
   "commands": {
     "toggle-sidebar": {
       "suggested_key": { "default": "Ctrl+Shift+F", "mac": "Command+Shift+F" },
-      "description": "开合收录卡片"
+      "description": "打开秋招求职助手侧边面板"
     }
   }
 }

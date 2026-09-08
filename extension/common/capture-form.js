@@ -87,6 +87,121 @@
   }
 
   /**
+   * 表单的组件样式（两端共用）。
+   * 和 html() 放在一起是刻意的：模板与样式同源，改一处就不会出现「迷你卡片好看、面板错位」。
+   * 全部走 var(--aja-*)，因此深浅主题自动适配；调用方负责先注入 tokensToCssVars。
+   * 选择器一律用 .capture-form 作用域而不是 #aja-capture-pop 这类端上专有的 id，
+   * 这样同一份 CSS 在 Shadow DOM 与扩展页面里都成立。
+   */
+  function css() {
+    return `
+    .capture-form { display: flex; flex-direction: column; gap: var(--aja-space-3); }
+    .capture-form[hidden] { display: none; }
+    .title-hint {
+      padding: var(--aja-space-2) var(--aja-space-3);
+      background: var(--aja-bg-sub);
+      border: 1px solid var(--aja-border-soft);
+      border-radius: var(--aja-radius-md);
+      font-size: var(--aja-font-xs);
+      color: var(--aja-text-sub);
+      line-height: 1.45;
+      word-break: break-all;
+      cursor: pointer;
+      transition: border-color var(--aja-motion-fast) var(--aja-motion-ease);
+    }
+    .title-hint:hover { border-color: var(--aja-accent); }
+    .title-hint-label {
+      display: flex;
+      align-items: center;
+      gap: var(--aja-space-1);
+      color: var(--aja-text-mute);
+      font-size: 10px;
+      margin-bottom: 2px;
+    }
+    .title-hint-text { color: var(--aja-text-sub); }
+    /* 解析器「宁空勿错」，识别不出的字段留空并在这里明确告知需要人工补填 */
+    .detect-hint {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--aja-space-1);
+      padding: var(--aja-space-2) var(--aja-space-3);
+      background: var(--aja-bg-sub);
+      border: 1px solid var(--aja-border-soft);
+      border-radius: var(--aja-radius-md);
+      font-size: var(--aja-font-xs);
+      line-height: 1.5;
+      color: var(--aja-text-sub);
+    }
+    .detect-hint[hidden] { display: none; }
+    .detect-hint.warn {
+      background: var(--aja-warn-soft);
+      border-color: var(--aja-warn);
+      color: var(--aja-warn);
+    }
+    .detect-hint-src { width: 100%; color: var(--aja-text-mute); }
+    .form-group { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .form-group label { font-size: var(--aja-font-xs); font-weight: 600; color: var(--aja-text-sub); }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 5px var(--aja-space-3);
+      font-size: var(--aja-font-sm);
+      font-family: inherit;
+      color: var(--aja-text);
+      background: var(--aja-bg);
+      border: 1px solid var(--aja-border);
+      border-radius: var(--aja-radius-md);
+      outline: none;
+      transition: border-color var(--aja-motion-fast) var(--aja-motion-ease);
+    }
+    .form-group input:focus, .form-group select:focus {
+      border-color: var(--aja-accent);
+      box-shadow: 0 0 0 2px var(--aja-accent-soft);
+    }
+    /* 关键修复（v4.x 遗留，必须保留）：容器整体 user-select:none 会让输入框里已有的文本
+       无法选中/替换，表现为"配置存了就改不了"；输入控件必须可选可编辑 */
+    .capture-form input, .capture-form textarea, .capture-form select {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--aja-space-2); }
+    .form-actions { display: flex; gap: var(--aja-space-2); margin-top: var(--aja-space-1); }
+    .btn-save-record {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--aja-space-1);
+      padding: 6px;
+      color: #fff;
+      background: var(--aja-accent);
+      border: 1px solid var(--aja-accent);
+      border-radius: var(--aja-radius-md);
+      font-size: var(--aja-font-sm);
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
+                  border-color var(--aja-motion-fast) var(--aja-motion-ease);
+    }
+    .btn-save-record:hover { background: var(--aja-accent-hover); border-color: var(--aja-accent-hover); }
+    .btn-cancel-capture {
+      padding: 6px 10px;
+      color: var(--aja-text-sub);
+      background: var(--aja-bg);
+      border: 1px solid var(--aja-border);
+      border-radius: var(--aja-radius-md);
+      font-size: var(--aja-font-sm);
+      font-family: inherit;
+      cursor: pointer;
+      transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
+                  color var(--aja-motion-fast) var(--aja-motion-ease);
+    }
+    .btn-cancel-capture:hover { background: var(--aja-bg-hover); color: var(--aja-text); }
+    `;
+  }
+
+  /**
    * 生成两个下拉的选项。
    * 阶段由 AJA.STAGES 统一生成（与网页版 STAGE_PRESETS 单一事实源）；
    * 企业性质首项固定「未设置」value=''，解析器从不猜企业性质（页面上没有可靠依据，
@@ -264,7 +379,7 @@
   }
 
   root.AJA.CaptureForm = {
-    html, fillOptions, els, fillForm, firstEmptyField, fillFromPending, renderDetectHint, collect, save,
+    html, css, fillOptions, els, fillForm, firstEmptyField, fillFromPending, renderDetectHint, collect, save,
     DETECT_SOURCE_LABELS, detectSourceLabel
   };
 })();

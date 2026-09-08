@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>秋招求职助手</title>
+  <!--
+    Chrome 原生 Side Panel（v5.0.0）。
+    为什么从「注入式全高抽屉」搬到这里：抽屉浮在页面之上，正在填的网申表单被挡住一半，
+    而且位置写死不能移动。Side Panel 由浏览器管理，会压缩页面宽度而不是覆盖页面，
+    于是「一边看表单、一边点字段速填」第一次真正成立；它还跨标签页保持打开、
+    宽度可由用户拖浏览器分隔条调整。
+
+    约束：Side Panel 是扩展页面（chrome-extension:// 源），拿不到宿主页 DOM，
+    所以「解析当前页」与「填入聚焦框」都要经 background 中转到目标标签页的 content script。
+    简历数据与暂存箱本来就走 chrome.runtime.sendMessage，直接复用零改动。
+
+    CSP：manifest 的 extension_pages 是 script-src 'self'，因此这里只能用外部 script，
+    不能写内联脚本；设计令牌变量由 panel.js 动态插入 <style> 注入。
+  -->
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <header class="p-header">
+    <span class="p-logo" id="p-logo"></span>
+    <span class="p-title">秋招求职助手</span>
+    <span class="p-ver" id="p-ver" title="当前插件版本；若与仓库最新不符，请在 edge://extensions 重新加载"></span>
+  </header>
+
+  <!-- 当前页状态：Side Panel 跨标签页保持打开，用户切页后必须知道面板现在对着哪个页面 -->
+  <div class="p-pagestate" id="p-pagestate" role="status" aria-live="polite"></div>
+
+  <main class="p-body">
+
+    <section class="p-section" id="p-sec-capture">
+      <button class="p-sec-head" id="p-cap-head" type="button" aria-expanded="true" aria-controls="p-cap-body">
+        <span class="p-sec-title">一键收录</span>
+        <span class="p-sec-arrow" id="p-cap-arrow"></span>
+      </button>
+      <div class="p-sec-body" id="p-cap-body">
+        <button class="p-primary" id="p-scan-btn" type="button">
+          <span class="p-btn-ico" id="p-scan-ico"></span><span>识别当前页面</span>
+        </button>
+        <div class="p-form-host" id="p-form-host"></div>
+      </div>
+    </section>
+
+    <section class="p-section">
+      <button class="p-sec-head" id="p-pend-head" type="button" aria-expanded="false" aria-controls="p-pend-body">
+        <span class="p-sec-title">暂存箱</span>
+        <span class="p-badge" id="p-pend-count">0</span>
+        <span class="p-sec-arrow" id="p-pend-arrow"></span>
+      </button>
+      <div class="p-sec-body" id="p-pend-body" hidden>
+        <p class="p-hint">网页版管理器没打开时，收录的岗位在这里排队；打开网页版后逐条确认入库。</p>
+        <div class="p-pend-list" id="p-pend-list"></div>
+      </div>
+    </section>
+
+    <section class="p-section">
+      <button class="p-sec-head" id="p-res-head" type="button" aria-expanded="false" aria-controls="p-res-body">
+        <span class="p-sec-title">简历字段</span>
+        <span class="p-badge" id="p-res-count">0</span>
+        <span class="p-sec-arrow" id="p-res-arrow"></span>
+      </button>
+      <div class="p-sec-body" id="p-res-body" hidden>
+        <p class="p-status" id="p-resume-status"></p>
+        <p class="p-hint">① 先点网页里的输入框 → ② 再点下方字段即可填入；<b>右键字段 = 复制内容</b></p>
+        <div class="p-search">
+          <span class="p-search-ico" id="p-search-ico"></span>
+          <input id="p-resume-search" type="text" placeholder="搜索字段名或内容" autocomplete="off">
+        </div>
+        <div class="p-resume-list" id="p-resume-list"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="p-footer">
+    <button class="p-footer-btn" id="p-open-tracker" type="button">
+      <span class="p-btn-ico" id="p-globe-ico"></span><span>打开网页版管理器</span>
+    </button>
+  </footer>
+
+  <div class="p-toast" id="p-toast" hidden role="status"></div>
+
+  <!-- 加载顺序有依赖：constants（AJA 命名空间）→ default-resume（简历兜底）→ tokens（设计令牌）
+       → icons（AJA.svg，capture-form 的模板要用）→ capture-form → panel.js -->
+  <script src="../common/constants.js"></script>
+  <script src="../common/default-resume.js"></script>
+  <script src="../common/tokens.js"></script>
+  <script src="../common/icons.js"></script>
+  <script src="../common/capture-form.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>
