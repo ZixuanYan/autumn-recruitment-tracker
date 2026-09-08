@@ -15,6 +15,18 @@ const assert = require('assert');
 const HTML_PATH = path.resolve(__dirname, '../index.html');
 const html = fs.readFileSync(HTML_PATH, 'utf8');
 
+// v4.9.0：跨端常量与归一化实现移入仓库根 shared/，index.html 里只剩**转发别名**
+// （块外 `const STAGE_PRESETS = AJA.STAGE_PRESETS;`、CORE 块内 `const companyGroupKey = AJA.companyGroupKey;`）。
+// 因此下面三个沙箱与 extractConst 的现场求值都必须注入真实的 AJA，否则 ReferenceError。
+// 这一步只负责「让测试能跑」；「index.html 是否真的转发、有没有人又写回字面量」
+// 由 web-check.js 的别名守卫与 company-dedup.js 的引用相等断言盯着，两边缺一不可。
+const AJA_SHARED = Object.assign({},
+  require(path.resolve(__dirname, '../shared/stages.js')),
+  require(path.resolve(__dirname, '../shared/company-types.js')),
+  require(path.resolve(__dirname, '../shared/company-key.js')),
+  require(path.resolve(__dirname, '../shared/default-resume.js'))
+);
+
 const START = '      // ================= 邮件提醒（M3）：本地状态、模糊匹配、复核视图、应用/忽略 =================';
 const END = '      // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================';
 const si = html.indexOf(START);
@@ -53,6 +65,7 @@ const sandbox = {
   document: { querySelector: () => null }
 };
 
+sandbox.AJA = AJA_SHARED;   // 邮件段会用到 STAGE_PRESETS 等转发别名
 vm.createContext(sandbox);
 vm.runInContext(sectionSrc, sandbox, { filename: 'mail-section.js' });
 
@@ -356,10 +369,11 @@ function extractBlock(src, startMark, endMark) {
   return (s !== -1 && e !== -1 && e > s) ? src.slice(s + startMark.length, e) : '';
 }
 // 顶层常量现场求值抽取（不在测试里复制字面量）：枚举漂移后测试会失败，而不是继续「绿」。
+// v4.9.0 起这些常量是 shared/ 的转发别名，所以求值时必须把真实的 AJA 作为参数传进去。
 function extractConst(src, name) {
   const line = src.split('\n').find(l => l.includes(`const ${name} =`));
   if (!line) throw new Error(`未在 index.html 找到 const ${name}`);
-  return new Function(`${line.trim()}\nreturn ${name};`)();
+  return new Function('AJA', `${line.trim()}\nreturn ${name};`)(AJA_SHARED);
 }
 
 const CORE_START = '/*__CORE_PURE_START__*/';
@@ -522,6 +536,7 @@ const sandbox2 = {
 };
 sandbox2.globalThis = sandbox2;
 sandbox2.self = sandbox2; // cryptoId 用 self.crypto 探测
+sandbox2.AJA = AJA_SHARED; // coreBlock 里有 `const companyGroupKey = AJA.companyGroupKey;` 等四个转发别名
 vm.createContext(sandbox2);
 vm.runInContext(
   [mailPureBlock, coreBlock, v45Section, normalizeRecordSrc.join('\n'), getVisibleRecordsSrc, applyAdvanceSrc, loadRecordsSrc, submitFormSrc, handleJobActionSrc, timelineEditorSrc.join('\n'), insightSection, v44Section].join('\n'),
@@ -1762,6 +1777,7 @@ const sandbox3 = {
   renderMailView: () => { routeCalls.renderMailView += 1; },
   renderRecordsView: () => { routeCalls.renderRecordsView += 1; }
 };
+sandbox3.AJA = AJA_SHARED;
 vm.createContext(sandbox3);
 vm.runInContext([VIEW_META_SRC, ROUTE_ALIASES_SRC, parseRouteSrc, switchViewSrc].join('\n'), sandbox3, { filename: 'router-section.js' });
 

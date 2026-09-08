@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "秋招求职与简历助手",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "description": "秋招网申采集端：侧边面板内一键提取收录岗位与暂存、简历字段点击速填（左键填入聚焦框、右键复制、可搜索），页面上只留一个可拖拽的收录胶囊。配合网页版管理器实现跨设备同步。",
   "icons": {
     "16": "icons/icon16.png",
@@ -37,6 +37,8 @@
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": [
+        "shared/stages.js",
+        "shared/company-types.js",
         "common/constants.js",
         "common/tokens.js",
         "common/icons.js",

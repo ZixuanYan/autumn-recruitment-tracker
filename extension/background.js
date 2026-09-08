@@ -4,7 +4,17 @@
  */
 'use strict';
 
-importScripts('common/constants.js', 'common/default-resume.js', 'common/company-key.js');
+// 加载顺序有依赖：shared 四件必须**先于** common/constants.js —— constants 里的
+// AJA.STAGES 是对 AJA.STAGE_PRESETS 的别名转发，顺序反了会转发到 undefined 且**不报错**
+// （表现为收录表单的阶段下拉空空如也）。extension/shared/ 是仓库根 shared/ 的生成拷贝
+// （Chrome 扩展只能加载扩展目录内的文件），由 scripts/pack-extension.js 同步、同源守卫防漂移。
+importScripts(
+  'shared/stages.js',
+  'shared/company-types.js',
+  'shared/company-key.js',
+  'shared/default-resume.js',
+  'common/constants.js'
+);
 
 const RECORDS_STORAGE_KEY = AJA.RECORDS_STORAGE_KEY;
 const RESUME_STORAGE_KEY = AJA.RESUME_STORAGE_KEY;
@@ -12,7 +22,7 @@ const PENDING_KEY = AJA.PENDING_KEY;
 const MSG = AJA.MSG;
 
 // ================= 初始化时检查并写入默认简历（如果尚无配置）=================
-// 默认简历定义见 common/default-resume.js（全端唯一，不预置个人信息）
+// 默认简历定义见 shared/default-resume.js（全端唯一，不预置个人信息）
 chrome.runtime.onInstalled.addListener(async (details) => {
   try {
     const data = await chrome.storage.local.get([RESUME_STORAGE_KEY]);
@@ -24,7 +34,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 });
 
-// 暂存箱去重：与网页端 index.html 的 findDuplicateRecord 同源（都基于 common/company-key.js 的归一化键）。
+// 暂存箱去重：与网页端 index.html 的 findDuplicateRecord 同源（都基于 shared/company-key.js 的归一化键）。
 // 此前这里是「公司名与岗位名原文精确相等」，导致「腾讯」与「腾讯 」（尾空格）、
 // 「腾讯」与「腾讯科技（深圳）有限公司」在暂存箱里堆成两条，推给网页端时要逐条弹窗确认。
 // 返回 { record, mode: 'duplicate' | 'variant' } 或 null：

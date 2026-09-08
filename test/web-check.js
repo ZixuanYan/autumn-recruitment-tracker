@@ -298,8 +298,52 @@ check('CORE 依赖的顶层常量全部从 index.html 抽取到', () => {
   assert.deepStrictEqual(missing, []);
 });
 
+// v4.9.0：跨端常量与归一化实现移入仓库根 shared/，index.html 里只剩**转发别名**
+// （块外的 `const STAGE_PRESETS = AJA.STAGE_PRESETS;`，与 CORE 块内的
+// `const companyGroupKey = AJA.companyGroupKey;` 等四个）。沙箱必须注入真实的 AJA，
+// 否则这些行会因 AJA 未定义直接抛错。
+// ⚠️ 注入之后**防护强度不得降级**：extractConstLine 原本的价值是「抓 index.html 里真实生效的
+// 字面量」，现在字面量没了，就必须另有断言盯着"那几行只能是转发"——见下面的别名守卫。
+// 少了它，谁把 index.html 改回字面量并写错一个值，测试依然全绿（那正是本机制原本要防的事）。
+const AJA_SHARED = Object.assign({},
+  require(path.resolve(__dirname, '../shared/stages.js')),
+  require(path.resolve(__dirname, '../shared/company-types.js')),
+  require(path.resolve(__dirname, '../shared/company-key.js')),
+  require(path.resolve(__dirname, '../shared/default-resume.js'))
+);
+
+// 别名守卫：index.html 里这些行只能是 `= AJA.X`，不得是数组/对象字面量或实现体。
+// 用正则而不是求值比对——求值比对会因为"沙箱里的 AJA 就来自 shared"而恒真（自己比自己）。
+const ALIAS_ONLY = {
+  STAGE_PRESETS: /^const STAGE_PRESETS = AJA\.STAGE_PRESETS;$/,
+  COMPANY_TYPES: /^const COMPANY_TYPES = AJA\.COMPANY_TYPES;$/,
+  COMPANY_TYPE_UNSET: /^const COMPANY_TYPE_UNSET = AJA\.COMPANY_TYPE_UNSET;$/,
+  DEFAULT_RESUME: /^const DEFAULT_RESUME = AJA\.DEFAULT_RESUME;$/,
+  companyGroupKey: /^const companyGroupKey = AJA\.companyGroupKey;$/,
+  sameCompanyGroup: /^const sameCompanyGroup = AJA\.sameCompanyGroup;$/,
+  normalizePositionSlug: /^const normalizePositionSlug = AJA\.normalizePositionSlug;$/,
+  loosePositionSlug: /^const loosePositionSlug = AJA\.loosePositionSlug;$/
+};
+check('别名守卫：index.html 的八个跨端符号只能是 shared 的转发，不得再出现第二份字面量/实现', () => {
+  for (const [name, re] of Object.entries(ALIAS_ONLY)) {
+    const line = html.split('\n').find(l => l.includes(`const ${name} =`));
+    assert.ok(line, `index.html 里找不到 ${name} 的声明行`);
+    assert.ok(re.test(line.trim()),
+      `${name} 不是 shared 的转发别名（可能又出现了第二份字面量或实现体）：\n      ${line.trim()}`);
+  }
+  // 反向兜底：整份 index.html 里不该再有这些字面量/实现体
+  assert.ok(!/const STAGE_PRESETS = \[/.test(html), 'index.html 又出现了阶段字面量');
+  assert.ok(!/const COMPANY_TYPES = \[/.test(html), 'index.html 又出现了企业性质字面量');
+  assert.ok(!/const LEGAL_SUFFIX_RE = \//.test(html), 'index.html 又出现了法人后缀正则副本');
+  assert.ok(!/function companyGroupKey\(/.test(html), 'index.html 又出现了 companyGroupKey 的实现体');
+  assert.ok(!/function sameCompanyGroup\(/.test(html), 'index.html 又出现了 sameCompanyGroup 的实现体');
+  assert.ok(!/function normalizePositionSlug\(/.test(html), 'index.html 又出现了 normalizePositionSlug 的实现体');
+  assert.ok(!/function loosePositionSlug\(/.test(html), 'index.html 又出现了 loosePositionSlug 的实现体');
+  assert.ok(!/const DEFAULT_RESUME = \{/.test(html), 'index.html 又出现了默认简历字面量');
+});
+
 const core = new Function(
-  'self',
+  'self', 'AJA',
   `${coreConsts.join('\n   ')}
    ${pureSrc}
    ${coreDeps.join('\n')}
@@ -311,7 +355,17 @@ const core = new Function(
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
    };`
-)(globalThis);
+)(globalThis, AJA_SHARED);
+
+// 注入的 AJA 必须真的被用上了：core 里的这四个符号应与 shared 的实现是同一引用。
+// 这条断言把「沙箱注入了 AJA」与「index.html 的别名确实转发」两件事绑在一起验证，
+// 缺任何一边都会红——比只看文本正则强。
+check('CORE 沙箱里的归一化函数与 shared 是同一引用（转发链路真的通了）', () => {
+  assert.strictEqual(core.companyGroupKey, AJA_SHARED.companyGroupKey);
+  assert.strictEqual(core.sameCompanyGroup, AJA_SHARED.sameCompanyGroup);
+  assert.strictEqual(core.normalizePositionSlug, AJA_SHARED.normalizePositionSlug);
+  assert.strictEqual(core.loosePositionSlug, AJA_SHARED.loosePositionSlug);
+});
 
 const DAY = 86400000;
 function dayOffset(n, base = new Date('2026-09-06T12:00:00')) {
@@ -1157,7 +1211,36 @@ check('网页版本号 5 处一致：APP_VERSION / service-worker CACHE_NAME / d
   assert.strictEqual(footerVersion, appVersion, `download.html 页脚 (${footerVersion}) 必须与 APP_VERSION 一致`);
   assert.strictEqual(readmeVersion, appVersion, `README (${readmeVersion}) 必须与 APP_VERSION 一致`);
   assert.strictEqual(usageVersion, appVersion, `使用说明.txt (${usageVersion}) 必须与 APP_VERSION 一致`);
-  assert.strictEqual(appVersion, '4.8.0', '本轮发版网页版本应为 4.8.0');
+  assert.strictEqual(appVersion, '4.9.0', '本轮发版网页版本应为 4.9.0');
+});
+
+check('插件版本号 11 处一致（补的缺口：此前插件版本无任何断言，漂移到 v3.1.0 都没人发现）', () => {
+  // 为什么补这条：上一条守卫只校验**网页**版本的 5 处，插件版本一处都没盯。
+  // 实测后果是 README.md 的插件版本停在 v3.1.0、使用说明.txt 停在 v4.2.0（实际早已 v5.x），
+  // 漂移了整整两个大版本都没人发现——用户照文档核对版本时会以为自己装错了，
+  // 而「插件改了代码但浏览器没重新加载就仍跑旧版」这个坑恰恰需要靠版本号来自证。
+  const root = path.resolve(__dirname, '..');
+  const read = f => fs.readFileSync(path.join(root, f), 'utf8');
+  const manifestVersion = JSON.parse(read('extension/manifest.json')).version;
+  const found = {
+    'manifest.json 的 version': manifestVersion,
+    'constants.js 的 AJA.VERSION': /root\.AJA\.VERSION = '([^']+)'/.exec(read('extension/common/constants.js'))[1],
+    'download.html 插件卡片 meta': /插件 v([0-9.]+)/.exec(read('download.html'))[1],
+    'download.html 下载文件名': /秋招求职与简历助手-v([0-9.]+)\.zip/.exec(read('download.html'))[1],
+    'download.html 页脚': /插件 v([0-9.]+)<br>/.exec(read('download.html'))[1],
+    'README.md 下载表格': /插件 v([0-9.]+)/.exec(read('README.md'))[1],
+    'README.md 版本小节': /浏览器插件：v([0-9.]+)/.exec(read('README.md'))[1],
+    '使用说明.txt': /插件 v([0-9.]+)/.exec(read('使用说明.txt'))[1],
+    'extension/README.md 标题': /扩展 v([0-9.]+)/.exec(read('extension/README.md'))[1],
+    'extension/README.md 版本小节': /扩展：v([0-9.]+)/.exec(read('extension/README.md'))[1],
+    // docs 也要覆盖：这一处是本轮补写守卫时才发现的（当时写着上一轮的 v5.0.0），
+    // 说明"只盯 README 与下载页"不够——用户看的恰恰是 docs 里的安装教程
+    'docs/安装与使用教程.md': /助手」（v([0-9.]+)）/.exec(read('docs/安装与使用教程.md'))[1]
+  };
+  assert.strictEqual(Object.keys(found).length, 11, '应校验 11 处（新增展示位时记得同步本断言）');
+  for (const [where, v] of Object.entries(found)) {
+    assert.strictEqual(v, manifestVersion, `${where} = ${v}，与 manifest.json 的 ${manifestVersion} 不一致`);
+  }
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

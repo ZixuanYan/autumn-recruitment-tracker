@@ -21,7 +21,12 @@ const assert = require('assert');
 const TRACKER = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(TRACKER, 'index.html'), 'utf8');
 const backgroundSrc = fs.readFileSync(path.join(TRACKER, 'extension/background.js'), 'utf8');
-const companyKeySrc = fs.readFileSync(path.join(TRACKER, 'extension/common/company-key.js'), 'utf8');
+// v4.9.0：跨端常量与归一化只剩一份，在仓库根 shared/（插件加载 extension/shared/ 的生成拷贝，
+// 由 extension-ui.js 的同源守卫断言逐字节相同）。原 extension/common/company-key.js 已删除。
+// 四件都要加载：别名守卫要验 STAGE_PRESETS / COMPANY_TYPES / DEFAULT_RESUME 的**引用相等**，
+// 只加载 company-key 会让另外三个是 undefined（本轮就踩了一次：报 "not iterable"）。
+const SHARED_SRCS = ['stages.js', 'company-types.js', 'company-key.js', 'default-resume.js']
+  .map(f => fs.readFileSync(path.join(TRACKER, 'shared', f), 'utf8'));
 
 let failed = 0;
 const cases = [];
@@ -53,11 +58,42 @@ function extractFunction(src, name) {
   return '';
 }
 
-// ---------- 网页端：真实实现 ----------
-const legalLine = html.split('\n').find(line => line.includes('const LEGAL_SUFFIX_RE'));
-assert.ok(legalLine, '未找到 LEGAL_SUFFIX_RE');
-const WEB_FNS = ['companyGroupKey', 'sameCompanyGroup', 'groupRecordsByCompany', 'companyGroupIndex',
-  'normalizePositionSlug', 'loosePositionSlug', 'findDuplicateRecord', 'resolveDuplicate'];
+// ---------- 单一事实源：shared/company-key.js ----------
+// v4.9.0 起归一化只有一份实现。本文件原本用 vm 同时跑「从 index.html 抽的网页版实现」与
+// 「插件的 common/company-key.js」做两两比对；合并后失去对照物，因此按方案 2.3 把断言语义改为：
+//   ① 单一实现对黄金样例的**行为契约**（期望值实测钉死，任何归一化规则改动都会红）
+//   ② **别名守卫**：index.html 里那几行 const 必须真的是转发（运行时比函数引用，不只是正则匹配文本）
+// 黄金样例一条不减——它们才是这套断言真正的价值所在，「两份实现」只是当时的形式。
+const ajaBox = { AJA: null, self: null, globalThis: null };
+ajaBox.self = ajaBox;
+ajaBox.globalThis = ajaBox;
+vm.createContext(ajaBox);
+vm.runInContext(`${SHARED_SRCS.join('\n')}\n;__grab(AJA);`, Object.assign(ajaBox, { __grab: a => { ajaBox.AJA = a; } }), { filename: 'shared/all.js' });
+const AJA = ajaBox.AJA;
+assert.ok(AJA && typeof AJA.companyKey === 'function', 'shared/company-key.js 未能挂载 AJA');
+assert.ok(AJA && Array.isArray(AJA.STAGE_PRESETS), 'shared/stages.js 未能挂载 AJA.STAGE_PRESETS');
+assert.ok(AJA && Array.isArray(AJA.COMPANY_TYPES), 'shared/company-types.js 未能挂载 AJA.COMPANY_TYPES');
+assert.ok(AJA && AJA.DEFAULT_RESUME && typeof AJA.DEFAULT_RESUME === 'object', 'shared/default-resume.js 未能挂载 AJA.DEFAULT_RESUME');
+
+// ---------- 网页端：转发别名（运行时验证）+ 网页版专有实现 ----------
+// 四个归一化符号在 index.html 里已是 `const X = AJA.X;`。把这几行原文抽出来、在注入了 AJA 的
+// 沙箱里执行，就能在运行时验证它们确实指向 shared 的同一份——比正则强：正则只看文本，
+// 这里比的是**函数引用**，谁抄一份实现出来立刻红。
+const ALIAS_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET', 'DEFAULT_RESUME',
+  'companyGroupKey', 'sameCompanyGroup', 'normalizePositionSlug', 'loosePositionSlug'];
+const aliasLines = ALIAS_NAMES.map(name => {
+  const line = html.split('\n').find(l => l.includes(`const ${name} = AJA.`));
+  assert.ok(line, `index.html 里找不到 ${name} 的转发别名行（可能又写回了字面量或实现体）`);
+  return line.trim();
+});
+const aliasBox = { AJA, __out: null };
+vm.createContext(aliasBox);
+vm.runInContext(`${aliasLines.join('\n')}\n;__out = { ${ALIAS_NAMES.join(', ')} };`, aliasBox, { filename: 'web-aliases.js' });
+const webAlias = aliasBox.__out;
+
+// 网页版**专有**的实现仍在 index.html 里（聚类、判重四态、确认弹窗）。它们内部调用的四个归一化
+// 符号通过参数注入 AJA 提供——这顺带验证了「转发别名在真实调用链里能用」，不只是声明存在。
+const WEB_FNS = ['groupRecordsByCompany', 'companyGroupIndex', 'findDuplicateRecord', 'resolveDuplicate'];
 const webSrc = WEB_FNS.map(name => extractFunction(html, name));
 for (const [idx, src] of webSrc.entries()) {
   assert.ok(src && src.length > 40, `未能从 index.html 抽取 ${WEB_FNS[idx]}`);
@@ -69,20 +105,13 @@ let confirmAnswer = true;
 let confirmOutcome = 'ok';
 const web = new Function(
   'confirmInApp', 'lastConfirmOutcome',
-  `${legalLine}\n${webSrc.join('\n')}\nreturn { ${WEB_FNS.join(', ')} };`
+  'companyGroupKey', 'sameCompanyGroup', 'normalizePositionSlug', 'loosePositionSlug',
+  `${webSrc.join('\n')}\nreturn { ${WEB_FNS.join(', ')} };`
 )(
   async (message, options) => { confirmCalls.push({ message: String(message || ''), title: (options && options.title) || '' }); return confirmAnswer; },
-  () => confirmOutcome
+  () => confirmOutcome,
+  AJA.companyGroupKey, AJA.sameCompanyGroup, AJA.normalizePositionSlug, AJA.loosePositionSlug
 );
-
-// ---------- 插件端：真实的 common/company-key.js + background.js 的去重函数 ----------
-const ajaBox = { AJA: null, self: null, globalThis: null };
-ajaBox.self = ajaBox;
-ajaBox.globalThis = ajaBox;
-vm.createContext(ajaBox);
-vm.runInContext(`${companyKeySrc}\n;__grab(AJA);`, Object.assign(ajaBox, { __grab: a => { ajaBox.AJA = a; } }), { filename: 'company-key.js' });
-const AJA = ajaBox.AJA;
-assert.ok(AJA && typeof AJA.companyKey === 'function', 'common/company-key.js 未能挂载 AJA');
 
 const bgBox = { AJA, __bg: null };
 vm.createContext(bgBox);
@@ -104,7 +133,7 @@ async function runAll() {
 }
 
 // ============================================================================
-section('一、三端归一化必须逐值一致（common/company-key.js 是 index.html 的镜像）');
+section('一、归一化行为契约（单一事实源 shared/company-key.js）+ 别名守卫');
 
 const COMPANY_SAMPLES = [
   '腾讯', '腾讯科技（深圳）有限公司', '腾讯科技(深圳)有限公司', '  腾讯  ', '腾讯 ',
@@ -119,30 +148,125 @@ const POSITION_SAMPLES = [
   '客户端开发（iOS）', '  前端开发  ', '', '管培生'
 ];
 
-check('companyKey：插件镜像与网页端 companyGroupKey 对全部样例输出相同', () => {
+check('别名守卫：index.html 的八个转发别名在运行时确实指向 shared 的同一份', () => {
+  // 比正则强：这里比的是**引用相等**。谁在 index.html 里抄一份实现出来，立刻红。
+  // 合并前这条断言的形式是「两份实现逐值等价」，合并后对照物消失，改为验证"只有一份"本身。
+  for (const n of ['companyGroupKey', 'sameCompanyGroup', 'normalizePositionSlug', 'loosePositionSlug']) {
+    assert.strictEqual(webAlias[n], AJA[n],
+      `${n} 不是 shared 的同一函数引用（index.html 里可能又出现了第二份实现）`);
+  }
+  assert.strictEqual(webAlias.STAGE_PRESETS, AJA.STAGE_PRESETS, 'STAGE_PRESETS 应是同一数组引用');
+  assert.strictEqual(webAlias.DEFAULT_RESUME, AJA.DEFAULT_RESUME, 'DEFAULT_RESUME 应是同一对象引用');
+  assert.strictEqual(webAlias.COMPANY_TYPE_UNSET, AJA.COMPANY_TYPE_UNSET);
+  assert.deepStrictEqual([...webAlias.COMPANY_TYPES], [...AJA.COMPANY_TYPES]);
+  // 插件侧的 AJA.STAGES 也必须是同一个数组（constants.js 的别名转发）
+  const constSrc = fs.readFileSync(path.join(TRACKER, 'extension/common/constants.js'), 'utf8');
+  assert.ok(/root\.AJA\.STAGES = root\.AJA\.STAGE_PRESETS;/.test(constSrc), 'constants.js 缺少 STAGES 别名转发');
+});
+
+check('两套 API 等价：companyGroupKey(record) === companyKey(record.company)（全部黄金样例）', () => {
+  // 合并后仍保留这条：companyGroupKey 收 record、companyKey 收字符串，是两个不同的函数，
+  // 网页版 31 处调用点用前者、插件 background 用后者，等价性不能靠"看起来一样"
   for (const s of COMPANY_SAMPLES) {
-    assert.strictEqual(AJA.companyKey(s), web.companyGroupKey({ company: s }), `公司「${s}」两端不一致`);
+    assert.strictEqual(AJA.companyGroupKey({ company: s }), AJA.companyKey(s), `公司「${s}」两套 API 不一致`);
+  }
+  assert.strictEqual(AJA.companyGroupKey(null), '', 'record 为 null 不该抛错');
+  assert.strictEqual(AJA.companyGroupKey({}), '', 'record 缺 company 字段不该抛错');
+  // 另三个是同引用别名（签名相同，直接转发）
+  assert.strictEqual(AJA.normalizePositionSlug, AJA.positionKey);
+  assert.strictEqual(AJA.loosePositionSlug, AJA.loosePositionKey);
+  assert.strictEqual(AJA.sameCompanyGroup, AJA.sameCompanyKey);
+});
+
+check('companyKey 行为契约：期望值实测钉死（改归一化规则必红）', () => {
+  // 这些期望值是 2026-09-08 实测输出，不是推导值。任何一条变了都意味着归一化规则被改动，
+  // 而那会直接影响判重与聚类（旧版就是因为规则改动导致「第二个岗位录不进去」）。
+  const EXPECT = {
+    '腾讯': '腾讯',
+    '腾讯科技（深圳）有限公司': '腾讯科技深圳',      // 全角括号去掉 + 循环剥「有限公司」
+    '腾讯科技(深圳)有限公司': '腾讯科技深圳',        // 半角括号同键（全半角统一）
+    '  腾讯  ': '腾讯',                             // trim
+    '腾讯 ': '腾讯',
+    'Ｔｅｎｃｅｎｔ　Ｌｔｄ': 'tencent',             // 全角转半角 + 小写 + 剥 Ltd
+    '星海科技': '星海科技',                          // 行业词**保留**
+    '星海互娱': '星海互娱',                          // 与上不同键，否则两家公司被并成一家
+    '小米科技': '小米科技',
+    '小米智能': '小米智能',
+    '字节': '字节',
+    '字节跳动': '字节跳动',
+    '商汤集团': '商汤',                             // 「集团」是法人后缀，剥掉
+    '商汤科技': '商汤科技',                          // 「科技」是行业词，保留
+    '某集团股份有限公司': '某',                       // 循环剥离：股份有限公司 → 集团
+    '阿里巴巴（中国）网络技术有限公司': '阿里巴巴中国网络技术',
+    'CVTE': 'cvte',
+    '大疆创新': '大疆创新',
+    '': '',
+    '   ': '',
+    '华为': '华为'
+  };
+  assert.strictEqual(Object.keys(EXPECT).length, COMPANY_SAMPLES.length,
+    '期望值表应覆盖全部 COMPANY_SAMPLES（新增样例时两处一起加）');
+  for (const s of COMPANY_SAMPLES) {
+    assert.ok(Object.prototype.hasOwnProperty.call(EXPECT, s), `COMPANY_SAMPLES 里的「${s}」缺期望值`);
+    assert.strictEqual(AJA.companyKey(s), EXPECT[s], `companyKey(${JSON.stringify(s)}) 应为 ${JSON.stringify(EXPECT[s])}`);
   }
 });
 
-check('positionKey：插件镜像与网页端 normalizePositionSlug 对全部样例输出相同', () => {
+check('positionKey 保留括号、loosePositionKey 才去括号（同公司多岗位的关键区分）', () => {
+  const EXPECT_POS = {
+    '后端开发工程师（深圳）': '后端开发工程师(深圳)',  // 括号保留，但全角转半角
+    '后端开发工程师（北京）': '后端开发工程师(北京)',
+    '后端开发工程师(深圳)': '后端开发工程师(深圳)',    // 与全角版同键
+    'Java 开发工程师': 'java开发工程师',              // 去空白 + 小写
+    'Java开发工程师': 'java开发工程师',
+    'Android开发': 'android开发',
+    'android开发': 'android开发',
+    '产品经理（2026届校招）': '产品经理(2026届校招)',
+    '产品经理（社招）': '产品经理(社招)',
+    '算法工程师-推荐': '算法工程师-推荐',              // 连字符后缀在严格键里保留
+    '算法工程师-广告': '算法工程师-广告',
+    '客户端开发（iOS）': '客户端开发(ios)',
+    '  前端开发  ': '前端开发',
+    '': '',
+    '管培生': '管培生'
+  };
+  assert.strictEqual(Object.keys(EXPECT_POS).length, POSITION_SAMPLES.length, '期望值表应覆盖全部 POSITION_SAMPLES');
   for (const s of POSITION_SAMPLES) {
-    assert.strictEqual(AJA.positionKey(s), web.normalizePositionSlug(s), `岗位「${s}」两端不一致`);
+    assert.strictEqual(AJA.positionKey(s), EXPECT_POS[s], `positionKey(${JSON.stringify(s)}) 应为 ${JSON.stringify(EXPECT_POS[s])}`);
   }
+  // 严格键必须区分城市，宽松键必须不区分——这两条一起构成「第二个岗位能录进去、但会提示疑似同岗位」
+  assert.notStrictEqual(AJA.positionKey('后端开发工程师（深圳）'), AJA.positionKey('后端开发工程师（北京）'),
+    '严格键必须区分括号里的城市，否则两条独立投递撞成同名、第二个岗位录不进去');
+  assert.strictEqual(AJA.loosePositionKey('后端开发工程师（深圳）'), AJA.loosePositionKey('后端开发工程师（北京）'),
+    '宽松键应抹掉括号，用于「疑似同岗位不同方向」提示');
+  assert.strictEqual(AJA.loosePositionKey('算法工程师-推荐'), AJA.loosePositionKey('算法工程师-广告'), '宽松键应抹掉连字符后缀');
+  assert.strictEqual(AJA.loosePositionKey('客户端开发（iOS）'), '客户端开发');
 });
 
-check('loosePositionKey：插件镜像与网页端 loosePositionSlug 对全部样例输出相同', () => {
-  for (const s of POSITION_SAMPLES) {
-    assert.strictEqual(AJA.loosePositionKey(s), web.loosePositionSlug(s), `宽松岗位键「${s}」两端不一致`);
+check('sameCompany 分组语义：相等或互相包含（钉死"该合并"与"不该合并"两侧）', () => {
+  // 该判为同一家（键互相包含）
+  const SAME = [['腾讯', '腾讯科技（深圳）有限公司'], ['腾讯', '腾讯科技(深圳)有限公司'],
+    ['字节', '字节跳动'], ['商汤集团', '商汤科技']];
+  for (const [a, b] of SAME) {
+    assert.strictEqual(AJA.sameCompany(a, b), true, `「${a}」与「${b}」应判为同一家`);
+    assert.strictEqual(AJA.sameCompany(b, a), true, `判定必须对称：「${b}」与「${a}」`);
   }
-});
-
-check('sameCompany：插件镜像与网页端 sameCompanyGroup 对全部公司两两组合判定相同', () => {
+  // 不该判为同一家（行业词不同 → 键互不包含）
+  const DIFF = [['星海科技', '星海互娱'], ['小米科技', '小米智能'], ['腾讯', '华为'], ['腾讯', ''], ['', '']];
+  for (const [a, b] of DIFF) {
+    assert.strictEqual(AJA.sameCompany(a, b), false, `「${a}」与「${b}」不该判为同一家`);
+  }
+  // 空键一律 false，否则所有缺公司名的记录会被并成一家
+  assert.strictEqual(AJA.sameCompanyKey('', ''), false);
+  assert.strictEqual(AJA.sameCompanyKey('腾讯', ''), false);
+  // 长度 < 2 的键不参与包含判定，否则「腾」会匹配一切含"腾"的公司
+  assert.strictEqual(AJA.sameCompanyKey('腾', '腾讯'), false, '短键不该参与包含判定');
+  // 全样例两两组合仍要跑一遍：确保没有异常输入让判定抛错或返回非布尔
   for (const a of COMPANY_SAMPLES) {
     for (const b of COMPANY_SAMPLES) {
-      const webSays = web.sameCompanyGroup(web.companyGroupKey({ company: a }), web.companyGroupKey({ company: b }));
-      const extSays = AJA.sameCompany(a, b);
-      assert.strictEqual(extSays, webSays, `「${a}」vs「${b}」两端判定不一致（网页=${webSays} 插件=${extSays}）`);
+      const r = AJA.sameCompany(a, b);
+      assert.strictEqual(typeof r, 'boolean', `「${a}」vs「${b}」应返回布尔值`);
+      assert.strictEqual(r, AJA.sameCompany(b, a), `「${a}」vs「${b}」判定必须对称`);
     }
   }
 });

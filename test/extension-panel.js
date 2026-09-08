@@ -238,10 +238,16 @@ async function bootPanel(options) {
     }
   }
 
-  // 顺序与 panel.html 的 <script> 一致
-  for (const f of ['common/constants.js', 'common/default-resume.js', 'common/tokens.js',
-    'common/icons.js', 'common/capture-form.js', 'panel/panel.js']) {
-    vm.runInContext(read(f), sandbox, { filename: f });
+  // 加载顺序**直接读 panel.html 的 <script> 列表**，不在测试里硬编码：
+  // 硬编码的话每次增删脚本都要同步改测试，改漏了就会测到与线上不一致的加载顺序
+  // （阶段 2 把 default-resume 从 common/ 换到 shared/ 时，硬编码列表就直接 ENOENT 了）。
+  const panelHtml = read('panel/panel.html');
+  const scripts = [...panelHtml.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
+  assert.ok(scripts.length >= 7, `panel.html 只解析出 ${scripts.length} 个 script，正则可能失效`);
+  for (const s of scripts) {
+    // panel.html 在 extension/panel/ 下：../shared/x.js → shared/x.js；panel.js → panel/panel.js
+    const rel = s.startsWith('../') ? s.slice(3) : `panel/${s}`;
+    vm.runInContext(read(rel), sandbox, { filename: rel });
   }
   await settle();
   return { sandbox, doc, state, AJA: sandbox.AJA, P: sandbox.AJAPanel, el: (id) => doc.getElementById(id) };

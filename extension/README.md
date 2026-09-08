@@ -1,4 +1,4 @@
-# 秋招求职与简历助手（Chrome/Edge 扩展 v5.0.0）
+# 秋招求职与简历助手（Chrome/Edge 扩展 v5.1.0）
 
 网申页采集端浏览器扩展（Manifest V3）：**简历字段点击速填 + 岗位一键收录 + 暂存箱**。与网页版 [秋招投递管理器](https://github.com/ZixuanYan/autumn-recruitment-tracker) 配套使用，插件负责采集与速填，网页版负责管理与跨设备同步。
 
@@ -83,17 +83,23 @@ extension/
 ├── background.js              Service Worker：暂存箱队列与查重、简历存取、网页版标签页中继、
 │                              Side Panel 入口（openPanelOnActionClick / commands）、
 │                              panel ↔ content 的消息中转与错误收敛
+├── shared/                    ⚠ 生成拷贝，勿手改（v5.1.0）：仓库根 shared/ 的四件跨端单一事实源
+│   │                          （阶段预设 / 企业性质 / 公司归一化 / 默认简历骨架）。
+│   │                          Chrome 扩展只能加载扩展目录内的文件、且插件要独立打 zip 分发，
+│   │                          所以由 scripts/pack-extension.js 拷贝进来；test/extension-ui.js
+│   │                          的同源守卫断言两边**逐字节相同**（拷贝刻意不加注释头，就是为了能这么比）
+│   └── stages.js · company-types.js · company-key.js · default-resume.js
 ├── panel/                     Side Panel（扩展页面，v5.0.0 新增）
 │   ├── panel.html             结构：顶栏 / 当前页状态条 / 三段折叠 / 底栏
 │   ├── panel.css              组件样式（只引用 var(--aja-*)，零渐变零阴影零 emoji）
 │   └── panel.js               逻辑：纯函数挂 window.AJAPanel 便于单测，init() 只在 DOM 就绪时跑
-├── common/                    两端共用（content script 与 Side Panel）
-│   ├── constants.js           AJA 命名空间：版本、阶段/企业性质枚举、存储键、消息类型
+├── common/                    插件**专有**的共用模块（content script 与 Side Panel 都加载）
+│   ├── constants.js           AJA 命名空间：版本、存储键、TRACKER_URL、MSG 协议；
+│   │                          阶段与企业性质只做**别名转发**（值来自 shared/，不得再写字面量——
+│   │                          本文件在 shared 之后加载，写字面量会把单一事实源覆盖回去）
 │   ├── tokens.js              设计令牌：圆角/间距/字号/动效 + light/dark 调色板 + 主题订阅
 │   ├── icons.js               13 个内联 SVG 图标（currentColor，替代 18 处 emoji）
-│   ├── capture-form.js        收录表单的模板 + 样式 + 下拉生成 + 置信提示 + 保存链路 + 暂存回填
-│   ├── company-key.js         公司/岗位归一化键（网页版判重逻辑的镜像副本，两处必须同步）
-│   └── default-resume.js      默认简历骨架（不预置个人信息）
+│   └── capture-form.js        收录表单的模板 + 样式 + 下拉生成 + 置信提示 + 保存链路 + 暂存回填
 └── content/                   注入网页的内容脚本（同一 isolated world，按序加载）
     ├── 01-core.js             Shadow Root、设计令牌样式、胶囊拖拽吸边与持久化、
     │                          光标追踪、fillFocusedField 填入引擎、Side Panel 的远程调用入口
@@ -102,9 +108,14 @@ extension/
     └── 06-bridge.js           与网页版管理器的 postMessage 桥接（只在管理器页面生效）
 ```
 
-**加载顺序有硬依赖**，改 `manifest.json` 的 `content_scripts.js` 或 `panel.html` 的 `<script>` 时必须保持：
-`constants`（AJA 命名空间）→ `tokens` / `icons` → `capture-form`（模板要用 `AJA.svg`）→ `01-core`（顶层就调用 `tokensToCssVars`）→ `03-parsers` → `05-capture`（调用 `extractPageJobData`）→ `06-bridge`（依赖 `05-capture` 的 `safeSendMessage`）。
-`autumn-mail-sync/test/extension-ui.js` 有断言盯着这个顺序。
+v5.1.0 起 `common/` 里不再有 `company-key.js` 与 `default-resume.js`——它们与网页版、Action 的那两份副本一起合并进了仓库根 `shared/`。
+
+**加载顺序有硬依赖**，改 `manifest.json` 的 `content_scripts.js`、`panel.html` 的 `<script>` 或 `background.js` 的 `importScripts` 时必须保持：
+`shared/stages` → `shared/company-types` →（background 另需 `shared/company-key`、`shared/default-resume`）→ `common/constants`（`AJA.STAGES` 是对 `AJA.STAGE_PRESETS` 的**别名转发**，所以 shared 必须先加载）→ `common/tokens` → `common/icons` → `common/capture-form`（模板要用 `AJA.svg`）→ `content/01-core`（顶层就调用 `tokensToCssVars`）→ `03-parsers` → `05-capture`（调用 `extractPageJobData`）→ `06-bridge`（依赖 `05-capture` 的 `safeSendMessage`）。
+
+顺序错了**不会抛异常**，只会让 `AJA.STAGES` 变成 `undefined`——表现为收录表单的阶段下拉空空如也、企业性质只剩「未设置」一项。这类静默失败比报错难查得多，所以 `test/extension-ui.js` 对三处加载点都有顺序断言（含"shared 必须在 constants 之前"）。
+
+改了仓库根 `shared/` 之后**必须跑** `node scripts/pack-extension.js`：它会同步生成拷贝并重打 zip（用 `zip -FS`，普通 `zip -r` 不会删掉包内已消失的旧条目）。忘了跑，同源守卫会红。
 
 ## 与网页版管理器的配合
 
@@ -127,7 +138,7 @@ extension/
 
 ## 版本
 
-- 扩展：v5.0.0（Side Panel + 可拖拽胶囊 + 设计令牌化样式；采集端定位与速填机制不变）
+- 扩展：v5.1.0（阶段/企业性质/归一化/默认简历改为消费仓库根 `shared/` 的单一事实源；Side Panel + 可拖拽胶囊 + 设计令牌化样式自 v5.0.0 起）
 - 存储键：`autumnRecruitmentTracker.resume.v1` / `autumnRecruitmentTracker.pending.v1` / `autumnRecruitmentTracker.ui.v1`（胶囊位置）
 
 ### v5.0.0 UI 重构要点
@@ -156,5 +167,5 @@ extension/
 - **两个清洗器共用同一份平台噪声表**：`软件工程师 - 北森`、`算法工程师|猎聘`、`游戏策划_米哈游`、`后端开发工程师_腾讯科技招聘官网` 都能剥干净；剥净为空或整段是噪声时返回空串，不再硬塞「待确认岗位」
 - **属性提取与文本提取分离**：`alt`/`title` 优先原本只为 logo `<img>` 设计，此前被无差别用到 `h1` 与岗位标题上，导致带 tooltip 的元素取到属性而非用户看到的文本
 - **城市按文本出现位置选取**：城市库 31 → 100；排除页脚总部地址与城市切换器；全文兜底改为「工作地点/办公地点/base」后 40 字窗口
-- **暂存箱去重与网页端同源**：`common/company-key.js` 是网页版 `companyGroupKey` / `normalizePositionSlug` / `loosePositionSlug` / `sameCompanyGroup` 的镜像副本，**两处必须同步修改**（`autumn-mail-sync/test/company-dedup.js` 有逐值一致性断言，漂移即失败）
+- **暂存箱去重与网页端同源**：v5.1.0 起归一化只有**一份**实现（仓库根 `shared/company-key.js`，插件加载 `extension/shared/` 的生成拷贝）。此前 `common/company-key.js` 是网页版 `companyGroupKey` / `normalizePositionSlug` / `loosePositionSlug` / `sameCompanyGroup` 的镜像副本、两处必须同步修改，靠 `test/company-dedup.js` 的逐值一致性断言防漂移；合并后那批断言的语义升级为「行为契约（21 个黄金样例的期望值实测钉死）+ 别名唯一性（运行时比函数引用）」，**黄金样例一条没减**，防护强度反而上升——旧断言只保证两端相同（两端可以一起错），新断言保证只有一份且那份值正确
 - **与 background 的通信一律走 `safeSendMessage`**：扩展被重新加载后，页面上旧内容脚本的 `chrome.runtime` 已成失效句柄，直接调用会同步抛 `Extension context invalidated.` 冒到网页控制台。封装先用 `chrome.runtime.id` 探测、再 `try/catch` 兜底（v5.0.0 起定义在 `05-capture.js` 顶层，`06-bridge.js` 与 `panel.js` 各自复用同签名实现）。失败时经 postMessage 上报一次 `BRIDGE_BROKEN`，由网页版弹「刷新页面即可恢复」提示（带刷新按钮）；上报去重，但每次留 `console.warn`。**新增任何 `chrome.runtime.*` 调用都必须走封装**，`autumn-mail-sync/test/extension-bridge.js` 有一条静态守卫会拦截裸调用

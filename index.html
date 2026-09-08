@@ -1489,23 +1489,35 @@
 
   <script src="./ocr/tesseract.min.js"></script>
   <script src="./ocr/chi_sim-data.js"></script>
+  <!-- 跨端单一事实源（v4.9.0）：阶段预设 / 企业性质 / 公司归一化 / 默认简历骨架。
+       同一份代码还被浏览器插件（extension/shared/ 的生成拷贝）与 mail-sync Action（require）消费。
+       **必须在主内联脚本之前加载**：内联脚本里这几个常量已改成转发别名（const X = AJA.X），
+       少加载一个就会让对应常量变 undefined——而且不抛错，只表现为阶段下拉空了、判重静默失效。
+       test/web-check.js 有别名守卫，断言这几行只能是转发、不得再是字面量副本。 -->
+  <script src="./shared/stages.js"></script>
+  <script src="./shared/company-types.js"></script>
+  <script src="./shared/company-key.js"></script>
+  <script src="./shared/default-resume.js"></script>
   <script>
     (() => {
       'use strict';
 
-      // 单一事实源提醒：STAGE_PRESETS 与下方 DEFAULT_RESUME 是与扩展端 extension/
-      // （common/constants.js、common/default-resume.js）的跨端约定，两处必须保持一致，改一处需同步另一处。
+      // 跨端单一事实源（v4.9.0）：以下常量全部来自 ./shared/*.js（<script> 已在主内联脚本之前加载），
+      // 这里只做**转发别名**，不再写字面量。同一份值还被浏览器插件（extension/shared/ 生成拷贝）
+      // 与 mail-sync Action（require）消费——从此改一个阶段名不会出现「网页版认、Action 不认」的静默失败。
+      // test/web-check.js 的别名守卫断言这几行只能是 `= AJA.X` 形式，写回字面量即红。
       // 阶段预设（仅用于排序/推进建议/分布/配色）：实际阶段可自定义，允许跳过笔试、支持三/四/五面、交叉面等。
-      const STAGE_PRESETS = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
+      const STAGE_PRESETS = AJA.STAGE_PRESETS;
       const STAGES = STAGE_PRESETS; // 兼容别名：旧引用（分布/筛选/采集）仍可用
       // v4.4.0 批次与渠道候选（datalist，允许自由输入，不做强约束）
       const BATCH_PRESETS = ['提前批', '正式批', '补录', '内推批', '春招', '实习转正'];
       const CHANNEL_PRESETS = ['官网', '内推', 'BOSS直聘', '猎聘', '智联招聘', '实习僧', '牛客', '校园宣讲', '学长推荐', '其他'];
       // v4.6.0 企业性质（封闭枚举，白名单校验，非法值归 ''=未设置）。
-      // 与插件端 extension/common/constants.js 的 AJA.COMPANY_TYPES 是同一份约定，两处必须同步修改
-      // （autumn-mail-sync/test/extension-bridge.js 有一条逐值一致性契约断言，漂移即失败）。
-      const COMPANY_TYPES = ['央国企', '民企', '外企'];
-      const COMPANY_TYPE_UNSET = '未设置';
+      // v4.9.0 起值来自 ./shared/company-types.js，与插件端同源；此前要靠 extension-bridge.js 的
+      // 逐值一致性断言防漂移（多写或写错一个字，用户选了也等于没选、洞察统计永远缺这一档），
+      // 现在结构上不可能漂移了。
+      const COMPANY_TYPES = AJA.COMPANY_TYPES;
+      const COMPANY_TYPE_UNSET = AJA.COMPANY_TYPE_UNSET;
       // 阶段排序：预设返回索引；自定义/未知返回大值（视为“更靠后”），用 9000 规避 2^53 精度问题
       function stageOrder(stage) {
         const i = STAGE_PRESETS.indexOf(stage);
@@ -1538,24 +1550,19 @@
       const RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
       const RESUME_META_KEY = 'autumnRecruitmentTracker.resumeMeta.v1';
       // 简历默认骨架（全空，不预置任何个人信息；须在 loadResumeData 调用前声明）
-      const DEFAULT_RESUME = {
-        "优先信息": { "身份证": "", "手机": "", "邮箱": "", "微信号": "", "现居地": "", "求职意向": "" },
-        "基本信息": { "姓名": "", "性别": "", "出生年月": "", "政治面貌": "", "籍贯": "", "紧急联系人": "", "自我评价": "" },
-        "教育经历": [
-          { "_rowName": "教育经历 1", "学校": "", "学院": "", "专业": "", "学历": "", "开始时间": "", "结束时间": "", "专业排名": "" },
-          { "_rowName": "教育经历 2", "学校": "", "学院": "", "专业": "", "学历": "", "开始时间": "", "结束时间": "", "专业排名": "" }
-        ],
-        "实习经历": [ { "_rowName": "实习经历 1", "单位": "", "部门": "", "岗位": "", "开始": "", "结束": "", "证明人": "", "岗位职责": "" } ],
-        "项目经历": [ { "_rowName": "项目经历 1", "项目名称": "", "角色": "", "开始": "", "结束": "", "主要工作": "", "技术栈": "" } ],
-        "竞赛与技能": { "英语水平": "", "专业技能": "", "学术竞赛": "" }
-      };
+      // v4.9.0 起骨架来自 ./shared/default-resume.js，与插件 background 的首次初始化、
+      // Side Panel 的兜底同源（合并前已实测两份逐值深度相同：6 段、段名一致、JSON 序列化相同）。
+      // 结构约定见 shared 里的注释：对象段不含下划线键，数组段用 _rowName 作段名元数据。
+      const DEFAULT_RESUME = AJA.DEFAULT_RESUME;
+      // 下面两个是**网页版专有**的渲染分类（插件侧用 Array.isArray 判断段类型，不依赖段名），
+      // 刻意不搬进 shared/——搬过去只会让 Action 与插件多一份用不到的耦合。
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const JOB_POOL_KEY = 'autumnRecruitmentTracker.jobPool.v1';
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.8.0';
+      const APP_VERSION = '4.9.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -3682,26 +3689,14 @@
       // （两家不同公司被合并）。旧版查重用的是激进的 normalizeCompanySlug（连「科技/网络/智能」这类
       // 行业词也剥），已退役；该函数仍保留，但只服务于邮件建议的模糊匹配。
       // 聚类语义也统一为「相等或互相包含」，与 groupRecordsByCompany 完全一致。
-      function sameCompanyGroup(keyA, keyB) {
-        const a = String(keyA || ''), b = String(keyB || '');
-        if (!a || !b) return false;
-        if (a === b) return true;
-        return a.length >= 2 && b.length >= 2 && (a.includes(b) || b.includes(a));
-      }
-      // 法人形式后缀（可循环剥离，如「××集团有限公司」→「××」）；不含行业词
-      const LEGAL_SUFFIX_RE = /(股份有限公司|有限责任公司|集团有限公司|有限公司|股份公司|集团|公司|股份|co\.,?ltd\.?|inc\.?|ltd\.?|corp\.?|llc)+$/i;
-      function companyGroupKey(record) {
-        const raw = String((record && record.company) || '').trim();
-        if (!raw) return '';
-        // 全角 ASCII → 半角，去掉括号/标点/空白，latin 小写
-        let key = raw
-          .replace(/[\uff01-\uff5e]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
-          .replace(/[（）()[\]【】·・,，.。、\-—_\s]/g, '')
-          .toLowerCase();
-        let prev = null;
-        while (key !== prev && key.length > 2) { prev = key; key = key.replace(LEGAL_SUFFIX_RE, ''); }
-        return key || raw.toLowerCase();
-      }
+      // v4.9.0：归一化实现移入 ./shared/company-key.js（与插件 background 的暂存箱去重同源），
+      // 这里只留转发别名，31 处调用点因此零改动。合并前已实测**三方逐值等价**（483 项断言：
+      // 网页版旧实现 / shared / 插件旧实现，覆盖尾空格、法人后缀循环剥离、全角转半角、
+      // 行业词保留、键互相包含、岗位括号修饰、空值与 null/undefined 等场景）。
+      // 法人后缀正则 LEGAL_SUFFIX_RE 一并移入 shared，本文件不再保留第二份（此前它与插件侧
+      // 那个独立的归一化模块各有一份，靠 company-dedup.js 的断言防漂移；该模块已随本次合并删除）。
+      const sameCompanyGroup = AJA.sameCompanyGroup;
+      const companyGroupKey = AJA.companyGroupKey;
       // 按公司聚合：先取保守键，再把「键互相包含」的并成一家（腾讯 ⊂ 腾讯科技深圳），
       // 组的规范键取成员里最短的那个，保证同一家公司在配色/折叠/排序上始终一致。
       function groupRecordsByCompany(records) {
@@ -3883,16 +3878,10 @@
       // 校招社招 / 提前批正式批，是同一家公司多个岗位的关键区分维度。
       // 旧版这里有一行 .replace(/[（(][^）)]*[）)]/g,'') 把括号整块删掉，导致「后端（深圳）」与「后端（北京）」
       // 撞成同名被判重复；而岗位库与插件两条路径当时都是硬拦截、没有逃生口 → 第二个岗位根本录不进去。
-      function normalizePositionSlug(position) {
-        return String(position || '')
-          .replace(/[\uFF01-\uFF5E]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
-          .replace(/\s+/g, '')
-          .toLowerCase();
-      }
+      // v4.9.0：实现移入 ./shared/company-key.js（插件侧同一份代码叫 positionKey），这里只留转发别名
+      const normalizePositionSlug = AJA.normalizePositionSlug;
       // 宽松版：再去掉括号与连字符后缀。**只用于「疑似同岗位不同方向」提示，绝不用于判重**
-      function loosePositionSlug(position) {
-        return normalizePositionSlug(position).replace(/[（(][^）)]*[）)]/g, '').replace(/[-—|·_~].*$/, '');
-      }
+      const loosePositionSlug = AJA.loosePositionSlug;
       // 返回 { mode: 'duplicate' | 'variant' | 'same-company', reason, matches } 或 null
       //   duplicate    ：同投递网址，或 同公司 + 岗位归一化严格相等 + 同批次 → 应改为编辑既有记录
       //   variant      ：同公司 + 岗位宽松相等 + （严格不等或批次不等）→ 疑似同一岗位的不同方向/城市/批次，

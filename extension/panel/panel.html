@@ -84,10 +84,16 @@
 
   <div class="p-toast" id="p-toast" hidden role="status"></div>
 
-  <!-- 加载顺序有依赖：constants（AJA 命名空间）→ default-resume（简历兜底）→ tokens（设计令牌）
-       → icons（AJA.svg，capture-form 的模板要用）→ capture-form → panel.js -->
+  <!-- 加载顺序有依赖：shared 三件（阶段 / 企业性质 / 简历骨架，constants 的别名转发要用）
+       → constants（AJA 命名空间与插件专有常量）→ tokens（设计令牌）
+       → icons（AJA.svg，capture-form 的模板要用）→ capture-form → panel.js。
+       面板不需要 shared/company-key.js：公司归一化只在 background 的暂存箱去重里用。
+       extension/shared/ 是仓库根 shared/ 的生成拷贝（Chrome 扩展只能加载扩展目录内的文件），
+       由 scripts/pack-extension.js 同步、test/extension-ui.js 的同源守卫断言两边逐字节相同。 -->
+  <script src="../shared/stages.js"></script>
+  <script src="../shared/company-types.js"></script>
+  <script src="../shared/default-resume.js"></script>
   <script src="../common/constants.js"></script>
-  <script src="../common/default-resume.js"></script>
   <script src="../common/tokens.js"></script>
   <script src="../common/icons.js"></script>
   <script src="../common/capture-form.js"></script>

@@ -10,17 +10,23 @@
 
   // 扩展版本（胶囊 title / 控制台均会展示，用于排查“是否已加载新代码”）
   // 必须与 manifest.json 的 version 一致，test/extension-ui.js 有契约断言
-  root.AJA.VERSION = '5.0.0';
+  root.AJA.VERSION = '5.1.0';
 
-  // 招聘阶段预设（与网页版 autumn-recruitment-tracker 的 STAGE_PRESETS 保持一致，两端需同步；实际阶段可自定义）
-  root.AJA.STAGES = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
+  // 招聘阶段预设（实际阶段可自定义，允许跳过笔试、支持三/四/五面、交叉面等）
+  // v4.9.0 起值来自 shared/stages.js —— 它**必须先于本文件加载**（见 manifest.json 的
+  // content_scripts、panel/panel.html 的 script、background.js 的 importScripts 三处顺序）。
+  // 这里只做别名转发：shared 导出的名字是 STAGE_PRESETS（与网页版、Action 同名），
+  // 而插件全代码用的是 AJA.STAGES，这一行让 capture-form.js / panel.js / 05-capture.js 的调用点零改动。
+  // 注意：不要再在这里写字面量——本文件在 shared **之后**加载，字面量会把单一事实源覆盖回两份副本，
+  //    而测试与功能全都正常，只有下次改阶段名时才会发现两端不一致。
+  root.AJA.STAGES = root.AJA.STAGE_PRESETS;
 
-  // 企业性质（与网页版的 COMPANY_TYPES 保持一致，两端需同步；封闭枚举，不像阶段那样允许自定义）
-  // 收录表单的「企业性质」下拉由本数组动态生成，首项固定为「未设置」（value=''）。
-  // 网页端 normalizeRecord 会做白名单校验：不在 COMPANY_TYPES 里的值一律归为未设置，
-  // 因此这里多写/写错一个字，用户选了就等于没选（autumn-mail-sync/test/extension-bridge.js 有逐值一致性契约断言）。
-  root.AJA.COMPANY_TYPES = ['央国企', '民企', '外企'];
-  root.AJA.COMPANY_TYPE_UNSET = '未设置';
+  // 企业性质（封闭枚举，不像阶段那样允许自定义）：值同样来自 shared/company-types.js，
+  // 且两端**同名**（AJA.COMPANY_TYPES / AJA.COMPANY_TYPE_UNSET），所以这里连别名都不必写。
+  // 收录表单的「企业性质」下拉由该数组动态生成，首项固定「未设置」（value=''）。
+  // 网页端 normalizeRecord 做白名单校验：不在 COMPANY_TYPES 里的值一律归为未设置，
+  // 因此多写/写错一个字，用户选了就等于没选、洞察统计永远缺这一档——合并进 shared 之前
+  // 这要靠 test/extension-bridge.js 的逐值一致性断言来防，现在结构上不可能漂移了。
 
   // 存储键（与网页版保持同名，保证 JSON 备份格式互通；插件侧存储域为 chrome.storage.local）
   root.AJA.RECORDS_STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';   // 旧版遗留，仅一次性迁移源

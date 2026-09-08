@@ -4,9 +4,23 @@
 // 不变量③：密钥只从环境变量读，永不写盘、永不进 Gist 建议文件、永不进浏览器。
 // ============================================================================
 
-// 单一事实源提醒：STAGE_PRESETS 必须与网页端 autumn-recruitment-tracker/index.html
-// 的 STAGE_PRESETS 完全一致（14 项、同序）。AI 只能从中选 stage，选不出留空。
-const STAGE_PRESETS = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
+// 单一事实源：14 个阶段值来自仓库根 shared/stages.js，与网页版 index.html、浏览器插件同源——
+// 此前这里是一份独立字面量，靠注释「必须与网页端完全一致」维持；谁改了网页版忘了改这里，
+// AI 就会把「交叉面」判成非法阶段而**静默置空**（邮件照样入库，只是阶段字段没了）。
+//
+// 路径与可移植性——同步到独立仓库时必须一并处理，否则 Action 起不来：
+// 1. 本文件在 monorepo 的 services/mail-sync/src/（深三层），回到仓库根 shared/ 需要**三个** ../；
+//    写成 ../../shared/stages 只到 services/shared/，MODULE_NOT_FOUND。
+// 2. 但**独立仓库**（私有运行实例 autumn-mail-sync、公开 template）的布局是根级 src/（深两层），
+//    而且仓库里本来没有 shared/。所以同步脚本必须做两件事：
+//      ① 把 shared/stages.js 一并拷进目标仓库的 shared/；
+//      ② 把这一行的 ../../../ 改写为 ../../。
+//    缺任何一步，目标仓库的 Action 启动即崩，且 test/run.js 也会连带失败（它 require 本文件）。
+// 3. 在同步脚本落地之前，独立仓库里这一行**仍是字面量副本**（那边跑的是 v0.4.0，功能正常）。
+//    请勿手工把本文件覆盖过去——那会直接打死线上定时任务。
+//
+// AI 只能从这 14 个里选 stage，选不出留空（严格校验见 ai.js 的 normalizeStage）。
+const { STAGE_PRESETS } = require('../../../shared/stages');
 
 // 建议文件名：Action 只 PATCH 这一个文件，永不读写 vault-*.json（不变量①⑥）
 const MAIL_SUGGEST_FILENAME = 'mail-suggestions.json';

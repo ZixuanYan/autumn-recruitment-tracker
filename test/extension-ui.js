@@ -20,9 +20,16 @@ const vm = require('vm');
 const assert = require('assert');
 
 const EXT = path.resolve(__dirname, '../extension');
+const ROOT = path.resolve(__dirname, '..');
 const WEB = path.resolve(__dirname, '../index.html');
 
 const read = (rel) => fs.readFileSync(path.join(EXT, rel), 'utf8');
+const readRoot = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+// 跨端单一事实源在仓库根 shared/；插件加载的是 extension/shared/ 的**生成拷贝**
+// （Chrome 扩展只能加载扩展目录内的文件，且插件要独立打 zip 分发）。
+// 两份都要测：源测内容正确，拷贝测与源逐字节相同（同源守卫，见 I 节）。
+const SHARED_FILES = ['stages.js', 'company-types.js', 'company-key.js', 'default-resume.js'];
 
 const SRC = {
   core: read('content/01-core.js'),
@@ -33,13 +40,25 @@ const SRC = {
   icons: read('common/icons.js'),
   form: read('common/capture-form.js'),
   constants: read('common/constants.js'),
-  defaultResume: read('common/default-resume.js'),
   background: read('background.js'),
   panelJs: read('panel/panel.js'),
   panelCss: read('panel/panel.css'),
   panelHtml: read('panel/panel.html'),
   manifest: JSON.parse(read('manifest.json'))
 };
+
+// 反 AI 感守卫与旧配色黑名单的扫描范围（相对仓库根，用 readRoot 读）。
+// 刻意把 shared/ 与其生成拷贝 extension/shared/ 都纳入：生成拷贝若不扫就成了守卫盲区，
+// 有人往跨端共享源里塞蓝紫渐变或 emoji 也发现不了（方案 D13 提到的正是这个）。
+const SCAN_FILES = [
+  'extension/content/01-core.js', 'extension/content/05-capture.js', 'extension/content/06-bridge.js',
+  'extension/content/03-parsers.js', 'extension/common/tokens.js', 'extension/common/icons.js',
+  'extension/common/capture-form.js', 'extension/common/constants.js',
+  'extension/panel/panel.css', 'extension/panel/panel.js', 'extension/panel/panel.html',
+  'extension/background.js',
+  ...SHARED_FILES.map(f => `shared/${f}`),
+  ...SHARED_FILES.map(f => `extension/shared/${f}`)
+];
 
 let failed = 0;
 const cases = [];
@@ -69,9 +88,20 @@ function loadAjA() {
   sandbox.globalThis = sandbox;
   sandbox.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
   vm.createContext(sandbox);
-  // 顺序与 manifest 的 content_scripts / panel.html 的 script 一致
-  for (const f of ['common/constants.js', 'common/default-resume.js', 'common/tokens.js', 'common/icons.js', 'common/capture-form.js']) {
+  // 加载插件的**完整公共层**：extension/shared/ 四件（跨端单一事实源的生成拷贝）+ common 四件。
+  // 这是 background.js 的 importScripts 与 panel.html 的 script 的**并集**——只跟 panel.html 会缺
+  // company-key（面板确实用不到它），而本节要验证的是 shared 四件的完整契约。
+  // 顺序仍然满足依赖：shared 必须在 constants 之前（constants 的 AJA.STAGES 是别名转发）。
+  const commonLayer = [...SHARED_FILES.map(f => `shared/${f}`),
+    'common/constants.js', 'common/tokens.js', 'common/icons.js', 'common/capture-form.js'];
+  for (const f of commonLayer) {
+    assert.ok(fs.existsSync(path.join(EXT, f)), `公共层文件不存在：extension/${f}`);
     vm.runInContext(read(f), sandbox, { filename: f });
+  }
+  // panel.html 的 script 必须是这个公共层的子集（多引一个不存在的就是 404）
+  for (const m of SRC.panelHtml.matchAll(/<script src="([^"]+)"><\/script>/g)) {
+    const rel = m[1].startsWith('../') ? m[1].slice(3) : null;
+    if (rel) assert.ok(commonLayer.includes(rel), `panel.html 引了公共层之外的 ${rel}`);
   }
   return sandbox;
 }
@@ -113,10 +143,9 @@ check('旧版蓝紫/绿/琥珀配色零残留（29 个历史色值黑名单）',
   // 刻意不区分注释与代码：先解析并排除注释会引入误删风险（字符串里的 // 、模板里的 /* 等），
   // 而「整个文件不许出现这些色值」这条规则简单可靠。代价是注释里提到旧配色时只能写「蓝紫色」
   // 这类文字描述、不能写出 hex——tokens.js 的 accent 注释就是这么写的。
-  const files = ['content/01-core.js', 'content/05-capture.js', 'common/tokens.js', 'common/icons.js',
-    'common/capture-form.js', 'panel/panel.css', 'panel/panel.js', 'panel/panel.html'];
-  for (const f of files) {
-    const lower = read(f).toLowerCase();
+  // 扫描范围见 SCAN_FILES（含 shared/ 与其生成拷贝，不留盲区）。
+  for (const f of SCAN_FILES) {
+    const lower = readRoot(f).toLowerCase();
     for (const c of LEGACY_COLORS) {
       assert.ok(!lower.includes(c), `${f} 里出现了旧配色 ${c}（注释里也不要写，见本断言上方说明）`);
     }
@@ -141,14 +170,13 @@ check('零毛玻璃：backdrop-filter / filter: blur 不许有', () => {
 });
 
 check('零 emoji：18 处 emoji 图标已全部换成内联 SVG', () => {
-  // 范围刻意不含 \u2190-\u21FF（箭头 →），注释里大量使用它做流程示意，那不是图标
+  // 范围刻意不含 \u2190-\u21FF（箭头 →），注释里大量用它做流程示意，那不是图标。
+  // 但含 \u2600-\u26FF（⚠ 落在这一段）：**注释里的 ⚠️ 同样会被拦**——这与旧配色黑名单是同一个取舍，
+  // 守卫不区分注释与代码，换来简单可靠；写注释时用「注意：」代替即可（本轮就自己踩了一次）。
   const RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE0F}\u{1F000}-\u{1F0FF}]/u;
-  const files = ['content/01-core.js', 'content/05-capture.js', 'content/06-bridge.js', 'content/03-parsers.js',
-    'common/tokens.js', 'common/icons.js', 'common/capture-form.js', 'common/constants.js',
-    'panel/panel.css', 'panel/panel.js', 'panel/panel.html', 'background.js'];
-  for (const f of files) {
-    const hit = RE.exec(read(f));
-    assert.ok(!hit, `${f} 里出现了 emoji/装饰符号 ${hit ? JSON.stringify(hit[0]) : ''}`);
+  for (const f of SCAN_FILES) {
+    const hit = RE.exec(readRoot(f));
+    assert.ok(!hit, `${f} 里出现了 emoji/装饰符号 ${hit ? JSON.stringify(hit[0]) : ''}（注释里也不要写）`);
   }
 });
 
@@ -366,7 +394,10 @@ section('D. manifest 契约');
 check('manifest 版本与 AJA.VERSION 一致（两处不同步会让人以为没加载新代码）', () => {
   assert.strictEqual(SRC.manifest.version, AJA.VERSION,
     `manifest.version=${SRC.manifest.version} 与 constants.js 的 AJA.VERSION=${AJA.VERSION} 不一致`);
-  assert.strictEqual(SRC.manifest.version, '5.0.0');
+  // 这里刻意**不**硬编码期望版本号：具体版本由 web-check.js 的「插件版本号 10 处一致」守卫负责
+  // （那条覆盖 manifest / AJA.VERSION / download.html 三处 / README 两处 / 使用说明 / extension README 两处）。
+  // 在本文件再写死一次只会让每次升版多改一处、且两处容易不同步——本轮就自己踩了一次。
+  assert.ok(/^\d+\.\d+\.\d+$/.test(SRC.manifest.version), `版本号格式异常：${SRC.manifest.version}`);
 });
 
 check('content_scripts 列出的文件全部存在，且旧文件已彻底移除', () => {
@@ -380,14 +411,20 @@ check('content_scripts 列出的文件全部存在，且旧文件已彻底移除
   }
 });
 
-check('注入顺序满足依赖（constants→tokens→icons→capture-form→01-core→03-parsers→05-capture→06-bridge）', () => {
+check('注入顺序满足依赖（shared→constants→tokens→icons→capture-form→01-core→03-parsers→05-capture→06-bridge）', () => {
   const files = SRC.manifest.content_scripts[0].js;
   const idx = (f) => files.indexOf(f);
-  const required = ['common/constants.js', 'common/tokens.js', 'common/icons.js', 'common/capture-form.js',
+  const required = ['shared/stages.js', 'shared/company-types.js', 'common/constants.js', 'common/tokens.js',
+    'common/icons.js', 'common/capture-form.js',
     'content/01-core.js', 'content/03-parsers.js', 'content/05-capture.js', 'content/06-bridge.js'];
   for (const f of required) assert.ok(idx(f) > -1, `content_scripts 缺少 ${f}`);
+  // 🔴 shared 必须在 constants 之前：constants 里 AJA.STAGES = AJA.STAGE_PRESETS 是别名转发，
+  // 顺序反了会转发到 undefined 且**不报错**，只表现为收录表单的阶段下拉空空如也。
+  // 这条依赖是阶段 2 新增的，原来的断言只覆盖 constants 之后的相对顺序、守不住它。
+  assert.ok(idx('shared/stages.js') < idx('common/constants.js'), 'shared/stages.js 必须在 constants.js 之前（别名转发依赖）');
+  assert.ok(idx('shared/company-types.js') < idx('common/constants.js'), 'shared/company-types.js 必须在 constants.js 之前');
   // 01-core 顶层就调用 AJA.tokensToCssVars / AJA.svg / AJA.onSchemeChange，三者必须在它之前
-  assert.ok(idx('common/constants.js') < idx('common/tokens.js'), 'constants 必须最先（AJA 命名空间）');
+  assert.ok(idx('common/constants.js') < idx('common/tokens.js'), 'constants 必须在 tokens 之前（AJA 命名空间）');
   assert.ok(idx('common/tokens.js') < idx('content/01-core.js'), 'tokens 必须在 01-core 之前');
   assert.ok(idx('common/icons.js') < idx('content/01-core.js'), 'icons 必须在 01-core 之前（胶囊 innerHTML 用 AJA.svg）');
   assert.ok(idx('common/icons.js') < idx('common/capture-form.js'), 'icons 必须在 capture-form 之前（表单模板用 AJA.svg）');
@@ -399,19 +436,30 @@ check('注入顺序满足依赖（constants→tokens→icons→capture-form→01
 
 check('panel.html 的 script 顺序同样满足依赖，且引用的文件都存在', () => {
   const srcs = [...SRC.panelHtml.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
-  assert.ok(srcs.length >= 6, `panel.html 只引了 ${srcs.length} 个脚本`);
+  assert.ok(srcs.length >= 8, `panel.html 只引了 ${srcs.length} 个脚本（应为 shared 三件 + common 四件 + panel.js）`);
   for (const s of srcs) {
     const abs = path.join(EXT, 'panel', s);
     assert.ok(fs.existsSync(abs), `panel.html 引用了不存在的文件 ${s}`);
   }
   const idx = (n) => srcs.findIndex(s => s.includes(n));
-  assert.ok(idx('constants.js') < idx('tokens.js'), 'constants 必须最先');
+  // 🔴 shared 必须在 constants 之前：constants 里 AJA.STAGES = AJA.STAGE_PRESETS 是别名转发
+  assert.ok(idx('shared/stages.js') > -1, 'panel.html 缺少 shared/stages.js');
+  assert.ok(idx('shared/company-types.js') > -1, 'panel.html 缺少 shared/company-types.js');
+  assert.ok(idx('shared/stages.js') < idx('constants.js'), 'shared/stages.js 必须在 constants.js 之前');
+  assert.ok(idx('shared/company-types.js') < idx('constants.js'), 'shared/company-types.js 必须在 constants.js 之前');
+  assert.ok(idx('constants.js') < idx('tokens.js'), 'constants 必须在 tokens 之前');
   assert.ok(idx('tokens.js') < idx('panel.js'), 'tokens 必须在 panel.js 之前');
   assert.ok(idx('icons.js') < idx('capture-form.js'), 'icons 必须在 capture-form 之前');
   assert.ok(idx('capture-form.js') < idx('panel.js'), 'capture-form 必须在 panel.js 之前');
   assert.strictEqual(srcs[srcs.length - 1], 'panel.js', 'panel.js 必须最后加载');
-  // panel 用 AJA.DEFAULT_RESUME 兜底，必须引 default-resume.js
-  assert.ok(idx('default-resume.js') > -1, 'panel.html 缺少 default-resume.js（简历兜底会 undefined）');
+  // panel 用 AJA.DEFAULT_RESUME 兜底，阶段 2 起它在 shared/ 下
+  assert.ok(idx('shared/default-resume.js') > -1, 'panel.html 缺少 shared/default-resume.js（简历兜底会 undefined）');
+  // 被 shared 取代的两个 common 文件已删除，不该再被引用（引了就是 404 → CSP 报错）
+  for (const gone of ['common/default-resume', 'common/company-key']) {
+    assert.ok(!srcs.some(s => s.includes(gone)), `${gone}.js 已删除，panel.html 不该再引用`);
+  }
+  // 面板不需要 company-key（公司归一化只在 background 的暂存箱去重里用）
+  assert.ok(!srcs.some(s => s.includes('company-key')), 'panel.html 不该加载 company-key.js（面板用不到，白增体积）');
   // CSP 是 script-src 'self'，内联脚本会被拦
   assert.ok(!/<script>(?!<\/script>)/.test(SRC.panelHtml), 'panel.html 里有内联脚本，会被 extension_pages 的 CSP 拦掉');
 });
@@ -855,6 +903,140 @@ check('面板与迷你卡片通过 storage.onChanged 同步（不需要额外广
   assert.ok(/changes\[AJA\.RESUME_STORAGE_KEY\]/.test(SRC.panelJs), '简历更新不会刷新面板');
   assert.ok(/changes\[AJA\.PENDING_KEY\]/.test(SRC.panelJs), '迷你卡片存的暂存不会刷新面板');
   assert.ok(/chrome\.tabs\.onActivated/.test(SRC.panelJs), '切标签页不会刷新当前页状态');
+});
+
+// ============================================================================
+section('I. 跨端单一事实源（shared/ 与 extension/shared/ 生成拷贝）');
+
+check('同源守卫：extension/shared/*.js 与仓库根 shared/*.js 逐字节相同', () => {
+  for (const f of SHARED_FILES) {
+    const srcPath = path.join(ROOT, 'shared', f);
+    const dstPath = path.join(EXT, 'shared', f);
+    assert.ok(fs.existsSync(srcPath), `仓库根 shared/${f} 不存在`);
+    assert.ok(fs.existsSync(dstPath), `extension/shared/${f} 不存在——忘了跑 node scripts/pack-extension.js`);
+    // 逐字节比对，不做「剥掉注释头再比」——那会给守卫开口子（真实改动可以藏进注释头里）
+    assert.strictEqual(fs.readFileSync(dstPath, 'utf8'), fs.readFileSync(srcPath, 'utf8'),
+      `extension/shared/${f} 与源不一致：改了 shared/ 后要跑 node scripts/pack-extension.js 重新同步；`
+      + '绝不要手改生成拷贝，那等于又回到两份副本');
+  }
+  const extra = fs.readdirSync(path.join(EXT, 'shared')).filter(f => !SHARED_FILES.includes(f));
+  assert.deepStrictEqual(extra, [], `extension/shared/ 里有多余文件：${extra.join(', ')}（源已删但拷贝没清）`);
+});
+
+check('shared 的值本身正确（源头错了三端一起错，所以源头也要有契约）', () => {
+  assert.strictEqual(AJA.STAGE_PRESETS.length, 14, '阶段预设应为 14 档');
+  // 跨 vm context 的数组原型不同，deepStrictEqual 会报「结构相同但引用不等」，所以先展开成本地数组
+  assert.deepStrictEqual([...AJA.STAGE_PRESETS],
+    ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束']);
+  assert.deepStrictEqual([...AJA.COMPANY_TYPES], ['央国企', '民企', '外企'], '企业性质应为约定的 3 档');
+  assert.strictEqual(AJA.COMPANY_TYPE_UNSET, '未设置');
+  assert.strictEqual(Object.keys(AJA.DEFAULT_RESUME).length, 6, '默认简历应为 6 段');
+  // 归一化两套 API 缺一不可：少字符串版插件要改调用点，少 record 版网页版要改 31 处
+  for (const fn of ['companyKey', 'positionKey', 'loosePositionKey', 'sameCompanyKey', 'sameCompany',
+    'companyGroupKey', 'normalizePositionSlug', 'loosePositionSlug', 'sameCompanyGroup']) {
+    assert.strictEqual(typeof AJA[fn], 'function', `shared/company-key.js 缺少 ${fn}`);
+  }
+  // LEGAL_SUFFIX_RE 此前在网页版与插件各有一份，现在应一并从 shared 导出。
+  // 用行为断言而不是 instanceof RegExp：跨 vm context 的原型不同，instanceof 必然为假
+  // （与上面 deepStrictEqual 要展开数组是同一个原因）。
+  const re = AJA.LEGAL_SUFFIX_RE;
+  assert.ok(re && typeof re.test === 'function' && typeof re.source === 'string',
+    'LEGAL_SUFFIX_RE 应一并导出（此前网页版与插件各有一份）');
+  assert.ok(re.test('腾讯科技有限公司'), 'LEGAL_SUFFIX_RE 应能匹配「有限公司」');
+  assert.ok(re.test('华为集团'), 'LEGAL_SUFFIX_RE 应能匹配「集团」');
+  assert.ok(!re.test('星海科技'), 'LEGAL_SUFFIX_RE 不该匹配行业词「科技」（否则星海科技与星海互娱会被并成一家）');
+  assert.ok(!re.test('星海互娱'), '同上：「互娱」是行业词，必须保留');
+});
+
+check('别名是真的别名（同一函数引用），不是复制出来的第二份实现', () => {
+  // 这是 D12 / 2.3 的核心：合并之后如果「别名」其实是又抄了一份实现，漂移风险原封不动还在
+  assert.strictEqual(AJA.normalizePositionSlug, AJA.positionKey, 'normalizePositionSlug 应是 positionKey 的同一引用');
+  assert.strictEqual(AJA.loosePositionSlug, AJA.loosePositionKey, 'loosePositionSlug 应是 loosePositionKey 的同一引用');
+  assert.strictEqual(AJA.sameCompanyGroup, AJA.sameCompanyKey, 'sameCompanyGroup 应是 sameCompanyKey 的同一引用');
+  // companyGroupKey 收 record、companyKey 收字符串，签名不同所以不能是同一引用，但必须行为等价
+  for (const c of ['腾讯', '腾讯科技（深圳）有限公司', '字节跳动', '星海科技', '', null, undefined, 'ＴCL']) {
+    assert.strictEqual(AJA.companyGroupKey({ company: c }), AJA.companyKey(c),
+      `companyGroupKey 与 companyKey 对 ${JSON.stringify(c)} 结果不一致`);
+  }
+  assert.strictEqual(AJA.companyGroupKey(null), '', 'record 为 null 时不该抛错');
+});
+
+check('插件 constants.js 只做别名转发，不得再有阶段/企业性质字面量', () => {
+  // constants.js 在 shared **之后**加载，留着字面量会把单一事实源覆盖回两份副本，
+  // 而且测试与功能全都正常——只有下次改阶段名时才会发现两端不一致
+  assert.ok(/root\.AJA\.STAGES = root\.AJA\.STAGE_PRESETS;/.test(SRC.constants),
+    'constants.js 缺少 AJA.STAGES 的别名转发（插件全代码用的是 AJA.STAGES）');
+  assert.ok(!/AJA\.STAGES = \[/.test(SRC.constants), 'constants.js 里又出现了阶段字面量数组');
+  assert.ok(!/AJA\.COMPANY_TYPES = \[/.test(SRC.constants), 'constants.js 里又出现了企业性质字面量数组');
+  assert.ok(!/央国企|民企|外企/.test(SRC.constants), 'constants.js 里不该再有企业性质的中文字面量');
+  // 插件专有常量必须保留原地（网页版与 Action 用不到，搬进 shared 只会制造新耦合）
+  for (const k of ['TRACKER_URL', 'TRACKER_ORIGIN', 'TRACKER_PATH_PREFIX', 'UI_STORAGE_KEY', 'MSG', 'VERSION', 'BRIDGE_SOURCE']) {
+    assert.ok(SRC.constants.includes(`AJA.${k}`), `constants.js 丢了插件专有常量 ${k}`);
+  }
+});
+
+check('三端都指向同一份 shared，五组原始副本已清零（语法级断言，不受排版影响）', () => {
+  const html = fs.readFileSync(WEB, 'utf8');
+  // ① 网页版：八个转发别名
+  const ALIAS = {
+    STAGE_PRESETS: /const STAGE_PRESETS = AJA\.STAGE_PRESETS;/,
+    COMPANY_TYPES: /const COMPANY_TYPES = AJA\.COMPANY_TYPES;/,
+    COMPANY_TYPE_UNSET: /const COMPANY_TYPE_UNSET = AJA\.COMPANY_TYPE_UNSET;/,
+    DEFAULT_RESUME: /const DEFAULT_RESUME = AJA\.DEFAULT_RESUME;/,
+    companyGroupKey: /const companyGroupKey = AJA\.companyGroupKey;/,
+    sameCompanyGroup: /const sameCompanyGroup = AJA\.sameCompanyGroup;/,
+    normalizePositionSlug: /const normalizePositionSlug = AJA\.normalizePositionSlug;/,
+    loosePositionSlug: /const loosePositionSlug = AJA\.loosePositionSlug;/
+  };
+  for (const [name, re] of Object.entries(ALIAS)) {
+    assert.ok(re.test(html), `index.html 的 ${name} 不是 shared 的转发别名（可能又出现了第二份实现）`);
+  }
+  // ② 网页版不得再有字面量副本
+  assert.ok(!/const STAGE_PRESETS = \[/.test(html), 'index.html 又出现了阶段字面量');
+  assert.ok(!/const COMPANY_TYPES = \[/.test(html), 'index.html 又出现了企业性质字面量');
+  assert.ok(!/const LEGAL_SUFFIX_RE = \//.test(html), 'index.html 又出现了法人后缀正则副本');
+  assert.ok(!/function companyGroupKey\(/.test(html), 'index.html 又出现了 companyGroupKey 的实现体');
+  assert.ok(!/function normalizePositionSlug\(/.test(html), 'index.html 又出现了 normalizePositionSlug 的实现体');
+  assert.ok(!/const DEFAULT_RESUME = \{/.test(html), 'index.html 又出现了默认简历字面量');
+  // ③ 网页版必须真的加载这四个 script，否则别名全是 undefined（而且不报错）
+  for (const f of SHARED_FILES) {
+    assert.ok(html.includes(`<script src="./shared/${f}"></script>`), `index.html 缺少 <script src="./shared/${f}">`);
+  }
+  // ④ Action：config.js 在 services/mail-sync/src/ 深三层，需要三个 ../
+  const cfg = readRoot('services/mail-sync/src/config.js');
+  assert.ok(/require\('\.\.\/\.\.\/\.\.\/shared\/stages'\)/.test(cfg),
+    'config.js 的 require 路径不对：本文件深三层，回到仓库根需要三个 ../（写两个只到 services/shared/）');
+  assert.ok(!/const STAGE_PRESETS = \[/.test(cfg), 'config.js 又出现了阶段字面量');
+  // ⑤ 插件：被取代的两个 common 文件必须已删除
+  for (const gone of ['common/company-key.js', 'common/default-resume.js']) {
+    assert.ok(!fs.existsSync(path.join(EXT, gone)), `extension/${gone} 应已删除（被 shared/ 取代）`);
+  }
+  // ⑥ background 的 importScripts 必须含 shared 四件，且排在 constants 之前
+  const imp = /importScripts\(([\s\S]*?)\);/.exec(SRC.background);
+  assert.ok(imp, 'background.js 找不到 importScripts');
+  const list = [...imp[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+  for (const f of SHARED_FILES) {
+    assert.ok(list.includes(`shared/${f}`), `background.js 的 importScripts 缺 shared/${f}`);
+  }
+  assert.ok(list.indexOf('shared/stages.js') < list.indexOf('common/constants.js'),
+    'background.js 里 shared 必须排在 constants 之前（别名转发依赖）');
+  assert.ok(!list.some(s => s.includes('common/company-key') || s.includes('common/default-resume')),
+    'background.js 还在 importScripts 已删除的 common 文件，扩展会加载失败');
+});
+
+check('shared/ 进了 dist 白名单与 APP_SHELL，且两边一一对应', () => {
+  const build = readRoot('build.js');
+  assert.ok(/existsSync\(path\.join\(ROOT, 'shared'\)\)/.test(build),
+    'build.js 没有自动纳入 shared/（线上会 4 个 404）');
+  const sw = readRoot('service-worker.js');
+  const html = fs.readFileSync(WEB, 'utf8');
+  for (const f of SHARED_FILES) {
+    // cache.addAll 全有或全无：APP_SHELL 缺一个 → 整个 install 失败 → PWA 离线能力全废
+    assert.ok(sw.includes(`'./shared/${f}'`),
+      `service-worker.js 的 APP_SHELL 缺 ./shared/${f}（addAll 全有或全无，缺一个就打挂 PWA）`);
+    assert.ok(html.includes(`./shared/${f}`),
+      `index.html 没引用 ./shared/${f} 但 APP_SHELL 里有——那是白缓存，两边必须一一对应`);
+  }
 });
 
 runAll();
