@@ -273,7 +273,11 @@
     .install-guide span:last-child { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
 
     /* ================= 视图路由 ================= */
-    .view { display: grid; gap: 20px; align-content: start; }
+    /* grid-template-columns 必须显式给 minmax(0, 1fr)：不写的话隐式列轨道宽度由内容决定，
+       .panel 作为 grid item 的 min-width:auto 会解析成 min-content——台账表格（min-width:780px）
+       与看板四列（min-content 964px）会把整列撑宽，导致 .table-scroll / .board-cols 的
+       overflow-x:auto 永远拿不到"被压缩"的宽度而失效，退化成整页横向滚动（窄屏实测 +342px）。 */
+    .view { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; }
     .view[hidden] { display: none; } /* 关键：作者样式的 display 会覆盖 [hidden] 的 UA display:none，必须显式补回，否则四视图会同时堆叠 */
     .view.is-entering { animation: view-in .18s ease-out; }
     @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -968,7 +972,11 @@
 
     /* ===== 邮件提醒视图（M3）+ 导航角标 ===== */
     .nav-badge { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
-    .mail-head-actions { display: flex; gap: 8px; }
+    /* flex-wrap + nowrap 两个都不能少：没有 wrap 时，.panel-head 把剩余宽度压给 actions，
+       两个按钮会被挤到 CJK 最小内容宽（中文允许逐字断行）→「设/置」「重/新/读/取」竖排，
+       按钮被撑到 60px 高（窄屏实测）；没有 nowrap 则 wrap 也救不了逐字断行。 */
+    .mail-head-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .mail-head-actions .btn { flex: 0 0 auto; white-space: nowrap; }
     /* 三个状态变体统一改成规范 alert 式：base-200 底 + 左 3px **亮档**语义条 + 语义色标题。
        旧版是整块语义色底（soft），三态并排时颜色太吵，且与洞察的 .alert-item 风格不一致。 */
     .mail-statusbar { margin-bottom: 14px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); border-left: 3px solid transparent; box-shadow: none; color: var(--muted); font-size: 13px; }

@@ -1279,5 +1279,23 @@ check('persistResume 必须写快照层（createEnvelope 含 resume，漏了会�
     'createEnvelope 必须在 resumeSavedAt 更新之后调用，否则快照里的 savedAt 是上一次的');
 });
 
+check('窄屏布局守卫：.view 的列轨道与 .mail-head-actions 的换行（两处都是不报错型缺陷）', () => {
+  // 缺陷 1（窄屏实测整页横向滚动 +342px）：.view 不写 grid-template-columns 时隐式列轨道由内容
+  // 决定，.panel 的 min-width:auto 解析成 min-content，台账表格与看板四列会把列撑宽，
+  // 于是 .table-scroll / .board-cols 的 overflow-x:auto 永远失效。
+  const viewRule = /\.view \{[^}]*\}/.exec(html);
+  assert.ok(viewRule, '找不到 .view 规则');
+  assert.ok(/grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(viewRule[0]),
+    '.view 必须有 grid-template-columns: minmax(0, 1fr)，否则窄屏下内部滚动容器失效、整页横滚');
+  // 缺陷 2（窄屏实测按钮被挤成竖排文字的 60px 高药丸）：CJK 文本允许逐字断行，
+  // flex 不换行时按钮会被压到最小内容宽。wrap 与 nowrap 缺一即回归。
+  const mailActions = /\.mail-head-actions \{[^}]*\}/.exec(html);
+  assert.ok(mailActions && /flex-wrap:\s*wrap/.test(mailActions[0]),
+    '.mail-head-actions 必须有 flex-wrap: wrap，否则窄屏下按钮被压缩');
+  const mailBtn = /\.mail-head-actions \.btn \{[^}]*\}/.exec(html);
+  assert.ok(mailBtn && /white-space:\s*nowrap/.test(mailBtn[0]),
+    '.mail-head-actions .btn 必须有 white-space: nowrap，否则中文会逐字竖排');
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;
