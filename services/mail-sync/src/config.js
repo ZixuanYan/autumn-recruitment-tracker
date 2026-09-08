@@ -11,11 +11,14 @@
 // 路径与可移植性——同步到独立仓库时必须一并处理，否则 Action 起不来：
 // 1. 本文件在 monorepo 的 services/mail-sync/src/（深三层），回到仓库根 shared/ 需要**三个** ../；
 //    写成 ../../shared/stages 只到 services/shared/，MODULE_NOT_FOUND。
-// 2. 但**独立仓库**（私有运行实例 autumn-mail-sync、公开 template）的布局是根级 src/（深两层），
-//    而且仓库里本来没有 shared/。所以同步脚本必须做两件事：
+// 2. 但**独立仓库**（私有运行实例 autumn-mail-sync、公开 template）的布局是根级 src/，
+//    本文件到仓库根只需**一个** ../，而且那些仓库里本来没有 shared/。所以同步脚本必须做两件事：
 //      ① 把 shared/stages.js 一并拷进目标仓库的 shared/；
-//      ② 把这一行的 ../../../ 改写为 ../../。
+//      ② 把这一行的 ../../../ 改写为 ../（scripts/sync-template.js 自动做）。
 //    缺任何一步，目标仓库的 Action 启动即崩，且 test/run.js 也会连带失败（它 require 本文件）。
+//    改写层级时别想当然：曾在同步脚本里写成 ../../（以为独立仓库"深两层"），而且在 monorepo 内
+//    验证时**假绿**——staging/src 往上两层恰好是仓库根，那里真有 shared/；只有把产物复制到
+//    monorepo 之外跑才暴露 MODULE_NOT_FOUND。所以 sync-template.js 的 --test 刻意在隔离目录里跑。
 // 3. 在同步脚本落地之前，独立仓库里这一行**仍是字面量副本**（那边跑的是 v0.4.0，功能正常）。
 //    请勿手工把本文件覆盖过去——那会直接打死线上定时任务。
 //
