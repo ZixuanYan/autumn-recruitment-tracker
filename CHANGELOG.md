@@ -1,5 +1,18 @@
 # 更新记录
 
+## v4.9.1（网页 + Action v0.4.1：修三个静默故障）
+
+三个都是**不报错、不崩溃**的问题——只会在事后发现数据不对，所以优先清掉。
+
+**① 云同步会静默丢一次推送**（网页）
+`scheduleSyncPush()` 遇到 `syncBusy` 时直接 `return`，那次变更就永不上推了：不重试、不报错，你以为同步过了其实没有（要等到下次有别的变更、或页面重新可见、或 5 分钟后的定时器才补上）。改为记下 `syncPushPending` 标志，在 `syncNow()` 的 `finally` 里补推一次。
+
+**② 简历不进 IndexedDB 快照层**（网页）
+`persistResume()` 只写 localStorage，而 `saveRecords()` 一直会通过 `persistenceQueue` 调 `persistSafetyLayers()`。`createEnvelope()` 里是**含** `resume` / `resumeSavedAt` 的，所以后果是：localStorage 一旦损坏或被清，从快照恢复出来的是**旧简历**（投递记录反而是新的）。补齐同一套调用，且必须在 `resumeSavedAt` 更新之后取 envelope。
+
+**③ Action 的配置覆盖缺数值范围夹取**（Action v0.4.1）
+`applyMailConfigOverrides()` 原本已有类型守卫（`Number.isFinite`）、字符串长度上限与 `minIntervalHours` 的下限，但**没有数值范围夹取**：手改 Gist 里的 `mail-config.json` 塞 `minConfidence: 5` → 所有建议都被当低置信丢弃且无报错；`maxPerRun: 99999` → 一次拉爆。网页端设置面板一直有 `clampNum`，现在两端范围**逐项对齐**：`minConfidence` 0–1、`sinceDays` 1–365、`maxPerRun` 1–200、`minIntervalHours` 0–168。
+
 ## v4.9.0（网页 + 插件 v5.1.0：跨端单一事实源 `shared/`）
 
 这是一次**内部结构重构**，功能与界面没有变化。解决的是"同一份常量散在多处、靠注释和测试维持一致"的长期隐患。

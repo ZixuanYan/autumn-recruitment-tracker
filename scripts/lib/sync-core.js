@@ -31,8 +31,20 @@ const SHARED_FILES = ['stages.js', 'company-types.js', 'company-key.js', 'defaul
 // 只带这两个测试：其余 7 个依赖仓库根的 index.html 与 extension/，独立仓库里没有
 const TEST_FILES = ['run.js', 'integration.js'];
 
-// 独立仓库里跑 npm test 应有的断言数（run.js 54 + integration.js 10）
-const EXPECTED_ASSERTIONS = 64;
+/**
+ * 独立仓库里跑 npm test 应有的 test 数。
+ *
+ * 刻意**不硬编码**（原先写死 64）：硬编码的话每次给 run.js 加测试都要记得改这里，
+ * 忘了脚本就无端变红。但也不能完全不校验——校验的目的是抓「少跑了 integration.js」，
+ * 那 10 项是编排层守卫，历史上抓到过 adjudicated is not defined 那次线上事故。
+ * 所以改为直接数 monorepo 侧两个文件里行首的 test( 调用数。
+ */
+function expectedTestCount() {
+  return TEST_FILES.reduce((n, f) => {
+    const s = fs.readFileSync(path.join(ROOT, 'test', f), 'utf8');
+    return n + (s.match(/^test\(/gm) || []).length;
+  }, 0);
+}
 
 function copyTree(src, dst) {
   fs.mkdirSync(dst, { recursive: true });
@@ -210,13 +222,21 @@ function verifyInIsolation(outDir, label) {
       throw new Error(`隔离目录里 npm test 失败（说明产物不自洽，目标仓库会崩）：\n`
         + String(err.stdout || '') + String(err.stderr || ''));
     }
-    const passed = (out.match(/✓/g) || []).length;
-    if (passed !== EXPECTED_ASSERTIONS) {
-      throw new Error(`断言数 ${passed} 与预期 ${EXPECTED_ASSERTIONS} 不符：`
+    // 解析两个文件各自的「共 N 个，通过 N」汇总：既校验总数，也校验**两个文件都跑了**。
+    // 比数 ✓ 更可靠——test 内部的 console.log 也可能带 ✓。
+    const totals = [...out.matchAll(/共 (\d+) 个，通过 (\d+)/g)].map(m => Number(m[1]));
+    const expected = expectedTestCount();
+    if (totals.length !== TEST_FILES.length) {
+      throw new Error(`只解析到 ${totals.length} 个测试文件的汇总（应为 ${TEST_FILES.length} 个）：`
         + '可能有人为了让测试变绿而少跑了 integration.js（那 10 项是编排层守卫，'
         + '历史上抓到过 adjudicated is not defined 那次线上事故）');
     }
-    return passed;
+    const sum = totals.reduce((a, b) => a + b, 0);
+    if (sum !== expected) {
+      throw new Error(`test 数 ${sum}（${totals.join(' + ')}）与 monorepo 侧的 ${expected} 不符：`
+        + '同步可能漏拷或改坏了测试文件');
+    }
+    return sum;
   } finally {
     fs.rmSync(verifyDir, { recursive: true, force: true });
   }
@@ -274,6 +294,6 @@ function applyToRepo(opts) {
 }
 
 module.exports = {
-  ROOT, SRC, SHARED_FILES, TEST_FILES, EXPECTED_ASSERTIONS,
+  ROOT, SRC, SHARED_FILES, TEST_FILES, expectedTestCount,
   copyTree, listFiles, generate, selfCheck, verifyInIsolation, applyToRepo
 };

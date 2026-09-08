@@ -35,7 +35,7 @@ try {
 
   // 必须在 monorepo 之外验证：在里面跑会因路径逃逸到仓库根的 shared/ 而假绿（core 里有详细说明）
   const passed = core.verifyInIsolation(STAGING, 'template');
-  console.log(`✓ 隔离目录 npm test 通过，${passed} 项（= run.js 54 + integration.js 10）`);
+  console.log(`✓ 隔离目录 npm test 通过，${passed} 项（run.js + integration.js；期望值由 core 从源文件动态数出，加测试不必改脚本）`);
 
   const applyIdx = process.argv.indexOf('--apply');
   if (applyIdx > -1) {
@@ -46,7 +46,7 @@ try {
     for (const c of changes.slice(0, 30)) console.log(`    ${c}`);
     if (changes.length > 30) console.log(`    …另有 ${changes.length - 30} 项`);
     console.log('\n下一步（手动）：进目标仓库确认 git status → git commit → git push。');
-    console.log('推送后按方案 T.4 验收：全新 clone 到空目录跑 npm test 应为 64 项。');
+    console.log(`推送后按方案 T.4 验收：全新 clone 到空目录跑 npm test 应为 ${core.expectedTestCount()} 项。`);
   } else {
     console.log('\n（未指定 --apply，只生成 staging/ 供 review；推送需手动执行）');
   }

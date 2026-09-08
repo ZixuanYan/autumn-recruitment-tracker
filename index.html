@@ -1562,7 +1562,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.9.0';
+      const APP_VERSION = '4.9.1';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1613,6 +1613,10 @@
       let tombstones = loadTombstones();
       let syncBusy = false;
       let syncPushTimer = null;
+      // 忙碌期间被记下的待推变更。原先 scheduleSyncPush 遇到 syncBusy 直接 return，
+      // 那次改动就**永不上推**了（不报错、不重试，只是静默少同步一次），故改为记标志、
+      // 在 syncNow 的 finally 里补推。
+      let syncPushPending = false;
       let cachedSnapshotCount = null; // 快照计数缓存，避免每次渲染都全量读 IndexedDB
 
       // ===== 邮件提醒（M3）本地状态 =====
@@ -2211,11 +2215,14 @@
           else console.warn('自动云同步失败', error);
         } finally {
           syncBusy = false;
+          // 补推忙碌期间记下的变更（见 syncPushPending 声明处的说明）
+          if (syncPushPending) { syncPushPending = false; scheduleSyncPush(); }
         }
       }
 
       function scheduleSyncPush() {
-        if (!syncConfig.token || syncBusy) return;
+        if (!syncConfig.token) return;
+        if (syncBusy) { syncPushPending = true; return; }
         clearTimeout(syncPushTimer);
         syncPushTimer = setTimeout(() => syncNow('auto'), 4000);
       }
@@ -2668,6 +2675,13 @@
         localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(resume));
         resumeSavedAt = Date.now();
         localStorage.setItem(RESUME_META_KEY, JSON.stringify({ savedAt: resumeSavedAt }));
+        // 简历也在 envelope 里（createEnvelope 含 resume / resumeSavedAt），所以本地保存同样要写
+        // 快照层：saveRecords 一直有调，这里漏了 → localStorage 一旦损坏，从 IndexedDB 恢复出来的
+        // 会是**旧简历**。必须在 resumeSavedAt 更新之后再取 envelope。
+        const envelope = createEnvelope(records);
+        persistenceQueue = persistenceQueue
+          .then(() => persistSafetyLayers(envelope))
+          .catch(error => console.warn('附加备份未完成', error));
         pushResumeToPlugin();
         scheduleSyncPush();
       }

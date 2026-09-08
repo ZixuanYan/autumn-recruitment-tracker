@@ -147,14 +147,18 @@ function applyMailConfigOverrides(cfg, mailConfig) {
   const mc = mailConfig && typeof mailConfig === 'object' ? mailConfig : {};
   const num = (v, fb) => (String(v == null ? '' : v).trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : fb);
   const str = (v, fb, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max || 4000) : fb);
+  // 数值范围夹取。范围与网页端设置面板的 clampNum **逐项一致**（index.html 保存 mail-config 处）：
+  // 两端不一致的话，网页里存不进去的值手改 Gist 就能塞进来，行为分叉且无从察觉。
+  // 缺夹取的真实后果：minConfidence 填 5 → 所有建议都被当低置信丢弃；maxPerRun 填 99999 → 一次拉爆。
+  const clampInt = (v, fb, min, max) => Math.min(max, Math.max(min, Math.round(num(v, fb))));
   return Object.freeze({
     ...cfg,
     keywords: str(mc.keywords, cfg.keywords, 2000),
-    minConfidence: num(mc.minConfidence, cfg.minConfidence),
-    sinceDays: num(mc.sinceDays, cfg.sinceDays),
-    maxPerRun: num(mc.maxPerRun, cfg.maxPerRun),
+    minConfidence: Math.min(1, Math.max(0, num(mc.minConfidence, cfg.minConfidence))),
+    sinceDays: clampInt(mc.sinceDays, cfg.sinceDays, 1, 365),
+    maxPerRun: clampInt(mc.maxPerRun, cfg.maxPerRun, 1, 200),
     enabled: mc.enabled === false ? false : true, // 仅显式 false 才禁用
-    minIntervalHours: Math.max(0, num(mc.minIntervalHours, cfg.minIntervalHours)),
+    minIntervalHours: clampInt(mc.minIntervalHours, cfg.minIntervalHours, 0, 168),
     promptExtra: str(mc.promptExtra, cfg.promptExtra, 2000),
     // 清空即回落内置提示词：str() 对空串返回 fallback（cfg.promptOverride 默认 ''），
     // 而 buildSystemPrompt 见到空 override 就用 DEFAULT_PROMPT_BODY，语义天然正确

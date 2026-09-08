@@ -44,7 +44,7 @@ try {
   console.log('✓ 产物自检通过：无 monorepo 路径残留、shared require 恰好一层、不依赖 tracker 仓库');
 
   const passed = core.verifyInIsolation(STAGING, 'private');
-  console.log(`✓ 隔离目录 npm test 通过，${passed} 项（= run.js 54 + integration.js 10）`);
+  console.log(`✓ 隔离目录 npm test 通过，${passed} 项（run.js + integration.js；期望值由 core 从源文件动态数出，加测试不必改脚本）`);
 
   const applyIdx = process.argv.indexOf('--apply');
   if (applyIdx > -1) {

@@ -1198,8 +1198,8 @@ check('$(\'.xxx\') 纯单 class 选择器命中的 class 在 HTML 里必须唯�
   assert.deepStrictEqual(sampleOffenders, ['table-scroll'], '守卫必须拦下对 .table-scroll 的单 class 选择器，且不误伤 id 与唯一 class');
 });
 
-console.log('版本号一致性（发版链 5 处，防漏改导致缓存不刷新 / 文档与实现漂移）');
-check('网页版本号 5 处一致：APP_VERSION / service-worker CACHE_NAME / download 页脚 / README / 使用说明', () => {
+console.log('版本号一致性（发版链 6 处，防漏改导致缓存不刷新 / 文档与实现漂移）');
+check('网页版本号 6 处一致：APP_VERSION / service-worker CACHE_NAME / download 页脚 / README / 使用说明 / CHANGELOG 顶部', () => {
   const root = path.resolve(__dirname, '..');
   const read = f => fs.readFileSync(path.join(root, f), 'utf8');
   const appVersion = /const APP_VERSION = '([^']+)'/.exec(html)[1];
@@ -1211,7 +1211,13 @@ check('网页版本号 5 处一致：APP_VERSION / service-worker CACHE_NAME / d
   assert.strictEqual(footerVersion, appVersion, `download.html 页脚 (${footerVersion}) 必须与 APP_VERSION 一致`);
   assert.strictEqual(readmeVersion, appVersion, `README (${readmeVersion}) 必须与 APP_VERSION 一致`);
   assert.strictEqual(usageVersion, appVersion, `使用说明.txt (${usageVersion}) 必须与 APP_VERSION 一致`);
-  assert.strictEqual(appVersion, '4.9.0', '本轮发版网页版本应为 4.9.0');
+  // 不硬编码期望版本号：那样每次发版都得改测试，忘了就假红，而且它并不校验一致性
+  // （上面四条已经做了）。改为盯 CHANGELOG 顶部条目——这能抓到两种真实漏改：
+  // 「升了版但忘了写 CHANGELOG」与「写了 CHANGELOG 但忘了升 APP_VERSION」。
+  const changelogTop = /^## v([0-9.]+)/m.exec(read('CHANGELOG.md'));
+  assert.ok(changelogTop, 'CHANGELOG.md 找不到形如「## v4.9.1」的顶部条目');
+  assert.strictEqual(changelogTop[1], appVersion,
+    `CHANGELOG 顶部条目 (v${changelogTop[1]}) 必须与 APP_VERSION (${appVersion}) 一致`);
 });
 
 check('插件版本号 11 处一致（补的缺口：此前插件版本无任何断言，漂移到 v3.1.0 都没人发现）', () => {
@@ -1241,6 +1247,36 @@ check('插件版本号 11 处一致（补的缺口：此前插件版本无任何
   for (const [where, v] of Object.entries(found)) {
     assert.strictEqual(v, manifestVersion, `${where} = ${v}，与 manifest.json 的 ${manifestVersion} 不一致`);
   }
+});
+
+// ---- 静默故障守卫：这几个问题不报错、不崩溃，只会在事后发现数据不对 ----
+console.log('\n静默故障守卫（不报错型缺陷）');
+
+check('scheduleSyncPush 不得在 syncBusy 时直接丢弃这次推送', () => {
+  const m = html.match(/function scheduleSyncPush\(\)\s*\{[\s\S]*?\n {6}\}/);
+  assert.ok(m, '找不到 scheduleSyncPush 函数体');
+  assert.ok(!/if\s*\([^)]*\|\|\s*syncBusy\)\s*return/.test(m[0]),
+    '不得把 token 与 syncBusy 合并成一句 return——那样忙碌期间的变更**永不上推**（静默丢同步）');
+  assert.ok(/syncPushPending\s*=\s*true/.test(m[0]), '忙碌期间应记下 syncPushPending，等 finally 补推');
+});
+
+check('syncNow 的 finally 必须补推 syncPushPending', () => {
+  const m = html.match(/finally\s*\{\s*\n\s*syncBusy = false;[\s\S]{0,240}?\n\s*\}/);
+  assert.ok(m, '找不到 syncNow 的 finally 块');
+  assert.ok(/syncPushPending/.test(m[0]),
+    'finally 里只把 syncBusy 置回 false 而不补推，pending 标志就永远悬着，等于没修');
+});
+
+check('persistResume 必须写快照层（createEnvelope 含 resume，漏了会恢复出旧简历）', () => {
+  const m = html.match(/function persistResume\(\)\s*\{[\s\S]*?\n {6}\}/);
+  assert.ok(m, '找不到 persistResume 函数体');
+  assert.ok(/persistSafetyLayers/.test(m[0]),
+    'saveRecords 一直通过 persistenceQueue 调 persistSafetyLayers；persistResume 漏了 → '
+    + 'localStorage 损坏时从 IndexedDB 恢复出来的是旧简历（投递记录反而是新的）');
+  const iSavedAt = m[0].indexOf('resumeSavedAt = Date.now()');
+  const iEnvelope = m[0].indexOf('createEnvelope(');
+  assert.ok(iSavedAt > -1 && iEnvelope > iSavedAt,
+    'createEnvelope 必须在 resumeSavedAt 更新之后调用，否则快照里的 savedAt 是上一次的');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

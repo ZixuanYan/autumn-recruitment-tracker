@@ -677,6 +677,33 @@ test('applyMailConfigOverrides 覆盖可调项、非法/缺省回落', () => {
   assert.strictEqual(cfg2.sinceDays, base.sinceDays);
   assert.strictEqual(cfg2.enabled, true);
 });
+test('applyMailConfigOverrides 数值范围夹取，且与网页端 clampNum 的范围逐项一致', () => {
+  const base = config.buildConfig();
+  // minConfidence 只能 0–1。不夹取的真实后果：手改 Gist 塞 5 → 所有建议都被判低置信丢弃，
+  // 而且不报错，看起来就像"最近没收到招聘邮件"。
+  assert.strictEqual(config.applyMailConfigOverrides(base, { minConfidence: 5 }).minConfidence, 1);
+  assert.strictEqual(config.applyMailConfigOverrides(base, { minConfidence: -1 }).minConfidence, 0);
+  // maxPerRun 1–200（网页端设置面板的上限就是 200）
+  assert.strictEqual(config.applyMailConfigOverrides(base, { maxPerRun: 99999 }).maxPerRun, 200);
+  assert.strictEqual(config.applyMailConfigOverrides(base, { maxPerRun: 0 }).maxPerRun, 1);
+  // sinceDays 1–365
+  assert.strictEqual(config.applyMailConfigOverrides(base, { sinceDays: 9999 }).sinceDays, 365);
+  assert.strictEqual(config.applyMailConfigOverrides(base, { sinceDays: -5 }).sinceDays, 1);
+  // minIntervalHours 0–168：原先只有 Math.max(0,…) 的下限，没有上限
+  assert.strictEqual(config.applyMailConfigOverrides(base, { minIntervalHours: 9999 }).minIntervalHours, 168);
+  assert.strictEqual(config.applyMailConfigOverrides(base, { minIntervalHours: -3 }).minIntervalHours, 0);
+  // 小数取整：网页端是 Math.round(clampNum(...))，两端要一致
+  assert.strictEqual(config.applyMailConfigOverrides(base, { maxPerRun: 30.6 }).maxPerRun, 31);
+  assert.strictEqual(config.applyMailConfigOverrides(base, { sinceDays: 7.4 }).sinceDays, 7);
+  // 夹取不得影响正常范围内的值（否则等于偷偷改了用户配置）
+  const ok = config.applyMailConfigOverrides(base, { minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, minIntervalHours: 12 });
+  assert.strictEqual(ok.minConfidence, 0.3);
+  assert.strictEqual(ok.sinceDays, 30);
+  assert.strictEqual(ok.maxPerRun, 30);
+  assert.strictEqual(ok.minIntervalHours, 12);
+  // minConfidence 是浮点，不能被取整（0.3 不能变 0）
+  assert.strictEqual(config.applyMailConfigOverrides(base, { minConfidence: 0.35 }).minConfidence, 0.35);
+});
 test('gateReason：禁用或间隔未到→跳过；否则继续(null)', () => {
   const base = config.buildConfig();
   assert.ok(config.gateReason(config.applyMailConfigOverrides(base, { enabled: false }), {}));
