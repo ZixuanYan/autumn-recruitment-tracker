@@ -252,7 +252,6 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       border-width: 1px;
       border-radius: var(--aja-radius-lg);
     }
-    #aja-toggle.hidden { display: none; }
     #aja-toggle .toggle-label { white-space: nowrap; }
 
     /* ---------- 迷你收录卡片 ---------- */

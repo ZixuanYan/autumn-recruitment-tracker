@@ -95,6 +95,8 @@
    */
   function css() {
     return `
+    /* 模板里的 SVG 图标自带 .aja-ico，样式随模板一起走，两端不必各自再定义一遍 */
+    .aja-ico { flex: 0 0 auto; display: block; }
     .capture-form { display: flex; flex-direction: column; gap: var(--aja-space-3); }
     .capture-form[hidden] { display: none; }
     .title-hint {

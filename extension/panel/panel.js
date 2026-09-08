@@ -51,7 +51,17 @@
     try { return new URL(String(url || '')).hostname; } catch (_) { return ''; }
   }
 
-  // 统计简历里已填写的字段数：数组段累加各 item 的非空非下划线键，对象段统计非空值
+  /**
+   * 统计简历里已填写的字段数。
+   *
+   * 两段规则刻意不对称，对齐 common/default-resume.js 的真实结构：
+   * - 数组段（教育 / 实习 / 项目经历）的每个 item 带 _rowName 作段名元数据，必须跳过下划线键；
+   * - 对象段（优先信息 / 基本信息 / 竞赛与技能）不存在下划线键，直接统计非空值。
+   *
+   * renderResumeHtml 渲染 chip 用的是同一套规则。两者一旦漂移就会出现
+   * 「徽标说填了 8 项、展开只有 6 个 chip」这类对不上的现象，
+   * test/extension-ui.js 有一条断言专门盯 chip 数与计数必须相等。
+   */
   function countResumeFilledFields(resume) {
     let n = 0;
     try {
@@ -365,7 +375,10 @@
 
   function renderResumeStatus(n) {
     const filled = Number(n) > 0;
-    els.resumeStatus.textContent = filled ? `简历：已同步（已填 ${filled} 项）` : '简历：未同步 · 点此去网页版配置';
+    // 这里必须插值 n 而不是 filled：filled 是布尔值，写成 ${filled} 会渲染成「已填 true 项」。
+    // 迁移自旧版 refreshResumeStatus 时踩了这个坑，由 test/extension-panel.js 的桩 DOM 跑 init() 抓到
+    // （静态断言与纯函数单测都发现不了：文案模板本身合法，只有真实渲染才看得出）。
+    els.resumeStatus.textContent = filled ? `简历：已同步（已填 ${Number(n)} 项）` : '简历：未同步 · 点此去网页版配置';
     els.resumeStatus.classList.toggle('is-empty', !filled);
     els.resumeStatus.onclick = filled ? null : () => openTracker();
   }
