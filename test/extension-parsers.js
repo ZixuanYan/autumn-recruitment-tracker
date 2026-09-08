@@ -449,7 +449,7 @@ check('城市负向过滤：页脚总部地址不被当成岗位 base 地', () =
   assert.strictEqual(sb.__api.extractPageJobData().city, '深圳');
 });
 
-check('返回值结构与旧版兼容（05-sidebar.js 只消费这 5 个字段）', () => {
+check('返回值结构与旧版兼容（收录表单只消费这 5 个字段）', () => {
   const sb = makeSandbox({ hostname: 'x.example.com', title: 't', selectors: {}, bodyText: '' });
   const got = sb.__api.extractPageJobData();
   for (const key of ['company', 'position', 'city', 'stage', 'applicationDate', 'applicationUrl']) {

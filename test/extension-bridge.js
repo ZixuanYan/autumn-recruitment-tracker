@@ -11,7 +11,7 @@
 //
 // 本测试把 chrome.runtime.id 置空（这正是上下文失效后的可观测状态）来复现该条件，
 // 断言：不抛异常、失败被收敛成一次性 BRIDGE_BROKEN 上报、多次触发不刷屏。
-// 真实的 safeSendMessage 从 05-sidebar.js 原文抽取（不打桩），保证测的是实际防护逻辑。
+// 真实的 safeSendMessage 从 05-capture.js 原文抽取（不打桩），保证测的是实际防护逻辑。
 // 运行：node test/extension-bridge.js
 // ============================================================================
 
@@ -22,7 +22,11 @@ const assert = require('assert');
 
 const EXT = path.resolve(__dirname, '../../autumn-recruitment-tracker/extension');
 const bridgeSrc = fs.readFileSync(path.join(EXT, 'content/06-bridge.js'), 'utf8');
-const sidebarSrc = fs.readFileSync(path.join(EXT, 'content/05-sidebar.js'), 'utf8');
+// v5.0.0：safeSendMessage 仍在 content 侧（05-capture.js）；收录表单的 HTML、下拉选项生成、
+// 保存 payload 与暂存箱回填则收敛到 common/capture-form.js——迷你卡片与 Side Panel 共用一份，
+// 下面那几条跨仓库契约断言因此有了唯一落点，不会出现「一端改了另一端漏改」。
+const captureSrc = fs.readFileSync(path.join(EXT, 'content/05-capture.js'), 'utf8');
+const formSrc = fs.readFileSync(path.join(EXT, 'common/capture-form.js'), 'utf8');
 
 let failed = 0;
 const cases = [];
@@ -53,8 +57,8 @@ function extractFunction(src, name) {
   return '';
 }
 
-const safeSendMessageSrc = extractFunction(sidebarSrc, 'safeSendMessage');
-assert.ok(safeSendMessageSrc.length > 100, '未能从 05-sidebar.js 抽取真实的 safeSendMessage');
+const safeSendMessageSrc = extractFunction(captureSrc, 'safeSendMessage');
+assert.ok(safeSendMessageSrc.length > 100, '未能从 05-capture.js 抽取真实的 safeSendMessage');
 
 // ---------------- 沙箱：可中途「失效」的插件桥接环境 ----------------
 // 真实时序是：页面正常加载（上下文有效）→ 用户去 edge://extensions 重载了插件 →
@@ -212,13 +216,15 @@ check('契约：AJA.COMPANY_TYPES 与网页端 COMPANY_TYPES 逐值相同', () =
 
 check('收录链路：企业性质从插件表单一路透传到网页端 seed（任一环断了都等于功能没做）', () => {
   // ① 表单里有下拉，且选项由 AJA.COMPANY_TYPES 生成（不是硬编码）
-  assert.ok(/<select id="cap-company-type"><\/select>/.test(sidebarSrc), '收录表单缺企业性质下拉');
-  assert.ok(/AJA\.COMPANY_TYPES\s*\|\|\s*\[\]\)\.map/.test(sidebarSrc), '下拉选项应由 AJA.COMPANY_TYPES 动态生成');
-  assert.ok(/<option value="">\$\{AJA\.COMPANY_TYPE_UNSET/.test(sidebarSrc), '首项必须是 value="" 的「未设置」');
+  assert.ok(/<select id="cap-company-type"><\/select>/.test(formSrc), '收录表单缺企业性质下拉');
+  assert.ok(/AJA\.COMPANY_TYPES\s*\|\|\s*\[\]\)\.map/.test(formSrc), '下拉选项应由 AJA.COMPANY_TYPES 动态生成');
+  // v5.0.0 起模板在 common/capture-form.js，首项文案多包了一层 escapeHtml(root.AJA.…)，
+  // 因此这里按意图匹配（value="" 且文案取自常量）而不是死盯具体写法
+  assert.ok(/<option value="">[^\n]*COMPANY_TYPE_UNSET/.test(formSrc), '首项必须是 value="" 的「未设置」');
   // ② 保存 payload 带上（否则选了也传不出去）
-  assert.ok(/companyType:\s*capCompanyType\.value/.test(sidebarSrc), '保存 payload 未带 companyType');
+  assert.ok(/companyType:\s*[^\n,]*e\.companyType/.test(formSrc), '保存 payload 未带 companyType');
   // ③ 暂存箱回填也带上（否则「回填收录表单」会丢掉已选的性质）
-  assert.ok(/capCompanyType\.value\s*=\s*item\.companyType/.test(sidebarSrc), '暂存箱回填未带 companyType');
+  assert.ok(/e\.companyType\.value\s*=\s*it\.companyType/.test(formSrc), '暂存箱回填未带 companyType');
   // ④ background 暂存与「重复收录合并」两处都要带（合并漏了会把已选值冲掉）
   const bgSrc = fs.readFileSync(path.join(EXT, 'background.js'), 'utf8');
   assert.ok(/companyType:\s*String\(request\.record\.companyType\s*\|\|\s*''\)/.test(bgSrc), 'staged 未带 companyType');
