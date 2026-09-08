@@ -1,0 +1,75 @@
+name: mail-sync
+
+# 定时（每 12 小时：UTC 00:23 与 12:23）+ 手动触发：IMAP 增量拉取 → 预筛 → AI 判定 → 只 PATCH Gist 的 mail-suggestions.json。
+# 保活提示：GitHub Actions 对 60 天无活动的仓库会停用定时 workflow，需偶尔手动 dispatch 一次保活。
+on:
+  schedule:
+    - cron: '23 */12 * * *'
+  workflow_dispatch:
+    inputs:
+      SINCE_DAYS:
+        description: '增量回看天数（覆盖默认 30；首次或 UIDVALIDITY 变化时生效）'
+        required: false
+        type: string
+      MAX_PER_RUN:
+        description: '单次最多处理邮件数（覆盖默认 30）'
+        required: false
+        type: string
+      UID_FROM:
+        description: '回溯起点 UID：忽略云端水位，从该 UID 起重新扫描（用于捞回被误杀的邮件；建议同时调大 MAX_PER_RUN）'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mail-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run mail sync
+        env:
+          QQ_EMAIL: ${{ secrets.QQ_EMAIL }}
+          QQ_AUTHCODE: ${{ secrets.QQ_AUTHCODE }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GIST_PAT: ${{ secrets.GIST_PAT }}
+          MAIL_ENC_KEY: ${{ secrets.MAIL_ENC_KEY }}
+          IMAP_HOST: imap.qq.com
+          IMAP_PORT: '993'
+          SINCE_DAYS: ${{ github.event.inputs.SINCE_DAYS || '30' }}
+          MAX_PER_RUN: ${{ github.event.inputs.MAX_PER_RUN || '30' }}
+          # 留空 = 正常按云端水位增量；填 UID 则忽略水位从该处重扫（回溯被误杀的邮件）
+          UID_FROM: ${{ github.event.inputs.UID_FROM || '' }}
+          MIN_CONFIDENCE: '0.3'
+          # 可选：设置 KEYWORDS Secret 即可覆盖默认关键词（留空则用 src/config.js 的 DEFAULT_KEYWORDS）
+          KEYWORDS: ${{ secrets.KEYWORDS }}
+        run: node index.js
+
+      # 兜底：主步骤硬失败时，把 meta.lastError 写进 Gist（保留已有 suggestions/水位），网页端可上屏提示。
+      - name: Report error to Gist (fallback)
+        if: failure()
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GIST_PAT: ${{ secrets.GIST_PAT }}
+          MAIL_ENC_KEY: ${{ secrets.MAIL_ENC_KEY }}
+          MAIL_SYNC_ERROR: '邮件同步失败，请查看本次 Action 日志（常见原因：QQ 授权码失效 / AI 超额 / IMAP 被风控）'
+        run: node index.js --report-error

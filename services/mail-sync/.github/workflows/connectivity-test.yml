@@ -1,0 +1,37 @@
+name: connectivity-test
+
+# M0 连通性去风险闸门：仅手动触发。验证 QQ 授权码能否从 GitHub-hosted runner 经 IMAP 登录。
+# 只读、不下载正文、不写任何文件；成功打印「登录成功 + INBOX 邮件数 + 最近 3 封主题」。
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mail-connectivity
+  cancel-in-progress: false
+
+jobs:
+  connectivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run IMAP connectivity test (M0 gate)
+        env:
+          QQ_EMAIL: ${{ secrets.QQ_EMAIL }}
+          QQ_AUTHCODE: ${{ secrets.QQ_AUTHCODE }}
+          IMAP_HOST: imap.qq.com
+          IMAP_PORT: '993'
+        run: node src/connectivity-test.js
