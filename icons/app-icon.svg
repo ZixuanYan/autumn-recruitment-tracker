@@ -1,13 +1,17 @@
+<!-- 秋招投递管理器 · App 图标（v4.10.0 Apple 风格重绘）
+     改动：钴蓝**渐变**底 → Apple 蓝**纯色**底，删掉整个 <defs> 渐变（Apple 禁忌「多彩渐变」）；
+     日历卡去掉 opacity=".97"（纯白更干净）；分隔线改与底色相同（形成"镂空"效果）；
+     对勾改 Apple 绿**亮档**——对勾是装饰性图形、不承载文字，所以用亮档而非文本档的深绿。
+     ⚠️ 本注释刻意**不写出**被替换掉的旧色值：项目的「旧配色零残留」grep 清单与守卫
+     不区分注释与代码，写出具体 hex 会让检查永远不干净（extension/common/tokens.js 同一条纪律）。
+     几何完全沿用旧版（viewBox 512 / rx=116 / 日历卡 / 两个挂环 / 分隔线 / 对勾），保持识别延续性。
+     两个 PNG（app-icon-512.png、apple-touch-icon.png 180）由 scripts/gen-icons.py 依本文件的
+     几何纯 Python 光栅化生成——环境没有 rsvg / imagemagick / chromium，也不联网。
+     改本文件的几何时必须同步改 gen-icons.py 的 SHAPE 常量，否则 PNG 与 SVG 会长得不一样。 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="g" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#7182f2"/>
-      <stop offset="1" stop-color="#4053cb"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="116" fill="url(#g)"/>
-  <path d="M130 151h252a30 30 0 0 1 30 30v199a30 30 0 0 1-30 30H130a30 30 0 0 1-30-30V181a30 30 0 0 1 30-30Z" fill="#fff" opacity=".97"/>
+  <rect width="512" height="512" rx="116" fill="#0071e3"/>
+  <path d="M130 151h252a30 30 0 0 1 30 30v199a30 30 0 0 1-30 30H130a30 30 0 0 1-30-30V181a30 30 0 0 1 30-30Z" fill="#fff"/>
   <path d="M184 119v73M328 119v73" stroke="#fff" stroke-width="28" stroke-linecap="round"/>
-  <path d="M101 224h310" stroke="#5367e9" stroke-width="24"/>
-  <path d="m178 315 50 47 110-116" fill="none" stroke="#24a475" stroke-width="35" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M101 224h310" stroke="#0071e3" stroke-width="24"/>
+  <path d="m178 315 50 47 110-116" fill="none" stroke="#34c759" stroke-width="35" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

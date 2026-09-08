@@ -3,50 +3,51 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#4f63e9">
+  <meta name="theme-color" content="#f5f5f7">
   <link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml">
   <title>秋招投递管理器｜下载中心</title>
   <style>
     :root {
       color-scheme: light;
-      --ink: #172033;
-      --muted: #667085;
-      --line: #e4e8f2;
-      --primary: #4f63e9;
-      --primary-dark: #3e50cd;
-      --soft: #f4f6ff;
-      --green: #138a62;
-      --shadow: 0 18px 50px rgba(33, 47, 93, .12);
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --primary: #0071e3;
+      --primary-dark: #0066cc;
+      --soft: #e6f1fc;
+      --green: #1f7a35;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 8px 24px rgba(0, 0, 0, .06);
     }
     * { box-sizing: border-box; }
+    /* 删掉两段 radial-gradient 铺底（Apple 禁忌：多彩渐变 / 蓝绿铺底），改纯 base-200 画布。 */
     body {
       margin: 0;
       min-height: 100vh;
       color: var(--ink);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      background:
-        radial-gradient(circle at 10% 10%, #e8edff 0, transparent 34%),
-        radial-gradient(circle at 90% 0, #e6fff5 0, transparent 28%),
-        #f8f9fd;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f5f5f7;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
     a { color: inherit; }
     .page { width: min(1040px, calc(100% - 32px)); margin: 0 auto; padding: 64px 0 48px; }
-    .hero { text-align: center; margin-bottom: 34px; }
+    .hero { text-align: center; margin-bottom: 32px; }
+    /* logo 从蓝绿渐变改 Apple 蓝纯色，与重绘后的 app-icon.svg 一致 */
     .logo {
       display: inline-grid;
       place-items: center;
       width: 72px;
       height: 72px;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
       border-radius: 22px;
       color: white;
       font-size: 34px;
-      font-weight: 800;
-      background: linear-gradient(145deg, #596cef, #35b98a);
-      box-shadow: var(--shadow);
+      font-weight: 600;
+      background: #0071e3;
+      box-shadow: none;
     }
-    h1 { margin: 0; font-size: clamp(30px, 5vw, 46px); letter-spacing: -.04em; }
-    .subtitle { max-width: 660px; margin: 14px auto 0; color: var(--muted); font-size: 17px; line-height: 1.8; }
+    h1 { margin: 0; font-size: clamp(30px, 5vw, 46px); font-weight: 600; letter-spacing: -.03em; }
+    .subtitle { max-width: 660px; margin: 14px auto 0; color: var(--muted); font-size: 17px; line-height: 1.55; }
     .privacy {
       display: inline-flex;
       align-items: center;
@@ -55,63 +56,71 @@
       padding: 8px 13px;
       border-radius: 999px;
       color: var(--green);
-      background: #eaf9f3;
+      background: #e3f7e8;
       font-size: 14px;
-      font-weight: 700;
+      font-weight: 500;
     }
-    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+    /* 间距统一收到 4 倍数网格（设计资源的阶是 4/8/12/16/24/32/48/64/96，没有 18） */
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
     .card {
       display: flex;
       min-height: 280px;
       flex-direction: column;
-      padding: 26px;
-      border: 1px solid rgba(220, 225, 239, .9);
+      padding: 24px;
+      border: 1px solid rgba(0, 0, 0, .08);
       border-radius: 24px;
-      background: rgba(255, 255, 255, .92);
-      box-shadow: var(--shadow);
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
     }
-    .card.primary { border-color: #bfc8ff; background: linear-gradient(180deg, #f2f4ff, #fff); }
+    /* 删掉渐变底与蓝边框（禁忌：蓝色铺底）。primary 卡与普通卡的区分交给 .number 的蓝底白字。 */
+    .card.primary { border-color: rgba(0, 0, 0, .08); background: #ffffff; }
     .number {
       display: grid;
       place-items: center;
       width: 42px;
       height: 42px;
-      margin-bottom: 18px;
-      border-radius: 14px;
+      margin-bottom: 16px;
+      border-radius: 12px;
       color: var(--primary);
       background: var(--soft);
-      font-weight: 800;
+      font-weight: 600;
     }
     .card.primary .number { color: white; background: var(--primary); }
-    h2 { margin: 0 0 9px; font-size: 22px; }
+    h2 { margin: 0 0 9px; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
     .card p { margin: 0; color: var(--muted); line-height: 1.7; }
     .meta { margin-top: 10px !important; font-size: 13px; }
+    /* 胶囊 CTA + weight 500 + 180ms ease-apple；hover 只变暗不位移 */
     .button {
       display: block;
       margin-top: auto;
-      padding: 13px 16px;
-      border: 1px solid #cfd5e7;
-      border-radius: 14px;
+      padding: 12px 24px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
       text-align: center;
       text-decoration: none;
-      font-weight: 800;
-      transition: transform .15s ease, background .15s ease;
+      color: var(--ink);
+      background: #ffffff;
+      font-size: 15px;
+      font-weight: 500;
+      transition: background .18s cubic-bezier(.28, .11, .32, 1), border-color .18s cubic-bezier(.28, .11, .32, 1);
     }
-    .button:hover { transform: translateY(-2px); background: #f6f7fb; }
-    .primary .button { color: white; border-color: var(--primary); background: var(--primary); }
-    .primary .button:hover { background: var(--primary-dark); }
+    .button:hover { transform: none; background: #f5f5f7; border-color: #c7c7cc; }
+    .primary .button { color: white; border-color: transparent; background: var(--primary); }
+    .primary .button:hover { background: var(--primary-dark); border-color: transparent; }
     .guide {
       margin-top: 24px;
-      padding: 24px 26px;
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      background: white;
+      padding: 24px;
+      border: 1px solid rgba(0, 0, 0, .08);
+      border-radius: 24px;
+      background: #ffffff;
+      box-shadow: none;
     }
-    .guide h3 { margin: 0 0 12px; font-size: 18px; }
-    .guide-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .guide h3 { margin: 0 0 12px; font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+    .guide-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .guide p { margin: 0; color: var(--muted); line-height: 1.75; }
-    .text-link { color: var(--primary); font-weight: 700; }
-    footer { margin-top: 24px; color: #8991a3; text-align: center; font-size: 13px; line-height: 1.7; }
+    .text-link { color: var(--primary); font-weight: 500; }
+    .text-link:hover { text-decoration: underline; }
+    footer { margin-top: 24px; color: #86868b; text-align: center; font-size: 13px; line-height: 1.7; }
     @media (max-width: 800px) {
       .page { padding-top: 36px; }
       .cards { grid-template-columns: 1fr; }
@@ -134,7 +143,7 @@
         <div class="number">1</div>
         <h2>直接在线使用</h2>
         <p>最简单的方式。电脑和手机都能打开，手机还可以添加到主屏幕。</p>
-        <p class="meta">推荐大多数用户选择 · v4.8.0 台账体验重做：<strong>投递记录独立成一个页面</strong>（表格 / 看板占满整屏，搜索 / 筛选 / 排序更顺手），看板顶部新增整宽<strong>推进投放区</strong>——拖卡片进去可自由选阶段（含三面 / 交叉面这类当前没有列的阶段），拖到「已结束」会引导填写结束原因；看板卡片直接标出停滞天数、列头点一下即按该阶段筛选，聚焦卡片按 <code>A</code> 键也能推进；阶段分布并入洞察、与转化漏斗同排。并修复了「切到看板时台账表格没消失、洞察里的 Offer 对比矩阵反被隐藏」的切换缺陷。另含 v4.7.0 邮件提示词可见可改、v4.6.x 城市 / 企业性质统计与邮件漏拉修复</p>
+        <p class="meta">推荐大多数用户选择 · v4.10.0 Apple 风格视觉重刷：SF 排版 / 胶囊按钮与输入框 / 发丝线卡片 / 磨砂玻璃侧栏，Offer 语义色由金色改为 Apple 绿，公司标识色板换成 iOS 系统色（既有公司的色条会重新分配，属预期）。并含 v4.8.0 台账体验重做：<strong>投递记录独立成一个页面</strong>（表格 / 看板占满整屏，搜索 / 筛选 / 排序更顺手），看板顶部新增整宽<strong>推进投放区</strong>——拖卡片进去可自由选阶段（含三面 / 交叉面这类当前没有列的阶段），拖到「已结束」会引导填写结束原因；看板卡片直接标出停滞天数、列头点一下即按该阶段筛选，聚焦卡片按 <code>A</code> 键也能推进；阶段分布并入洞察、与转化漏斗同排。并修复了「切到看板时台账表格没消失、洞察里的 Offer 对比矩阵反被隐藏」的切换缺陷。另含 v4.7.0 邮件提示词可见可改、v4.6.x 城市 / 企业性质统计与邮件漏拉修复</p>
         <a class="button" href="./index.html">打开网页版</a>
       </article>
 
@@ -157,7 +166,7 @@
     </section>
 
     <footer>
-      网页 v4.9.1 · 插件 v5.1.0<br>
+      网页 v4.10.0 · 插件 v5.1.0<br>
       电脑和手机的数据默认不会自动同步，可在“工具 → 云同步”开启跨设备同步，或用“导出投递记录”和“导入备份文件”手动迁移。
     </footer>
   </main>

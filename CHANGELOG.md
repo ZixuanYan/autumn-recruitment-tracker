@@ -1,5 +1,20 @@
 # 更新记录
 
+## v4.10.0（网页：Apple 风格视觉重刷）
+
+- 设计系统整体重刷为 Apple 剧场式语言：钴蓝 `#2447e0` → Apple 蓝 `#0071e3` 家族；SF Pro 排版、胶囊按钮与输入框（44px）、发丝线卡片（1px `rgba(0,0,0,.08)` + 近不可见承托影）、磨砂玻璃侧栏 / toast / tooltip、Apple 缓动 `cubic-bezier(.28,.11,.32,1)` 与 400ms 视图切换。**仪表盘密度保持不变**（表格行 ~48px、基础字号 14px、面板 padding 16px），不是营销页尺度
+- Offer 语义色由金色 `#b7791f` 改为 Apple 绿系：文本与实底用 `#1f7a35`（白字对比 5.39:1），装饰亮绿 `#34c759` 只做色条 / 进度条 / 圆点——白字压亮绿只有 2.22:1，**严禁用于文字**
+- 14 阶段色阶 rebase 到 Apple 蓝有序色阶（灰 → 蓝灰 → `#0071e3` 逐轮加深至 `#004487` → iOS 靛 `#5856d6` → Apple 紫 `#5e30b1` → 绿 `#1f7a35` → 淡灰）；企业性质 4 色与公司标识 8 色板（`COMPANY_PALETTE`）换为 iOS 系统色家族。**既有公司的标识色会随哈希重新分配，属预期行为，不是 bug**
+- 废弃机加工三件套（内高光 `--hi` / 描边环 `--ring` / 环境影），改为「发丝线 + 近不可见承托影」。`--hi` 置**语法合法的零值**而非 `none`：基础层有 `box-shadow: var(--hi), var(--ring), …`，任一项为 none 会让整条声明失效、大量元素瞬间失去全部阴影且不报错
+- 补齐三处 a11y：`.control:focus-visible`（旧版 `:focus{outline:none}` 特异性更高，键盘用户看不到焦点）、div 型可交互元素的 outline（`.city-row` / `.ctype-seg` / `.insight-metric` / `.board-col-head`）、`.insight-metric` 的焦点指示从弱阴影改为真 outline
+- body 补 SF Pro 排印细节：`font-feature-settings: "cv02","cv03","cv04","cv11"`、`-moz-osx-font-smoothing`（旧版只写了 `-webkit-`，Firefox 下是粗体渲染）、`letter-spacing: -.005em`、`line-height: 1.55`
+- 间距统一到 4 倍数网格（设计资源的阶是 4/8/12/16/24/32/48/64/96，凡 18px 一律收到 16px）；进度条补 `width .5s` 过渡（旧版切换视图时条是瞬间跳变的）
+- toast 从深底 `#202a40` 改为磨砂玻璃白 + 矩形圆角 + 320ms + action 改纯文字链接；基础层与覆盖层**双份定义**同一套视觉，任一层失效都仍是 Apple 风格（不再依赖"覆盖层压住基础层"这种脆弱关系）
+- 表单 `label` 从 700/无色/7px 改为 500/ink-soft/6px（`.exp-fields-grid label` 与 `.safety-label` 特异性更高，不受影响）
+- `app-icon.svg` 重绘（`#0071e3` 纯底 + 白日历 + Apple 绿对勾，删掉钴蓝渐变），纯 Python 重新生成 `app-icon-512.png` 与 `apple-touch-icon.png`(180)；`theme-color` 与 manifest 两个色值同步为 `#f5f5f7`
+- `download.html` 落地页同步重刷（白画布、SF 排版、蓝色 logo、胶囊 CTA、发丝线卡片；删掉蓝绿渐变 logo 与两段 radial-gradient 铺底）
+- 插件本轮**未改动**（仍 v5.1.0）。插件的 Apple 化是独立的下一阶段，等网页版验收通过后再做——两端同时改会让出问题时无法归因
+
 ## v4.9.1（网页 + Action v0.4.1：修三个静默故障）
 
 三个都是**不报错、不崩溃**的问题——只会在事后发现数据不对，所以优先清掉。
