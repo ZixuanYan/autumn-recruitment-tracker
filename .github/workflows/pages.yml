@@ -1,0 +1,63 @@
+name: pages
+
+# 部署闸门：测试不过就不上线。
+# 在此之前 `git push` 是直接部署、没有任何检查（Pages 的 branch/root 模式会把推上去的
+# 根目录原样伺服），出问题的发现时机是"用户打开站点看到白屏"。
+on:
+  push:
+    branches: [main]
+  # 手动重跑：方案 D14 那个场景要用——若先 push 了本文件、后才把 Settings 的 Pages source
+  # 改成 GitHub Actions，首次运行必然失败，改完 Settings 后在这里重跑即可，不必造一个空提交。
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 部署不要并发：cancel-in-progress: false 保证一次部署跑完，
+# 否则两次 push 挨得近时可能出现"后一次取消了前一次、站点停在半旧状态"。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 与 test.yml 重复跑一遍是**刻意的**：跨 workflow 无法用 needs 串联，
+      # 而部署闸门必须自己确认测试通过——依赖"另一个 workflow 刚才绿了"是假设，不是保证。
+      # 测试零依赖（不需要 npm install），382 项十几秒跑完，重复成本可忽略。
+      - name: 测试（382 项，不过就不部署）
+        run: npm test
+
+      # build.js 自带两道守卫：白名单里的路径缺失即失败；拷完自检入口文件的全部站内引用
+      # 是否都在 dist 里（漏一个就是线上 404，而 SW 的 cache.addAll 是全有或全无）。
+      - name: 构建 dist
+        run: node build.js
+
+      - name: 产物概览（便于在 CI 日志里直接核对）
+        run: |
+          echo "dist 顶层：" && ls -A dist
+          echo "文件总数：$(find dist -type f | wc -l)"
+          echo "总体积：$(du -sh dist | cut -f1)"
+          test -f dist/index.html || { echo "✗ dist/index.html 缺失"; exit 1; }
+          test -f dist/service-worker.js || { echo "✗ dist/service-worker.js 缺失"; exit 1; }
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
