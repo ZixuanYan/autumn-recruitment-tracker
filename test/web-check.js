@@ -13,7 +13,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-const HTML_PATH = path.resolve(__dirname, '../../autumn-recruitment-tracker/index.html');
+const HTML_PATH = path.resolve(__dirname, '../index.html');
 const html = fs.readFileSync(HTML_PATH, 'utf8');
 
 let failed = 0;
@@ -180,7 +180,7 @@ check('mileNoteText：把历史数据里的「邮件·其它」换成 summary，
 check('跨仓库契约：网页端 mileNoteText 与 Action 侧 milestoneNote 对同一输入给出相同结果', () => {
   // 两处各自实现同一套「其它→summary」规则：Action 管新数据，网页管历史数据兜底。
   // 若规则漂移（比如一边截 48 字一边截 60 字），同一条建议在新旧两版下显示会不一致。
-  const ai = require('../src/ai');
+  const ai = require('../services/mail-sync/src/ai');
   const cases = [
     ['其它', '简历成功投递滴滴校招，等待后续流程推进。'],
     ['其它', ''],
@@ -199,7 +199,7 @@ check('跨仓库契约：网页端 DROP_REASON_LABELS 的 key 必须与 Action �
   // 两端各自维护一份 reason 字面量：Action 写进 meta.lastDropped.recent[].reason，
   // 网页端据此显示中文标签。任一侧增删档位而另一侧没跟上，用户就会看到英文原文
   // （describeDropReason 回退），因此这里把契约钉死。
-  const actionConfig = require('../src/config');
+  const actionConfig = require('../services/mail-sync/src/config');
   const actionReasons = Object.values(actionConfig.DROP_REASONS).sort();
   // 从 index.html 的纯函数块里取出 DROP_REASON_LABELS 的 key
   const block = pureSrc;
@@ -214,7 +214,7 @@ check('跨仓库契约：网页端 MAIL_CFG_DEFAULTS 的键必须与 Action appl
   // mail-config.json 是「网页写、Action 读」的单向契约，两端各维护一份字段清单。
   // 任一侧加了字段而另一侧没跟上，失效是**静默**的：网页保存成功、Action 也照跑，
   // 只是那个字段永远不起作用（v0.4.0 加 promptOverride 时两端都得改，正是这个风险）。
-  const cfgSrc = fs.readFileSync(path.join(__dirname, '../src/config.js'), 'utf8');
+  const cfgSrc = fs.readFileSync(path.join(__dirname, '../services/mail-sync/src/config.js'), 'utf8');
   const fnSrc = extractFunction(cfgSrc, 'applyMailConfigOverrides');
   assert.ok(fnSrc, '未在 src/config.js 找到 applyMailConfigOverrides');
   const body = fnSrc.slice(fnSrc.indexOf('return Object.freeze({'));
@@ -1146,7 +1146,7 @@ check('$(\'.xxx\') 纯单 class 选择器命中的 class 在 HTML 里必须唯�
 
 console.log('版本号一致性（发版链 5 处，防漏改导致缓存不刷新 / 文档与实现漂移）');
 check('网页版本号 5 处一致：APP_VERSION / service-worker CACHE_NAME / download 页脚 / README / 使用说明', () => {
-  const root = path.resolve(__dirname, '../../autumn-recruitment-tracker');
+  const root = path.resolve(__dirname, '..');
   const read = f => fs.readFileSync(path.join(root, f), 'utf8');
   const appVersion = /const APP_VERSION = '([^']+)'/.exec(html)[1];
   const cacheVersion = /autumn-tracker-app-v([0-9.]+)/.exec(read('service-worker.js'))[1];

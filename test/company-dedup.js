@@ -18,7 +18,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-const TRACKER = path.resolve(__dirname, '../../autumn-recruitment-tracker');
+const TRACKER = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(TRACKER, 'index.html'), 'utf8');
 const backgroundSrc = fs.readFileSync(path.join(TRACKER, 'extension/background.js'), 'utf8');
 const companyKeySrc = fs.readFileSync(path.join(TRACKER, 'extension/common/company-key.js'), 'utf8');

@@ -19,7 +19,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-const PARSER_PATH = path.resolve(__dirname, '../../autumn-recruitment-tracker/extension/content/03-parsers.js');
+const PARSER_PATH = path.resolve(__dirname, '../extension/content/03-parsers.js');
 const parserSrc = fs.readFileSync(PARSER_PATH, 'utf8');
 
 let failed = 0;

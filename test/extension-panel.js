@@ -18,7 +18,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-const EXT = path.resolve(__dirname, '../../autumn-recruitment-tracker/extension');
+const EXT = path.resolve(__dirname, '../extension');
 const read = (rel) => fs.readFileSync(path.join(EXT, rel), 'utf8');
 
 let failed = 0;

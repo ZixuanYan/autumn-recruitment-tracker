@@ -18,7 +18,7 @@ const assert = require('assert');
 const Module = require('module');
 const path = require('path');
 
-const INDEX_PATH = path.join(__dirname, '..', 'index.js');
+const INDEX_PATH = path.join(__dirname, '..', 'services', 'mail-sync', 'index.js');
 
 // 跑一次 index.js：注入假 IMAP / 假 mailparser / 假 fetch，返回本次 PATCH 进 Gist 的内容与日志。
 // options:
@@ -123,7 +123,7 @@ async function runIndexOnce({ mails = [], prevGist = null, ai = 'ok', uidFrom = 
     // 而那个 stub 的 fetch() 闭包捕获了本次的 mails。若 src/imap.js 命中缓存，
     // 下一次 runIndexOnce 就会继续用上一次的假邮件（实测过：第 6 个用例抓到的是
     // 第 4 个用例的 uid=1890，导致「丢弃日志 0 条」这种误导性失败）。
-    const projectRoot = path.join(__dirname, '..');
+    const projectRoot = path.join(__dirname, '..', 'services', 'mail-sync');
     for (const key of Object.keys(require.cache)) {
       if (key.startsWith(projectRoot)) delete require.cache[key];
     }
@@ -142,7 +142,7 @@ async function runIndexOnce({ mails = [], prevGist = null, ai = 'ok', uidFrom = 
     Object.assign(process.env, envBackup);
     // 同样清全部：残留的 src/* 缓存会持有已恢复的 Module._load 之前注入的 stub
     for (const key of Object.keys(require.cache)) {
-      if (key.startsWith(path.join(__dirname, '..'))) delete require.cache[key];
+      if (key.startsWith(path.join(__dirname, '..', 'services', 'mail-sync'))) delete require.cache[key];
     }
   }
 

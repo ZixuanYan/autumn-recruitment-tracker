@@ -12,7 +12,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-const HTML_PATH = path.resolve(__dirname, '../../autumn-recruitment-tracker/index.html');
+const HTML_PATH = path.resolve(__dirname, '../index.html');
 const html = fs.readFileSync(HTML_PATH, 'utf8');
 
 const START = '      // ================= 邮件提醒（M3）：本地状态、模糊匹配、复核视图、应用/忽略 =================';

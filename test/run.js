@@ -8,13 +8,13 @@
 
 const assert = require('assert');
 
-const config = require('../src/config');
-const prefilter = require('../src/prefilter');
-const parse = require('../src/parse');
-const state = require('../src/state');
-const ai = require('../src/ai');
-const gist = require('../src/gist');
-const crypto = require('../src/crypto');
+const config = require('../services/mail-sync/src/config');
+const prefilter = require('../services/mail-sync/src/prefilter');
+const parse = require('../services/mail-sync/src/parse');
+const state = require('../services/mail-sync/src/state');
+const ai = require('../services/mail-sync/src/ai');
+const gist = require('../services/mail-sync/src/gist');
+const crypto = require('../services/mail-sync/src/crypto');
 const nodeCrypto = require('crypto'); // 用于「跨端兼容」验证：以浏览器同款算法 的经典实现解密 Action 密文
 
 // 从源码里抽取一个纯函数并求值。用于 imap.js —— 它顶部 require('imapflow')，
@@ -81,7 +81,7 @@ const ALL_SOURCES = [
 test('全部 Action 源文件语法可编译（含无法 require 的 index.js / imap.js）', () => {
   const broken = [];
   for (const rel of ALL_SOURCES) {
-    const src = fs.readFileSync(nodePath.join(__dirname, '..', rel), 'utf8');
+    const src = fs.readFileSync(nodePath.join(__dirname, '..', 'services', 'mail-sync', rel), 'utf8');
     try { new vm.Script(src, { filename: rel }); } catch (e) { broken.push(`${rel}: ${e.message}`); }
   }
   assert.deepStrictEqual(broken, [], `语法错误：\n    ${broken.join('\n    ')}`);
@@ -93,7 +93,7 @@ test('index.js 从各模块解构的每个符号都真实存在于该模块的�
     './src/config': config, './src/prefilter': prefilter, './src/parse': parse,
     './src/state': state, './src/gist': gist, './src/ai': ai
   };
-  const indexSrc = fs.readFileSync(nodePath.join(__dirname, '..', 'index.js'), 'utf8');
+  const indexSrc = fs.readFileSync(nodePath.join(__dirname, '..', 'services', 'mail-sync', 'index.js'), 'utf8');
   const re = /const\s*\{([^}]+)\}\s*=\s*require\('(\.\/src\/[a-z-]+)'\)/g;
   const missing = [];
   let checked = 0;
@@ -277,7 +277,7 @@ test('AI 失败的 UID 不得计入 scannedUids（否则 AI 抖动会删掉已�
   assert.deepStrictEqual(mixed.map(s => s.sourceUid).sort((a, b) => a - b), [1881, 1887]);
 });
 test('index.js 传给 mergeSuggestions 的必须是「已裁决 UID」而非抓取全集（静态守卫）', () => {
-  const src = fs.readFileSync(nodePath.join(__dirname, '..', 'index.js'), 'utf8');
+  const src = fs.readFileSync(nodePath.join(__dirname, '..', 'services', 'mail-sync', 'index.js'), 'utf8');
   assert.ok(
     /mergeSuggestions\(prev\.suggestions, incoming, \[\.\.\.adjudicated\]\)/.test(src),
     '第三参数必须是 [...adjudicated]；改用 fetched.map(m => m.uid) 会在 AI 失败时删掉已有建议'
@@ -509,7 +509,7 @@ test('buildMeta 带 promptSnapshot；未传时保留上一次的值', () => {
 // ===== v4.6.1：UID_FROM 回溯 =====
 // imap.js 顶部 require('imapflow')，本地无 node_modules 无法直接 require；
 // planFetch 是纯函数，按项目既有做法（web-check.js / extension-parsers.js）从源码抽取求值。
-const imapSrc = require('fs').readFileSync(require('path').join(__dirname, '../src/imap.js'), 'utf8');
+const imapSrc = require('fs').readFileSync(require('path').join(__dirname, '../services/mail-sync/src/imap.js'), 'utf8');
 const planFetch = new Function(`${extractPureFunction(imapSrc, 'planFetch')}\nreturn planFetch;`)();
 test('planFetch 传 UID_FROM 时忽略水位与 UIDVALIDITY 变化，强制从该 UID 重扫', () => {
   const mailbox = { uidValidity: 100 };

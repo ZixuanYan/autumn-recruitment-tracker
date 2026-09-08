@@ -20,7 +20,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-const EXT = path.resolve(__dirname, '../../autumn-recruitment-tracker/extension');
+const EXT = path.resolve(__dirname, '../extension');
 const bridgeSrc = fs.readFileSync(path.join(EXT, 'content/06-bridge.js'), 'utf8');
 // v5.0.0：safeSendMessage 仍在 content 侧（05-capture.js）；收录表单的 HTML、下拉选项生成、
 // 保存 payload 与暂存箱回填则收敛到 common/capture-form.js——迷你卡片与 Side Panel 共用一份，
@@ -160,7 +160,7 @@ check('三处通信全部走 sendRuntimeMessage（出队 / 读暂存箱 / 简历
 check('跨仓库契约：BRIDGE_BROKEN 的消息源必须能通过网页端的 BRIDGE_SOURCES 过滤', () => {
   // 网页端 handleCaptureMessage 第一行就按 BRIDGE_SOURCES 过滤来源；若插件的 AJA.BRIDGE_SOURCE
   // 与网页端的清单漂移，这条提示会**静默失效**（插件以为报了，网页端直接 return），很难发现。
-  const htmlSrc = fs.readFileSync(path.resolve(__dirname, '../../autumn-recruitment-tracker/index.html'), 'utf8');
+  const htmlSrc = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
   const constantsSrc = fs.readFileSync(path.join(EXT, 'common/constants.js'), 'utf8');
 
   const extSource = /AJA\.BRIDGE_SOURCE\s*=\s*'([^']+)'/.exec(constantsSrc);
@@ -192,7 +192,7 @@ function liveArray(src, pattern, name) {
   return new Function(`return ${literal[0]};`)();
 }
 const constantsSrc2 = fs.readFileSync(path.join(EXT, 'common/constants.js'), 'utf8');
-const htmlSrc2 = fs.readFileSync(path.resolve(__dirname, '../../autumn-recruitment-tracker/index.html'), 'utf8');
+const htmlSrc2 = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
 
 check('契约：AJA.STAGES 与网页端 STAGE_PRESETS 逐值相同（此前一直没有这条守卫）', () => {
   const ext = liveArray(constantsSrc2, /root\.AJA\.STAGES\s*=/, 'AJA.STAGES');
