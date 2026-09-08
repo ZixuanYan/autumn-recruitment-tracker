@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "秋招求职与简历助手",
-  "version": "4.2.0",
+  "version": "5.0.0",
   "description": "秋招网申采集端：岗位一键提取收录与暂存 + 简历字段点击速填（左键填入聚焦框、右键复制、可搜索），配合网页版管理器实现跨设备同步。",
   "icons": {
     "16": "icons/icon16.png",
@@ -22,7 +22,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "唤起秋招求职助手侧边栏",
+    "default_title": "收录当前岗位",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -34,12 +34,12 @@
       "matches": ["http://*/*", "https://*/*"],
       "js": [
         "common/constants.js",
-        "common/default-resume.js",
-        "common/company-key.js",
+        "common/tokens.js",
+        "common/icons.js",
+        "common/capture-form.js",
         "content/01-core.js",
-        "content/02-resume.js",
         "content/03-parsers.js",
-        "content/05-sidebar.js",
+        "content/05-capture.js",
         "content/06-bridge.js"
       ],
       "run_at": "document_end"
@@ -51,7 +51,7 @@
   "commands": {
     "toggle-sidebar": {
       "suggested_key": { "default": "Ctrl+Shift+F", "mac": "Command+Shift+F" },
-      "description": "唤起/收起秋招求职助手侧边栏"
+      "description": "开合收录卡片"
     }
   }
 }

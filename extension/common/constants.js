@@ -9,7 +9,8 @@
   root.AJA = root.AJA || {};
 
   // 扩展版本（胶囊 title / 控制台均会展示，用于排查“是否已加载新代码”）
-  root.AJA.VERSION = '4.2.0';
+  // 必须与 manifest.json 的 version 一致，test/extension-ui.js 有契约断言
+  root.AJA.VERSION = '5.0.0';
 
   // 招聘阶段预设（与网页版 autumn-recruitment-tracker 的 STAGE_PRESETS 保持一致，两端需同步；实际阶段可自定义）
   root.AJA.STAGES = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
@@ -26,6 +27,10 @@
   root.AJA.RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
   root.AJA.PENDING_KEY = 'autumnRecruitmentTracker.pending.v1';           // 暂存箱队列
   root.AJA.SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
+  // 插件 UI 偏好（v5.0.0）：胶囊吸边方位与垂直位置 { side:'left'|'right', top:number }。
+  // 与网页版同名 key 但存储域不同（插件是 chrome.storage.local，网页是 localStorage），不会互相覆盖。
+  // 旧版胶囊位置完全不持久化，刷新页面就回到 top:180px，用户每次都得重新拖。
+  root.AJA.UI_STORAGE_KEY = 'autumnRecruitmentTracker.ui.v1';
 
   // 与网页版管理器的桥接
   root.AJA.TRACKER_URL = 'https://zixuanyan.github.io/autumn-recruitment-tracker/';
@@ -34,15 +39,21 @@
   root.AJA.TRACKER_PATH_PREFIX = '/autumn-recruitment-tracker';
 
   // 消息类型（chrome.runtime / tabs 通信）
+  // 「任意端」= content script / Side Panel / 网页版桥接三者之一，都经 background 的同一个 onMessage 中枢
   root.AJA.MSG = {
-    PUSH_TO_TRACKER: 'PUSH_TO_TRACKER',       // content -> background：推送记录到网页版（实时确认）
+    PUSH_TO_TRACKER: 'PUSH_TO_TRACKER',       // 任意端 -> background：推送记录到网页版（实时确认）
     RELAY_TO_TRACKER: 'RELAY_TO_TRACKER',     // background -> 网页版 content：中继记录
-    SAVE_JOB_RECORD: 'SAVE_JOB_RECORD',       // content -> background：存入暂存箱
-    GET_PENDING_RECORDS: 'GET_PENDING_RECORDS', // bridge -> background：取暂存队列
-    REMOVE_PENDING_RECORD: 'REMOVE_PENDING_RECORD', // bridge -> background：出队（丢弃）
+    SAVE_JOB_RECORD: 'SAVE_JOB_RECORD',       // 任意端 -> background：存入暂存箱
+    GET_PENDING_RECORDS: 'GET_PENDING_RECORDS', // 任意端 -> background：取暂存队列
+    REMOVE_PENDING_RECORD: 'REMOVE_PENDING_RECORD', // 任意端 -> background：出队（丢弃）
     SAVE_RESUME: 'SAVE_RESUME',               // bridge -> background：接收网页版下发的简历
-    GET_RESUME_DATA: 'GET_RESUME_DATA',       // 任意 -> background：读简历
-    TOGGLE_SIDEBAR: 'TOGGLE_SIDEBAR'          // background -> content：快捷键/图标唤起侧边栏
+    GET_RESUME_DATA: 'GET_RESUME_DATA',       // 任意端 -> background：读简历
+    // v5.0.0 新增：Side Panel 是扩展页面，拿不到宿主页 DOM，因此「解析当前页」与「填入聚焦框」
+    // 都要 panel -> background -> tabs.sendMessage -> content 走一趟。background 只做转发与
+    // 「当前页没有 content script」的错误收敛（edge:// 内部页、扩展商店页等）。
+    SCAN_CURRENT_PAGE: 'SCAN_CURRENT_PAGE',       // panel -> background -> content：解析当前页岗位信息
+    FILL_FOCUSED_FIELD: 'FILL_FOCUSED_FIELD',     // panel -> background -> content：把值填入宿主页面聚焦框
+    TOGGLE_SIDEBAR: 'TOGGLE_SIDEBAR'              // background -> content：图标/快捷键开合迷你收录卡片
   };
 
   // 网页版 postMessage 桥接标识（独立于原作者旧插件的 AUTUMN_JOB_CAPTURE，避免协议撞车）

@@ -34,7 +34,8 @@ if (IS_TRACKER_PAGE) {
   // 为什么不能直接调 chrome.runtime.sendMessage：扩展被重新加载（手动重载 / 更新 / 浏览器停用后恢复）后，
   // 页面上旧的内容脚本还活着，但它的 chrome.runtime 已成失效句柄，任何直接调用都会**同步抛出**
   // "Uncaught Error: Extension context invalidated." 冒到网页控制台 —— 用户看到报错却不知该做什么。
-  // safeSendMessage 由先注入的 05-sidebar.js 提供（同一 isolated world，顶层函数跨文件可见），
+  // safeSendMessage 由先注入的 05-capture.js 提供（同一 isolated world，顶层函数跨文件可见；
+  // 它定义在文件顶层而不是 IS_TRACKER_PAGE 分支内，所以本文件依赖的桥接模式下同样可用），
   // 它先用 chrome.runtime.id 探测上下文是否还在，再 try/catch 兜底，失败走回调而不是抛异常。
   function sendRuntimeMessage(message) {
     return new Promise((resolve, reject) => {
