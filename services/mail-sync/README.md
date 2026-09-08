@@ -1,6 +1,6 @@
 # autumn-mail-sync
 
-把 QQ 邮箱里的招聘邮件（面试 / 笔试 / 测评 / Offer / 拒信）自动解析成**结构化建议**，写进你自己的私有 Gist 文件 `mail-suggestions.json`。网页端 **[秋招投递管理](../autumn-recruitment-tracker)** 在云同步时顺带读取它，在新增的「邮件提醒」视图里**逐字段人工复核**后并入投递台账。
+把 QQ 邮箱里的招聘邮件（面试 / 笔试 / 测评 / Offer / 拒信）自动解析成**结构化建议**，写进你自己的私有 Gist 文件 `mail-suggestions.json`。网页端 **[秋招投递管理](https://github.com/ZixuanYan/autumn-recruitment-tracker)** 在云同步时顺带读取它，在新增的「邮件提醒」视图里**逐字段人工复核**后并入投递台账。
 
 > 本仓库必须建成 **私有仓库**：QQ 授权码、AI Key、Gist PAT 都放在这里的 Secrets，**永不进浏览器、永不进网页 localStorage、永不进 vault**。
 
@@ -70,8 +70,18 @@ node src/connectivity-test.js   # M0 连通性（需 QQ_EMAIL/QQ_AUTHCODE）
 node index.js               # 跑一轮同步（需全部 Secrets）
 node index.js --report-error    # 兜底：把 meta 标记为 error（workflow failure() 调用）
 npm run check               # node --check 全部脚本
-npm test                    # 纯函数单测（不触网、不依赖 IMAP/AI）
 ```
+
+**测试怎么跑**（纯函数单测 + 编排层守卫，不触网、不依赖 IMAP/AI）：
+
+```bash
+npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ test/integration.js（10 项编排层守卫）
+```
+
+> 在 monorepo `autumn-recruitment-tracker` 里情况不同：`services/mail-sync/package.json` **不含** `test` 脚本（避免两个测试入口各跑一半），测试统一住**仓库根**——跑 `cd ../.. && npm test` 得 392 项（含网页端与插件的跨端契约、反 AI 感守卫等），本目录的代码只占其中 64 项。
+> 这段说明之所以两边都写：本 README 会被同步脚本原样拷进独立仓库，只写一种情况就会在另一边变成错的。
+
+下文提到的 `test/run.js`、`test/integration.js`、`test/web-check.js` 一律指**仓库根的 `test/`**（独立仓库里就是 `test/`，monorepo 里是 `../../test/`）。其中 `web-check.js` / `web-runtime.js` 等 7 个文件依赖网页端与插件源码，**只存在于 monorepo**，独立仓库不带它们（带了也跑不起来）。
 
 - **定时**：`mail-sync.yml` 用 `cron: '23 */12 * * *'`（每 12 小时：UTC 00:23 与 12:23）。招聘高峰可改回每小时 `'23 * * * *'`（风控与实时性权衡）。GitHub 的 schedule 在高峰期常延迟 2–4 小时，属平台侧行为，改 cron 无法解决。
 - **手动**：`workflow_dispatch` 可传 `SINCE_DAYS` / `MAX_PER_RUN` / `UID_FROM` 覆盖默认值。

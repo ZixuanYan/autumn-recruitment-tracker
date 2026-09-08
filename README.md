@@ -2,7 +2,7 @@
 
 一个面向秋招求职者的投递管理工具，可在电脑浏览器和手机上使用。无需注册账号，投递数据默认只保存在使用者自己的浏览器中。
 
-> 本仓库为 monorepo：根目录 = 网页版管理器（GitHub Pages 部署），`extension/` = 配套浏览器扩展「秋招求职与简历助手」源码。
+> 本仓库为 monorepo：根目录 = 网页版管理器（GitHub Pages 部署，实际伺服的是 `build.js` 产出的 `dist/`），`extension/` = 配套浏览器扩展「秋招求职与简历助手」源码，`services/mail-sync/` = 邮件提醒的 GitHub Action，`shared/` = 三端共用的单一事实源（阶段预设 / 企业性质 / 公司归一化 / 默认简历骨架），`test/` = 392 项测试（每次 push 由 CI 跑，不过就不部署）。
 
 ## 普通用户请从这里开始
 
@@ -69,13 +69,29 @@
 ## 仓库目录
 
 ```text
+—— 会被 build.js 拷进 dist/ 并上线的 ——
 index.html                 在线网页入口
-manifest.webmanifest       手机安装配置
+download.html              下载中心（在线使用 / 插件压缩包）
+manifest.webmanifest       手机安装配置（PWA）
 service-worker.js          离线缓存
+shared/                    跨端单一事实源：阶段预设 / 企业性质 / 公司归一化 / 默认简历骨架
+                           （网页、插件、邮件 Action 三端共用，v4.9.0 起）
 icons/                     网页 App 图标
-ocr/                       本地截图识别资源
-docs/                      安装、使用和数据迁移教程
-extension/                 配套浏览器扩展「秋招求职与简历助手」源码（采集端）
+ocr/                       本地截图识别资源（tesseract，整目录上线：worker 与 wasm 是运行时动态加载的）
+docs/                      安装、快速上手、数据保存与迁移教程
+downloads/                 插件压缩包（extension/ 的打包产物，由 scripts/pack-extension.js 生成）
+
+—— 只在仓库里、不上线的 ——
+extension/                 配套浏览器扩展「秋招求职与简历助手」源码（采集端；靠 downloads/ 的 zip 分发）
+services/mail-sync/        邮件提醒的 GitHub Action（**权威源**；实际定时运行的是你自己的独立私有仓库，
+                           部署与配置步骤见 docs/安装与使用教程.md 第六节「邮件提醒」）
+test/                      392 项测试（9 个文件，npm test 一次跑完，零 npm 依赖）
+build.js                   构建 dist/：白名单拷贝 + 站内引用自检（漏一个就是线上 404）
+scripts/                   pack-extension.js（同步 shared 生成拷贝 + 重打 zip）
+                           sync-template.js（同步到公开 template 仓库）
+.github/workflows/         test.yml（每次 push 跑 392 项）、pages.yml（测试通过才部署）
+CHANGELOG.md               更新记录（网页版与插件共用一份，按标题区分）
+使用说明.txt               纯文本版简要说明
 ```
 
 ## 来源说明
