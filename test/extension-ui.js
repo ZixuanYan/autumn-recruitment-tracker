@@ -567,6 +567,39 @@ check('fillFromPending() 必须带回 companyType（漏了会把已选的企业�
   AJA.CaptureForm.fillFromPending(e2, null);
 });
 
+check('两端渲染用的 class 都在各自的 CSS 里有定义（防「渲染出来了但没样式」）', () => {
+  // 这类漂移刚在 capture-form 上出现过一次（模板用了 .aja-ico，css() 里却没有），
+  // 表现是元素渲染出来但完全没有样式，人工复核时容易以为是"设计就这样"
+  const fromJs = (src, prefix) => {
+    const set = new Set();
+    for (const m of src.matchAll(/class="([a-zA-Z0-9\- ]+)"/g)) {
+      for (const c of m[1].split(/\s+/)) if (c.startsWith(prefix)) set.add(c);
+    }
+    // classList.toggle/add 里的状态类同样是渲染契约
+    for (const m of src.matchAll(/classList\.(?:toggle|add|remove)\('([a-zA-Z0-9\-]+)'/g)) {
+      if (m[1].startsWith(prefix)) set.add(m[1]);
+    }
+    return [...set];
+  };
+  const panelClasses = fromJs(SRC.panelJs, 'p-');
+  assert.ok(panelClasses.length >= 10, `只从 panel.js 提取到 ${panelClasses.length} 个 p- 类，正则可能失效`);
+  for (const c of panelClasses) {
+    assert.ok(SRC.panelCss.includes(`.${c}`), `panel.js 渲染用了 .${c}，但 panel.css 里没有定义`);
+  }
+  const popClasses = fromJs(SRC.capture, 'pop-');
+  assert.ok(popClasses.length >= 3, `只从 05-capture.js 提取到 ${popClasses.length} 个 pop- 类`);
+  for (const c of popClasses) {
+    assert.ok(CORE_CSS.includes(`.${c}`), `05-capture.js 渲染用了 .${c}，但 01-core.js 的 COMPONENT_CSS 里没有定义`);
+  }
+  // 状态类同样要有样式，否则"告警态""折叠态"只是改了个看不见的 class
+  for (const c of ['is-warn', 'is-empty', 'is-collapsed']) {
+    assert.ok(SRC.panelCss.includes(`.${c}`), `panel.css 缺少状态类 .${c} 的样式`);
+  }
+  for (const c of ['is-left', 'is-right', 'is-dragging']) {
+    assert.ok(CORE_CSS.includes(`.${c}`), `COMPONENT_CSS 缺少胶囊状态类 .${c} 的样式`);
+  }
+});
+
 check('css() 与 html() 同源：模板里用到的 class 在 css() 里都有定义', () => {
   const html = AJA.CaptureForm.html();
   const classes = new Set([...html.matchAll(/class="([^"]+)"/g)].flatMap(m => m[1].split(/\s+/)));
