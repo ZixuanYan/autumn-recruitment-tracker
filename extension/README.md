@@ -136,8 +136,7 @@ v5.1.0 起 `common/` 里不再有 `company-key.js` 与 `default-resume.js`——
 
 本项目基于以下开源项目修改而来：
 
-- [ljkss/autumn-job-assistant-tracker](https://github.com/ljkss/autumn-job-assistant-tracker)（秋招网申填写与投递管理助手 v2.0）
-- [songxue0614-lgtm/autumn-recruitment-tracker](https://github.com/songxue0614-lgtm/autumn-recruitment-tracker)（秋招投递管理器，数据结构与同步协议源头）
+- [ljkss/autumn-job-assistant-tracker](https://github.com/ljkss/autumn-job-assistant-tracker)（秋招网申填写与投递管理助手 v2.0）——桥接协议 `AUTUMN_JOB_ASSISTANT` 与简历存储键的命名沿用自它
 
 ## 版本
 

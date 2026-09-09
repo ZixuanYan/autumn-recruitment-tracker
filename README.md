@@ -127,6 +127,6 @@ git add src index.html  # 两者必须在同一次提交里，否则 CI 判定�
 孤儿守卫会红并点名是哪个文件。模块插入标记（形如 `__MODULE:xxx__`，外面包一对块注释符）
 必须**顶格**：带缩进的话那几个空格会残留进产物。
 
-## 来源说明
+## 许可
 
-本项目基于 [songxue0614-lgtm/autumn-recruitment-tracker](https://github.com/songxue0614-lgtm/autumn-recruitment-tracker)（秋招投递管理器 v3.0.0）修改，增加了可选的 GitHub Gist 云同步功能。
+MIT，见 [extension/LICENSE](extension/LICENSE)。

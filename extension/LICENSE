@@ -22,6 +22,5 @@ SOFTWARE.
 
 ---
 
-本项目基于以下开源项目修改而来，特此致谢：
+本项目的桥接协议与简历存储键命名沿用自以下开源项目，特此致谢：
 - https://github.com/ljkss/autumn-job-assistant-tracker （秋招网申填写与投递管理助手）
-- https://github.com/songxue0614-lgtm/autumn-recruitment-tracker （秋招投递管理器）
