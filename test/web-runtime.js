@@ -534,6 +534,11 @@ const sandbox2 = {
   openSyncDialog: () => {}, openScreenshotDialog: () => {}, openSafetyDialog: () => {}, openMailSettings: () => {},
   syncNow: () => {}, exportData: () => {}, exportIcs: () => {}, exportResume: () => {}
 };
+// setSampleMode 的桩：index.html 里它是顶层函数，但本 sandbox 只拼接了部分抽取的函数块
+// （loadRecords / loadDemoRecords / clearSampleData 等），不桩的话它们调用它会 ReferenceError。
+// 桩必须同步 sampleDataMode 属性，否则下面断言 sandbox2.sampleDataMode 的测试读不到变化。
+// 持久化本身（SAMPLE_FLAG_KEY 的读写）由 web-check 的静态守卫钉住，这里不重复模拟。
+sandbox2.setSampleMode = (on) => { sandbox2.sampleDataMode = !!on; };
 sandbox2.globalThis = sandbox2;
 sandbox2.self = sandbox2; // cryptoId 用 self.crypto 探测
 sandbox2.AJA = AJA_SHARED; // coreBlock 里有 `const companyGroupKey = AJA.companyGroupKey;` 等四个转发别名

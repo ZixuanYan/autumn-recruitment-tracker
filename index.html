@@ -1675,7 +1675,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.10.0';
+      const APP_VERSION = '4.10.1';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1701,7 +1701,24 @@
       let primaryLoadState = 'unknown';
       // 当前台账是否为「首次打开自动塞入的示例数据」（必须在 loadRecords 调用前声明，否则赋值触发 TDZ）
       let sampleDataMode = false;
+      // 示例标记必须**持久化**：sampleDataMode 只是内存变量时，刷新页面后标记丢失而示例还在
+      // localStorage 里——首启引导消失（showGuide 依赖它）、统计把示例当真实数据、之后开云同步时
+      // 示例被 syncNow 静默丢弃（用户会莫名其妙发现台账空了）。三个后果都不报错，属静默型缺陷。
+      // 所有赋值必须走 setSampleMode（web-check 有守卫钉住裸赋值），否则又会绕过持久化。
+      const SAMPLE_FLAG_KEY = 'autumnRecruitmentTracker.sample.v1';
+      function setSampleMode(on) {
+        sampleDataMode = !!on;
+        try {
+          if (on) localStorage.setItem(SAMPLE_FLAG_KEY, '1');
+          else localStorage.removeItem(SAMPLE_FLAG_KEY);
+        } catch (_) {}
+      }
       let records = loadRecords();
+      // 刷新恢复标记：loadRecords 播种时会 setSampleMode(true)；若上次会话已载入/播种过示例，
+      // flag 仍在 localStorage → 读回。keep / 清空 / 快照恢复 / 云同步丢弃都会删 flag。
+      if (!sampleDataMode) {
+        try { sampleDataMode = localStorage.getItem(SAMPLE_FLAG_KEY) === '1'; } catch (_) {}
+      }
       let resume = loadResumeData();
       let resumeSavedAt = loadResumeMeta();
       let jobs = loadJobs();
@@ -1803,7 +1820,7 @@
         }
         const initial = exampleRecords();
         // 标记「当前台账是示例数据」：首启引导会明确告知并提供一键清空，避免用户误把示例当成自己的投递
-        sampleDataMode = true;
+        setSampleMode(true);
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(initial)); } catch (error) { console.warn(error); }
         return initial;
       }
@@ -2280,7 +2297,7 @@
           // 因此只要走到云同步（无论云端有无数据），一律先丢弃本地示例；引导卡会随后提示开始记录。
           if (sampleDataMode) {
             records = [];
-            sampleDataMode = false;
+            setSampleMode(false);
             try { localStorage.setItem(STORAGE_KEY, '[]'); } catch (_) {}
           }
           const { mergedRecords, mergedTombstones } = mergeSyncState(remote);
@@ -2934,7 +2951,7 @@
             records = latest.records.map(normalizeRecord);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
             primaryLoadState = 'valid';
-            sampleDataMode = false; // 恢复出来的是真实数据，不再是示例
+            setSampleMode(false); // 恢复出来的是真实数据，不再是示例
             render();
             showToast(`已从安全快照恢复 ${records.length} 条记录`);
           } else {
@@ -3550,7 +3567,7 @@
         const ids = records.map(record => record.id);
         if (ids.length) markDeleted(ids);
         records = [];
-        sampleDataMode = false;
+        setSampleMode(false);
         saveRecords('已清空示例数据');
         render();
         showToast('示例数据已清空，现在记录你自己的投递');
@@ -3560,7 +3577,7 @@
       function loadDemoRecords() {
         if (records.length) { showToast('台账已有记录，为避免覆盖不载入示例'); return; }
         records = exampleRecords().map(item => normalizeRecord(item));
-        sampleDataMode = true;
+        setSampleMode(true);
         saveRecords('已载入示例数据（可随时清空）');
         render();
       }
@@ -6682,7 +6699,7 @@
         if (!button) return;
         const action = button.dataset.guide;
         if (action === 'clear') return clearSampleData();
-        if (action === 'keep') { sampleDataMode = false; uiPrefs.hideGuide = true; saveUiPrefs(); return render(); }
+        if (action === 'keep') { setSampleMode(false); uiPrefs.hideGuide = true; saveUiPrefs(); return render(); }
         if (action === 'add') return openDialog(null);
         if (action === 'demo') return loadDemoRecords();
         if (action === 'hide') { uiPrefs.hideGuide = true; saveUiPrefs(); render(); }

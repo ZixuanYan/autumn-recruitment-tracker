@@ -1,5 +1,15 @@
 # 更新记录
 
+## v4.10.1（网页：修示例数据标记刷新丢失）
+
+- `sampleDataMode` 原是纯内存变量：**没开云同步时**刷新页面后标记丢失而示例还在 localStorage 里，
+  三个不报错的后果——首启引导消失（`showGuide` 依赖该标记），用户不知道台账里是示例；
+  统计与洞察把示例当真实数据；之后开云同步时示例被 `syncNow` 静默丢弃，用户莫名发现台账空了
+- 修复：标记持久化到 `localStorage`（`autumnRecruitmentTracker.sample.v1`），所有赋值统一走
+  `setSampleMode()`（写/删 flag），刷新后读回。keep / 清空 / 快照恢复 / 云同步丢弃都会删 flag
+- 云同步污染的保护**此前已有**（syncNow 在 merge 前丢弃本地示例 + 写 `'[]'`、清空走 tombstone
+  防合并复活），本轮不动；新增 web-check 守卫钉住「sampleDataMode 不许裸赋值」防回归
+
 ## v4.10.0（网页：Apple 风格视觉重刷）
 
 - 设计系统整体重刷为 Apple 剧场式语言：钴蓝 `#2447e0` → Apple 蓝 `#0071e3` 家族；SF Pro 排版、胶囊按钮与输入框（44px）、发丝线卡片（1px `rgba(0,0,0,.08)` + 近不可见承托影）、磨砂玻璃侧栏 / toast / tooltip、Apple 缓动 `cubic-bezier(.28,.11,.32,1)` 与 400ms 视图切换。**仪表盘密度保持不变**（表格行 ~48px、基础字号 14px、面板 padding 16px），不是营销页尺度

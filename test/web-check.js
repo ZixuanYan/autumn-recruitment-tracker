@@ -1297,5 +1297,18 @@ check('窄屏布局守卫：.view 的列轨道与 .mail-head-actions 的换行�
     '.mail-head-actions .btn 必须有 white-space: nowrap，否则中文会逐字竖排');
 });
 
+check('示例数据标记必须持久化（刷新丢失的三个后果都不报错：引导消失 / 示例被当真实数据 / 开同步时被静默丢弃）', () => {
+  // 裸赋值会绕过持久化：sampleDataMode = true/false 只允许出现在声明处 1 次，
+  // 其余赋值必须走 setSampleMode（它同时写/删 localStorage flag）。
+  const assigns = html.match(/sampleDataMode\s*=\s*(?:true|false)\s*;/g) || [];
+  assert.strictEqual(assigns.length, 1,
+    `sampleDataMode 的裸赋值应只剩声明处 1 处（实得 ${assigns.length}），其余必须走 setSampleMode`);
+  assert.ok(/let sampleDataMode = false;/.test(html), '声明处应在');
+  assert.ok(/const SAMPLE_FLAG_KEY = /.test(html), '应有持久化 flag 的 key');
+  assert.ok(/localStorage\.removeItem\(SAMPLE_FLAG_KEY\)/.test(html),
+    'setSampleMode(false) 必须删 flag，否则清空/keep/云同步丢弃后刷新又变回示例态');
+  assert.ok(/localStorage\.getItem\(SAMPLE_FLAG_KEY\)/.test(html), '刷新后必须读回 flag');
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;
