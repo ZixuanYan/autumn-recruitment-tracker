@@ -20,6 +20,8 @@ const assert = require('assert');
 
 const TRACKER = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(TRACKER, 'index.html'), 'utf8');
+// 阶段 3 起 index.html 是构建产物；已拆出的模块改从 src/ 读（见 loadSrc）
+const loadSrc = require('./lib/load-src');
 const backgroundSrc = fs.readFileSync(path.join(TRACKER, 'extension/background.js'), 'utf8');
 // v4.9.0：跨端常量与归一化只剩一份，在仓库根 shared/（插件加载 extension/shared/ 的生成拷贝，
 // 由 extension-ui.js 的同源守卫断言逐字节相同）。原 extension/common/company-key.js 已删除。
@@ -93,10 +95,20 @@ const webAlias = aliasBox.__out;
 
 // 网页版**专有**的实现仍在 index.html 里（聚类、判重四态、确认弹窗）。它们内部调用的四个归一化
 // 符号通过参数注入 AJA 提供——这顺带验证了「转发别名在真实调用链里能用」，不只是声明存在。
-const WEB_FNS = ['groupRecordsByCompany', 'companyGroupIndex', 'findDuplicateRecord', 'resolveDuplicate'];
-const webSrc = WEB_FNS.map(name => extractFunction(html, name));
+// 阶段 3：前三个已拆进 src/core/（company.js 与 dedupe.js），改从模块源码里抽——
+// extractFunction 的花括号配平算法没变，但搜索范围从 6892 行产物缩到 531 行，
+// 同名函数误匹配的面降了一个量级（那套算法踩过默认参数 options = {} 的坑）。
+// resolveDuplicate 仍在 app/ 的 DOM 层（要调 confirmInApp、刷新视图），本轮没拆，继续从产物抽。
+const CORE_FNS = ['groupRecordsByCompany', 'companyGroupIndex', 'findDuplicateRecord'];
+const DOM_FNS = ['resolveDuplicate'];
+const WEB_FNS = [...CORE_FNS, ...DOM_FNS];
+const webSrc = [
+  ...CORE_FNS.map(name => extractFunction(loadSrc.coreSrc, name)),
+  ...DOM_FNS.map(name => extractFunction(html, name))
+];
 for (const [idx, src] of webSrc.entries()) {
-  assert.ok(src && src.length > 40, `未能从 index.html 抽取 ${WEB_FNS[idx]}`);
+  const from = idx < CORE_FNS.length ? 'src/core/' : 'index.html（DOM 层，尚未拆分）';
+  assert.ok(src && src.length > 40, `未能从 ${from} 抽取 ${WEB_FNS[idx]}`);
 }
 
 // resolveDuplicate 的外部依赖用桩，并记录调用以便断言分支

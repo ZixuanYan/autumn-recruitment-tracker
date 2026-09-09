@@ -11,4 +11,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm test          # 382 项，零依赖安装，十几秒
+      # 零依赖安装，十几秒。阶段 3 起前两步是构建 + 断言产物与入库的 index.html 一致
+      # （抓"改了 src/ 忘记 build:write"），之后才是九套测试。项数刻意不写死，已漂移过两次。
+      - run: npm test

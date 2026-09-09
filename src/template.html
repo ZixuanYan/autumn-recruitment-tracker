@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f5f5f7">
+  <meta name="description" content="本地保存、随时跟进的秋招投递管理器">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="秋招管理">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <title>秋招投递管理</title>
+  <style>
+/*__STYLES__*/
+  </style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+<symbol id="i-briefcase" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></symbol>
+<symbol id="i-tool" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4z"/></symbol>
+<symbol id="i-scan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 12h8"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/></symbol>
+<symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.3A3.5 3.5 0 0 1 17.5 18z"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="m8 11 4 4 4-4"/><path d="M5 19h14"/></symbol>
+<symbol id="i-file-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5"/><path d="m10 15 2 2 2-2"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 14.5 5-5"/><path d="M12.5 6.5 14 5a3.5 3.5 0 0 1 5 5l-1.5 1.5"/><path d="M11.5 17.5 10 19a3.5 3.5 0 0 1-5-5l1.5-1.5"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m8 8 4-4 4 4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7 8.5 6 8.5-6"/></symbol>
+<symbol id="i-stack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 8 4.5-8 4.5-8-4.5z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></symbol>
+<symbol id="i-today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M12 13v4M10 15h4"/></symbol>
+<symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="12" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8.5 6H12a3.5 3.5 0 0 1 3.5 3.5V12M15.5 12H12a3.5 3.5 0 0 0-3.5 3.5V18"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M7.5 14h3M13.5 14h3M7.5 17.5h3"/></symbol>
+<symbol id="i-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5H5.5v1.5A3.5 3.5 0 0 0 9 10M16 5h2.5v1.5A3.5 3.5 0 0 1 15 10"/><path d="M12 13v4M9 20h6M10 17h4"/></symbol>
+</defs></svg>
+  <div class="app-layout">
+    <aside class="app-sidebar" aria-label="主导航">
+      <div class="sidebar-brand">
+        <div class="brand-mark" aria-hidden="true">↗</div>
+        <div><div class="sidebar-title">秋招投递管理</div><div class="sidebar-subtitle">从银十到金九 有迹可循</div></div>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="nav-item is-active" data-route="overview" href="#/overview"><span class="nav-icon"><svg><use href="#i-grid"/></svg></span><span>总览</span></a>
+        <a class="nav-item" data-route="records" href="#/records"><span class="nav-icon"><svg><use href="#i-stack"/></svg></span><span>投递记录</span></a>
+        <a class="nav-item" data-route="mail" href="#/mail"><span class="nav-icon"><svg><use href="#i-mail"/></svg></span><span>邮件提醒</span><span class="nav-badge" id="mailNavBadge" hidden></span></a>
+        <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon"><svg><use href="#i-file"/></svg></span><span>我的简历</span></a>
+        <a class="nav-item" data-route="jobPool" href="#/jobPool"><span class="nav-icon"><svg><use href="#i-briefcase"/></svg></span><span>岗位库</span></a>
+        <a class="nav-item" data-route="tools" href="#/tools"><span class="nav-icon"><svg><use href="#i-tool"/></svg></span><span>工具</span></a>
+      </nav>
+      <div class="sidebar-footer" id="sideDataNotice"><strong>数据保存在本机</strong>无需账号，不上传投递记录</div>
+    </aside>
+
+    <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="page-kicker" id="viewKicker">DASHBOARD</div>
+        <h1 id="viewTitle">投递总览</h1>
+        <p class="subtitle" id="viewSubtitle">今天也别忘了跟进重要机会</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn" id="exportRecordsBtn" type="button" title="导出投递记录（台账 JSON 备份）"><span class="icon"><svg><use href="#i-download"/></svg></span>导出投递记录</button>
+        <button class="btn" id="exportResumeBtn" type="button" title="导出简历 JSON"><span class="icon"><svg><use href="#i-file-down"/></svg></span>导出简历</button>
+        <button class="btn" id="topSyncBtn" type="button" title="云同步"><span class="icon"><svg><use href="#i-cloud"/></svg></span>云同步</button>
+        <button class="btn" id="captureUrlBtn" type="button" title="识别投递网址"><span class="icon"><svg><use href="#i-link"/></svg></span>识别投递网址</button>
+        <button class="btn" id="installAppBtn" type="button" title="安装到手机" hidden><span class="icon"><svg><use href="#i-share"/></svg></span>安装到手机</button>
+        <button class="btn btn-primary" id="addBtn" type="button" title="新增投递"><span class="icon"><svg><use href="#i-plus"/></svg></span>新增投递</button>
+      </div>
+    </header>
+
+    <div class="view" data-view="overview">
+    <section class="stats" id="overview" aria-label="投递概览">
+      <article class="stat-card" data-metric="total"><div class="stat-top"><span>投递总数</span><span class="stat-icon"><svg><use href="#i-stack"/></svg></span></div><div class="stat-number" id="totalCount">0</div></article>
+      <article class="stat-card" data-metric="today"><div class="stat-top"><span>今日投递</span><span class="stat-icon"><svg><use href="#i-today"/></svg></span></div><div class="stat-number" id="todayCount">0</div></article>
+      <article class="stat-card" data-metric="active"><div class="stat-top"><span>进行中的流程</span><span class="stat-icon"><svg><use href="#i-flow"/></svg></span></div><div class="stat-number" id="activeCount">0</div></article>
+      <article class="stat-card" data-metric="week"><div class="stat-top"><span>七天内安排</span><span class="stat-icon"><svg><use href="#i-calendar"/></svg></span></div><div class="stat-number" id="weekCount">0</div></article>
+      <article class="stat-card" data-metric="offer"><div class="stat-top"><span>Offer 数量</span><span class="stat-icon"><svg><use href="#i-trophy"/></svg></span></div><div class="stat-number" id="offerCount">0</div></article>
+    </section>
+
+    <section class="panel insights" id="insights" aria-labelledby="insightsTitle">
+      <div class="panel-head">
+        <div><h2 class="panel-title" id="insightsTitle">洞察</h2><div class="panel-caption">全部由你的记录与阶段时间线本机算出：卡点提醒、转化漏斗、城市分布、企业性质、投递节奏与各阶段停留</div></div>
+        <button class="btn btn-small" id="insightsCompactBtn" type="button" title="精简模式只保留概览、需要关注与转化漏斗，把城市 / 企业性质 / 节奏 / 停留等明细折起来">精简</button>
+      </div>
+      <div class="guide" id="firstRunGuide" hidden>
+        <div class="guide-note" id="guideNote"></div>
+        <div class="guide-steps">
+          <div class="guide-step"><span class="guide-no">1</span><div class="guide-text"><strong>新增投递</strong><span>填公司 / 岗位 / 城市 / 投递日期；按 <kbd>N</kbd> 可随时快速新增，按 <kbd>⌘K</kbd> 打开命令面板</span></div></div>
+          <div class="guide-step"><span class="guide-no">2</span><div class="guide-text"><strong>收到通知就推进</strong><span>笔试、面试、Offer 每次推进都追加一条里程碑，历史不会被覆盖；点公司名看详情抽屉</span></div></div>
+          <div class="guide-step"><span class="guide-no">3</span><div class="guide-text"><strong>开启云同步（可选）</strong><span>用你自己的 GitHub 令牌同步到私有 Gist，手机与电脑数据一致</span></div></div>
+        </div>
+        <div class="guide-actions" id="guideActions"></div>
+      </div>
+      <div class="insights-body" id="insightsBody">
+        <!-- 信息层级：① 概览数字 → ② 需要行动 → ③ 转化 → ④~⑦ 分析明细。
+             此前指标条夹在两张图之后、最需要行动的「需要关注」被压到第 5 块，读起来要来回跳。 -->
+        <div class="insight-metrics" id="insightMetrics"></div>
+        <div class="insight-block">
+          <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
+          <div class="alert-list" id="alertList"></div>
+        </div>
+        <div class="insight-grid">
+          <div class="insight-block">
+            <div class="insight-block-head"><h3>转化漏斗</h3><span class="insight-note" id="funnelNote">按记录口径</span></div>
+            <div class="funnel-row" id="funnelRow"></div>
+            <button class="text-button insight-toggle" id="funnelScopeBtn" type="button">切换为公司去重口径</button>
+          </div>
+          <div class="insight-block">
+            <div class="insight-block-head"><h3>阶段分布</h3><span class="insight-note">当前存量，按阶段计数</span></div>
+            <div class="stage-grid" id="stageGrid"></div>
+          </div>
+        </div>
+        <!-- ④~⑦ 分析明细：精简模式整块折叠（偏好存本机 ui.v1，不进云同步 envelope） -->
+        <div class="insight-details" id="insightDetails">
+          <div class="insight-grid">
+            <div class="insight-block">
+              <div class="insight-block-head"><h3>城市分布</h3><span class="insight-note" id="cityNote">—</span></div>
+              <div class="city-list" id="cityList"></div>
+            </div>
+            <div class="insight-block">
+              <div class="insight-block-head"><h3>企业性质</h3><span class="insight-note" id="ctypeNote">—</span></div>
+              <div class="ctype-bar" id="ctypeBar" role="img" aria-label="企业性质占比"></div>
+              <div class="ctype-legend" id="ctypeLegend"></div>
+            </div>
+          </div>
+          <div class="insight-grid">
+            <div class="insight-block">
+              <div class="insight-block-head"><h3>近 14 天投递节奏</h3><span class="insight-note" id="sparkSummary">—</span></div>
+              <svg class="spark" id="sparkSvg" viewBox="0 0 280 46" preserveAspectRatio="none" role="img" aria-label="近 14 天每日投递数量"></svg>
+              <div class="spark-axis"><span id="sparkStart">—</span><span id="sparkEnd">—</span></div>
+            </div>
+            <div class="insight-block">
+              <div class="insight-block-head"><h3>各阶段平均停留</h3><span class="insight-note">相邻里程碑日期差</span></div>
+              <div class="dwell-list" id="dwellList"></div>
+            </div>
+          </div>
+          <div class="insight-block" id="multiCompanyWrap" hidden>
+            <div class="insight-block-head"><h3>多岗位公司</h3><span class="insight-note" id="multiCompanyNote"></span></div>
+            <div class="multi-company-list" id="multiCompanyList"></div>
+          </div>
+          <div class="insight-block" id="offerMatrixWrap" hidden>
+            <div class="insight-block-head"><h3>Offer 对比</h3><span class="insight-note">按意向度排序</span></div>
+            <div class="table-scroll"><table class="offer-matrix" id="offerMatrix"></table></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
+      <div class="panel-head">
+        <div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">面试安排与截止日期合并排序，逾期项置顶 · 最多 6 项</div></div>
+        <button class="btn btn-small" id="exportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出日历</button>
+      </div>
+      <div class="schedule-list" id="upcomingList"></div>
+    </aside>
+    </div>
+<div class="view" data-view="records" hidden>
+    <section class="panel" id="records">
+      <div class="panel-head">
+        <div><h2 class="panel-title">投递记录</h2><div class="panel-caption" id="resultCaption">共 0 条记录</div></div>
+        <div class="view-switch" role="tablist" aria-label="台账显示方式">
+          <button class="view-switch-btn is-active" id="viewTableBtn" type="button" role="tab" aria-selected="true" title="表格视图">表格</button>
+          <button class="view-switch-btn" id="viewBoardBtn" type="button" role="tab" aria-selected="false" title="看板视图：按阶段分列，可拖拽推进">看板</button>
+        </div>
+      </div>
+      <div class="filters">
+        <div class="search-wrap"><span class="search-glyph">⌕</span><input class="control" id="searchInput" type="search" placeholder="搜索公司或岗位" aria-label="搜索公司或岗位"></div>
+        <select class="control" id="stageFilter" aria-label="按阶段筛选"><option value="all">全部阶段</option></select>
+        <select class="control" id="sortSelect" aria-label="排序方式">
+          <option value="schedule">最近安排优先</option>
+          <option value="applied-desc">投递日期：从新到旧</option>
+          <option value="updated-desc">最近更新优先</option>
+          <option value="company">公司名称排序</option>
+          <option value="company-group">按公司聚合（同公司多岗位）</option>
+        </select>
+      </div>
+      <div class="table-scroll" id="recordsTableScroll">
+        <table>
+          <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
+          <tbody id="recordBody"></tbody>
+        </table>
+      </div>
+      <div class="board" id="boardView" hidden>
+        <div class="board-drop-zone" id="boardDropZone" title="拖到阶段列直接推进（追加里程碑，向后拖二次确认）；拖到这里可自由选择阶段，含当前没有列的阶段 · 点卡片看详情，聚焦卡片按 A 键推进">
+          <span class="drop-icon" aria-hidden="true">⤵</span>
+          <span class="drop-text" id="boardDropText">拖到这里，自由选择阶段（含没有列的阶段）</span>
+        </div>
+        <div class="board-cols" id="boardCols"></div>
+      </div>
+      <div class="empty" id="emptyState" hidden></div>
+    </section>
+    </div>
+<div class="view" data-view="jobPool" hidden>
+    <section class="panel job-pool" id="jobPool" aria-labelledby="jobPoolTitle">
+      <div class="panel-head job-pool-head">
+        <div>
+          <h2 class="panel-title" id="jobPoolTitle">岗位库</h2>
+          <div class="panel-caption">候选池：收集还没投的岗位（可同步/粘贴腾讯文档，或用工具页「截图识别导入岗位」）；确认要投时点「记为已投递」进入总览台账</div>
+          <a class="job-source" href="https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&amp;viewId=vKWCWH" target="_blank" rel="noopener noreferrer">查看岗位来源 ↗</a>
+        </div>
+        <div class="job-pool-actions">
+          <button class="btn" id="clearJobPoolBtn" type="button">清空岗位库</button>
+          <button class="btn btn-primary" id="syncJobsBtn" type="button"><span class="icon">↻</span>同步腾讯文档</button>
+        </div>
+      </div>
+      <div class="job-pool-toolbar">
+        <div class="search-wrap"><span class="search-glyph">⌕</span><input class="control" id="jobSearchInput" type="search" placeholder="搜索公司、岗位或城市" aria-label="搜索岗位库"></div>
+        <div class="job-sync-meta" id="jobSyncMeta">尚未同步岗位</div>
+      </div>
+      <div class="job-list" id="jobList"></div>
+    </section>
+    </div>
+<div class="view" data-view="resume" hidden>
+    <section class="panel" id="resume" aria-labelledby="resumeTitle">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title" id="resumeTitle">我的简历</h2>
+          <div class="panel-caption">字段名即插件填表匹配名——使用常用名（手机 / 邮箱 / 学校）匹配效果最好；保存后自动下发给浏览器插件并随云同步加密上传</div>
+        </div>
+        <div class="resume-actions">
+          <input id="resumeFileInput" type="file" accept=".json,application/json" hidden>
+          <button class="btn btn-small" id="resumeImportBtn" type="button">导入 JSON</button>
+          <button class="btn btn-small" id="resumeExportBtn" type="button">导出 JSON</button>
+          <button class="btn btn-small" data-action="add-section" type="button">＋ 添加区块</button>
+          <button class="btn btn-small btn-danger" id="resumeResetBtn" type="button">重置</button>
+          <button class="btn btn-small btn-primary" id="saveResumeBtn" type="button">保存简历</button>
+        </div>
+      </div>
+      <div class="resume-layout">
+        <div class="resume-progress">
+          <div class="resume-progress-head">
+            <span class="resume-progress-title">简历完成度</span>
+            <span class="resume-progress-value" id="resumeProgressValue">0%</span>
+          </div>
+          <div class="resume-progress-bar"><div class="resume-progress-fill" id="resumeProgressFill" style="width: 0%"></div></div>
+          <div class="resume-progress-hint">按已填字段占全部字段的比例估算；优先信息和基本信息填满后，填表命中率最高。</div>
+        </div>
+        <p class="resume-privacy-note">简历含身份证、手机等敏感信息：开启云同步并设置口令后，简历与投递记录一起加密上传（GitHub 只保存密文）；不开启云同步时仅保存在本机浏览器。</p>
+
+        <div id="resume-sections"></div>
+      </div>
+    </section>
+    </div>
+<div class="view" data-view="tools" hidden>
+    <section class="panel" id="tools" aria-labelledby="toolsTitle">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title" id="toolsTitle">工具</h2>
+          <div class="panel-caption">截图识别、日程导出、数据安全与云同步统一收在这里；顶栏不再重复放置，避免同一功能两个入口</div>
+        </div>
+      </div>
+      <div class="tools-grid">
+        <article class="tool-card">
+          <div class="tool-card-top"><span class="tool-icon"><svg><use href="#i-scan"/></svg></span><span class="tool-status" id="toolOcrBadge">离线可用</span></div>
+          <h3>截图识别导入岗位</h3>
+          <p>上传招聘海报、官网或公众号截图，在本机完成文字识别，提取公司、岗位、城市后确认入账。</p>
+          <button class="btn" id="toolScreenshotBtn" type="button">打开截图识别</button>
+        </article>
+        <article class="tool-card">
+          <div class="tool-card-top"><span class="tool-icon"><svg><use href="#i-calendar"/></svg></span><span class="tool-status" id="toolIcsBadge">—</span></div>
+          <h3>日程导出到日历</h3>
+          <p>把面试安排与截止日期生成 <code>.ics</code> 文件，双击即可加入系统日历（本机生成，不联网、不上传）。</p>
+          <button class="btn" id="toolIcsBtn" type="button">导出 .ics 日程</button>
+        </article>
+        <article class="tool-card">
+          <div class="tool-card-top"><span class="tool-icon"><svg><use href="#i-shield"/></svg></span><span class="tool-status" id="toolSafetyBadge">—</span></div>
+          <h3>数据安全</h3>
+          <p>自动保留最近快照，可随时回滚误操作；支持导出完整 JSON 备份，换设备不丢数据。</p>
+          <button class="btn" id="toolSafetyBtn" type="button">打开数据安全</button>
+        </article>
+        <article class="tool-card">
+          <div class="tool-card-top"><span class="tool-icon"><svg><use href="#i-cloud"/></svg></span><span class="tool-status" id="toolSyncBadge">未开启</span></div>
+          <h3>云同步</h3>
+          <p>把投递记录与简历同步到自己的 GitHub 私有 Gist：手机、电脑与浏览器插件跨设备互通。</p>
+          <button class="btn" id="toolSyncBtn" type="button">打开云同步</button>
+        </article>
+      </div>
+    </section>
+    </div>
+<div class="view" data-view="mail" hidden>
+    <section class="panel" id="mail" aria-labelledby="mailTitle">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title" id="mailTitle">邮件提醒</h2>
+          <div class="panel-caption">招聘邮件解析结果，逐项复核后并入台账——所有更新都需你手动勾选确认，绝不自动写入。邮件建议随云同步从你的私有 Gist 读取。</div>
+        </div>
+        <div class="mail-head-actions">
+          <button class="btn btn-small" id="mailSettingsBtn" type="button"><span class="icon">⚙</span>设置</button>
+          <button class="btn btn-small" id="mailRefreshBtn" type="button"><span class="icon">↻</span>重新读取</button>
+        </div>
+      </div>
+      <div class="mail-statusbar" id="mailStatusBar" role="status" aria-live="polite"></div>
+      <div class="mail-list" id="mailList"></div>
+    </section>
+    </div>
+    </main>
+  </div>
+
+  <!-- ===== 记录详情抽屉（v4.4.0）：时间线步骤条 + 笔记 + 同公司其它投递 ===== -->
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="drawer" id="recordDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+    <div class="drawer-head">
+      <div class="drawer-head-text">
+        <h2 id="drawerTitle">投递详情</h2>
+        <div class="drawer-sub" id="drawerSub"></div>
+      </div>
+      <button class="close-btn" id="closeDrawerBtn" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+    <div class="drawer-actions" id="drawerActions"></div>
+  </aside>
+
+  <!-- ===== 悬浮明细浮层（v4.6.0）：全站共用一个，内容按需构建 =====
+       放在抽屉之后、弹窗之前：z-index 高于抽屉(41)，而 dialog 属于顶层元素(top layer)，
+       因此弹窗打开时浮层自然被盖住，不需要额外处理层级。 -->
+  <div class="tip" id="tipLayer" role="tooltip" hidden></div>
+
+  <!-- ===== ⌘K 命令面板（v4.4.0）：搜记录 / 跳视图 / 执行动作 ===== -->
+  <dialog id="cmdPalette" aria-label="命令面板">
+    <div class="cmd-inner">
+      <div class="cmd-input-row">
+        <span class="cmd-glyph" aria-hidden="true">⌕</span>
+        <input class="control" id="cmdInput" type="text" placeholder="搜索记录、跳转视图或执行动作…" autocomplete="off" spellcheck="false" aria-label="命令面板输入">
+        <kbd class="cmd-kbd">Esc</kbd>
+      </div>
+      <div class="cmd-results" id="cmdResults" role="listbox" aria-label="命令结果"></div>
+      <div class="cmd-foot"><span>↑↓ 选择 · Enter 执行</span><span class="cmd-foot-right">⌘K 唤起 · N 新增 · / 搜索台账</span></div>
+    </div>
+  </dialog>
+
+  <dialog id="recordDialog">
+    <form id="recordForm">
+      <div class="modal-head"><h2 id="dialogTitle">新增投递</h2><button class="close-btn" id="closeDialog" type="button" aria-label="关闭">×</button></div>
+      <div class="form-body">
+        <div class="form-grid">
+          <div class="field"><label for="company">公司 <span class="required">*</span></label><input class="control" id="company" name="company" required maxlength="60" placeholder="例如：星海科技"><div class="hint" id="sameCompanyHint" hidden></div></div>
+          <div class="field"><label for="position">岗位 <span class="required">*</span></label><input class="control" id="position" name="position" required maxlength="80" placeholder="例如：产品经理校招生"></div>
+          <div class="field"><label for="city">城市 <span class="required">*</span></label><input class="control" id="city" name="city" required maxlength="30" placeholder="例如：上海"></div>
+          <div class="field">
+            <label for="companyType">企业性质</label>
+            <select class="control" id="companyType" name="companyType"><option value="">未设置</option></select>
+            <div class="hint">用于洞察里的央国企 / 民企 / 外企统计；插件一键收录时也能直接选</div>
+          </div>
+          <div class="field"><label for="applicationDate">投递日期 <span class="required">*</span></label><input class="control" id="applicationDate" name="applicationDate" type="date" required></div>
+          <div class="field"><label for="scheduleAt">安排时间</label><input class="control" id="scheduleAt" name="scheduleAt" type="datetime-local"><div class="hint">有面试、笔试或跟进时间时填写</div></div>
+          <div class="field"><label for="deadline">截止日期</label><input class="control" id="deadline" name="deadline" type="date"><div class="hint">网申 / 测评 / 笔试 / 签约的截止时间，会进入「未来安排」并可导出到日历</div></div>
+          <div class="field">
+            <label for="intent">意向度</label>
+            <select class="control" id="intent" name="intent">
+              <option value="">未设</option>
+              <option value="1">1 · 保底</option>
+              <option value="2">2 · 一般</option>
+              <option value="3">3 · 愿意去</option>
+              <option value="4">4 · 很想去</option>
+              <option value="5">5 · 首选</option>
+            </select>
+            <div class="hint">用于 Offer 对比排序与看板标记</div>
+          </div>
+          <div class="field full">
+            <label>阶段时间线 <span class="required">*</span></label>
+            <div class="hint">按时间顺序记录这条投递走过的阶段——可跳过笔试、可多面、可自定义；当前阶段 = 最后一条。</div>
+            <datalist id="stagePresets"></datalist>
+            <div class="timeline-editor" id="timelineEditor"></div>
+            <button class="btn btn-small" id="addTimelineBtn" type="button">＋ 添加阶段</button>
+          </div>
+          <div class="field full"><label for="applicationUrl">投递网址</label><input class="control" id="applicationUrl" name="applicationUrl" type="url" maxlength="1000" placeholder="https://jobs.example.com/position/123"><div class="hint">通过一键收录插件添加时会自动填写</div></div>
+          <div class="field full"><label for="recentSchedule">最近安排</label><input class="control" id="recentSchedule" name="recentSchedule" maxlength="100" placeholder="例如：线上一面（腾讯会议）"></div>
+          <div class="field full"><label for="nextAction">下一步行动</label><textarea class="control" id="nextAction" name="nextAction" maxlength="200" placeholder="例如：准备项目复盘，提前测试摄像头"></textarea></div>
+          <div class="field full">
+            <details class="form-more" id="formMore">
+              <summary>更多字段（批次 / 渠道 / 内推人 / 薪资）· 可选</summary>
+              <div class="form-grid form-more-grid">
+                <div class="field">
+                  <label for="batch">批次</label>
+                  <input class="control" id="batch" name="batch" list="batchPresets" maxlength="20" placeholder="例如：提前批">
+                  <datalist id="batchPresets"></datalist>
+                  <div class="hint">同公司同岗位、不同批次不会被判为重复投递</div>
+                </div>
+                <div class="field">
+                  <label for="channel">渠道</label>
+                  <input class="control" id="channel" name="channel" list="channelPresets" maxlength="20" placeholder="例如：内推">
+                  <datalist id="channelPresets"></datalist>
+                </div>
+                <div class="field"><label for="referral">内推人 / 联系方式</label><input class="control" id="referral" name="referral" maxlength="60" placeholder="例如：学长张三（微信 zhangsan）"></div>
+                <div class="field"><label for="salary">薪资 / 待遇</label><input class="control" id="salary" name="salary" maxlength="40" placeholder="例如：25k×16 或 面议"></div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions"><button class="btn" id="cancelDialog" type="button">取消</button><button class="btn btn-primary" type="submit">保存记录</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirmDialog">
+    <div class="modal-head"><h2 id="confirmTitle">请确认</h2></div>
+    <div class="form-body"><p class="capture-note" id="confirmMessage"></p></div>
+    <div class="modal-actions"><button class="btn" id="confirmCancelBtn" type="button">取消</button><button class="btn btn-primary" id="confirmOkBtn" type="button">确定</button></div>
+  </dialog>
+
+  <dialog id="advanceDialog">
+    <div class="modal-head"><h2 id="advanceTitle">推进阶段</h2><button class="close-btn" id="closeAdvanceDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">选择要推进到的阶段——它会作为一条新里程碑追加到该投递的时间线，当前阶段随之更新。可跳过笔试、直接到任意面试轮次或 Offer。</p>
+      <div class="field"><label for="advanceDate">阶段日期</label><input class="control" id="advanceDate" type="date"></div>
+      <div class="advance-stage-grid" id="advanceStageGrid"></div>
+      <div class="field"><label for="advanceCustom">或自定义阶段</label><input class="control" id="advanceCustom" maxlength="20" placeholder="例如：加面、复试、意向书、测评"></div>
+      <div class="field"><label for="advanceNote">里程碑备注（可选）</label><input class="control" id="advanceNote" maxlength="60" placeholder="例如：HR 电话通知、腾讯会议二面"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelAdvanceDialog" type="button">取消</button><button class="btn btn-primary" id="confirmAdvanceBtn" type="button">确认推进</button></div>
+  </dialog>
+
+  <dialog id="captureDialog">
+    <form id="captureForm">
+      <div class="modal-head"><h2>识别投递详情页</h2><button class="close-btn" id="closeCaptureDialog" type="button" aria-label="关闭">×</button></div>
+      <div class="form-body">
+        <p class="capture-note">粘贴招聘网站的岗位详情或投递详情网址。插件会在本机读取公司、岗位、投递日期和状态，识别完成后由你确认再保存。</p>
+        <div class="field">
+          <label for="captureUrlInput">投递详情页网址 <span class="required">*</span></label>
+          <input class="control" id="captureUrlInput" type="url" required placeholder="https://jobs.example.com/application/123">
+        </div>
+        <div class="capture-status" id="captureStatus" role="status" aria-live="polite">正在检查一键收录插件…</div>
+      </div>
+      <div class="modal-actions"><button class="btn" id="cancelCaptureDialog" type="button">取消</button><button class="btn btn-primary" id="startCaptureBtn" type="submit">开始识别</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="screenshotDialog">
+    <div class="modal-head"><h2>批量截图识别岗位</h2><button class="close-btn" id="closeScreenshotDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">直接复制截图后按 Command + V 粘贴，也可以一次选择多张图片。识别完全在浏览器本地完成，不会上传；无法确认的日期会保持空白。</p>
+      <div class="ocr-dropzone" id="ocrDropzone" role="button" tabindex="0" aria-label="选择多张岗位截图">
+        <div id="ocrEmptyState"><div class="ocr-dropzone-icon">▧</div><div class="ocr-dropzone-title">粘贴、点击选择，或把多张截图拖到这里</div><div class="ocr-dropzone-help">复制图片后按 Command + V；支持 PNG、JPG、WEBP，最多 20 张</div></div>
+        <div class="ocr-preview-grid" id="ocrPreviewGrid" hidden></div>
+      </div>
+      <input id="ocrFileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+      <div class="ocr-progress" id="ocrProgress" hidden><div class="ocr-progress-fill" id="ocrProgressFill"></div></div>
+      <div class="capture-status" id="ocrStatus" role="status" aria-live="polite">按 Command + V 粘贴截图，或选择一张或多张图片。</div>
+      <div class="ocr-results" id="ocrResults" hidden></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelScreenshotDialog" type="button">取消</button><button class="btn btn-primary" id="startOcrBtn" type="button" disabled>开始批量识别</button></div>
+  </dialog>
+
+  <dialog id="jobSyncDialog">
+    <div class="modal-head"><h2>同步腾讯招聘岗位</h2><button class="close-btn" id="closeJobSyncDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">岗位只保存在你的浏览器本地。同步会读取公开招聘文档，不会上传你的投递记录，也不会自动替你投递。</p>
+      <div class="sync-steps">
+        <div class="sync-step"><span class="sync-step-number">1</span><div><strong>安装或更新“一键收录插件”</strong><span>腾讯文档有登录和跨站访问限制，需要插件在你的浏览器里读取。</span></div></div>
+        <div class="sync-step"><span class="sync-step-number">2</span><div><strong>点击下方“一键同步”</strong><span>插件会后台打开指定文档，读取岗位后自动关闭页面。</span></div></div>
+        <div class="sync-step"><span class="sync-step-number">3</span><div><strong>在岗位库里搜索并投递</strong><span>点击“记为已投递”后，才会写入正式投递记录。</span></div></div>
+      </div>
+      <div class="capture-status" id="jobSyncStatus" role="status" aria-live="polite">正在检查一键收录插件…</div>
+      <details class="sync-fallback">
+        <summary>插件暂时不可用？粘贴表格内容导入</summary>
+        <textarea class="control" id="jobPasteInput" placeholder="从腾讯文档复制多行岗位后粘贴到这里。建议包含：公司、岗位、城市、截止时间、投递链接。"></textarea>
+        <button class="btn btn-soft btn-small" id="importPastedJobsBtn" type="button">识别粘贴内容</button>
+      </details>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelJobSyncDialog" type="button">取消</button><button class="btn btn-primary" id="startJobSyncBtn" type="button">一键同步</button></div>
+  </dialog>
+
+  <dialog id="safetyDialog">
+    <div class="modal-head"><h2>数据安全与恢复</h2><button class="close-btn" id="closeSafetyDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">每次新增、编辑、删除和推进阶段后，都会保留浏览器主数据和历史快照。建议再设置一个电脑本地备份文件，形成独立保护。</p>
+      <div class="safety-summary">
+        <div class="safety-row"><div><div class="safety-label">浏览器主数据</div><div class="safety-detail">沿用固定存储标识，网站升级不会覆盖</div></div><div class="safety-state" id="primaryStorageState">已保护</div></div>
+        <div class="safety-row"><div><div class="safety-label">浏览器恢复快照</div><div class="safety-detail">最多保留最近 25 个数据版本</div></div><div class="safety-state" id="snapshotState">正在检查</div></div>
+        <div class="safety-row"><div><div class="safety-label">电脑本地备份文件</div><div class="safety-detail">设置后，每次修改都会尝试同步写入</div></div><div class="safety-state warning" id="fileBackupState">尚未设置</div></div>
+      </div>
+      <div class="safety-actions">
+        <button class="btn btn-primary" id="setupBackupBtn" type="button">设置自动备份文件</button>
+        <button class="btn" id="backupNowBtn" type="button">立即同步备份</button>
+        <button class="btn" id="importBtn" type="button">导入备份文件</button>
+        <button class="btn" id="restoreSnapshotBtn" type="button">恢复上一个快照</button>
+      </div>
+      <input id="importFileInput" type="file" accept="application/json,.json" hidden>
+      <p class="safety-footnote">本地备份不上传网络。若电脑和备份文件同时损坏，仍无法恢复；重要数据建议把备份文件另存到你信任的移动硬盘或个人云盘。</p>
+    </div>
+    <div class="modal-actions"><button class="btn" id="doneSafetyDialog" type="button">完成</button></div>
+  </dialog>
+
+  <dialog id="syncDialog">
+    <div class="modal-head"><h2>云同步（GitHub Gist）</h2><button class="close-btn" id="closeSyncDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">开启后，投递记录会自动同步到你 GitHub 账号下的私有 Gist；手机和电脑填同一个令牌，数据即可互通。设置口令后，数据先在本机加密再上传，GitHub 只保存密文；不同口令对应不同数据空间，互不覆盖，可随时切换。</p>
+      <div class="form-grid">
+        <div class="field full"><label for="syncTokenInput">GitHub 访问令牌 <span class="required">*</span></label><input class="control" id="syncTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_… 或 github_pat_…" maxlength="255"><div class="hint">令牌只保存在本机浏览器，不会发给 GitHub 以外的任何服务；生成方法见下方说明。</div></div>
+        <div class="field full"><label for="syncPassphraseInput">同步口令（推荐设置）</label><input class="control" id="syncPassphraseInput" type="password" autocomplete="off" placeholder="加密口令，所有设备需一致" maxlength="100"><div class="hint">设置后云端只保存密文；不同口令是独立数据空间，换口令不会覆盖原有数据。</div></div>
+      </div>
+      <div class="safety-summary">
+        <div class="safety-row"><div><div class="safety-label">同步状态</div><div class="safety-detail" id="syncStateDetail">未开启</div></div><div class="safety-state warning" id="syncStateBadge">未配置</div></div>
+        <div class="safety-row"><div><div class="safety-label">同步方式</div><div class="safety-detail">按记录合并，改动保留较新版本；不同口令是独立数据空间，可切换且互不覆盖</div></div><div class="safety-state">自动</div></div>
+      </div>
+      <div class="capture-status" id="syncStatus" role="status" aria-live="polite">填写令牌后点击“保存并同步”即可开启。</div>
+      <details class="sync-fallback">
+        <summary>怎么生成访问令牌？</summary>
+        <ol class="sync-help-list">
+          <li>电脑登录 GitHub → 右上角头像 → Settings。</li>
+          <li>最底部 Developer settings → Personal access tokens → Tokens (classic)。</li>
+          <li>Generate new token (classic)：只需勾选 <strong>gist</strong> 一个权限，生成后立即复制令牌（页面关闭后无法再查看）。</li>
+          <li>回到本页粘贴令牌，设置口令后点击“保存并同步”；另一台设备重复同样操作即可互通。</li>
+        </ol>
+      </details>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="disconnectSyncBtn" type="button">断开</button>
+      <button class="btn" id="cancelSyncDialog" type="button">取消</button>
+      <button class="btn btn-primary" id="saveSyncBtn" type="button">保存并同步</button>
+    </div>
+  </dialog>
+
+  <dialog id="mailSettingsDialog">
+    <div class="modal-head"><h2>邮件提醒设置</h2><button class="close-btn" id="closeMailSettingsDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">这些设置保存在你自己的私有 Gist（<code>mail-config.json</code>），随云同步跨设备生效，autumn-mail-sync 的 Action 下次运行时读取。密钥类（QQ 授权码 / AI Key / GIST_PAT）不在此上传；「邮件解密密钥」也只存本机。</p>
+      <div class="form-grid">
+        <div class="field full"><label for="mailCfgKeywords">预筛关键词（用 | 分隔）</label><input class="control" id="mailCfgKeywords" type="text" maxlength="2000" placeholder="面试|笔试|校招|录用…"><div class="hint">只有命中关键词且非噪声（退订/营销等）的邮件才会发给 AI，收紧可省 token。</div></div>
+        <div class="field"><label for="mailCfgMinConf">置信度阈值</label><input class="control" id="mailCfgMinConf" type="number" step="0.05" min="0" max="1"><div class="hint">低于此值的建议丢弃（0~1）</div></div>
+        <div class="field"><label for="mailCfgSinceDays">回看天数</label><input class="control" id="mailCfgSinceDays" type="number" min="1" max="365"><div class="hint">首次/重置时按此天数全量扫</div></div>
+        <div class="field"><label for="mailCfgMaxPerRun">单次上限</label><input class="control" id="mailCfgMaxPerRun" type="number" min="1" max="200"><div class="hint">单次最多处理多少封</div></div>
+        <div class="field"><label for="mailCfgInterval">最小间隔（小时）</label><input class="control" id="mailCfgInterval" type="number" min="0" max="168"><div class="hint">0=每次定时都跑；&gt;0 则距上次不足该小时数时跳过（0 token）</div></div>
+        <div class="field full"><label class="mail-field" for="mailCfgEnabled"><input type="checkbox" id="mailCfgEnabled"><span>启用邮件同步（关闭后 Action 直接跳过，0 token）</span></label></div>
+        <div class="field full"><label for="mailCfgPrompt">AI 附加指令（可选）</label><textarea class="control" id="mailCfgPrompt" maxlength="2000" rows="3" placeholder="例如：只关注互联网/国企岗位；忽略培训机构"></textarea><div class="hint">在提示词后<strong>追加</strong>你的个性化要求，内置规则保持不变。不要要求改变输出格式（输出契约无法被覆盖）。</div></div>
+        <div class="field full">
+          <label for="mailCfgPromptOverride">整体替换解析提示词（高级，可选）</label>
+          <textarea class="control" id="mailCfgPromptOverride" maxlength="4000" rows="5" placeholder="留空 = 用内置提示词。例如：你是校招邮件助手，只关注国企与事业单位的招聘邮件，忽略互联网大厂与培训机构；summary 用一句话概括并写明截止时间。"></textarea>
+          <div class="hint">替换内置的「解析偏好」部分（怎么理解邮件、summary 写多长、拒信怎么归类）。<strong>输出契约会被强制附加在最后、无法删除</strong>——它规定只返回 JSON、字段清单、阶段仅限 14 个预设、不得编造；一旦被改掉，Action 会解析不到任何字段，建议队列将永远为空却仍报成功。<strong>清空此框即恢复内置提示词。</strong></div>
+        </div>
+        <div class="field full">
+          <details class="prompt-snapshot" id="mailPromptSnapshotWrap">
+            <summary>查看当前实际生效的完整提示词</summary>
+            <pre class="prompt-snapshot-body" id="mailPromptSnapshot"></pre>
+            <div class="hint" id="mailPromptSnapshotNote"></div>
+          </details>
+        </div>
+        <div class="field full"><label for="mailCfgEncKey">邮件解密密钥（MAIL_ENC_KEY，可选）</label><div class="mail-key-row"><input class="control" id="mailCfgEncKey" type="password" autocomplete="off" spellcheck="false" maxlength="200" placeholder="留空=邮件建议不加密"><button class="btn btn-small" id="mailGenEncKeyBtn" type="button">生成</button></div><div class="hint">若 Action 配了 MAIL_ENC_KEY 加密邮件建议，这里填<strong>完全相同</strong>的密钥才能解密查看；只存本机 localStorage，不上传 Gist。</div></div>
+      </div>
+      <div class="capture-status" id="mailCfgStatus" role="status" aria-live="polite"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelMailSettingsDialog" type="button">取消</button><button class="btn btn-primary" id="saveMailSettingsBtn" type="button">保存设置</button></div>
+  </dialog>
+
+  <dialog id="installDialog">
+    <div class="modal-head"><h2>安装到手机桌面</h2><button class="close-btn" id="closeInstallDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">请先通过 GitHub Pages 的 HTTPS 地址打开。安装后会像普通 App 一样从桌面启动，投递数据仍只保存在当前手机浏览器中。</p>
+      <ol class="install-guide">
+        <li><span class="install-step">iOS</span><div><strong>iPhone / iPad</strong><span>使用 Safari 打开网页 → 点击底部“分享” → 选择“添加到主屏幕” → 点击“添加”。</span></div></li>
+        <li><span class="install-step">安卓</span><div><strong>Android</strong><span>使用 Chrome 打开网页 → 点击右上角菜单 → 选择“安装应用”或“添加到主屏幕”。</span></div></li>
+        <li><span class="install-step">备份</span><div><strong>换手机前先导出</strong><span>不同手机不会自动同步数据。请先点击“导出投递记录”，再在新手机的“数据安全”中导入。</span></div></li>
+      </ol>
+    </div>
+    <div class="modal-actions"><button class="btn btn-primary" id="doneInstallDialog" type="button">知道了</button></div>
+  </dialog>
+
+  <dialog id="fieldLibraryDialog">
+    <div class="modal-head"><h2 id="fieldLibraryTitle">添加字段</h2><button class="close-btn" id="closeFieldLibraryDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">点击字段即添加到当前区块；已添加的字段会置灰。找不到想要的？用「自定义字段」自由命名。</p>
+      <div class="field-library-grid" id="fieldLibraryGrid"></div>
+      <div class="capture-status" id="fieldLibraryStatus"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="fieldLibraryCustomBtn" type="button">自定义字段</button>
+      <button class="btn btn-primary" id="doneFieldLibraryDialog" type="button">完成</button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="./ocr/tesseract.min.js"></script>
+  <script src="./ocr/chi_sim-data.js"></script>
+  <!-- 跨端单一事实源（v4.9.0）：阶段预设 / 企业性质 / 公司归一化 / 默认简历骨架。
+       同一份代码还被浏览器插件（extension/shared/ 的生成拷贝）与 mail-sync Action（require）消费。
+       **必须在主内联脚本之前加载**：内联脚本里这几个常量已改成转发别名（const X = AJA.X），
+       少加载一个就会让对应常量变 undefined——而且不抛错，只表现为阶段下拉空了、判重静默失效。
+       test/web-check.js 有别名守卫，断言这几行只能是转发、不得再是字面量副本。 -->
+  <script src="./shared/stages.js"></script>
+  <script src="./shared/company-types.js"></script>
+  <script src="./shared/company-key.js"></script>
+  <script src="./shared/default-resume.js"></script>
+  <script>
+    (() => {
+      'use strict';
+/*__APP__*/
+    })();
+  </script>
+</body>
+</html>

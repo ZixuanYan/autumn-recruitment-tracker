@@ -14,6 +14,9 @@ const assert = require('assert');
 
 const HTML_PATH = path.resolve(__dirname, '../index.html');
 const html = fs.readFileSync(HTML_PATH, 'utf8');
+// 阶段 3 起 index.html 是构建产物（源在 src/）。本文件既有"检查产物文本"的断言，
+// 也有"抠函数体丢进沙箱跑"的断言：前者继续读产物，后者改读 src/，见 loadSrc 用法。
+const loadSrc = require('./lib/load-src');
 
 // v4.9.0：跨端常量与归一化实现移入仓库根 shared/，index.html 里只剩**转发别名**
 // （块外 `const STAGE_PRESETS = AJA.STAGE_PRESETS;`、CORE 块内 `const companyGroupKey = AJA.companyGroupKey;`）。
@@ -376,12 +379,18 @@ function extractConst(src, name) {
   return new Function('AJA', `${line.trim()}\nreturn ${name};`)(AJA_SHARED);
 }
 
+// CORE_START 仍然要留着：下面的 insightSection 用它当**结束边界**（洞察段 = INSIGHT_START
+// 一直到 CORE 块之前）。CORE_END 随 coreBlock 改造成了死代码，删掉。
 const CORE_START = '/*__CORE_PURE_START__*/';
-const CORE_END = '/*__CORE_PURE_END__*/';
 const INSIGHT_START = '      // ===== 洞察面板（v4.4.0）：漏斗 / 节奏 / 停留 / 指标 / 卡点，全部由 records+timeline 派生 =====';
 const V44_START = '      // ================= 台账视图增强（v4.4.0）：UI 偏好 / 看板 / 详情抽屉 / ⌘K 命令面板 =================';
-const coreBlock = extractBlock(html, CORE_START, CORE_END);
-const mailPureBlock = extractBlock(html, '/*__MAIL_PURE_START__*/', '/*__MAIL_PURE_END__*/');
+// 阶段 3：这两块已拆成 src/core/（6 个文件）与 src/mail/pure.js，按 bundle.js 清单加载，
+// 不再靠标记文本从 6892 行产物里抠（标记名拼错或那行注释被改，就会静默抠出空串，
+// 然后沙箱里几十个符号全成 undefined，报错信息离真实原因非常远）。
+// 加载结果含首尾的标记行，它们都是注释，沙箱执行无害。
+// insightSection / v44Section / v45Section 三段仍在 app/ 的 DOM 层里，本轮没拆，继续用 extractBlock。
+const coreBlock = loadSrc.coreSrc;
+const mailPureBlock = loadSrc.mailSrc;
 const insightSection = extractBlock(html, INSIGHT_START, CORE_START);
 const v44Section = extractBlock(html, V44_START, START);
 const getVisibleRecordsSrc = extractFunction(html, 'getVisibleRecords');

@@ -69,8 +69,8 @@
 ## 仓库目录
 
 ```text
-—— 会被 build.js 拷进 dist/ 并上线的 ——
-index.html                 在线网页入口
+—— 会上线的（build.js 生成或拷进 dist/）——
+index.html                 在线网页入口 —— ⚠️ **构建产物**，由 src/ 拼接生成，不要直接改
 download.html              下载中心（在线使用 / 插件压缩包）
 manifest.webmanifest       手机安装配置（PWA）
 service-worker.js          离线缓存
@@ -82,17 +82,50 @@ docs/                      安装、快速上手、数据保存与迁移教程
 downloads/                 插件压缩包（extension/ 的打包产物，由 scripts/pack-extension.js 生成）
 
 —— 只在仓库里、不上线的 ——
+src/                       **网页版的源**：template.html 骨架 · styles/ 两层 CSS（基础层 + Apple 覆盖层）
+                           · core/ 六个纯函数模块 · mail/pure.js · app/ 三段 DOM 层
+                           · bundle.js 拼接清单（build.js 与测试共用这一份顺序）
 extension/                 配套浏览器扩展「秋招求职与简历助手」源码（采集端；靠 downloads/ 的 zip 分发）
 services/mail-sync/        邮件提醒的 GitHub Action（**权威源**；实际定时运行的是你自己的独立私有仓库，
                            部署与配置步骤见 docs/安装与使用教程.md 第六节「邮件提醒」）
-test/                      392 项测试（9 个文件，npm test 一次跑完，零 npm 依赖）
-build.js                   构建 dist/：白名单拷贝 + 站内引用自检（漏一个就是线上 404）
+test/                      九套测试（npm test 一次跑完，零 npm 依赖；项数不写在这里，它会涨）
+                           lib/load-src.js 按 src/bundle.js 的清单加载已拆分模块，供各套测试共用
+build.js                   拼接 src/ 生成 index.html，再按白名单拷进 dist/。三道守卫：白名单路径缺失、
+                           站内引用在产物里找不到（上线就是 404）、src/ 泄漏进 dist
 scripts/                   pack-extension.js（同步 shared 生成拷贝 + 重打 zip）
-                           sync-template.js（同步到公开 template 仓库）
-.github/workflows/         test.yml（每次 push 跑 392 项）、pages.yml（测试通过才部署）
+                           sync-template.js / sync-private.js（同步到两个独立仓库，共用 lib/sync-core.js）
+                           gen-icons.py（纯 Python 超采样光栅化，依 app-icon.svg 生成两个 PNG）
+.github/workflows/         test.yml（每次 push 跑构建 + 测试）、pages.yml（测试通过才部署）
 CHANGELOG.md               更新记录（网页版与插件共用一份，按标题区分）
 使用说明.txt               纯文本版简要说明
 ```
+
+## 改网页版代码的正确姿势
+
+`index.html` 是**构建产物**。直接改它，下次构建就被覆盖；只改 `src/` 而忘记构建，CI 会红
+（`npm test` 的前两步是 `node build.js && diff -q dist/index.html index.html`）。
+
+```bash
+# 改完 src/ 下的任何文件之后
+npm run build:write     # 生成 dist/，并把 index.html 写回仓库根
+npm test                # 会再构建一次并断言产物与入库的那份一致
+git add src index.html  # 两者必须在同一次提交里，否则 CI 判定为漂移
+```
+
+各部分在哪：
+
+| 要改什么 | 去哪 |
+| --- | --- |
+| 配色 / 圆角 / 阴影 / 排版 | `src/styles/apple.css`（Apple 覆盖层，级联在后，改这里就够） |
+| 重置样式、表格骨架、响应式断点 | `src/styles/base.css`（基础层） |
+| 截止日 / ICS 导出 / 公司分组 / 洞察统计 / 查重 / 城市统计 | `src/core/` 六个文件（纯函数，零 DOM 依赖，可单测） |
+| 邮件匹配的纯逻辑（模糊匹配 / 过滤 / 状态合并） | `src/mail/pure.js`（完全自洽） |
+| 其余（存储、云同步、渲染、事件绑定、启动） | `src/app/` 三段，数字前缀即拼接顺序 |
+| HTML 骨架 / head / meta | `src/template.html`（两个顶格标记是 CSS 与 JS 的插入点） |
+
+新增文件必须登记进 `src/bundle.js` 的清单，否则它永远不会进产物——`web-check.js` 的
+孤儿守卫会红并点名是哪个文件。模块插入标记（形如 `__MODULE:xxx__`，外面包一对块注释符）
+必须**顶格**：带缩进的话那几个空格会残留进产物。
 
 ## 来源说明
 

@@ -36,12 +36,17 @@ jobs:
 
       # 与 test.yml 重复跑一遍是**刻意的**：跨 workflow 无法用 needs 串联，
       # 而部署闸门必须自己确认测试通过——依赖"另一个 workflow 刚才绿了"是假设，不是保证。
-      # 测试零依赖（不需要 npm install），382 项十几秒跑完，重复成本可忽略。
-      - name: 测试（382 项，不过就不部署）
+      # 测试零依赖（不需要 npm install），十几秒跑完，重复成本可忽略。
+      # 阶段 3 起 npm test 的前两步是 `node build.js && diff -q dist/index.html index.html`：
+      # 先拼接产物，再断言它与入库的那份一致——这一步抓的正是"改了 src/ 忘记 build:write"
+      # 与"手改了 index.html 而没改 src/"两种漂移（项数刻意不写死在这里，已经漂移过两次）。
+      - name: 测试（含构建与产物一致性校验，不过就不部署）
         run: npm test
 
-      # build.js 自带两道守卫：白名单里的路径缺失即失败；拷完自检入口文件的全部站内引用
-      # 是否都在 dist 里（漏一个就是线上 404，而 SW 的 cache.addAll 是全有或全无）。
+      # npm test 里已经 build 过一次，这里再跑是**刻意的**：部署用的 dist/ 必须由一个显式
+      # 步骤生成，而不是"顺带被测试生成的"——后者一旦测试脚本调整就会静默失去产物。
+      # build.js 自带三道守卫：白名单路径缺失即失败；拷完自检全部站内引用是否都在 dist 里
+      # （漏一个就是线上 404，而 SW 的 cache.addAll 是全有或全无）；src/ 不得泄漏进 dist。
       - name: 构建 dist
         run: node build.js
 

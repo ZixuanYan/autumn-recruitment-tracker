@@ -1,0 +1,1912 @@
+
+      // syncNow 读到邮件文件后调用：存原始建议 + meta，再按本机 mailState 过滤（缺失/损坏已在调用方静默处理）
+      function applyMailPayload(fileJson) {
+        const data = fileJson && typeof fileJson === 'object' ? fileJson : null;
+        mailMeta = data && data.meta && typeof data.meta === 'object' ? data.meta : null;
+        mailRawSuggestions = data && Array.isArray(data.suggestions) ? data.suggestions : [];
+        mailState.lastReadAt = new Date().toISOString();
+        saveMailState();
+        refilterMail();
+      }
+
+      // 用当前 mailState 重新过滤原始建议并刷新视图（mailState 跨设备合并后需重跑）
+      function refilterMail() {
+        mailSuggestions = filterMailSuggestions(mailRawSuggestions, mailState.appliedIds, mailState.dismissedIds);
+        renderMailView();
+        updateMailBadge();
+      }
+
+      function updateMailBadge() {
+        const badge = $('#mailNavBadge');
+        if (!badge) return;
+        const n = mailSuggestions.length;
+        if (n > 0) { badge.textContent = n > 99 ? '99+' : String(n); badge.hidden = false; }
+        else { badge.textContent = ''; badge.hidden = true; }
+      }
+
+      function mailCardHtml(s) {
+        const conf = Number(s.confidence) || 0;
+        const lowConf = conf < 0.6;
+        const checked = conf >= 0.6; // 高置信默认勾选，低置信需手动勾选
+        const matches = matchRecordsByCompany(s.company, s.position, records);
+        // 同公司多岗位：按最近更新倒序，让 select 默认预选「最近活跃」的那条（下拉首项即选中项）
+        const orderedMatches = matches.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
+        const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
+
+        let matchHtml;
+        if (matches.length === 1) {
+          const r = matches[0];
+          matchHtml = `<div class="mail-match single" data-target-id="${escapeHtml(r.id)}">匹配到台账：<strong>${escapeHtml(r.company)}</strong> · ${escapeHtml(r.position)}（当前阶段：${escapeHtml(r.stage)}）</div>`;
+        } else if (matches.length > 1) {
+          matchHtml = `<div class="mail-match multi"><label>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），请选择目标：<select class="control mail-target-select">${orderedMatches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}${r.batch ? `（${escapeHtml(r.batch)}）` : ''} · ${escapeHtml(r.stage)}</option>`).join('')}</select></label></div>`;
+        } else {
+          matchHtml = '<div class="mail-match none">未匹配到台账记录——可「新建记录」并预填邮件信息（走人工补全），或忽略。</div>';
+        }
+
+        const fields = [];
+        // note 走 mileNoteText 兜底：历史数据里的「邮件·其它」改用同一条建议的 summary 展示
+        if (mile.stage) {
+          const noteText = mileNoteText(mile.note, s.summary);
+          fields.push({ key: 'milestone', label: `推进里程碑：${mile.stage}${mile.at ? `（${mile.at}）` : ''}${noteText ? ` · ${noteText}` : ''}` });
+        }
+        if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: `安排时间：${formatDateTime(p.scheduleAt)}` });
+        if (p.recentSchedule) fields.push({ key: 'recentSchedule', label: `最近安排：${p.recentSchedule}` });
+        if (p.nextAction) fields.push({ key: 'nextAction', label: `下一步行动：${p.nextAction}` });
+        const fieldsHtml = fields.length
+          ? `<div class="mail-fields">${fields.map(f => `<label class="mail-field"><input type="checkbox" data-mail-field="${f.key}" ${checked ? 'checked' : ''}><span>${escapeHtml(f.label)}</span></label>`).join('')}</div>`
+          : '<div class="mail-fields mail-fields-empty">这封邮件没有可直接应用的字段。</div>';
+
+        const primaryBtn = matches.length === 0
+          ? `<button class="btn btn-small btn-primary" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`
+          : `<button class="btn btn-small btn-primary" data-mail-action="apply" data-mail-id="${escapeHtml(s.id)}" type="button">应用所选</button>`;
+
+        return `<article class="mail-card${lowConf ? ' low-conf' : ''}" data-mail-id="${escapeHtml(s.id)}">
+          <div class="mail-card-top">
+            <span class="mail-type" data-type="${escapeHtml(s.emailType || '其它')}">${escapeHtml(s.emailType || '其它')}</span>
+            <span class="mail-company">${escapeHtml(s.company || '（未识别公司）')}</span>
+            ${s.position ? `<span class="mail-position">${escapeHtml(s.position)}</span>` : ''}
+            ${s.stage ? `<span class="badge" data-stage="${escapeHtml(s.stage)}">${escapeHtml(s.stage)}</span>` : ''}
+            <span class="mail-conf${lowConf ? ' low' : ''}" title="${lowConf ? '低置信，请仔细核对后再应用' : 'AI 判定置信度'}">置信度 ${Math.round(conf * 100)}%</span>
+          </div>
+          ${s.subject ? `<div class="mail-subject">${escapeHtml(s.subject)}</div>` : ''}
+          ${s.summary ? `<div class="mail-summary">${escapeHtml(s.summary)}</div>` : ''}
+          <div class="mail-meta">${escapeHtml(s.from || '')}${s.receivedAt ? ` · ${escapeHtml(formatClock(s.receivedAt) || '')}` : ''}</div>
+          ${matchHtml}
+          ${fieldsHtml}
+          <div class="mail-actions">${primaryBtn}<button class="btn btn-small" data-mail-action="dismiss" data-mail-id="${escapeHtml(s.id)}" type="button">忽略</button></div>
+        </article>`;
+      }
+
+      // 丢弃明细 HTML（状态栏 ok 分支用）。from / subject 一律走 escapeHtml：
+      // 邮件主题可以含任意 HTML，直接拼接等于给外部发件人一个注入本页面的入口。
+      // 复用 error 分支已有的 .mail-help 折叠样式，不新增交互范式。
+      function mailDroppedHtml(stats) {
+        if (!stats) return '';
+        const pairs = [
+          ['noise-from', stats.noiseFrom],
+          ['noise-subject', stats.noiseSubject],
+          ['no-keyword', stats.noKeyword],
+          ['ai-not-recruit', stats.aiNotRecruit],
+          ['low-conf', stats.lowConf],
+          ['ai-error', stats.aiError]
+        ].filter(pair => Number(pair[1]) > 0);
+        const countsHtml = pairs.length
+          ? `<div class="drop-counts">${pairs.map(pair => `<span>${escapeHtml(describeDropReason(pair[0]))} <b>${Number(pair[1])}</b></span>`).join('')}</div>`
+          : '';
+        const listHtml = stats.recent.length
+          ? `<ul class="drop-list">${stats.recent.map(item => `<li>
+              <div class="drop-mail"><b>${escapeHtml(String(item.from || '（无发件人）'))}</b>${escapeHtml(String(item.subject || '（无主题）'))}</div>
+              <div class="drop-meta">#${escapeHtml(String(item.uid || '0'))} · ${escapeHtml(describeDropReason(item.reason))}</div>
+            </li>`).join('')}</ul>`
+          : '';
+        return `<details class="mail-help"><summary>本次丢弃 ${stats.total} 封，怀疑漏了可以展开看</summary>${countsHtml}${listHtml}<div class="drop-note">丢弃只发生在自动预筛与 AI 判定阶段，被丢的邮件不会进建议队列，也不影响你已投递的记录。若发现某封招聘邮件被误丢：在 autumn-mail-sync 仓库手动运行 mail-sync、填 <code>UID_FROM</code>（回溯起点，见下方邮件编号）重新扫描即可捞回——常规增量运行不会回头看已被水位越过的邮件。</div></details>`;
+      }
+
+      function renderMailView() {
+        const list = $('#mailList');
+        const bar = $('#mailStatusBar');
+        if (!list || !bar) return;
+
+        if (!syncConfig.token) {
+          bar.className = 'mail-statusbar warning';
+          bar.innerHTML = '<strong>需先开启云同步</strong>邮件建议随云同步从你的私有 Gist 读取。请到「工具 → 云同步」开启后再回到这里。';
+          list.innerHTML = '';
+          return;
+        }
+        if (mailNeedKey) {
+          bar.className = 'mail-statusbar warning';
+          bar.innerHTML = '<strong>邮件建议已加密</strong>本机未填写「邮件解密密钥」或密钥不正确，无法读取。点右上「设置」填入与 Action 的 MAIL_ENC_KEY 完全相同的密钥，保存后会自动重新读取。';
+          list.innerHTML = '';
+          return;
+        }
+        if (mailMeta && mailMeta.lastStatus === 'error') {
+          bar.className = 'mail-statusbar error';
+          bar.innerHTML = `<strong>上次邮件同步失败</strong>${escapeHtml(mailMeta.lastError || '未知错误')}<details class="mail-help"><summary>怎么修复？</summary><ol><li>最常见：改过 QQ 密码后 <strong>16 位授权码失效</strong> → 到 QQ 邮箱重新生成，更新私有仓库 autumn-mail-sync 的 QQ_AUTHCODE Secret。</li><li>AI 超额/密钥无效 → 检查 AI_API_KEY / AI_BASE_URL / AI_MODEL。</li><li>被 QQ 风控（Unsafe Login）→ 需把定时任务迁到国内宿主。</li><li>修复后在仓库手动重跑 mail-sync，再回本页点「重新读取」。</li></ol></details>`;
+        } else if (mailMeta) {
+          bar.className = 'mail-statusbar ok';
+          // 丢弃统计（v4.6.1）：老 Gist 文件没有 lastDropped、或本次一封没丢时 normalizeDropStats 返回 null，
+          // 这一段就不出现，状态栏与 v4.6.0 完全一致。
+          const drops = normalizeDropStats(mailMeta.lastDropped);
+          bar.innerHTML = `<strong>已读取邮件建议</strong>上次运行 ${escapeHtml(formatClock(mailMeta.lastRunAt) || '—')} · 本次新增 ${Number(mailMeta.newCount) || 0} 封 · 云端候选 ${Number(mailMeta.pendingCount) || 0} 条 · 待你复核 ${mailSuggestions.length} 条${drops ? ` · 丢弃 ${drops.total} 封` : ''}${mailDroppedHtml(drops)}`;
+        } else {
+          bar.className = 'mail-statusbar';
+          bar.innerHTML = '<strong>暂无邮件建议</strong>定时任务可能还没运行，或你的 Gist 里还没有 mail-suggestions.json。确认 autumn-mail-sync 的 mail-sync 已跑通后，点「重新读取」。';
+        }
+
+        if (!mailSuggestions.length) {
+          list.innerHTML = '<div class="mail-empty">没有待复核的邮件建议。已应用 / 已忽略的不会再出现在本机。</div>';
+          return;
+        }
+        list.innerHTML = mailSuggestions.map(mailCardHtml).join('');
+      }
+
+      function markMailApplied(id) {
+        const sid = String(id);
+        if (!mailState.appliedIds.includes(sid)) mailState.appliedIds.push(sid);
+        mailSuggestions = mailSuggestions.filter(s => String(s.id) !== sid);
+        saveMailState();
+        scheduleSyncPush(); // 跨设备：把已应用状态推上云，其它设备同步后不再重复显示
+      }
+      function markMailDismissed(id) {
+        const sid = String(id);
+        if (!mailState.dismissedIds.includes(sid)) mailState.dismissedIds.push(sid);
+        mailSuggestions = mailSuggestions.filter(s => String(s.id) !== sid);
+        saveMailState();
+        scheduleSyncPush(); // 跨设备：把已忽略状态推上云
+      }
+
+      // 应用所选字段到匹配记录：里程碑走 setTimeline，其余字段直接赋值 → saveRecords（触发快照+云同步）
+      function applyMailSuggestion(id) {
+        const s = mailSuggestions.find(x => String(x.id) === String(id));
+        if (!s) return;
+        const card = document.querySelector(`.mail-card[data-mail-id="${CSS.escape(String(id))}"]`);
+        if (!card) return;
+        let targetId = '';
+        const sel = card.querySelector('.mail-target-select');
+        if (sel) targetId = sel.value;
+        else { const single = card.querySelector('.mail-match.single'); if (single) targetId = single.dataset.targetId || ''; }
+        const rec = records.find(r => r.id === targetId);
+        if (!rec) { showToast('未找到目标记录，请重新选择或改用「新建记录」'); return; }
+
+        const checked = new Set([...card.querySelectorAll('input[data-mail-field]:checked')].map(i => i.dataset.mailField));
+        if (!checked.size) { showToast('请至少勾选一个要应用的字段'); return; }
+
+        const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
+        const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
+        let milestoneApplied = false;
+        if (checked.has('milestone') && mile.stage) {
+          setTimeline(rec, [...(rec.timeline || []), { stage: mile.stage, at: mile.at || localDateInput(new Date()), note: mile.note || '邮件' }]);
+          milestoneApplied = true;
+        }
+        if (checked.has('scheduleAt') && p.scheduleAt) rec.scheduleAt = p.scheduleAt;
+        if (checked.has('recentSchedule') && p.recentSchedule) rec.recentSchedule = p.recentSchedule;
+        if (checked.has('nextAction') && p.nextAction) rec.nextAction = p.nextAction;
+        rec.updatedAt = Date.now();
+
+        saveRecords(`已按邮件更新：${rec.company}`);
+        markMailApplied(id);
+        render();
+        flashRow(rec.id);
+        renderMailView();
+        updateMailBadge();
+        if (milestoneApplied && (mile.stage === 'Offer' || rec.stage === 'Offer')) playOfferStamp();
+      }
+
+      function dismissMailSuggestion(id) {
+        markMailDismissed(id);
+        renderMailView();
+        updateMailBadge();
+        showToast('已忽略这封邮件建议（仅本机不再显示）');
+      }
+
+      // 0 命中：预填邮件信息走现有「新增投递」弹窗人工补全；保存成功后（submitForm）才标记该建议为已应用
+      function openMailSeedDialog(id) {
+        const s = mailSuggestions.find(x => String(x.id) === String(id));
+        if (!s) return;
+        const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
+        const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
+        const today = localDateInput(new Date());
+        const seed = normalizeRecord({
+          company: s.company || '',
+          position: s.position || '',
+          city: '',
+          applicationDate: mile.at || today,
+          scheduleAt: p.scheduleAt || '',
+          recentSchedule: p.recentSchedule || '',
+          nextAction: p.nextAction || '',
+          stage: mile.stage || '已投递',
+          timeline: mile.stage ? [{ stage: mile.stage, at: mile.at || today, note: mile.note || '邮件' }] : undefined
+        });
+        pendingMailSeedId = String(id);
+        openDialog(null, seed);
+        showToast('已预填邮件信息，请补全城市/岗位等后保存');
+      }
+
+      // ---- 邮件设置面板：读写 Gist 的 mail-config.json（非密钥项）+ 本机解密密钥（C）----
+      function currentMailConfig() {
+        const c = mailConfig && typeof mailConfig === 'object' ? mailConfig : {};
+        const num = (v, fb) => (String(v == null ? '' : v).trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : fb);
+        return {
+          keywords: (typeof c.keywords === 'string' && c.keywords.trim()) ? c.keywords : MAIL_CFG_DEFAULTS.keywords,
+          minConfidence: num(c.minConfidence, MAIL_CFG_DEFAULTS.minConfidence),
+          sinceDays: num(c.sinceDays, MAIL_CFG_DEFAULTS.sinceDays),
+          maxPerRun: num(c.maxPerRun, MAIL_CFG_DEFAULTS.maxPerRun),
+          minIntervalHours: num(c.minIntervalHours, MAIL_CFG_DEFAULTS.minIntervalHours),
+          enabled: c.enabled === false ? false : true,
+          promptExtra: typeof c.promptExtra === 'string' ? c.promptExtra : MAIL_CFG_DEFAULTS.promptExtra,
+          // 整体替换提示词（v4.7.0）：只接受字符串，其它类型（Gist 被手改成数字/null）一律回落空串=用内置
+          promptOverride: typeof c.promptOverride === 'string' ? c.promptOverride.slice(0, 4000) : MAIL_CFG_DEFAULTS.promptOverride
+        };
+      }
+
+      // 展示 Action 上次运行时写入云端的、**真正生效**的完整提示词（meta.promptSnapshot）。
+      // 为什么不在前端硬编码一份提示词文本：那样 Action 侧改了提示词后，这里展示的就是过期的副本，
+      // 而这种漂移无法被任何测试发现（前端副本与 Action 源码之间没有约束关系）。
+      // 让 Action 把它实际发出去的那一份写进 meta，展示就永远等于生效值——
+      // test/integration.js 有一条断言钉死这个等价关系（快照必须与 AI 请求体里的 system prompt 逐字相同）。
+      function renderPromptSnapshot() {
+        const wrap = $('#mailPromptSnapshotWrap'), body = $('#mailPromptSnapshot'), note = $('#mailPromptSnapshotNote');
+        if (!wrap || !body) return;
+        const snap = String((mailMeta && mailMeta.promptSnapshot) || '').trim();
+        if (!snap) {
+          // 旧版 Action（<0.4.0）写的 meta 里没有这个字段：整块隐藏，不给用户看一个空框
+          wrap.hidden = true;
+          body.textContent = '';
+          if (note) note.textContent = '';
+          return;
+        }
+        wrap.hidden = false;
+        // 必须用 textContent：提示词里含 < > 「」 等字符，用 innerHTML 会把它们当标签解析
+        body.textContent = snap;
+        if (note) {
+          const at = mailMeta && mailMeta.lastRunAt ? (formatClock(mailMeta.lastRunAt) || '') : '';
+          note.textContent = `这是 Action 上次运行${at ? `（${at}）` : ''}实际发给 AI 的完整内容，由 Action 自己写入云端，因此与真正生效的版本永远一致。末尾「输出契约 · 不可覆盖」那一段无法被上面的替换框删掉。修改后需等 Action 下次运行，这里才会更新。`;
+        }
+      }
+
+      function openMailSettings() {
+        if (!syncConfig.token) { openSyncDialog(); showToast('请先开启云同步，再配置邮件提醒'); return; }
+        const c = currentMailConfig();
+        $('#mailCfgKeywords').value = c.keywords;
+        $('#mailCfgMinConf').value = c.minConfidence;
+        $('#mailCfgSinceDays').value = c.sinceDays;
+        $('#mailCfgMaxPerRun').value = c.maxPerRun;
+        $('#mailCfgInterval').value = c.minIntervalHours;
+        $('#mailCfgEnabled').checked = c.enabled;
+        $('#mailCfgPrompt').value = c.promptExtra;
+        $('#mailCfgPromptOverride').value = c.promptOverride;
+        renderPromptSnapshot();
+        $('#mailCfgEncKey').value = mailState.encKey || '';
+        const st = $('#mailCfgStatus');
+        st.className = 'capture-status';
+        st.textContent = mailConfig ? '已加载云端配置（mail-config.json）。' : '尚未保存过配置，当前为默认值。';
+        $('#mailSettingsDialog').showModal();
+      }
+
+      function generateMailEncKey() {
+        const bytes = crypto.getRandomValues(new Uint8Array(24));
+        $('#mailCfgEncKey').value = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+        const st = $('#mailCfgStatus');
+        st.className = 'capture-status';
+        st.textContent = '已生成密钥。保存后请把这串密钥同样填进 autumn-mail-sync 仓库的 MAIL_ENC_KEY Secret（两端必须完全一致才能解密）。';
+      }
+
+      async function saveMailSettings() {
+        if (!syncConfig.token) { showToast('请先开启云同步'); return; }
+        const st = $('#mailCfgStatus');
+        const clampNum = (v, min, max, fb) => { const n = Number(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fb; };
+        const cfgObj = {
+          keywords: String($('#mailCfgKeywords').value || '').trim().slice(0, 2000) || MAIL_CFG_DEFAULTS.keywords,
+          minConfidence: clampNum($('#mailCfgMinConf').value, 0, 1, MAIL_CFG_DEFAULTS.minConfidence),
+          sinceDays: Math.round(clampNum($('#mailCfgSinceDays').value, 1, 365, MAIL_CFG_DEFAULTS.sinceDays)),
+          maxPerRun: Math.round(clampNum($('#mailCfgMaxPerRun').value, 1, 200, MAIL_CFG_DEFAULTS.maxPerRun)),
+          minIntervalHours: Math.round(clampNum($('#mailCfgInterval').value, 0, 168, MAIL_CFG_DEFAULTS.minIntervalHours)),
+          enabled: $('#mailCfgEnabled').checked,
+          promptExtra: String($('#mailCfgPrompt').value || '').trim().slice(0, 2000),
+          // 清空即恢复内置提示词：Action 侧 applyMailConfigOverrides 见到空串会回落到 DEFAULT_PROMPT_BODY
+          promptOverride: String($('#mailCfgPromptOverride').value || '').trim().slice(0, 4000),
+          updatedAt: new Date().toISOString()
+        };
+        // 解密密钥只存本机 localStorage，绝不写进 mail-config.json（它明文存在 Gist）
+        const newEncKey = String($('#mailCfgEncKey').value || '').trim();
+        const encKeyChanged = newEncKey !== (mailState.encKey || '');
+        st.className = 'capture-status';
+        st.textContent = '正在保存到你的私有 Gist…';
+        try {
+          await resolveSyncGist();
+          // 只 PATCH mail-config.json 一个文件，不碰 vault / mail-suggestions（按文件互不覆盖）
+          await gistRequest(`/gists/${syncConfig.gistId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ files: { [MAIL_CONFIG_FILENAME]: { content: JSON.stringify(cfgObj, null, 2) } } })
+          });
+          mailConfig = cfgObj;
+          mailState.encKey = newEncKey;
+          saveMailState();
+          st.className = 'capture-status success';
+          st.textContent = '已保存。Action 下次运行按新配置执行。';
+          showToast('邮件设置已保存');
+          $('#mailSettingsDialog').close();
+          if (encKeyChanged) await syncNow('manual'); // 密钥变化影响能否解密邮件建议：立即重拉一次
+        } catch (error) {
+          st.className = 'capture-status error';
+          st.textContent = `保存失败：${error.message || error}`;
+        }
+      }
+
+      // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
+      const VIEW_META = {
+        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、洞察与未来安排——从银十到金九，每一步都在这里' },
+        records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
+        jobPool: { kicker: 'JOB POOL', title: '岗位库', subtitle: '从每日更新的招聘文档发现岗位，确认后再加入台账' },
+        resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
+        tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
+        mail: { kicker: 'INBOX', title: '邮件提醒', subtitle: '招聘邮件解析结果，逐项复核后并入台账' }
+      };
+      // records 恢复为独立视图（更早版本本就是，v4.4.0 曾并入总览并重定向，v4.8.0 拆回）；
+      // upcoming（未来安排）仍留在总览，旧书签重定向兼容。
+      const ROUTE_ALIASES = { overview: 'overview', records: 'records', jobPool: 'jobPool', jobpool: 'jobPool', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
+
+      // ================= 工具页卡片状态：云同步连接情况与快照数量 =================
+      async function renderToolCards() {
+        const icsBadge = $('#toolIcsBadge');
+        if (icsBadge) {
+          const count = collectScheduleEvents(records, new Date(), 500).length;
+          icsBadge.textContent = count ? `${count} 项可导出` : '暂无日程';
+          icsBadge.className = count ? 'tool-status ok' : 'tool-status';
+        }
+        const syncBadge = $('#toolSyncBadge');
+        if (syncBadge) {
+          if (!syncConfig.token) {
+            syncBadge.textContent = '未开启';
+            syncBadge.className = 'tool-status warning';
+          } else if (syncConfig.gistId) {
+            syncBadge.textContent = syncConfig.lastSyncAt ? `已连接 · 上次同步 ${formatClock(syncConfig.lastSyncAt)}` : '已连接 · 待首次同步';
+            syncBadge.className = 'tool-status ok';
+          } else {
+            syncBadge.textContent = '令牌已填写';
+            syncBadge.className = 'tool-status';
+          }
+        }
+        const safetyBadge = $('#toolSafetyBadge');
+        if (safetyBadge) {
+          const count = cachedSnapshotCount == null ? await refreshSnapshotCount() : cachedSnapshotCount;
+          if (count == null) {
+            safetyBadge.textContent = '当前不可用';
+            safetyBadge.className = 'tool-status warning';
+          } else {
+            safetyBadge.textContent = `${count} 个快照`;
+            safetyBadge.className = count ? 'tool-status ok' : 'tool-status';
+          }
+        }
+      }
+
+      function parseRoute() {
+        // 兼容 #/view 路由形式与旧 #view 锚点形式（井号后斜杠可选）
+        const raw = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
+        return ROUTE_ALIASES[raw] || 'overview';
+      }
+
+      function switchView(name) {
+        const route = VIEW_META[name] ? name : 'overview';
+        document.querySelectorAll('.view[data-view]').forEach(view => {
+          const active = view.dataset.view === route;
+          view.hidden = !active;
+          view.classList.remove('is-entering');
+          if (active) {
+            void view.offsetWidth; // 重置动画
+            view.classList.add('is-entering');
+          }
+        });
+        document.querySelectorAll('.nav-item[data-route]').forEach(item => {
+          item.classList.toggle('is-active', item.dataset.route === route);
+        });
+        const meta = VIEW_META[route];
+        if (meta) {
+          const kicker = $('#viewKicker'), title = $('#viewTitle'), subtitle = $('#viewSubtitle');
+          if (kicker) kicker.textContent = meta.kicker;
+          if (title) title.textContent = meta.title;
+          if (subtitle) subtitle.textContent = meta.subtitle;
+          document.title = `${meta.title} · 秋招投递管理`;
+        }
+        if (location.hash !== `#/${route}`) {
+          history.replaceState(null, '', `#/${route}`);
+        }
+        if (route === 'tools') renderToolCards();
+        if (route === 'mail') renderMailView();
+        // 从别的视图切回投递记录时重渲台账/看板：数据可能在别处变更过（如邮件应用、抽屉推进），
+        // 隐藏视图多渲染一次无副作用，换取各视图始终一致。
+        if (route === 'records') renderRecordsView();
+        window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+      }
+
+      function initializeRouter() {
+        // 旧锚点（#records 等，含插件桥接 location.hash 赋值场景）重定向到路由形式
+        const legacy = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
+        if (legacy && !location.hash.startsWith('#/') && ROUTE_ALIASES[legacy]) {
+          history.replaceState(null, '', `#/${ROUTE_ALIASES[legacy]}`);
+        }
+        window.addEventListener('hashchange', () => switchView(parseRoute()));
+        switchView(parseRoute());
+      }
+
+      function populateSelects() {
+        // 阶段组合框预设候选（时间线编辑器与推进自定义共用）
+        $('#stagePresets').innerHTML = STAGE_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+        // 批次 / 渠道候选（v4.4.0）：datalist 允许自由输入，取不到元素时静默跳过
+        const batchList = $('#batchPresets');
+        if (batchList) batchList.innerHTML = BATCH_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+        const channelList = $('#channelPresets');
+        if (channelList) channelList.innerHTML = CHANNEL_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+        // 企业性质（v4.6.0）：选项由 COMPANY_TYPES 生成，HTML 里只留「未设置」，避免两处枚举漂移
+        const companyTypeSelect = $('#companyType');
+        if (companyTypeSelect) {
+          companyTypeSelect.innerHTML = `<option value="">${escapeHtml(COMPANY_TYPE_UNSET)}</option>`
+            + COMPANY_TYPES.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+        }
+        refreshStageFilter();
+      }
+      // 筛选下拉 = 预设 ∪ 记录中实际出现的自定义阶段（保留当前选择）
+      function refreshStageFilter() {
+        const current = els.filter.value;
+        const opts = [...STAGE_PRESETS];
+        records.forEach(r => { if (r.stage && !opts.includes(r.stage)) opts.push(r.stage); });
+        els.filter.innerHTML = '<option value="all">全部阶段</option>' + opts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+        if ([...els.filter.options].some(o => o.value === current)) els.filter.value = current;
+      }
+
+      // ================= 阶段时间线编辑器（记录弹窗内）=================
+      function timelineRowHtml(m) {
+        return `<div class="tl-row">
+          <input class="control tl-stage" list="stagePresets" maxlength="20" placeholder="阶段" value="${escapeHtml(m && m.stage || '')}">
+          <input class="control tl-date" type="date" value="${escapeHtml(m && m.at || '')}" aria-label="阶段日期">
+          <input class="control tl-note" maxlength="60" placeholder="备注（可选）" value="${escapeHtml(m && m.note || '')}">
+          <button class="tl-del" type="button" title="删除该阶段" aria-label="删除该阶段">✕</button>
+        </div>`;
+      }
+      function renderTimelineEditor(source) {
+        const appDate = $('#applicationDate').value || localDateInput(new Date());
+        // 新增（无 source）时默认「已投递」而不是「待投递」：点「新增投递」的场景几乎总是
+        // 「我刚投了 / 我要记一条已经投出去的」，默认待投递等于每次都要多改一次；
+        // 更要紧的是 isActive 把「待投递」排除在外，照默认值存下来的记录不会进「在流程中」，
+        // 也不会被停滞提醒和卡点清单抓到——等于这条投递在洞察里隐身。
+        // 「待投递」仍然是合法阶段（在 STAGE_PRESETS 里），想记候选岗位请走岗位库。
+        // 注意：这里只改新增表单的默认值；normalizeRecord / deriveStage 里的 '待投递' 兜底
+        // 是「既无 timeline 又无 stage」的防御与老数据迁移路径，语义不同，保持不动。
+        const tl = Array.isArray(source && source.timeline) && source.timeline.length
+          ? source.timeline
+          : (source && source.stage ? [{ stage: source.stage, at: source.applicationDate || appDate, note: '' }]
+            : [{ stage: '已投递', at: appDate, note: '' }]);
+        $('#timelineEditor').innerHTML = tl.map(timelineRowHtml).join('');
+      }
+      function collectTimeline() {
+        return [...document.querySelectorAll('#timelineEditor .tl-row')].map(row => ({
+          stage: row.querySelector('.tl-stage').value.trim(),
+          at: row.querySelector('.tl-date').value,
+          note: row.querySelector('.tl-note').value.trim()
+        })).filter(m => m.stage);
+      }
+      function addTimelineRow() {
+        const ed = $('#timelineEditor');
+        ed.insertAdjacentHTML('beforeend', timelineRowHtml({ stage: '', at: $('#applicationDate').value || localDateInput(new Date()), note: '' }));
+        const last = ed.querySelector('.tl-row:last-child .tl-stage');
+        if (last) last.focus();
+      }
+
+      function openDialog(record = null, seed = null) {
+        const source = record || seed;
+        editingId = record?.id || null;
+        els.dialogTitle.textContent = record ? '编辑投递' : seed ? '确认识别结果' : '新增投递';
+        els.form.reset();
+        $('#applicationDate').value = source ? (source.applicationDate || '') : localDateInput(new Date());
+        renderTimelineEditor(source);
+        // 回填字段清单：新增任何表单字段都必须同步加进这里，否则「编辑」时该字段会被静默清空。
+        // 取不到元素时跳过（null 安全），便于分阶段加字段。
+        for (const field of ['company', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
+          const input = document.getElementById(field);
+          if (!input) continue;
+          // intent 是下拉框：0（未设）要映射成空字符串，否则 select 会落在无匹配项的状态
+          const raw = source ? source[field] : '';
+          input.value = field === 'intent' ? (Number(raw) > 0 ? String(Number(raw)) : '') : (raw ?? '');
+        }
+        // 已填过任一「更多字段」时自动展开折叠区，避免用户以为数据丢了
+        // （意向度与企业性质已上移到主网格，不再参与这里的判定）
+        const more = $('#formMore');
+        if (more) more.open = !!source && ['batch', 'channel', 'referral', 'salary'].some(f => String(source[f] || '').trim());
+        updateSameCompanyHint(); // 打开即显示「该公司已有哪几个岗位」，录入第二个岗位时心里有数
+        els.dialog.showModal();
+        requestAnimationFrame(() => $('#company').focus());
+      }
+
+      // 旧版“一键收录插件”(AUTUMN_JOB_CAPTURE) 才支持“识别投递网址”；新版秋招求职与简历助手不回应 CAPTURE_PING。
+      // 未探测到旧插件时隐藏网址识别入口（记录改用“新增投递 / 截图识别 / 侧边栏一键收录”）。
+      function applyLegacyCaptureUI() {
+        const captureUrlBtn = $('#captureUrlBtn');
+        if (captureUrlBtn) captureUrlBtn.hidden = !hasLegacyCapturePlugin;
+      }
+
+      function openCaptureDialog() {
+        $('#captureForm').reset();
+        const status = $('#captureStatus');
+        status.className = 'capture-status';
+        status.textContent = '正在检查一键收录插件…';
+        bridgeReady = false;
+        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_PING', url: location.href.split('?')[0].split('#')[0] }, '*');
+        clearTimeout(bridgeCheckTimer);
+        bridgeCheckTimer = setTimeout(() => {
+          if (!bridgeReady) {
+            status.className = 'capture-status error';
+            status.textContent = '未连接到一键收录插件。请先安装或更新插件，并开启“允许访问文件网址”。';
+          }
+        }, 900);
+        $('#captureDialog').showModal();
+        requestAnimationFrame(() => $('#captureUrlInput').focus());
+      }
+
+      function openJobSyncDialog() {
+        const status = $('#jobSyncStatus');
+        const steps = document.querySelector('#jobSyncDialog .sync-steps');
+        const fallback = document.querySelector('#jobSyncDialog .sync-fallback');
+        $('#jobPasteInput').value = '';
+        clearTimeout(bridgeCheckTimer);
+
+        // 无旧版同步插件：降级为“粘贴导入”模式（隐藏插件步骤、展开粘贴区、禁用一键同步）
+        if (!hasLegacyCapturePlugin) {
+          bridgeReady = false;
+          if (steps) steps.hidden = true;
+          if (fallback) fallback.open = true;
+          $('#startJobSyncBtn').disabled = true;
+          status.className = 'capture-status';
+          status.textContent = '未检测到同步插件，可直接在下方粘贴腾讯文档的表格内容导入。';
+          $('#jobSyncDialog').showModal();
+          return;
+        }
+
+        // 有旧版插件：维持原有一键同步流程
+        if (steps) steps.hidden = false;
+        if (fallback) fallback.open = false;
+        status.className = 'capture-status';
+        status.textContent = '正在检查一键收录插件…';
+        $('#startJobSyncBtn').disabled = false;
+        bridgeReady = false;
+        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_PING', url: location.href.split('?')[0].split('#')[0] }, '*');
+        bridgeCheckTimer = setTimeout(() => {
+          if (!bridgeReady) {
+            status.className = 'capture-status error';
+            status.textContent = '未连接到新版一键收录插件。请更新插件并刷新本页面，也可以展开下方入口粘贴表格内容。';
+          }
+        }, 1000);
+        $('#jobSyncDialog').showModal();
+      }
+
+      function closeJobSyncDialog() {
+        clearTimeout(bridgeCheckTimer);
+        clearTimeout(jobSyncTimer);
+        if ($('#jobSyncDialog').open) $('#jobSyncDialog').close();
+      }
+
+      function requestJobSync() {
+        const status = $('#jobSyncStatus');
+        if (!bridgeReady) {
+          status.className = 'capture-status error';
+          status.textContent = '插件尚未连接。请先更新插件并允许访问文件网址，或使用粘贴导入。';
+          return;
+        }
+        $('#startJobSyncBtn').disabled = true;
+        status.className = 'capture-status';
+        status.textContent = '正在读取腾讯招聘文档，岗位较多时可能需要半分钟…';
+        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'SYNC_QQ_JOBS', url: QQ_JOB_DOC_URL }, '*');
+        clearTimeout(jobSyncTimer);
+        jobSyncTimer = setTimeout(() => {
+          $('#startJobSyncBtn').disabled = false;
+          status.className = 'capture-status error';
+          status.textContent = '同步等待超时。请确认腾讯文档可以正常打开、已登录，然后重试。';
+        }, 60000);
+      }
+
+      function importPastedJobs() {
+        const parsed = parseJobRows($('#jobPasteInput').value);
+        const status = $('#jobSyncStatus');
+        if (!parsed.length) {
+          status.className = 'capture-status error';
+          status.textContent = '没有识别到完整岗位。请尽量复制包含公司、岗位、城市和链接的多行表格。';
+          return;
+        }
+        saveJobs(parsed, `已导入 ${parsed.length} 条岗位`);
+        closeJobSyncDialog();
+        location.hash = '#/jobPool';
+      }
+
+      function closeCaptureDialog() {
+        clearTimeout(bridgeCheckTimer);
+        clearTimeout(captureTimer);
+        $('#captureDialog').close();
+      }
+
+      function requestUrlCapture(event) {
+        event.preventDefault();
+        const url = $('#captureUrlInput').value.trim();
+        const status = $('#captureStatus');
+        if (!/^https?:\/\//i.test(url)) {
+          status.className = 'capture-status error';
+          status.textContent = '请输入以 http:// 或 https:// 开头的完整网址。';
+          return;
+        }
+        if (!bridgeReady) {
+          status.className = 'capture-status error';
+          status.textContent = '插件尚未连接，请检查插件是否安装并允许访问文件网址。';
+          return;
+        }
+        $('#startCaptureBtn').disabled = true;
+        status.className = 'capture-status';
+        status.textContent = '正在打开详情页并识别，通常需要几秒钟…';
+        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_JOB_URL', url }, '*');
+        clearTimeout(captureTimer);
+        captureTimer = setTimeout(() => {
+          $('#startCaptureBtn').disabled = false;
+          status.className = 'capture-status error';
+          status.textContent = '识别等待超时。请确认网址可以正常打开后重试。';
+        }, 25000);
+      }
+
+      // 桥接消息源：原配“一键收录插件”与本插件（秋招求职与简历助手）共存，两者都认
+      const BRIDGE_SOURCES = ['AUTUMN_JOB_CAPTURE', 'AUTUMN_JOB_ASSISTANT'];
+      async function handleCaptureMessage(event) {
+        if (event.source !== window || !BRIDGE_SOURCES.includes(event.data?.source)) return;
+        if (event.data.type === 'RESUME_REQUEST') {
+          // 插件打开网页版时主动索要简历：立即下发，弥补定时推送可能因内容脚本注入时机而错过
+          if (!isResumeEmpty(resume)) pushResumeToPlugin();
+          return;
+        }
+        if (event.data.type === 'CAPTURE_SUBMIT') {
+          // 秋招求职与简历助手插件推送的已收录岗位：走人工确认弹窗，保存后自动快照与云同步
+          const submitted = event.data.record || {};
+          const seed = normalizeRecord({
+            company: submitted.company,
+            position: submitted.position,
+            city: submitted.city,
+            applicationDate: submitted.applicationDate || '',
+            stage: String(submitted.stage || '').trim() || '已投递',
+            // 插件收录表单里选的企业性质直接透传；normalizeRecord 会做白名单校验，
+            // 因此旧版插件（不传该字段）或异常值都会安全落回「未设置」
+            companyType: submitted.companyType,
+            applicationUrl: submitted.applicationUrl,
+            recentSchedule: submitted.recentSchedule || '',
+            nextAction: submitted.nextAction || ''
+          });
+          // 统一走 resolveDuplicate。此前这条路径**没有逃生口**：一旦判为重复就强制 openDialog(既有记录)，
+          // 还自动 setTimeline 追加里程碑 + 合并 city/url —— 用户想录同一家公司的第二个岗位时不仅录不进，
+          // 新岗位的信息还会被静默写进旧记录。另外旧版传 ignoreBatch:true，会把「已有提前批 + 新收正式批」
+          // 判成 duplicate，同样触发上述静默改写。
+          // 现在：add → 新增弹窗；edit → 打开既有记录（阶段更靠后时只把里程碑**预置进时间线编辑器**，
+          // 用户看得到、可改可删，保存才落库）；cancel → 什么都不做。
+          const decision = await resolveDuplicate(findDuplicateRecord(records, seed), seed);
+          if (decision.action === 'cancel') return;
+          if (decision.action === 'edit') {
+            const target = decision.target;
+            const merged = { ...target };
+            ['city', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction'].forEach(key => {
+              if (seed[key] && !merged[key]) merged[key] = seed[key];
+            });
+            if (stageOrder(seed.stage) > stageOrder(merged.stage)) {
+              // 不直接 setTimeline 落库：只把新里程碑放进弹窗的时间线编辑器，由用户确认后保存
+              merged.timeline = [...(merged.timeline || []), { stage: seed.stage, at: seed.applicationDate || localDateInput(new Date()), note: '插件推送' }];
+            }
+            openDialog(merged);
+            showToast('已打开既有记录，请核对后保存（未自动改动任何内容）');
+            return;
+          }
+          openDialog(null, seed);
+          showToast(`插件已推送岗位，请检查信息后保存${decision.hint || ''}`);
+          return;
+        }
+        if (event.data.type === 'BRIDGE_BROKEN') {
+          // 插件的 chrome.runtime 上下文失效了：通常是扩展刚被重新加载或更新，而本页仍跑着旧的内容脚本，
+          // 旧脚本的 chrome.runtime 已成失效句柄。插件侧（06-bridge.js）已把这类失败收敛成一次性上报，
+          // 不再往控制台抛 "Extension context invalidated."；这里负责把它变成用户看得懂、点一下就能解决的提示。
+          // 插件自己不会自愈——必须刷新页面重新注入内容脚本，所以直接给一个「刷新页面」动作按钮。
+          showToast(String(event.data.detail || '插件连接已断开，刷新页面即可恢复'), {
+            actionLabel: '刷新页面',
+            duration: 10000,
+            onAction: () => window.location.reload()
+          });
+          return;
+        }
+        if (event.data.type === 'CAPTURE_READY') {
+          // CAPTURE_READY 仅由旧版 AUTUMN_JOB_CAPTURE 插件回应，据此确认其存在并恢复相关入口
+          if (event.data.source === 'AUTUMN_JOB_CAPTURE') {
+            hasLegacyCapturePlugin = true;
+            applyLegacyCaptureUI();
+          }
+          bridgeReady = true;
+          clearTimeout(bridgeCheckTimer);
+          const status = $('#captureStatus');
+          status.className = 'capture-status success';
+          status.textContent = '插件已连接，可以开始识别。';
+          const jobStatus = $('#jobSyncStatus');
+          if (jobStatus) {
+            jobStatus.className = 'capture-status success';
+            jobStatus.textContent = '新版插件已连接，可以一键同步。';
+          }
+          return;
+        }
+        if (event.data.type === 'SYNC_JOBS_RESULT') {
+          clearTimeout(jobSyncTimer);
+          $('#startJobSyncBtn').disabled = false;
+          const parsed = parseJobRows(event.data.rows || event.data.data || []);
+          if (!parsed.length) {
+            const status = $('#jobSyncStatus');
+            status.className = 'capture-status error';
+            status.textContent = '文档已经打开，但没有识别到岗位。请确认当前账号可以查看该表，或使用粘贴导入。';
+            return;
+          }
+          saveJobs(parsed, `同步完成：识别到 ${parsed.length} 条岗位`);
+          closeJobSyncDialog();
+          location.hash = '#/jobPool';
+          return;
+        }
+        if (event.data.type === 'SYNC_JOBS_ERROR') {
+          clearTimeout(jobSyncTimer);
+          $('#startJobSyncBtn').disabled = false;
+          const status = $('#jobSyncStatus');
+          status.className = 'capture-status error';
+          status.textContent = event.data.message || '同步失败，请确认腾讯文档可以正常打开后重试。';
+          return;
+        }
+        if (event.data.type === 'CAPTURE_RESULT') {
+          clearTimeout(captureTimer);
+          $('#startCaptureBtn').disabled = false;
+          closeCaptureDialog();
+          const captured = event.data.data || {};
+          const seed = normalizeRecord({
+            company: captured.company,
+            position: captured.position,
+            city: captured.city,
+            applicationDate: captured.applicationDate || '',
+            stage: String(captured.stage || '').trim() || '已投递',
+            companyType: captured.companyType, // 识别链路拿不到就留空，由用户在弹窗里选
+            applicationUrl: captured.applicationUrl,
+            nextAction: '关注消息并及时跟进投递进度'
+          });
+          openDialog(null, seed);
+          showToast('识别完成，请检查信息后保存');
+          return;
+        }
+        if (event.data.type === 'CAPTURE_ERROR') {
+          clearTimeout(captureTimer);
+          $('#startCaptureBtn').disabled = false;
+          const status = $('#captureStatus');
+          status.className = 'capture-status error';
+          status.textContent = event.data.message || '识别失败，请检查网址后重试。';
+        }
+      }
+
+      function openScreenshotDialog() {
+        resetScreenshotDialog();
+        $('#screenshotDialog').showModal();
+      }
+
+      function resetScreenshotDialog() {
+        ocrPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+        ocrPreviewUrls = [];
+        ocrFiles = [];
+        ocrCandidates = [];
+        $('#ocrFileInput').value = '';
+        $('#ocrPreviewGrid').hidden = true;
+        $('#ocrPreviewGrid').innerHTML = '';
+        $('#ocrResults').hidden = true;
+        $('#ocrResults').innerHTML = '';
+        $('#ocrEmptyState').hidden = false;
+        $('#ocrDropzone').classList.remove('has-image', 'is-dragging');
+        $('#ocrProgress').hidden = true;
+        $('#ocrProgressFill').style.width = '0%';
+        $('#ocrStatus').className = 'capture-status';
+        $('#ocrStatus').textContent = '按 Command + V 粘贴截图，或选择一张或多张图片。';
+        $('#startOcrBtn').textContent = '开始批量识别';
+        $('#startOcrBtn').disabled = true;
+      }
+
+      async function closeScreenshotDialog() {
+        ocrRunning = false;
+        if (ocrWorker) {
+          try { await ocrWorker.terminate(); } catch (_) {}
+          ocrWorker = null;
+        }
+        if ($('#screenshotDialog').open) $('#screenshotDialog').close();
+        resetScreenshotDialog();
+      }
+
+      function selectScreenshots(fileList, append = false) {
+        const status = $('#ocrStatus');
+        const selected = [...(fileList || [])];
+        if (!selected.length) return;
+        const priorCount = append ? ocrFiles.length : 0;
+        const accepted = selected.filter(file => /^image\/(png|jpeg|webp)$/i.test(file.type) && file.size <= 18 * 1024 * 1024);
+        const valid = (append ? [...ocrFiles, ...accepted] : accepted).slice(0, 20);
+        if (!valid.length) {
+          status.className = 'capture-status error';
+          status.textContent = '请选择小于 18 MB 的 PNG、JPG 或 WEBP 图片。';
+          return;
+        }
+        ocrPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+        ocrFiles = valid;
+        ocrCandidates = [];
+        ocrPreviewUrls = valid.map(file => URL.createObjectURL(file));
+        $('#ocrPreviewGrid').innerHTML = valid.map((file, index) => `<div class="ocr-preview-card"><img src="${escapeHtml(ocrPreviewUrls[index])}" alt="第 ${index + 1} 张待识别截图"><div class="ocr-preview-name">${escapeHtml(file.name || `截图 ${index + 1}`)}</div></div>`).join('');
+        $('#ocrPreviewGrid').hidden = false;
+        $('#ocrResults').hidden = true;
+        $('#ocrResults').innerHTML = '';
+        $('#ocrEmptyState').hidden = true;
+        $('#ocrDropzone').classList.add('has-image');
+        $('#ocrProgress').hidden = true;
+        $('#ocrProgressFill').style.width = '0%';
+        status.className = 'capture-status';
+        const skipped = Math.max(0, selected.length - accepted.length) + Math.max(0, priorCount + accepted.length - 20);
+        status.textContent = `已选择 ${valid.length} 张截图${skipped > 0 ? `，另有 ${skipped} 张因格式、大小或数量限制被忽略` : ''}。`;
+        $('#startOcrBtn').textContent = '开始批量识别';
+        $('#startOcrBtn').disabled = false;
+      }
+
+      function renderOcrCandidates() {
+        $('#ocrResults').hidden = false;
+        $('#ocrResults').innerHTML = ocrCandidates.map((job, index) => `<div class="ocr-result-card" data-ocr-index="${index}">
+          <div class="ocr-result-fields">
+            <input class="ocr-result-check" type="checkbox" checked aria-label="选择第 ${index + 1} 条岗位">
+            <input class="control" data-field="company" value="${escapeHtml(job.company)}" placeholder="公司" aria-label="公司">
+            <input class="control" data-field="position" value="${escapeHtml(job.position)}" placeholder="岗位（请重点检查）" aria-label="岗位">
+            <input class="control" data-field="city" value="${escapeHtml(job.city)}" placeholder="城市" aria-label="城市">
+            <input class="control" data-field="applicationDate" type="date" value="${escapeHtml(job.applicationDate || '')}" aria-label="投递日期" title="未识别到时保持空白">
+          </div>
+          <details class="ocr-raw"><summary>查看识别原文</summary><pre>${escapeHtml(job.rawText || '未读取到清晰文字')}</pre></details>
+        </div>`).join('');
+      }
+
+      function importOcrCandidates() {
+        const selected = [...document.querySelectorAll('.ocr-result-card')].filter(card => card.querySelector('.ocr-result-check').checked).map(card => normalizeJob({
+          company: card.querySelector('[data-field="company"]').value,
+          position: card.querySelector('[data-field="position"]').value,
+          city: card.querySelector('[data-field="city"]').value,
+          applicationDate: card.querySelector('[data-field="applicationDate"]').value,
+          category: '截图识别'
+        })).filter(job => job.company && job.position);
+        if (!selected.length) {
+          $('#ocrStatus').className = 'capture-status error';
+          $('#ocrStatus').textContent = '请至少保留一条公司和岗位都已填写的结果。';
+          return;
+        }
+        const before = jobs.length;
+        saveJobs(selected);
+        const added = jobs.length - before;
+        closeScreenshotDialog();
+        location.hash = '#/jobPool';
+        showToast(`已加入岗位库 ${added} 条${selected.length > added ? `，自动合并重复 ${selected.length - added} 条` : ''}`);
+      }
+
+      function openTesseractCache() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open('keyval-store');
+          request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains('keyval')) request.result.createObjectStore('keyval');
+          };
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error || new Error('无法打开本地识别缓存'));
+        });
+      }
+
+      async function ensureChineseOcrModel() {
+        if (!window.__OCR_CHI_SIM_GZIP_BASE64__) throw new Error('中文识别文件缺失');
+        const db = await openTesseractCache();
+        const key = './chi_sim.traineddata';
+        const exists = await new Promise((resolve, reject) => {
+          const request = db.transaction('keyval', 'readonly').objectStore('keyval').get(key);
+          request.onsuccess = () => resolve(typeof request.result !== 'undefined');
+          request.onerror = () => reject(request.error);
+        });
+        if (!exists) {
+          const raw = atob(window.__OCR_CHI_SIM_GZIP_BASE64__);
+          const bytes = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction('keyval', 'readwrite');
+            tx.objectStore('keyval').put(bytes, key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error || new Error('中文识别文件写入失败'));
+          });
+        }
+        db.close();
+      }
+
+      function cleanOcrCandidate(value, maxLength = 80) {
+        return String(value || '')
+          .replace(/^[\s:：|·•\-—]+|[\s:：|·•\-—]+$/g, '')
+          .replace(/\s{2,}/g, ' ')
+          .slice(0, maxLength);
+      }
+
+      function normalizeOcrTitle(value) {
+        let title = cleanOcrCandidate(value, 80)
+          .replace(/[［[]/g, '【').replace(/[］\]]/g, '】')
+          .replace(/【+/g, '【').replace(/】+/g, '】')
+          .replace(/\s*【\s*/g, '【').replace(/\s*】\s*/g, '】')
+          .replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, '$1')
+          .replace(/(\d)\s+(?=[\u3400-\u9fff])/g, '$1');
+        title = title.replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, '$1');
+        return title;
+      }
+
+      function matchOcrLabel(text, labels, maxLength) {
+        const labelGroup = labels.join('|');
+        const match = text.match(new RegExp(`(?:${labelGroup})\\s*[:：]?\\s*([^\\n]{2,${maxLength}})`, 'i'));
+        return cleanOcrCandidate(match?.[1], maxLength);
+      }
+
+      function parseOcrDate(text) {
+        const labelled = text.match(/(?:投递|申请|提交|创建)(?:日期|时间)?\s*[:：]?\s*(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*日?/);
+        const dateBeforeLabel = text.match(/(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*日?\s*(?:投递|申请|提交|创建)/);
+        const genericDates = [...text.matchAll(/(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*日?/g)];
+        const generic = /(?:已投递|投递成功|申请成功|已申请)/.test(text) && genericDates.length === 1 ? genericDates[0] : null;
+        const shortLabelled = text.match(/(?:投递|申请|提交|创建)(?:日期|时间)?\s*[:：]?\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*日?/);
+        const parts = labelled || dateBeforeLabel || generic;
+        if (!parts && !shortLabelled) return '';
+        const year = parts ? parts[1] : String(new Date().getFullYear());
+        const source = parts || shortLabelled;
+        const monthIndex = parts ? 2 : 1;
+        const dayIndex = parts ? 3 : 2;
+        const month = String(Math.min(12, Math.max(1, Number(source[monthIndex])))).padStart(2, '0');
+        const day = String(Math.min(31, Math.max(1, Number(source[dayIndex])))).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+
+      function parseOcrStage(text) {
+        if (/(?:offer|录用|已通过|已录取)/i.test(text)) return 'Offer';
+        if (/(?:已结束|流程结束|不合适|未通过|淘汰|拒绝)/i.test(text)) return '已结束';
+        if (/(?:HR\s*面|人力面|人事面)/i.test(text)) return 'HR面';
+        if (/(?:二面|第二轮面试|复试)/i.test(text)) return '二面';
+        if (/(?:一面|第一轮面试|初面|面试中)/i.test(text)) return '一面';
+        if (/(?:笔试|测评|在线测试)/i.test(text)) return '笔试';
+        if (/(?:已投递|投递成功|申请成功|已申请|简历筛选)/i.test(text)) return '已投递';
+        return '已投递';
+      }
+
+      function parseScreenshotText(rawText) {
+        const text = String(rawText || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
+        const compactText = text.replace(/\s+/g, '');
+        const lines = text.split('\n').map(line => cleanOcrCandidate(line, 120)).filter(line => line.length >= 2);
+        const noise = /^(?:首页|返回|搜索|登录|注册|分享|收藏|消息|全部|筛选|职位详情|岗位详情|招聘详情|申请记录|投递记录|我的申请|工作职责|职位描述|岗位职责|任职要求|职位要求|福利待遇|关于我们)$/i;
+        const positionWords = /(?:工程师|经理|运营|设计师|分析师|顾问|开发|算法|产品|销售|商务|市场|营销|商业化|策略|行业|客户|供应链|财务|人力|法务|测试|数据|项目|采购|管培|校招生|实习生|专员|研究员|策划|编辑|审计|助理|负责人|Job\s*Title|Position)/i;
+        const companyWords = /(?:公司|集团|科技|银行|证券|咨询|智能|互娱|网络|汽车|电子|传媒|研究院|事务所|有限公司|股份|控股|能源|医药|生物|教育|基金|保险|物流|航空|地产)/;
+        let company = matchOcrLabel(text, ['公司(?:名称)?', '企业(?:名称)?', '招聘单位', '应聘公司', 'Company'], 60);
+        let position = matchOcrLabel(text, ['投递岗位', '应聘岗位', '应聘职位', '岗位(?:名称)?', '职位(?:名称)?', 'Job\\s*Title', 'Position'], 80);
+        let city = matchOcrLabel(text, ['工作城市', '工作地点', '投递城市', '城市', '地点', 'Location'], 30);
+        const usable = lines.map((line, index) => ({ line, index })).filter(item => !noise.test(item.line));
+        if (!company) {
+          company = usable.map(item => ({ ...item, score: (companyWords.test(item.line) ? 35 : 0) + (item.index < 10 ? 10 : 0) + (item.line.length <= 36 ? 8 : -15) - (positionWords.test(item.line) ? 10 : 0) }))
+            .filter(item => item.score >= 25).sort((a, b) => b.score - a.score || a.index - b.index)[0]?.line || '';
+        }
+        if (!position) {
+          position = usable.map(item => ({ ...item, score: (positionWords.test(item.line) ? 40 : 0) + (item.index < 14 ? 10 : 0) + (item.line.length >= 3 && item.line.length <= 50 ? 10 : -20) - (companyWords.test(item.line) ? 8 : 0) }))
+            .filter(item => item.score >= 35).sort((a, b) => b.score - a.score || a.index - b.index)[0]?.line || '';
+        }
+        company = String(company).split(/(?:岗位|职位|工作地点|城市|申请|投递)/)[0];
+        position = String(position)
+          .split(/(?:撤\s*回\s*投\s*递|更\s*新\s*简\s*历|重\s*新\s*投\s*递|取\s*消\s*申\s*请|官\s*网\s*主\s*投|初\s*筛\s*中|筛\s*选\s*中|已\s*投\s*递|工作地点|城市|职位类别|岗位类别|申请时间|投递时间|发布日期)/)[0];
+        if (!city) {
+          const knownCities = ['北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '重庆', '武汉', '西安', '天津', '长沙', '厦门', '合肥', '青岛', '宁波', '郑州', '珠海', '佛山', '东莞', '无锡', '济南', '福州', '昆明', '南昌', '大连', '沈阳', '长春', '哈尔滨', '全国', '远程'];
+          city = knownCities.find(name => compactText.includes(name)) || '';
+        }
+        return normalizeRecord({
+          company: cleanOcrCandidate(company, 60),
+          position: normalizeOcrTitle(position),
+          city: cleanOcrCandidate(city, 30),
+          applicationDate: parseOcrDate(text),
+          stage: parseOcrStage(text),
+          nextAction: '检查识别结果，并关注后续通知'
+        });
+      }
+
+      async function prepareOcrImage(file) {
+        if (!window.createImageBitmap) return file;
+        const bitmap = await createImageBitmap(file);
+        const scale = Math.max(1, Math.min(2, 2600 / Math.max(1, bitmap.width)));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        const context = canvas.getContext('2d', { alpha: false });
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.filter = 'grayscale(1) contrast(1.3)';
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close?.();
+        return new Promise(resolve => canvas.toBlob(blob => resolve(blob || file), 'image/png'));
+      }
+
+      function describeOcrProgress(message) {
+        const names = {
+          'loading tesseract core': '正在加载本地识别引擎',
+          'initializing tesseract': '正在初始化识别引擎',
+          'loading language traineddata': '正在读取中文识别模型',
+          'initializing api': '正在准备中文识别',
+          'recognizing text': '正在识别截图文字'
+        };
+        const progress = Math.max(0, Math.min(1, Number(message.progress) || 0));
+        $('#ocrProgressFill').style.width = `${Math.round(progress * 100)}%`;
+        $('#ocrStatus').textContent = `${names[message.status] || '正在识别'}… ${Math.round(progress * 100)}%`;
+      }
+
+      async function recognizeScreenshot() {
+        if (ocrCandidates.length && !ocrRunning) return importOcrCandidates();
+        if (!ocrFiles.length || ocrRunning) return;
+        const status = $('#ocrStatus');
+        ocrRunning = true;
+        $('#startOcrBtn').disabled = true;
+        $('#ocrProgress').hidden = false;
+        $('#ocrProgressFill').style.width = '2%';
+        status.className = 'capture-status';
+        status.textContent = '正在准备离线中文识别，首次使用可能需要十几秒…';
+        try {
+          if (!window.Tesseract) throw new Error('本地识别引擎文件缺失');
+          await ensureChineseOcrModel();
+          if (!ocrRunning) return;
+          const ocrRoot = new URL('./ocr/', location.href).href;
+          ocrWorker = await Tesseract.createWorker('chi_sim', 1, {
+            workerPath: `${ocrRoot}worker.min.js`,
+            corePath: `${ocrRoot}core`,
+            langPath: `${ocrRoot}lang`,
+            cacheMethod: 'readOnly',
+            logger: describeOcrProgress
+          });
+          if (!ocrRunning) {
+            await ocrWorker.terminate();
+            ocrWorker = null;
+            return;
+          }
+          const recognized = [];
+          for (let index = 0; index < ocrFiles.length; index += 1) {
+            if (!ocrRunning) break;
+            status.textContent = `正在识别第 ${index + 1}/${ocrFiles.length} 张：${ocrFiles[index].name || '岗位截图'}…`;
+            const preparedImage = await prepareOcrImage(ocrFiles[index]);
+            const enhancedResult = await ocrWorker.recognize(preparedImage);
+            const enhancedText = String(enhancedResult?.data?.text || '').trim();
+            let analysisText = enhancedText;
+            let seed = parseScreenshotText(analysisText);
+            if (!seed.position || !seed.city || (/(?:投递|申请)/.test(enhancedText) && !seed.applicationDate)) {
+              status.textContent = `正在复核第 ${index + 1}/${ocrFiles.length} 张的浅色文字…`;
+              const originalResult = await ocrWorker.recognize(ocrFiles[index]);
+              const originalText = String(originalResult?.data?.text || '').trim();
+              if (originalText && originalText !== enhancedText) analysisText = `${enhancedText}\n${originalText}`;
+              seed = parseScreenshotText(analysisText);
+            }
+            if (seed.company || seed.position || analysisText) recognized.push({ ...normalizeJob({
+              company: seed.company,
+              position: seed.position,
+              city: seed.city,
+              applicationDate: seed.applicationDate,
+              category: '截图识别'
+            }), rawText: analysisText.slice(0, 4000) });
+            $('#ocrProgressFill').style.width = `${Math.round(((index + 1) / ocrFiles.length) * 100)}%`;
+          }
+          await ocrWorker.terminate();
+          ocrWorker = null;
+          ocrRunning = false;
+          ocrCandidates = recognized;
+          if (!recognized.length) {
+            $('#startOcrBtn').disabled = false;
+            status.className = 'capture-status error';
+            status.textContent = '没有读取到清晰文字。建议只截取公司、岗位和投递信息区域后重新粘贴。';
+            return;
+          }
+          renderOcrCandidates();
+          status.className = 'capture-status success';
+          status.textContent = `识别出 ${recognized.length} 条，请检查公司、岗位和城市；取消勾选可跳过。`;
+          $('#startOcrBtn').textContent = `导入岗位库（${recognized.length}）`;
+          $('#startOcrBtn').disabled = false;
+        } catch (error) {
+          ocrRunning = false;
+          if (ocrWorker) {
+            try { await ocrWorker.terminate(); } catch (_) {}
+            ocrWorker = null;
+          }
+          $('#startOcrBtn').disabled = false;
+          status.className = 'capture-status error';
+          status.textContent = `识别没有完成：${error?.message || '请换一张更清晰的截图后重试'}`;
+        }
+      }
+
+      function closeDialog() {
+        els.dialog.close();
+        editingId = null;
+        pendingMailSeedId = null; // 取消/关闭新建：撤销邮件建议的待应用交接
+      }
+
+      async function submitForm(event) {
+        event.preventDefault();
+        const timeline = collectTimeline();
+        if (!timeline.length) { showToast('请至少填写一个阶段（如“已投递”）'); return; }
+        const data = Object.fromEntries(new FormData(els.form).entries());
+        const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now(), timeline });
+        let sameCompanyHint = '';
+        if (!editingId) {
+          // 手填新增：统一走 resolveDuplicate —— duplicate / variant 都给逃生口，same-company 只做非阻断提示
+          const decision = await resolveDuplicate(findDuplicateRecord(records, normalized), normalized);
+          if (decision.action === 'cancel') return; // Esc / 点遮罩关掉确认框：什么都不写
+          if (decision.action === 'edit') { closeDialog(); openDialog(decision.target); return; }
+          // 不能在这里单独 showToast：紧接着 saveRecords 的 toast 会把它顶掉（同一个 #toast 元素），
+          // 用户永远看不到。改为把提示并进保存那条 toast。
+          sameCompanyHint = decision.hint || '';
+        }
+        if (editingId) {
+          records = records.map(record => record.id === editingId ? normalized : record);
+          saveRecords('已更新并自动保存');
+        } else {
+          records.unshift(normalized);
+          saveRecords(`已新增并自动保存${sameCompanyHint}`);
+          // 由「邮件提醒 → 新建记录」交接而来：保存成功后才把该建议标记为已应用（取消则不标记）
+          if (pendingMailSeedId) { const mid = pendingMailSeedId; pendingMailSeedId = null; markMailApplied(mid); renderMailView(); updateMailBadge(); }
+        }
+        closeDialog();
+        render();
+        flashRow(normalized.id);
+      }
+
+      let lastDeleted = null; // 仅最近一次删除可撤销
+
+      async function handleTableAction(event) {
+        // 公司分组折叠开关（只在「按公司聚合」排序时出现）
+        const groupToggle = event.target.closest('button[data-group-toggle]');
+        if (groupToggle) { toggleCompanyGroup(groupToggle.dataset.groupToggle); return; }
+        const button = event.target.closest('button[data-action]');
+        if (!button) {
+          // 点公司 / 岗位单元格 → 打开详情抽屉；点链接仍走原生跳转（不打断）
+          // 注意：此处不能引用下面的 record（const 尚未初始化会触发 TDZ），改从行上取 data-id
+          if (event.target.closest('a')) return;
+          const cell = event.target.closest('td[data-label="公司 / 岗位"]');
+          const row = cell && cell.closest('tr[data-id]');
+          if (row) openRecordFocus(row.dataset.id);
+          return;
+        }
+        const record = records.find(item => item.id === button.dataset.id);
+        if (!record) return;
+        if (button.dataset.action === 'edit') return openDialog(record);
+        if (button.dataset.action === 'delete') return requestDeleteRecord(record);
+        if (button.dataset.action === 'advance') {
+          openAdvanceDialog(record);
+        }
+      }
+
+      // 删除记录（表格行 / 详情抽屉共用）：确认后软删（写 tombstone）+ 可撤销
+      async function requestDeleteRecord(record) {
+        if (!record) return;
+        if (!await confirmInApp(`确定删除「${record.company} · ${record.position}」吗？`, { title: '删除投递记录', danger: true, confirmText: '删除' })) return;
+        const index = records.findIndex(item => item.id === record.id);
+        records = records.filter(item => item.id !== record.id);
+        markDeleted([record.id]);
+        saveRecords();
+        render();
+        lastDeleted = { record, index };
+        if (drawerRecordId === record.id) closeRecordDrawer();
+        showToast(`已删除「${record.company} · ${record.position}」`, { actionLabel: '撤销', duration: 6000, onAction: undoDelete });
+      }
+
+      // ================= 推进阶段：弹出选择，追加为时间线里程碑（不再盲目 index+1）=================
+      let advancingId = null;
+      function openAdvanceDialog(record, options = {}) {
+        advancingId = record.id;
+        $('#advanceTitle').textContent = `推进阶段 · ${record.company || ''}`.trim();
+        const curOrder = stageOrder(record.stage);
+        let candidates = STAGE_PRESETS.filter(s => stageOrder(s) > curOrder && s !== '待投递');
+        if (!candidates.length) candidates = STAGE_PRESETS.filter(s => s !== '待投递' && s !== record.stage);
+        $('#advanceStageGrid').innerHTML = candidates.map(s =>
+          `<button class="btn btn-small advance-pick" type="button" data-stage="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('');
+        $('#advanceCustom').value = '';
+        // 备注（v4.8.0）：拖到「已结束」列时预填结束原因引导，其余入口留空由用户自由填写
+        const noteEl = $('#advanceNote');
+        if (noteEl) noteEl.value = String(options.note || '');
+        $('#advanceDate').value = (record.scheduleAt ? String(record.scheduleAt).slice(0, 10) : '') || localDateInput(new Date());
+        $('#advanceDialog').showModal();
+      }
+      function applyAdvance(stage) {
+        const record = records.find(r => r.id === advancingId);
+        const s = String(stage || '').trim();
+        if (!record || !s) { showToast('请选择或填写一个阶段'); return; }
+        const at = $('#advanceDate').value || localDateInput(new Date());
+        // 备注写进里程碑（上限 60 字，与输入框 maxlength 一致）；留空时保持 ''，不写 "undefined"
+        const noteEl = $('#advanceNote');
+        const note = noteEl ? String(noteEl.value || '').trim().slice(0, 60) : '';
+        setTimeline(record, [...(record.timeline || []), { stage: s, at, note }]);
+        saveRecords(s === 'Offer' ? '已盖章：Offer' : `已推进到「${s}」并自动保存`);
+        closeAdvanceDialog();
+        render();
+        flashRow(record.id);
+        // 抽屉里点「推进阶段」走的也是这条路径：推进后必须重渲抽屉，
+        // 否则步骤条仍显示旧里程碑，要关掉重开才能看到（浏览器实证发现的缺陷）
+        if (drawerRecordId === record.id) renderDrawer();
+        if (s === 'Offer') playOfferStamp();
+      }
+      function closeAdvanceDialog() {
+        advancingId = null;
+        const dlg = $('#advanceDialog');
+        if (dlg && dlg.open) dlg.close();
+      }
+
+      // 撤销最近一次删除：撤回墓碑 + 按原位置插回 + 重渲染高亮
+      function undoDelete() {
+        if (!lastDeleted) return;
+        const { record, index } = lastDeleted;
+        lastDeleted = null;
+        unmarkDeleted([record.id]);
+        records.splice(Math.max(0, Math.min(index, records.length)), 0, record);
+        saveRecords();
+        render();
+        flashRow(record.id);
+        showToast('已撤销删除，记录已恢复');
+      }
+
+      // 变更行高亮：推进/编辑/撤销后给对应行一次性高亮，让“改了哪行”一目了然
+      function flashRow(id) {
+        const row = els.body.querySelector(`tr[data-id="${CSS.escape(String(id))}"]`);
+        if (!row) return;
+        row.classList.remove('row-flash');
+        void row.offsetWidth;
+        row.classList.add('row-flash');
+        setTimeout(() => row.classList.remove('row-flash'), 1000);
+      }
+
+      function exportData() {
+        const date = localDateInput(new Date());
+        downloadPayload(createEnvelope(records), `秋招投递记录-${date}.json`);
+        showToast(`已导出 ${records.length} 条记录，原数据未改变`);
+      }
+
+      // 通用文本文件下载（.ics 等非 JSON 产物）；downloadPayload 仅用于 JSON
+      function downloadText(text, filename, mime) {
+        const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      // 导出日程到系统日历：把「安排时间 + 截止日期」写成 .ics（纯本机生成，不联网）
+      function exportIcs(recordId) {
+        const source = recordId ? records.filter(r => r.id === recordId) : records;
+        const events = collectScheduleEvents(source, new Date(), 500);
+        if (!events.length) {
+          showToast(recordId ? '这条记录还没有安排时间或截止日期' : '还没有可导出的安排或截止日期');
+          return;
+        }
+        const name = recordId
+          ? `${(source[0] && source[0].company) || '投递'}-日程.ics`
+          : `秋招日程-${localDateInput(new Date())}.ics`;
+        downloadText(buildIcs(events), name, 'text/calendar;charset=utf-8');
+        showToast(`已导出 ${events.length} 项日程，双击 .ics 文件即可加入系统日历`);
+      }
+
+      // 导出简历 JSON（顶栏「导出简历」与简历页「导出 JSON」共用）
+      function exportResume() {
+        downloadPayload({ appVersion: APP_VERSION, exportedAt: new Date().toISOString(), resume: JSON.parse(JSON.stringify(resume)) }, `我的简历-${localDateInput(new Date())}.json`);
+        showToast('简历 JSON 已导出');
+      }
+
+      // 盖章动效：Offer 到手，印章砸落（prefers-reduced-motion 下由 CSS 直接跳过）
+      function playOfferStamp() {
+        const overlay = document.createElement('div');
+        overlay.className = 'stamp-overlay';
+        overlay.innerHTML = '<div class="stamp-seal">OFFER</div>';
+        document.body.appendChild(overlay);
+        setTimeout(() => overlay.remove(), 1200);
+      }
+
+      function showToast(message, options = {}) {
+        clearTimeout(toastTimer);
+        els.toast.textContent = '';
+        els.toast.classList.toggle('has-action', !!options.actionLabel);
+        const span = document.createElement('span');
+        span.textContent = message;
+        els.toast.appendChild(span);
+        if (options.actionLabel) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'toast-action';
+          btn.textContent = options.actionLabel;
+          btn.addEventListener('click', () => {
+            els.toast.classList.remove('show', 'has-action');
+            if (options.onAction) options.onAction();
+          });
+          els.toast.appendChild(btn);
+        }
+        els.toast.classList.add('show');
+        const duration = options.duration || 2400;
+        toastTimer = setTimeout(() => els.toast.classList.remove('show', 'has-action'), duration);
+      }
+
+      // 应用内确认框：替代原生 confirm()，风格统一、可 danger 样式化；Esc/点遮罩/取消均为 false
+      let confirmResolve = null;
+      let confirmResult = false;
+      // 'ok' | 'cancel' | 'dismiss'：布尔返回值无法区分「点了取消按钮」与「Esc / 点遮罩关掉」，
+      // 而查重场景里 Esc 应当中止整次操作，不该被当成任何一个按钮（否则按 Esc 会静默新增一条重复记录）。
+      let confirmOutcome = 'cancel';
+      function lastConfirmOutcome() { return confirmOutcome; }
+      function confirmInApp(message, options = {}) {
+        const dialog = $('#confirmDialog');
+        if (!dialog || typeof dialog.showModal !== 'function') {
+          const fallback = window.confirm(message);
+          confirmOutcome = fallback ? 'ok' : 'cancel';
+          return Promise.resolve(fallback);
+        }
+        // 重入保护：确认框已开着时再调用，showModal() 按规范会抛 InvalidStateError 并留下悬挂的 Promise。
+        // 先把上一次按「取消」结算掉，再复用同一个弹窗。
+        if (dialog.open) { confirmResult = false; confirmOutcome = 'dismiss'; settleConfirm(); }
+        $('#confirmMessage').textContent = message;
+        $('#confirmTitle').textContent = options.title || '请确认';
+        const okBtn = $('#confirmOkBtn');
+        okBtn.textContent = options.confirmText || '确定';
+        okBtn.classList.toggle('danger', !!options.danger);
+        const cancelBtn = $('#confirmCancelBtn');
+        if (cancelBtn) cancelBtn.textContent = options.cancelText || '取消';
+        confirmResult = false;
+        confirmOutcome = 'cancel';
+        return new Promise(resolve => {
+          confirmResolve = resolve;
+          dialog.showModal();
+        });
+      }
+
+      let deferredInstallPrompt = null;
+
+      function isStandaloneApp() {
+        return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      }
+
+      function openInstallDialog() {
+        $('#installDialog').showModal();
+      }
+
+      async function requestAppInstall() {
+        if (!deferredInstallPrompt) return openInstallDialog();
+        deferredInstallPrompt.prompt();
+        const result = await deferredInstallPrompt.userChoice.catch(() => null);
+        deferredInstallPrompt = null;
+        if (result?.outcome === 'accepted') {
+          $('#installAppBtn').hidden = true;
+          showToast('已开始安装，稍后可从手机桌面打开');
+        }
+      }
+
+      function initializeMobileApp() {
+        const installButton = $('#installAppBtn');
+        const canInstallFromWeb = location.protocol === 'https:' && !isStandaloneApp();
+        installButton.hidden = !canInstallFromWeb;
+        window.addEventListener('beforeinstallprompt', event => {
+          event.preventDefault();
+          deferredInstallPrompt = event;
+          installButton.hidden = false;
+        });
+        window.addEventListener('appinstalled', () => {
+          deferredInstallPrompt = null;
+          installButton.hidden = true;
+          showToast('秋招投递管理器已安装到桌面');
+        });
+        if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+          window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}), { once: true });
+        }
+      }
+
+      function consumeQuickCapture() {
+        const encoded = new URLSearchParams(location.search).get('capture');
+        if (!encoded) return;
+        try {
+          const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+          const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+          const bytes = Uint8Array.from(atob(padded), char => char.charCodeAt(0));
+          const captured = JSON.parse(new TextDecoder().decode(bytes));
+          const seed = normalizeRecord({
+            company: captured.company,
+            position: captured.position,
+            city: captured.city,
+            applicationDate: captured.applicationDate || '',
+            stage: String(captured.stage || '').trim() || '已投递',
+            companyType: captured.companyType, // 识别链路拿不到就留空，由用户在弹窗里选
+            applicationUrl: captured.applicationUrl,
+            nextAction: '关注消息并及时跟进投递进度'
+          });
+          try { history.replaceState(null, '', location.href.split('?')[0].split('#')[0]); } catch (_) {}
+          openDialog(null, seed);
+          showToast('已从岗位网页识别，请确认后保存');
+        } catch (error) {
+          alert('没有成功读取插件传来的岗位信息，请返回岗位页面重试。');
+        }
+      }
+
+      initializeRouter();
+      populateSelects();
+      render();
+      renderResumeEditor();
+
+      // ================= 我的简历：事件绑定（事件委托处理动态按钮） =================
+      document.addEventListener('click', (event) => {
+        const target = event.target.closest('[data-action]');
+        if (!target) return;
+        const action = target.getAttribute('data-action');
+        const sec = target.getAttribute('data-section') || target.closest('.exp-item-card')?.getAttribute('data-section');
+        const card = target.closest('.exp-item-card');
+        if (action === 'add-kv') {
+          event.preventDefault();
+          addKvField(sec);
+        } else if (action === 'add-exp') {
+          event.preventDefault();
+          addExperienceRow(sec);
+        } else if (action === 'open-lib') {
+          event.preventDefault();
+          let libCard = card;
+          if (!libCard && sec) {
+            const block = target.closest('.resume-section-block');
+            if (block && block.getAttribute('data-type') === 'exp') libCard = block.querySelector('.exp-item-card:last-of-type');
+          }
+          openFieldLibrary(sec, libCard);
+        } else if (action === 'toggle-exp') {
+          card?.classList.toggle('is-collapsed');
+        } else if (action === 'move-exp-up' || action === 'move-exp-down') {
+          event.preventDefault();
+          if (!card?.parentElement) return;
+          const siblings = [...card.parentElement.querySelectorAll('.exp-item-card')];
+          const at = siblings.indexOf(card);
+          const swapWith = action === 'move-exp-up' ? at - 1 : at + 1;
+          if (swapWith < 0 || swapWith >= siblings.length) return;
+          card.parentElement.insertBefore(card, action === 'move-exp-up' ? siblings[swapWith] : siblings[swapWith].nextSibling);
+          renumberExpCards(card.parentElement);
+        } else if (action === 'dup-exp') {
+          event.preventDefault();
+          if (!card?.parentElement) return;
+          const clone = card.cloneNode(true);
+          clone.classList.remove('is-collapsed');
+          card.parentElement.insertBefore(clone, card.nextSibling);
+          renumberExpCards(card.parentElement);
+          showToast('已复制此段经历，记得修改内容后保存');
+        } else if (action === 'del-kv') {
+          event.preventDefault();
+          const row = target.closest('.kv-row');
+          const container = row?.parentElement;
+          row?.remove();
+          if (container && !container.querySelector('.kv-row')) {
+            container.innerHTML = '<div class="resume-empty-hint">从字段库添加常用字段，或直接自定义输入</div>';
+          }
+        } else if (action === 'del-exp') {
+          event.preventDefault();
+          const parent = card?.parentElement;
+          card?.remove();
+          if (parent) {
+            renumberExpCards(parent);
+            if (!parent.querySelector('.exp-item-card')) {
+              parent.innerHTML = '<div class="resume-empty-hint">还没有经历，点「＋ 添加」开始</div>';
+            }
+          }
+        } else if (action === 'del-section') {
+          event.preventDefault();
+          const block = target.closest('.resume-section-block');
+          if (!block) return;
+          const name = block.getAttribute('data-section');
+          confirmInApp(`确定删除区块「${name}」吗？保存后该段将从简历 JSON 中移除。`, { title: '删除区块', danger: true, confirmText: '删除' }).then(ok => {
+            if (!ok) return;
+            block.remove();
+            updateResumeCompletion();
+            showToast(`已删除区块「${name}」，点「保存简历」后生效`);
+          });
+        } else if (action === 'add-section') {
+          event.preventDefault();
+          const name = prompt('新区块名称（保存后成为简历 JSON 的一个段）：');
+          if (!name || !name.trim()) return;
+          const key = name.trim();
+          resume = collectResumeFromDom();
+          if (key in resume) { showToast('该区块已存在'); renderResumeEditor(); return; }
+          resume[key] = {};
+          renderResumeEditor();
+          showToast(`已添加区块「${key}」，点「保存简历」后写入 JSON`);
+        }
+      });
+      // 字段库弹层
+      $('#fieldLibraryGrid').addEventListener('click', (event) => {
+        const item = event.target.closest('.field-library-item[data-field]');
+        if (!item || item.classList.contains('is-added')) return;
+        const name = item.getAttribute('data-field');
+        const type = item.querySelector('.field-library-type')?.textContent || '';
+        applyFieldFromLibrary(name, type);
+      });
+      $('#fieldLibraryCustomBtn').addEventListener('click', () => {
+        if (!fieldLibraryContext) return;
+        const name = prompt('自定义字段名称（保存后即成为插件填表匹配名）：');
+        if (!name || !name.trim()) return;
+        const trimmed = name.trim();
+        $('#fieldLibraryDialog').close();
+        applyFieldFromLibrary(trimmed, inferFieldType(trimmed));
+      });
+      $('#closeFieldLibraryDialog').addEventListener('click', () => $('#fieldLibraryDialog').close());
+      $('#doneFieldLibraryDialog').addEventListener('click', () => $('#fieldLibraryDialog').close());
+      $('#fieldLibraryDialog').addEventListener('click', event => { if (event.target === $('#fieldLibraryDialog')) $('#fieldLibraryDialog').close(); });
+      $('#saveResumeBtn').addEventListener('click', collectAndSaveResume);
+      $('#resumeExportBtn').addEventListener('click', exportResume);
+      $('#resumeImportBtn').addEventListener('click', () => $('#resumeFileInput').click());
+      $('#resumeFileInput').addEventListener('change', async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+          const parsed = JSON.parse(await file.text());
+          const incoming = parsed?.resume && typeof parsed.resume === 'object' ? parsed.resume : parsed;
+          if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) throw new Error('格式无效');
+          resume = incoming;
+          persistResume();
+          renderResumeEditor();
+          showToast('简历导入成功，已下发插件并纳入云同步');
+        } catch (error) {
+          alert(`导入失败：${error.message || '不是有效的简历 JSON 文件。'}`);
+        }
+      });
+      $('#resumeResetBtn').addEventListener('click', async () => {
+        if (!await confirmInApp('确定要清空简历全部内容并恢复默认结构吗？', { title: '重置简历', danger: true, confirmText: '清空并重置' })) return;
+        resume = JSON.parse(JSON.stringify(DEFAULT_RESUME));
+        persistResume();
+        renderResumeEditor();
+        showToast('简历已重置为默认结构');
+      });
+
+      $('#addBtn').addEventListener('click', () => openDialog());
+      $('#captureUrlBtn').addEventListener('click', openCaptureDialog);
+      $('#installAppBtn').addEventListener('click', requestAppInstall);
+      $('#toolScreenshotBtn').addEventListener('click', openScreenshotDialog);
+      $('#syncJobsBtn').addEventListener('click', openJobSyncDialog);
+      $('#jobSearchInput').addEventListener('input', renderJobPool);
+      $('#jobList').addEventListener('click', handleJobAction);
+      $('#clearJobPoolBtn').addEventListener('click', async () => {
+        if (!jobs.length) return showToast('岗位库目前是空的');
+        if (!await confirmInApp(`确定清空本地岗位库中的 ${jobs.length} 条岗位吗？\n你的正式投递记录不会受到影响。`, { title: '清空岗位库', danger: true, confirmText: '清空' })) return;
+        jobs = [];
+        jobPoolUpdatedAt = '';
+        localStorage.removeItem(JOB_POOL_KEY);
+        localStorage.removeItem(JOB_POOL_META_KEY);
+        renderJobPool();
+        showToast('岗位库已清空，投递记录未改变');
+      });
+      $('#toolSafetyBtn').addEventListener('click', openSafetyDialog);
+      $('#toolIcsBtn').addEventListener('click', () => exportIcs());
+      $('#exportRecordsBtn').addEventListener('click', exportData);
+      $('#exportResumeBtn').addEventListener('click', exportResume);
+      $('#exportIcsBtn').addEventListener('click', () => exportIcs());
+      // 洞察面板：漏斗口径切换（记录 / 公司去重）+ 卡点清单点击直达记录
+      $('#funnelScopeBtn').addEventListener('click', () => {
+        funnelScope = funnelScope === 'company' ? 'record' : 'company';
+        renderInsights();
+      });
+      // 洞察精简 / 完整切换（偏好存本机 ui.v1）
+      $('#insightsCompactBtn').addEventListener('click', toggleInsightsCompact);
+      // 悬浮明细：事件委托。mouseenter/mouseleave 不冒泡，所以用 mouseover/mouseout + relatedTarget 判定，
+      // 否则在触发元素内部子节点之间移动时会反复闪烁。
+      const insightsHost = $('#insightsBody');
+      insightsHost.addEventListener('mouseover', event => {
+        const target = event.target.closest('[data-tip-kind]');
+        if (!target || target === tipTarget) return;
+        showTipFor(target);
+      });
+      insightsHost.addEventListener('mouseout', event => {
+        const target = event.target.closest('[data-tip-kind]');
+        if (!target) return;
+        if (event.relatedTarget && target.contains && target.contains(event.relatedTarget)) return;
+        hideTip();
+      });
+      // 键盘用户同样能读到明细：城市行 / 指标卡 / 比例条分段都带 tabindex="0"
+      insightsHost.addEventListener('focusin', event => {
+        const target = event.target.closest('[data-tip-kind]');
+        if (target) showTipFor(target);
+      });
+      insightsHost.addEventListener('focusout', () => hideTip());
+      insightsHost.addEventListener('click', event => {
+        if (!isCoarsePointer()) return; // 有 hover 的设备交给 mouseover，点击留给「打开抽屉」等原有动作
+        const target = event.target.closest('[data-tip-kind]');
+        if (!target) return;
+        if (target === tipTarget) { hideTip(); return; }
+        showTipFor(target);
+      });
+      // 滚动后浮层位置就不再贴着触发元素了：直接隐藏，比跟着重算更省事也更不容易错位。
+      // capture=true 才能收到面板内部滚动容器（.table-scroll 等）的 scroll 事件。
+      window.addEventListener('scroll', () => { if (tipTarget) hideTip(); }, true);
+      $('#alertList').addEventListener('click', event => {
+        const item = event.target.closest('.alert-item[data-id]');
+        if (item) openRecordFocus(item.dataset.id);
+      });
+      // ===== v4.4.0：表格/看板切换、看板拖拽、详情抽屉、⌘K 命令面板 =====
+      $('#viewTableBtn').addEventListener('click', () => setRecordsView('table'));
+      $('#viewBoardBtn').addEventListener('click', () => setRecordsView('board'));
+      const boardCols = $('#boardCols');
+      boardCols.addEventListener('dragstart', event => {
+        const card = event.target.closest('.board-card[data-id]');
+        if (!card) return;
+        draggingRecordId = card.dataset.id;
+        card.classList.add('is-dragging');
+        activateBoardDropZone(); // 有卡片被拖起 → 顶部投放区变为可投放态
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', card.dataset.id);
+        }
+      });
+      boardCols.addEventListener('dragend', () => {
+        draggingRecordId = null;
+        boardCols.querySelectorAll('.board-card.is-dragging').forEach(node => node.classList.remove('is-dragging'));
+        boardCols.querySelectorAll('.board-col.is-drop').forEach(node => node.classList.remove('is-drop'));
+        clearBoardDropZone();
+      });
+      boardCols.addEventListener('dragover', handleBoardDragOver);
+      boardCols.addEventListener('drop', handleBoardDrop);
+      boardCols.addEventListener('click', event => {
+        // 列头点击 → 切到表格视图并按该阶段筛选（查看该阶段全部明细）；优先级高于卡片
+        const head = event.target.closest('.board-col-head[data-stage]');
+        if (head) { applyBoardColFilter(head.dataset.stage); return; }
+        const card = event.target.closest('.board-card[data-id]');
+        if (card) openRecordFocus(card.dataset.id);
+      });
+      boardCols.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const head = event.target.closest('.board-col-head[data-stage]');
+        if (head) { event.preventDefault(); applyBoardColFilter(head.dataset.stage); return; }
+        const card = event.target.closest('.board-card[data-id]');
+        if (!card) return;
+        event.preventDefault();
+        openRecordFocus(card.dataset.id);
+      });
+      // 顶部整宽推进投放区：在 #boardView 内、.board-cols 外，单独绑 dragover/dragleave/drop
+      const boardDropZone = $('#boardDropZone');
+      boardDropZone.addEventListener('dragover', handleDropZoneOver);
+      boardDropZone.addEventListener('dragleave', handleDropZoneLeave);
+      boardDropZone.addEventListener('drop', handleDropZoneDrop);
+      // 抽屉：关闭（按钮 / 遮罩）、笔记增删、同公司切换、底部操作
+      $('#closeDrawerBtn').addEventListener('click', closeRecordDrawer);
+      $('#drawerBackdrop').addEventListener('click', closeRecordDrawer);
+      $('#drawerBody').addEventListener('click', event => {
+        const noteDel = event.target.closest('button[data-note-del]');
+        if (noteDel) { deleteDrawerNote(noteDel.dataset.noteDel); return; }
+        const sibling = event.target.closest('button[data-sibling]');
+        if (sibling) { openRecordDrawer(sibling.dataset.sibling); return; }
+        if (event.target.closest('#drawerNoteAddBtn')) {
+          const input = $('#drawerNoteInput');
+          addDrawerNote(input ? input.value : '');
+        }
+      });
+      $('#drawerBody').addEventListener('keydown', event => {
+        // 笔记输入框里 ⌘/Ctrl+Enter 快速提交
+        if (event.target.id !== 'drawerNoteInput') return;
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+          event.preventDefault();
+          addDrawerNote(event.target.value);
+        }
+      });
+      $('#drawerActions').addEventListener('click', async event => {
+        const button = event.target.closest('button[data-drawer]');
+        if (!button) return;
+        const record = records.find(item => item.id === drawerRecordId);
+        if (!record) return;
+        const action = button.dataset.drawer;
+        if (action === 'advance') return openAdvanceDialog(record);
+        if (action === 'edit') { closeRecordDrawer(); return openDialog(record); }
+        if (action === 'ics') return exportIcs(record.id);
+        if (action === 'delete') return requestDeleteRecord(record);
+      });
+      // 命令面板
+      $('#cmdInput').addEventListener('input', event => {
+        cmdItems = buildCmdItems(event.target.value);
+        cmdActiveIndex = 0;
+        renderCmdResults();
+      });
+      $('#cmdInput').addEventListener('keydown', event => {
+        if (event.key === 'ArrowDown') { event.preventDefault(); moveCmdActive(1); return; }
+        if (event.key === 'ArrowUp') { event.preventDefault(); moveCmdActive(-1); return; }
+        if (event.key === 'Enter') { event.preventDefault(); runCmdItem(cmdActiveIndex); }
+      });
+      $('#cmdResults').addEventListener('click', event => {
+        const item = event.target.closest('.cmd-item[data-index]');
+        if (item) runCmdItem(Number(item.dataset.index));
+      });
+      $('#cmdResults').addEventListener('mousemove', event => {
+        const item = event.target.closest('.cmd-item[data-index]');
+        if (!item) return;
+        const index = Number(item.dataset.index);
+        if (index !== cmdActiveIndex) { cmdActiveIndex = index; renderCmdResults(); }
+      });
+      $('#cmdPalette').addEventListener('click', event => { if (event.target === $('#cmdPalette')) closeCmdPalette(); });
+      // 全局快捷键（⌘K / N / / / ? / Esc）
+      document.addEventListener('keydown', handleGlobalKeydown);
+      // 首启引导 / 示例数据处置
+      $('#firstRunGuide').addEventListener('click', event => {
+        const button = event.target.closest('button[data-guide]');
+        if (!button) return;
+        const action = button.dataset.guide;
+        if (action === 'clear') return clearSampleData();
+        if (action === 'keep') { setSampleMode(false); uiPrefs.hideGuide = true; saveUiPrefs(); return render(); }
+        if (action === 'add') return openDialog(null);
+        if (action === 'demo') return loadDemoRecords();
+        if (action === 'hide') { uiPrefs.hideGuide = true; saveUiPrefs(); render(); }
+      });
+      // 台账空状态 CTA（首启 / 筛选无结果）
+      els.empty.addEventListener('click', event => {
+        const button = event.target.closest('button[data-empty-action]');
+        if (!button) return;
+        const action = button.dataset.emptyAction;
+        if (action === 'add') return openDialog(null);
+        if (action === 'demo') return loadDemoRecords();
+        if (action === 'clear') {
+          els.search.value = '';
+          els.filter.value = 'all';
+          renderRecordsView();
+        }
+      });
+      // Offer 对比矩阵：点行打开详情抽屉
+      $('#offerMatrix').addEventListener('click', event => {
+        const row = event.target.closest('tr[data-id]');
+        if (row) openRecordFocus(row.dataset.id);
+      });
+      // 多岗位公司清单：点某个岗位打开详情抽屉
+      $('#multiCompanyList').addEventListener('click', event => {
+        const item = event.target.closest('.multi-company-item[data-id]');
+        if (item) openRecordFocus(item.dataset.id);
+      });
+      // 未来安排卡片可点击/可键盘激活（role=button + tabindex=0）
+      els.upcoming.addEventListener('click', event => {
+        const item = event.target.closest('.schedule-item[data-id]');
+        if (item) openRecordFocus(item.dataset.id);
+      });
+      els.upcoming.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const item = event.target.closest('.schedule-item[data-id]');
+        if (!item) return;
+        event.preventDefault();
+        openRecordFocus(item.dataset.id);
+      });
+      $('#topSyncBtn').addEventListener('click', openSyncDialog);
+      // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
+      $('#closeDialog').addEventListener('click', closeDialog);
+      $('#cancelDialog').addEventListener('click', closeDialog);
+      els.form.addEventListener('submit', submitForm);
+      // 公司名 / 岗位名输入时实时刷新「该公司已有 N 个岗位」提示
+      $('#company').addEventListener('input', scheduleSameCompanyHint);
+      $('#position').addEventListener('input', scheduleSameCompanyHint);
+      $('#addTimelineBtn').addEventListener('click', addTimelineRow);
+      $('#timelineEditor').addEventListener('click', event => {
+        const del = event.target.closest('.tl-del');
+        if (!del) return;
+        if (document.querySelectorAll('#timelineEditor .tl-row').length <= 1) { showToast('至少保留一个阶段'); return; }
+        del.closest('.tl-row').remove();
+      });
+      els.body.addEventListener('click', handleTableAction);
+      // 搜索 / 筛选 / 排序变化后重渲染「当前视图」（表格或看板），两者共用同一份 getVisibleRecords
+      els.search.addEventListener('input', renderRecordsView);
+      els.filter.addEventListener('change', renderRecordsView);
+      els.sort.addEventListener('change', renderRecordsView);
+      els.dialog.addEventListener('click', event => { if (event.target === els.dialog) closeDialog(); });
+      // 应用内确认框（替代原生 confirm）：确定=true，取消/Esc/点遮罩=false
+      // 结算只发生一次：OK/Cancel 点击时立即 resolve，close 事件仅作 Esc / 点遮罩的兜底。
+      // 不能把 resolve 只押在 close 上——部分 WebView / 内嵌浏览器不派发 <dialog> 的 close 事件，
+      // 那样 await 会永久挂起，表现为「删除点了没反应」且无任何提示（浏览器实证发现）。
+      function settleConfirm() {
+        if (!confirmResolve) return;
+        const resolve = confirmResolve;
+        confirmResolve = null;
+        resolve(confirmResult);
+      }
+      $('#confirmOkBtn').addEventListener('click', () => { confirmResult = true; confirmOutcome = 'ok'; settleConfirm(); $('#confirmDialog').close(); });
+      $('#confirmCancelBtn').addEventListener('click', () => { confirmResult = false; confirmOutcome = 'cancel'; settleConfirm(); $('#confirmDialog').close(); });
+      $('#confirmDialog').addEventListener('close', () => { settleConfirm(); });
+      // Esc 取消：modal dialog 先派发 cancel 再派发 close，而部分环境只派发其中之一，
+      // 因此两条都监听（与 #screenshotDialog 的做法一致），确保 await 一定能结算。
+      // Esc 记为 dismiss 而非 cancel：查重场景要能区分「用户明确选了取消按钮」与「用户什么都没选就关掉」。
+      $('#confirmDialog').addEventListener('cancel', () => { confirmResult = false; confirmOutcome = 'dismiss'; settleConfirm(); });
+      $('#confirmDialog').addEventListener('click', event => {
+        if (event.target !== $('#confirmDialog')) return;
+        confirmResult = false;
+        confirmOutcome = 'dismiss'; // 点遮罩关掉同样视为「未作选择」
+        settleConfirm();
+        $('#confirmDialog').close();
+      });
+      // 推进阶段弹窗：点预设阶段直接推进；自定义则填输入框后点确认
+      $('#advanceStageGrid').addEventListener('click', event => {
+        const btn = event.target.closest('.advance-pick');
+        if (btn) applyAdvance(btn.dataset.stage);
+      });
+      $('#confirmAdvanceBtn').addEventListener('click', () => applyAdvance($('#advanceCustom').value));
+      $('#closeAdvanceDialog').addEventListener('click', closeAdvanceDialog);
+      $('#cancelAdvanceDialog').addEventListener('click', closeAdvanceDialog);
+      $('#advanceDialog').addEventListener('click', event => { if (event.target === $('#advanceDialog')) closeAdvanceDialog(); });
+      $('#closeCaptureDialog').addEventListener('click', closeCaptureDialog);
+      $('#cancelCaptureDialog').addEventListener('click', closeCaptureDialog);
+      $('#captureForm').addEventListener('submit', requestUrlCapture);
+      $('#captureDialog').addEventListener('click', event => { if (event.target === $('#captureDialog')) closeCaptureDialog(); });
+      $('#closeJobSyncDialog').addEventListener('click', closeJobSyncDialog);
+      $('#cancelJobSyncDialog').addEventListener('click', closeJobSyncDialog);
+      $('#startJobSyncBtn').addEventListener('click', requestJobSync);
+      $('#importPastedJobsBtn').addEventListener('click', importPastedJobs);
+      $('#jobSyncDialog').addEventListener('click', event => { if (event.target === $('#jobSyncDialog')) closeJobSyncDialog(); });
+      $('#closeScreenshotDialog').addEventListener('click', closeScreenshotDialog);
+      $('#cancelScreenshotDialog').addEventListener('click', closeScreenshotDialog);
+      $('#startOcrBtn').addEventListener('click', recognizeScreenshot);
+      $('#ocrDropzone').addEventListener('click', () => { if (!ocrRunning) $('#ocrFileInput').click(); });
+      $('#ocrDropzone').addEventListener('keydown', event => {
+        if (!ocrRunning && ['Enter', ' '].includes(event.key)) { event.preventDefault(); $('#ocrFileInput').click(); }
+      });
+      $('#ocrFileInput').addEventListener('change', event => selectScreenshots(event.target.files));
+      window.addEventListener('paste', event => {
+        if (!$('#screenshotDialog').open || ocrRunning) return;
+        const imageFiles = [...(event.clipboardData?.items || [])]
+          .filter(item => item.kind === 'file' && /^image\//i.test(item.type))
+          .map(item => item.getAsFile()).filter(Boolean);
+        if (!imageFiles.length) return;
+        event.preventDefault();
+        selectScreenshots(imageFiles, true);
+        $('#ocrStatus').className = 'capture-status success';
+        $('#ocrStatus').textContent = `已从剪贴板粘贴图片，目前共 ${ocrFiles.length} 张。`;
+      });
+      for (const type of ['dragenter', 'dragover']) {
+        $('#ocrDropzone').addEventListener(type, event => { event.preventDefault(); if (!ocrRunning) $('#ocrDropzone').classList.add('is-dragging'); });
+      }
+      for (const type of ['dragleave', 'drop']) {
+        $('#ocrDropzone').addEventListener(type, event => { event.preventDefault(); $('#ocrDropzone').classList.remove('is-dragging'); });
+      }
+      $('#ocrDropzone').addEventListener('drop', event => { if (!ocrRunning) selectScreenshots(event.dataTransfer?.files); });
+      $('#screenshotDialog').addEventListener('click', event => { if (event.target === $('#screenshotDialog')) closeScreenshotDialog(); });
+      $('#screenshotDialog').addEventListener('cancel', event => { event.preventDefault(); closeScreenshotDialog(); });
+      window.addEventListener('message', handleCaptureMessage);
+      window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_REGISTER_TRACKER', url: location.href.split('?')[0].split('#')[0] }, '*');
+      // 探测旧版一键收录插件：先按当前状态设置入口可见性（默认隐藏网址识别），
+      // 若旧插件随后回 CAPTURE_READY（content script 注入有先后），handleCaptureMessage 会重新显示入口。
+      applyLegacyCaptureUI();
+      [300, 1200].forEach(delay => setTimeout(() => {
+        if (hasLegacyCapturePlugin) return;
+        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_PING', url: location.href.split('?')[0].split('#')[0] }, '*');
+      }, delay));
+      $('#closeSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());
+      $('#doneSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());
+      $('#safetyDialog').addEventListener('click', event => { if (event.target === $('#safetyDialog')) $('#safetyDialog').close(); });
+      $('#setupBackupBtn').addEventListener('click', setupAutomaticBackup);
+      $('#backupNowBtn').addEventListener('click', backupNow);
+      $('#importBtn').addEventListener('click', () => $('#importFileInput').click());
+      $('#importFileInput').addEventListener('change', importBackupFile);
+      $('#restoreSnapshotBtn').addEventListener('click', restorePreviousSnapshot);
+      $('#toolSyncBtn').addEventListener('click', openSyncDialog);
+      $('#closeSyncDialog').addEventListener('click', () => $('#syncDialog').close());
+      $('#cancelSyncDialog').addEventListener('click', () => $('#syncDialog').close());
+      $('#syncDialog').addEventListener('click', event => { if (event.target === $('#syncDialog')) $('#syncDialog').close(); });
+      $('#saveSyncBtn').addEventListener('click', saveSyncSettings);
+      $('#disconnectSyncBtn').addEventListener('click', disconnectSync);
+      // 邮件提醒（M3）：建议卡片操作事件委托 + 重新读取
+      $('#mailList').addEventListener('click', event => {
+        const btn = event.target.closest('button[data-mail-action]');
+        if (!btn) return;
+        const id = btn.dataset.mailId;
+        const action = btn.dataset.mailAction;
+        if (action === 'apply') applyMailSuggestion(id);
+        else if (action === 'new') openMailSeedDialog(id);
+        else if (action === 'dismiss') dismissMailSuggestion(id);
+      });
+      $('#mailRefreshBtn').addEventListener('click', () => {
+        if (!syncConfig.token) { openSyncDialog(); return; }
+        showToast('正在重新读取邮件建议…');
+        syncNow('manual');
+      });
+      $('#mailSettingsBtn').addEventListener('click', openMailSettings);
+      $('#mailGenEncKeyBtn').addEventListener('click', generateMailEncKey);
+      $('#saveMailSettingsBtn').addEventListener('click', saveMailSettings);
+      $('#closeMailSettingsDialog').addEventListener('click', () => $('#mailSettingsDialog').close());
+      $('#cancelMailSettingsDialog').addEventListener('click', () => $('#mailSettingsDialog').close());
+      $('#mailSettingsDialog').addEventListener('click', event => { if (event.target === $('#mailSettingsDialog')) $('#mailSettingsDialog').close(); });
+      $('#closeInstallDialog').addEventListener('click', () => $('#installDialog').close());
+      $('#doneInstallDialog').addEventListener('click', () => $('#installDialog').close());
+      $('#installDialog').addEventListener('click', event => { if (event.target === $('#installDialog')) $('#installDialog').close(); });
+      initializeDataSafety();
+      initializeMobileApp();
+      initializeCloudSync();
+      // 简历下发：本地非空简历推给同页插件（content script 注入时机不确定，重试覆盖）
+      if (!isResumeEmpty(resume)) {
+        setTimeout(pushResumeToPlugin, 1000);
+        setTimeout(pushResumeToPlugin, 3000);
+      }
+      consumeQuickCapture();

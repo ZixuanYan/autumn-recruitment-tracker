@@ -2,9 +2,10 @@
 // ============================================================================
 // test/web-check.js — 网页端（autumn-recruitment-tracker/index.html）本地校验：
 //   1) 内联 <script> 用 vm.Script 做语法校验（只编译不执行，无需 DOM）；
-//   2) 抽取 /*__MAIL_PURE_START__*/…/*__MAIL_PURE_END__*/ 纯函数块，跑单测：
+//   2) 按 src/bundle.js 的清单加载已拆分的纯函数模块（mail/ 与 core/），跑单测：
 //      normalizeCompanySlug / diceCoefficient / matchRecordsByCompany / filterMailSuggestions
 //      （0/1/多命中、后缀剥离、全半角）。
+//   3) 构建链守卫：清单与磁盘一致、模块标记顶格、splice 不得用 String.replace、产物一致。
 // 运行：node test/web-check.js
 // ============================================================================
 
@@ -15,12 +16,74 @@ const assert = require('assert');
 
 const HTML_PATH = path.resolve(__dirname, '../index.html');
 const html = fs.readFileSync(HTML_PATH, 'utf8');
+// 阶段 3 起 index.html 是**构建产物**（源在 src/）。本文件绝大多数断言检查的是产物
+// （CSS 规则、版本号、[hidden] 显示冲突、窄屏列轨道……），所以继续读产物是对的；
+// 只有"抠函数体丢进沙箱跑"那类才改读 src/，见下面的 loadSrc 用法。
+const loadSrc = require('./lib/load-src');
 
 let failed = 0;
 function check(name, fn) {
   try { fn(); console.log(`  ✓ ${name}`); }
   catch (e) { failed += 1; console.error(`  ✗ ${name}\n    ${e.message}`); }
 }
+
+// ---- 阶段 3：构建链守卫 ----
+// 这四条守的是"拆分本身"引入的新失效面。共同特征都是**不报错型**：清单漏文件、标记带缩进、
+// splice 被改成 replace、忘记 build——构建全绿、语法全对，但上线的代码与你以为的不是同一份。
+console.log('构建链守卫（src/ 清单 · 标记形态 · splice 实现 · 产物一致性）');
+
+check('src/bundle.js 清单与磁盘双向一致：清单里的文件都在，磁盘上没有清单外的孤儿', () => {
+  const listed = new Set([
+    'template.html',
+    ...loadSrc.BUNDLE.styles,
+    ...loadSrc.BUNDLE.app.flatMap(e => (typeof e === 'string' ? [e] : e.files))
+  ]);
+  const absent = [...listed].filter(rel => !fs.existsSync(path.join(loadSrc.SRC, rel)));
+  assert.deepStrictEqual(absent, [], '清单里这些文件在磁盘上不存在');
+  // 反向：磁盘上不在清单里的文件永远不会进产物，等于死代码（更糟的是它看起来像有效源码）
+  const walk = (dir, prefix) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? walk(path.join(dir, e.name), prefix + e.name + '/') : [prefix + e.name]);
+  const orphans = walk(loadSrc.SRC, '').filter(f => f !== 'bundle.js' && !listed.has(f));
+  assert.deepStrictEqual(orphans, [], '这些 src/ 文件不在拼接清单里，永远不会进产物');
+});
+
+check('模块标记必须顶格：带缩进的话那几个空格会残留进产物（多出的缩进让 SHA 变化）', () => {
+  for (const rel of loadSrc.BUNDLE.app.filter(e => typeof e === 'string')) {
+    for (const line of loadSrc.read(rel).split('\n')) {
+      if (line.includes('__MODULE:')) {
+        assert.strictEqual(line, line.trim(),
+          `src/${rel} 里的模块标记带了缩进：${JSON.stringify(line)}`);
+      }
+    }
+  }
+});
+
+check('build.js 的 splice 用 split/join，不得用 String.replace（$& 陷阱会静默改写代码）', () => {
+  const buildSrc = fs.readFileSync(path.resolve(__dirname, '../build.js'), 'utf8');
+  const m = /function splice\([\s\S]*?\n\}/.exec(buildSrc);
+  assert.ok(m, 'build.js 里找不到 splice 函数');
+  assert.ok(!/\.replace\(/.test(m[0]),
+    'splice 里出现了 .replace(：replace 的第二个字符串参数会把 $& 当成「匹配到的内容」、' +
+    "$' 当成「匹配点之后的文本」，而内联 JS 有 156 个模板字面量满是这类字符——" +
+    '代码被静默改写、语法仍合法、构建也不报错');
+  assert.ok(/\.split\(m\)\.join\(content\)/.test(m[0]), 'splice 应当是 split(marker).join(content)');
+});
+
+check('产物一致性：dist/index.html 与入库的 index.html 逐字节相同', () => {
+  const distHtml = path.resolve(__dirname, '../dist/index.html');
+  if (!fs.existsSync(distHtml)) {
+    console.log('    （dist/ 不存在，跳过；npm test 会先跑 node build.js）');
+    return;
+  }
+  const built = fs.readFileSync(distHtml, 'utf8');
+  if (built !== html) {
+    const a = built.split('\n'), b = html.split('\n');
+    let i = 0;
+    while (i < Math.min(a.length, b.length) && a[i] === b[i]) i += 1;
+    assert.fail(`构建产物与入库的 index.html 不同，首个差异在第 ${i + 1} 行。\n` +
+      '      要么改了 src/ 忘记 `npm run build:write`，要么手改了 index.html 而没改 src/。');
+  }
+});
 
 // ---- 1) 内联脚本语法校验 ----
 console.log('内联 <script> 语法校验（vm.Script 只编译不执行）');
@@ -33,14 +96,17 @@ inlineScripts.forEach((code, i) => {
   check(`内联脚本 #${i + 1} 语法通过（${code.length} 字符）`, () => { new vm.Script(code, { filename: `inline-${i + 1}.js` }); });
 });
 
-// ---- 2) 抽取纯函数块并单测 ----
+// ---- 2) 加载已拆分的纯函数模块并单测 ----
 console.log('邮件匹配纯函数单测');
-const startMark = '/*__MAIL_PURE_START__*/';
-const endMark = '/*__MAIL_PURE_END__*/';
-const si = html.indexOf(startMark);
-const ei = html.indexOf(endMark);
-check('找到纯函数块标记', () => { assert.ok(si !== -1 && ei !== -1 && ei > si, '未找到 __MAIL_PURE_START__/__END__ 标记'); });
-const pureSrc = html.slice(si + startMark.length, ei);
+// 阶段 3：这一块已拆成 src/mail/pure.js（140 行，10 个函数只调用彼此与内置方法，完全自洽）。
+// 原先这里是手写 indexOf/slice 从 6892 行产物里抠两个标记之间的内容——标记名拼错、或有人
+// 改动了那行注释，就会静默抠出空串，接着 new Function 里 10 个符号全成 undefined，
+// 报错信息（"normalizeCompanySlug is not defined"）离真实原因（一个标记名）非常远。
+const pureSrc = loadSrc.mailSrc;
+check('邮件纯函数模块已按清单加载（不再靠标记文本定位）', () => {
+  assert.deepStrictEqual(loadSrc.moduleFiles('mail'), ['mail/pure.js']);
+  assert.ok(pureSrc.length > 500, `mail/pure.js 过短或未读到：${pureSrc.length}`);
+});
 const helpers = new Function(`${pureSrc}; return { normalizeCompanySlug, diceCoefficient, companyMatchScore, matchRecordsByCompany, filterMailSuggestions, unionIdList, unionMailState, describeDropReason, normalizeDropStats, mileNoteText };`)();
 
 check('normalizeCompanySlug 剥离后缀 + 全角转半角 + 小写', () => {
@@ -269,15 +335,15 @@ function extractFunction(src, name) {
   }
   return '';
 }
-function extractBlock(src, startMark, endMark) {
-  const s = src.indexOf(startMark);
-  const e = src.indexOf(endMark);
-  return (s !== -1 && e !== -1 && e > s) ? src.slice(s + startMark.length, e) : '';
-}
+// extractBlock 已删除：CORE_PURE 拆成 src/core/ 六个文件后，本文件不再需要从产物里
+// 按标记抠块（web-runtime.js 还在用它抽洞察段与台账段，那两处本轮不动）。
 
 console.log('v4.4.0 核心纯函数单测（截止日 / 日程事件 / ICS / 公司分组 / 漏斗 / 停留 / 卡点 / 查重）');
-const coreSrc = extractBlock(html, '/*__CORE_PURE_START__*/', '/*__CORE_PURE_END__*/');
-check('找到 CORE 纯函数块标记', () => assert.ok(coreSrc.length > 500, `CORE 块过短或未找到：${coreSrc.length}`));
+const coreSrc = loadSrc.coreSrc;
+check('CORE 纯函数模块已按清单加载（6 个文件，531 行）', () => {
+  assert.strictEqual(loadSrc.moduleFiles('core').length, 6, 'src/core/ 应为 6 个文件');
+  assert.ok(coreSrc.length > 500, `CORE 块过短或未读到：${coreSrc.length}`);
+});
 
 const CORE_DEP_NAMES = ['stageOrder', 'parseLocal', 'localDateInput', 'localDateTimeInput', 'formatDate', 'formatDateTime', 'isActive', 'cryptoId', 'sanitizeTimeline', 'deriveStage', 'normalizeRecord', 'escapeHtml'];
 const coreDeps = CORE_DEP_NAMES.map(name => extractFunction(html, name));

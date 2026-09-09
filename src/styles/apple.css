@@ -1,0 +1,613 @@
+    /* ================================================================
+       APPLE THEATRICAL DESIGN SYSTEM — v4.10.0
+       白画布(#f5f5f7) + Apple 蓝(#0071e3)强调；发丝线卡片(1px hairline + 近不可见承托影，
+       废弃机加工三件套 ring/内高光/环境影)；胶囊控件；磨砂玻璃侧栏导航；ease-apple 曲线；
+       高密度 dashboard（表格行 ~48px、基础字号 14px，非营销页尺度）。
+       本层位于样式表末尾，级联覆盖旧模板。令牌依据与逐项 WCAG 实算见
+       Apple风格重刷实施方案-v4.10.0.md。
+       ================================================================ */
+    :root {
+      --bg: #f5f5f7; --surface: #ffffff; --surface-2: #f5f5f7; --surface-3: #ededf2;
+      --ink: #1d1d1f; --ink-2: #48484a; --muted: #6e6e73; --faint: #aeaeb2;
+      --line: rgba(0, 0, 0, .08); --line-strong: #d2d2d7;
+      --accent: #0071e3; --accent-ink: #0066cc; --accent-soft: #e6f1fc;
+      --ok: #1f7a35; --ok-soft: #e3f7e8; --warn: #a05a00; --warn-soft: #fff3e2; --danger: #d70015; --danger-soft: #ffebea;
+      /* iOS 系统原色：仅装饰性填充（左色条 / 进度条 / 圆点），**绝不用于小字文本**——
+         它们对白底的对比度不足 4.5:1，文本档请用上面的 --ok/--warn/--danger。 */
+      --ok-bright: #34c759; --warn-bright: #ff9f0a; --danger-bright: #ff3b30;
+      /* --offer-gold 名称保留兼容，值已改 Apple 绿（v4.10.0 决策：Offer = 成功语义，金色废除）。
+         白字压 #1f7a35 实测 5.39:1 达标；#248a3d 只有 4.40:1 不达标，故不用。 */
+      --offer-gold: #1f7a35; --offer-gold-soft: #e3f7e8;
+      /* v4.6.0 企业性质专用色（央国企 / 民企 / 外企 / 未设置），v4.10.0 Apple 化。
+         刻意与阶段色阶、状态色分离：这套色只出现在 ct-chip 与洞察的「企业性质」块里，
+         不参与任何阶段或成功/警告语义，避免用户在台账里把颜色当成进度信号。 */
+      --ct-soe: #c93400; --ct-soe-soft: #faebe6;
+      --ct-private: #0071e3; --ct-private-soft: #e6f1fc;
+      --ct-foreign: #177e89; --ct-foreign-soft: #e8f2f3;
+      --ct-none: #6e6e73; --ct-none-soft: #f5f5f7;
+      --primary: #0071e3; --primary-dark: #0066cc; --primary-soft: #e6f1fc;
+      --seal: #d70015; --seal-soft: #ffebea; --silver: #6e6e73; --silver-soft: #f5f5f7;
+      --green: #1f7a35; --green-soft: #e3f7e8; --amber: #a05a00; --amber-soft: #fff3e2; --red: #d70015; --red-soft: #ffebea;
+      --r-xl: 24px; --r-lg: 18px; --r-md: 12px; --r-sm: 10px; --r-pill: 999px;
+      /* 机加工三件套废弃，改为「发丝线 + 近不可见承托影」。
+         ⚠️ --hi 必须置**语法合法的零值**，禁止写 none：基础层有
+         `box-shadow: var(--hi), var(--ring), var(--sh-ambient)`，任一项为 none 会让整条声明失效，
+         大量元素瞬间失去全部阴影（且不报错）。--ring 退化为发丝内描边，仅作基础层旧引用兜底。 */
+      --ring: 0 0 0 1px var(--line); --hi: inset 0 0 0 rgba(255, 255, 255, 0);
+      --sh-ambient: 0 1px 2px rgba(0, 0, 0, .04), 0 8px 24px rgba(0, 0, 0, .06);
+      --sh-pop: 0 12px 40px rgba(0, 0, 0, .12);
+      --ease: cubic-bezier(.28, .11, .32, 1);
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --shadow: var(--sh-ambient); --radius: var(--r-lg);
+      /* 兼容别名：供仍引用旧变量名的基础层规则使用（--paper 同时是 .brand-mark 的文字色，必须是浅色） */
+      --paper: #f5f5f7; --surface-soft: #f5f5f7; --shadow-1: var(--sh-ambient); --shadow-2: var(--sh-pop); --radius-sm: 10px;
+    }
+    /* body：删掉旧的钴蓝 radial-gradient 铺底（Apple 禁忌「蓝色铺底 / 多彩渐变」，且那是旧主色的残留）。
+       排印三件套来自设计资源 body 的原值：line-height 1.55（Body 档）、letter-spacing -.005em、
+       font-feature-settings 开 SF Pro 的替代字形 cv02/cv03/cv04/cv11（数字与字母的苹果排印细节）。
+       -moz-osx-font-smoothing 与 -webkit- 成对，只写一个在 Firefox 上会是粗体渲染。 */
+    body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 14px; line-height: 1.55; letter-spacing: -.005em; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-feature-settings: "cv02", "cv03", "cv04", "cv11"; }
+    ::selection { background: rgba(0, 113, 227, .16); color: var(--ink); }
+    /* 全局滚动条（规范原值：10px、rgba(0,0,0,.15)、hover .28）。基础层 L361 的
+       .sidebar-nav{scrollbar-width:none} 是类选择器，特异性更高，移动端隐藏滚动条不受影响。 */
+    * { scrollbar-width: thin; scrollbar-color: rgba(0, 0, 0, .15) transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .15); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, .28); background-clip: content-box; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* M1a 白卡类：废弃机加工三件套（内高光 + ring + 环境影），改为「1px 发丝线 + 近不可见承托影」。
+       规范依据：发丝分割线替代大部分投影。dialog 用 24px 圆角与 lift 阴影（浮层档）。 */
+    .panel, .stat-card, .tool-card, .resume-section-block, .distribution { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    dialog { background: var(--surface); border: 0; border-radius: var(--r-xl); box-shadow: var(--sh-pop); }
+    dialog::backdrop { background: rgba(0, 0, 0, .3); backdrop-filter: blur(6px); }
+    /* 侧栏是全站唯一的 sticky chrome，所以磨砂玻璃用在这里、而不是设计资源规范的顶栏
+       （本项目顶栏不 sticky，磨砂无意义）。必须带 @supports 降级：不支持 backdrop-filter 的
+       浏览器要退回纯白，否则侧栏变成半透明白与内容糊在一起不可读。 */
+    .app-sidebar { background: var(--surface); border-right: 1px solid var(--line); }
+    @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
+      .app-sidebar { background: rgba(255, 255, 255, .72); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+    }
+    .sidebar-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+    .sidebar-brand .brand-mark { border-radius: 12px; background: var(--accent); color: #fff; box-shadow: none; }
+    /* 导航项用圆角矩形（Apple 系统设置侧栏的做法）而不是胶囊——胶囊是**按钮**的语言。
+       is-active 必须显式 box-shadow:none，压掉基础层那条 inset 3px 蓝条。 */
+    .nav-item { border-radius: var(--r-md); min-height: 40px; color: var(--muted); font-weight: 500; transition: background .18s var(--ease), color .18s var(--ease); }
+    .nav-item:hover { background: rgba(0, 0, 0, .04); color: var(--ink); }
+    .nav-item.is-active { background: var(--surface-2); color: var(--ink); font-weight: 600; box-shadow: none; }
+    .nav-icon { font-size: 15px; }
+    .nav-icon svg { width: 17px; height: 17px; }
+    .sidebar-footer { background: rgba(0, 0, 0, .03); border: 0; box-shadow: none; color: var(--muted); border-radius: var(--r-md); }
+    .topbar { min-height: 60px; }
+    h1 { font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: -.025em; line-height: 1.15; }
+    .page-kicker { display: inline-block; margin-bottom: 4px; padding: 3px 10px; border-radius: var(--r-pill); background: rgba(0, 0, 0, .04); color: var(--muted); font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
+    .subtitle { color: #86868b; font-size: 13px; line-height: 1.4; }
+    .brand-mark { border-radius: 12px; background: var(--accent); color: #fff; box-shadow: none; }
+    /* Apple 按钮：hover **只变暗不位移**（废弃 translateY 抬升与彩色投影）；:active 按压态用
+       --surface-3（= base-300 #ededf2，设计资源 secondary button hover 同值）。 */
+    .btn { border: 1px solid var(--line-strong); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); min-height: 38px; padding: 0 16px; font-weight: 500; font-size: 14px; box-shadow: none; transition: background .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease); }
+    .btn:hover { transform: none; background: var(--surface-2); border-color: #c7c7cc; box-shadow: none; }
+    .btn:active { transform: scale(.97); background: var(--surface-3); }
+    .btn-primary { background: var(--accent); border-color: transparent; color: #fff; box-shadow: none; }
+    .btn-primary:hover { background: var(--accent-ink); border-color: transparent; }
+    .btn-primary .icon { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 8px; border-radius: 50%; background: rgba(255, 255, 255, .2); font-size: 12px; }
+    .icon svg { width: 1.15em; height: 1.15em; vertical-align: -0.18em; }
+    .btn-primary .icon svg { width: 14px; height: 14px; vertical-align: 0; }
+    .btn-soft { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; box-shadow: none; }
+    .btn-soft:hover { background: #d6e8fb; }
+    .btn-danger { background: var(--danger-soft); color: var(--danger); border-color: transparent; box-shadow: none; }
+    .btn-danger:hover { background: #ffe0de; }
+    .btn-small { min-height: 32px; padding: 0 12px; font-size: 12.5px; font-weight: 500; }
+    .text-button { border-radius: var(--r-pill); color: var(--muted); }
+    .text-button:hover { background: rgba(0, 0, 0, .04); color: var(--ink); }
+    .text-button.danger:hover { background: var(--danger-soft); color: var(--danger); }
+    /* 表单：44px 胶囊 + 1px #d2d2d7 描边，focus 只把边框变蓝、**无光晕**（Apple 规范）。
+       ⚠️ .control:focus 的 outline:none 特异性高于全局元素级 focus-visible 规则，所以必须补
+       .control:focus-visible，否则键盘用户看不到焦点（a11y 回归）。
+       ⚠️ textarea.control 必须显式例外：多行框胶囊化会变成 44px 高的圆胶囊，内容不可见
+       （基础层 L189 与本层同特异性 (0,1,1)，本层在后生效，所以必须写全 min-height/padding/radius）。 */
+    .control { border: 1px solid var(--line-strong); border-radius: var(--r-pill); background: var(--surface); box-shadow: none; min-height: 44px; padding: 0 16px; font-size: 14px; color: var(--ink); transition: border-color .18s var(--ease); }
+    .control::placeholder { color: var(--faint); }
+    .control:focus { border-color: var(--accent); box-shadow: none; outline: none; background: var(--surface); }
+    .control:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    textarea.control { border-radius: var(--r-lg); min-height: 78px; padding: 12px 14px; }
+    .search-glyph { color: #86868b; }
+    /* 表单 label：13px / weight 500 / ink-soft / 下间距 6px（设计资源规范）。
+       基础层是 700 且继承 ink，在小尺寸密集表单里过重。
+       .exp-fields-grid label 与 .safety-label 特异性更高，不受本条影响。 */
+    label { color: #86868b; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+    .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+    .stat-card { padding: 14px 16px; }
+    .stat-card:first-child { grid-column: span 2; }
+    .stat-top { color: var(--muted); font-size: 12px; font-weight: 500; }
+    .stat-icon { width: 26px; height: 26px; border-radius: 8px; background: var(--surface-2); box-shadow: none; display: grid; place-items: center; color: var(--accent); }
+    .stat-icon svg { width: 15px; height: 15px; }
+    .stat-card[data-metric="offer"] .stat-icon { background: var(--offer-gold-soft); color: var(--offer-gold); box-shadow: none; }
+    .stat-number { font-family: var(--font-mono); font-size: 28px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); margin-top: 8px; }
+    .stage-grid { gap: 8px; }
+    /* 内描边环 → 真边框（阶段色阶的 --stage-border 本来就是为此准备的） */
+    .stage-cell { border: 1px solid var(--stage-border, var(--line)); border-radius: var(--r-md); box-shadow: none; background: var(--stage-soft, var(--surface-2)); padding: 9px 10px; }
+    .stage-meta { color: var(--stage-color, var(--muted)); font-size: 11.5px; font-weight: 600; }
+    .bar { height: 5px; background: rgba(0, 0, 0, .06); }
+    /* 进度条填充要有宽度过渡（设计资源 progress fill = duration-500）；旧版无过渡，
+       切换视图时条是瞬间跳变的。 */
+    .bar-fill { background: var(--stage-color, var(--accent)); transition: width .5s var(--ease); }
+    /* 语义色 10-12% 底 + 语义色文字，去掉内描边环。font-weight 600→500（规范）。
+       ⚠️ 后面那串复位属性（transform:none / font-family / letter-spacing:0 / padding）是对基础层的
+       刻意覆盖，删掉即回归旧模板外观，一律保留。 */
+    .badge { border: 0; border-radius: var(--r-pill); background: var(--stage-soft, var(--surface-2)); color: var(--stage-color, var(--ink-2)); padding: 3px 10px 3px 8px; font-size: 12px; font-weight: 500; letter-spacing: 0; transform: none; font-family: var(--font-sans); box-shadow: none; }
+    .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--stage-color, var(--faint)); }
+    /* ===== 阶段色阶：唯一权威定义（14 预设有序递进）=====
+       中性灰(未开始) → 蓝灰(已投递/测评/笔试/机试) → Apple 蓝(面试轮次逐轮加深至藏蓝)
+       → iOS 靛 / Apple 紫(交叉面 / HR面) → Apple 绿(Offer) → 淡灰(已结束)。
+       文本档全部 ≥4.5:1（已结束除外，刻意 ×.62 淡化，与旧版一致）。
+       色阶值与 shared/stages.js 的 14 个阶段名一一对应，改名要同步改这里。
+       自定义阶段（不在预设内）自动回退 .badge/.stage-cell 的 --accent 兜底色。
+       选择器同时覆盖 .step（抽屉时间线）：CSS 自定义属性会向下继承，故 .step-dot 等子孙能直接拿到同一套色值。 */
+    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"], .step[data-stage="待投递"] { --stage-color: #6e6e73; --stage-soft: transparent; --stage-border: #d2d2d7; }
+    .badge[data-stage="待投递"], .stage-cell[data-stage="待投递"] { border: 1px dashed var(--stage-border); box-shadow: none; }
+    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"], .step[data-stage="已投递"] { --stage-color: #64748b; --stage-soft: #f0f1f3; --stage-border: #d0d5dc; }
+    .stage-cell[data-stage="测评"], .badge[data-stage="测评"], .step[data-stage="测评"] { --stage-color: #5876a0; --stage-soft: #eef1f6; --stage-border: #cdd6e2; }
+    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"], .step[data-stage="笔试"] { --stage-color: #4a71ad; --stage-soft: #edf1f7; --stage-border: #c9d4e6; }
+    .stage-cell[data-stage="机试"], .badge[data-stage="机试"], .step[data-stage="机试"] { --stage-color: #356db8; --stage-soft: #ebf0f8; --stage-border: #c2d3ea; }
+    .stage-cell[data-stage="一面"], .badge[data-stage="一面"], .step[data-stage="一面"] { --stage-color: #0071e3; --stage-soft: #e6f1fc; --stage-border: #b2d4f7; }
+    .stage-cell[data-stage="二面"], .badge[data-stage="二面"], .step[data-stage="二面"] { --stage-color: #0066cc; --stage-soft: #e6f0fa; --stage-border: #b2d1f0; }
+    .stage-cell[data-stage="三面"], .badge[data-stage="三面"], .step[data-stage="三面"] { --stage-color: #0058b0; --stage-soft: #e6eef7; --stage-border: #b2cde7; }
+    .stage-cell[data-stage="四面"], .badge[data-stage="四面"], .step[data-stage="四面"] { --stage-color: #004e9c; --stage-soft: #e6edf5; --stage-border: #b2cae1; }
+    .stage-cell[data-stage="五面"], .badge[data-stage="五面"], .step[data-stage="五面"] { --stage-color: #004487; --stage-soft: #e6ecf3; --stage-border: #b2c7db; }
+    .stage-cell[data-stage="交叉面"], .badge[data-stage="交叉面"], .step[data-stage="交叉面"] { --stage-color: #5856d6; --stage-soft: #eeeefb; --stage-border: #cdccf3; }
+    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"], .step[data-stage="HR面"] { --stage-color: #5e30b1; --stage-soft: #efeaf7; --stage-border: #cfc1e8; }
+    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"], .step[data-stage="Offer"] { --stage-color: #1f7a35; --stage-soft: #e3f7e8; --stage-border: #1f7a35; }
+    .badge[data-stage="Offer"] { color: #fff; background: #1f7a35; border: 0; box-shadow: none; }
+    .badge[data-stage="Offer"]::before { background: #fff; }
+    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"], .step[data-stage="已结束"] { --stage-color: #86868b; --stage-soft: #f5f5f7; --stage-border: #dbdbdc; }
+    .badge[data-stage="已结束"] { opacity: .62; }
+    /* 表头恢复 base-200 灰带 + tracking .16em（规范）。安全性已核实：所有表格上方都有
+       panel-head / filters / 块头，灰带不会顶出 panel 圆角；≤560px 卡片化时 thead 整体隐藏。
+       td 字号 13.5→14：行高 12+12+21.7+1 ≈ 47px，达成 ~48px 的密度目标。 */
+    th { background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; border: 0; border-bottom: 1px solid var(--line); padding: 10px 14px; }
+    td { border-top: 1px solid var(--line); padding: 12px 14px; font-size: 14px; }
+    tbody tr:hover { background: var(--surface-2); }
+    /* Offer 行左条改**装饰亮档** --ok-bright(#34c759)：3px 色条不承载文字，用亮色更醒目；
+       文本与实底一律走 --ok(#1f7a35)，亮绿白字只有 2.22:1，严禁用于文字。 */
+    tbody tr[data-is-offer="true"] { box-shadow: inset 3px 0 0 var(--ok-bright); }
+    .record-no { color: var(--muted); font-family: var(--font-mono); }
+    .company { font-weight: 650; }
+    .company-link:hover { color: var(--accent-ink); }
+    .overdue { color: var(--danger); }
+    /* padding 从 16px 18px 收到 16px：18 不在设计资源的 4 倍数间距阶（4/8/12/16/24/32/48/64/96）上。 */
+    .panel-head { padding: 16px; border-bottom: 1px solid var(--line); }
+    .panel-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
+    .panel-caption { color: var(--muted); font-size: 12.5px; }
+    .filters { padding: 12px 16px; }
+    .schedule-item { padding: 13px 0; }
+    .date-tile { border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); }
+    .date-month { background: var(--accent); color: #fff; }
+    .side-time { color: var(--accent-ink); }
+    .tool-card { padding: 16px; transition: box-shadow .18s var(--ease), border-color .18s var(--ease); }
+    /* Apple：hover 只升阴影与描边，**不位移**（覆盖基础层 L93 的 transform 抬升） */
+    .tool-card:hover { transform: none; border-color: var(--line-strong); box-shadow: var(--sh-ambient); }
+    .tool-icon { width: 38px; height: 38px; border-radius: 10px; background: var(--surface-2); color: var(--ink); box-shadow: none; font-size: 0; display: grid; place-items: center; }
+    .tool-icon svg { width: 18px; height: 18px; }
+    .tool-card h3 { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+    .tool-status { border-radius: var(--r-pill); background: var(--surface-2); color: var(--muted); box-shadow: none; }
+    .tool-status.ok { background: var(--ok-soft); color: var(--ok); box-shadow: none; }
+    .tool-status.warning { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
+    .resume-block-head { background: var(--surface-2); border-bottom: 1px solid var(--line); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+    .resume-block-head h3 { font-family: var(--font-display); font-size: 14px; font-weight: 600; }
+    .resume-progress { border: 0; box-shadow: none; border-radius: var(--r-md); background: var(--surface-2); }
+    .resume-progress-fill { background: var(--accent); transition: width .5s var(--ease); }
+    .resume-privacy-note { background: var(--accent-soft); color: var(--accent-ink); border-radius: var(--r-md); }
+    .kv-del-btn { border-radius: 8px; background: var(--danger-soft); color: var(--danger); }
+    .exp-item-card { border: 0; box-shadow: none; border-radius: var(--r-md); background: var(--surface-2); }
+    .exp-item-header h4 { color: var(--accent-ink); }
+    .field-library-item { border: 1px solid var(--line); box-shadow: none; border-radius: var(--r-md); background: var(--surface); }
+    .field-library-item:hover { background: var(--accent-soft); border-color: rgba(0, 113, 227, .3); box-shadow: none; }
+    .modal-head { padding: 16px 24px; }
+    .modal-head h2 { font-family: var(--font-display); font-size: 18px; font-weight: 600; letter-spacing: -.015em; line-height: 1.2; }
+    .close-btn { border-radius: 10px; background: var(--surface-2); color: var(--muted); box-shadow: none; border: 0; }
+    .close-btn:hover { background: #e8e8ed; color: var(--ink); }
+    .capture-note { background: var(--accent-soft); color: var(--accent-ink); border-radius: var(--r-md); }
+    .capture-status.success { color: var(--ok); }
+    .capture-status.error { color: var(--danger); }
+    .ocr-dropzone { border: 1.5px dashed var(--line-strong); border-radius: var(--r-lg); background: rgba(0, 0, 0, .02); }
+    .ocr-dropzone.is-dragging { border-color: var(--accent); background: var(--accent-soft); }
+    .ocr-result-card { border: 0; box-shadow: none; border-radius: var(--r-md); background: var(--surface-2); }
+    .ocr-result-check { accent-color: var(--accent); }
+    .empty, .side-empty, .resume-empty-hint { color: var(--muted); }
+    /* 页面切换 400ms + 位移 16px（规范原值；旧版 .45s/12px） */
+    .view.is-entering { animation: view-in .4s var(--ease); }
+    @keyframes view-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    @media (max-width: 1100px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stat-card:first-child { grid-column: span 1; } }
+    @media (max-width: 780px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+    /* ===== v4.4.0：截止日倒计时 + 未来安排统一事件流 ===== */
+    .deadline-hint { margin-top: 4px; font-size: 12px; font-weight: 650; color: var(--muted); }
+    .deadline-hint.warn { color: var(--warn); }
+    .deadline-hint.danger { color: var(--danger); }
+    .schedule-body { min-width: 0; }
+    .schedule-item[role="button"] { cursor: pointer; transition: background .18s var(--ease); }
+    .schedule-item[role="button"]:hover { background: var(--surface-2); }
+    .schedule-item.is-overdue { box-shadow: inset 3px 0 0 var(--danger); padding-left: 10px; }
+    .schedule-item.is-deadline .date-tile { background: var(--warn-soft); color: var(--warn); }
+    .schedule-item.is-deadline .date-month { background: var(--warn); }
+    .side-kind { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; border: 0; color: var(--ink-2); font-size: 11px; font-weight: 700; }
+    .schedule-item.is-deadline .side-kind { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
+    .side-company { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .badge-sm { min-height: 19px; padding: 0 7px 0 6px; font-size: 11px; }
+    .badge-sm::before { width: 5px; height: 5px; }
+
+    /* ===== v4.4.0：洞察面板（漏斗 / sparkline / 停留 / 指标 / 卡点 / Offer 对比）===== */
+    .insights { margin-bottom: 16px; }
+    .insights-body { display: grid; gap: 16px; padding: 16px; }
+    /* 同理：首启引导显示时要把洞察内容整体隐掉，作者层 display:grid 必须被 [hidden] 显式覆盖 */
+    .insights-body[hidden] { display: none; }
+
+    /* ===== toast：磨砂玻璃增强 =====
+       基础层的 .toast 本身已改成 Apple 白底（不再靠本层去"压"旧深底——那种依赖很脆弱，
+       覆盖层一旦失效就变回深底白字）。这里只负责加磨砂：@supports 命中时用 .72 + blur(20px)，
+       不支持时留在上面那条 .88 的不透明降级值。
+       与设计资源的四处对齐：圆角用矩形档而非胶囊（toast 常是标题+副文本两行，胶囊会压行）、
+       阴影用 soft 档而非 lift、时长 320ms（规范 SpecList 明确含 toast）、action 是纯文字链接。 */
+    .toast { background: rgba(255, 255, 255, .88); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-ambient); padding: 10px 16px; font-size: 14px; font-weight: 500; transition: .32s var(--ease); }
+    @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
+      .toast { background: rgba(255, 255, 255, .72); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+    }
+    .toast-action { border: 0; background: transparent; color: var(--accent); font-weight: 500; }
+    .toast-action:hover { text-decoration: underline; background: transparent; }
+    .insight-block { min-width: 0; }
+    .insight-block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+    .insight-block-head h3 { margin: 0; font-size: 13px; font-weight: 600; font-family: var(--font-display); }
+    .insight-note { color: var(--muted); font-size: 11.5px; }
+    .insight-toggle { margin-top: 8px; font-size: 12px; }
+    .insight-empty { padding: 10px 0; color: var(--muted); font-size: 12.5px; }
+    .funnel-row { display: flex; align-items: stretch; gap: 6px; flex-wrap: wrap; }
+    .funnel-step { flex: 1 1 120px; min-width: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
+    .funnel-label { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+    .funnel-value { display: flex; align-items: baseline; gap: 7px; margin: 3px 0 7px; font-family: var(--font-mono); font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+    .funnel-rate { color: var(--accent-ink); font-family: var(--font-sans); font-size: 11.5px; font-weight: 650; }
+    .funnel-bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+    .funnel-bar-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width .5s var(--ease); }
+    .funnel-arrow { flex: 0 0 auto; align-self: center; color: var(--faint); font-size: 14px; }
+    .insight-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; }
+    .spark { display: block; width: 100%; height: 46px; }
+    .spark-axis { display: flex; justify-content: space-between; margin-top: 2px; color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+    .dwell-list { display: grid; gap: 2px; }
+    .dwell-row { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 12.5px; }
+    .dwell-row:last-child { border-bottom: 0; }
+    .dwell-days { margin-left: auto; font-family: var(--font-mono); font-weight: 700; }
+    .dwell-count { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; }
+    .insight-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .insight-metric { padding: 11px 13px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
+    .insight-metric-label { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+    .insight-metric-value { margin-top: 2px; font-family: var(--font-mono); font-size: 21px; font-weight: 700; letter-spacing: -.02em; }
+    .insight-metric-sub { margin-top: 1px; color: var(--muted); font-size: 11.5px; }
+    .alert-list { display: grid; gap: 6px; }
+    /* 规范 alert：base-200 底 + 左 3px **真边框**语义条（不是 inset shadow）。
+       色条用 bright 装饰档（更醒目），文字用文本档（对比度达标）——两档分工，别混用。 */
+    .alert-item { display: block; width: 100%; padding: 9px 12px; border: 0; border-left: 3px solid transparent; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; color: var(--ink-2); font-size: 12.5px; text-align: left; transition: background .18s var(--ease), color .18s var(--ease); }
+    .alert-item:hover { background: var(--accent-soft); color: var(--accent-ink); }
+    .alert-item.danger { border-left-color: var(--danger-bright); color: var(--danger); }
+    .alert-item.warn { border-left-color: var(--warn-bright); color: var(--warn); }
+    .alert-item.info { border-left-color: var(--accent); }
+    .offer-matrix { min-width: 620px; }
+    .multi-company-list { display: grid; gap: 8px; }
+    .multi-company { padding: 10px 12px 10px 14px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; position: relative; }
+    .multi-company::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--company-color, var(--accent)); }
+    .multi-company-head { display: flex; align-items: baseline; gap: 9px; }
+    .multi-company-head strong { font-size: 13.5px; }
+    .multi-company-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; }
+    .multi-company-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .multi-company-item { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); box-shadow: none; font-size: 12px; color: var(--ink-2); }
+    .multi-company-item:hover { background: var(--accent-soft); color: var(--accent-ink); }
+    .multi-company-pos { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (max-width: 900px) {
+      .insight-grid { grid-template-columns: minmax(0, 1fr); }
+      .insight-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* ===== v4.6.0：洞察明细折叠容器 + 城市分布 + 企业性质 ===== */
+    .insight-details { display: grid; gap: 16px; min-width: 0; }
+    /* 关键守卫：作者层的 display:grid 会覆盖 UA 的 [hidden]{display:none}。
+       漏了这条，精简模式下明细块仍然占位并吞掉下方台账的点击（.drawer / .insights-body / .ocr-* 踩过同一个坑）。 */
+    .insight-details[hidden] { display: none; }
+    .city-list { display: grid; gap: 2px; }
+    .city-row { display: grid; grid-template-columns: minmax(52px, auto) minmax(0, 1fr) 26px 62px; align-items: center; gap: 9px; padding: 5px 6px; border-radius: var(--r-sm); font-size: 12.5px; }
+    /* 拆开旧的 hover/focus 合并规则：hover 只要底色，focus-visible 必须有可见 outline（a11y） */
+    .city-row:hover { background: var(--surface-2); box-shadow: none; }
+    .city-row:focus-visible { background: var(--surface-2); outline: 2px solid var(--accent); outline-offset: 1px; }
+    .city-name { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .city-bar { position: relative; display: block; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+    /* 双层条：底色 = 该城市投递量占最大城市的比例，实色 = 其中拿到 Offer 的部分 */
+    .city-bar-total { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--accent); opacity: .26; transition: width .5s var(--ease); }
+    .city-bar-offer { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--ok-bright); transition: width .5s var(--ease); }
+    .city-num { text-align: right; font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .city-offer { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
+    .city-offer.has { color: var(--ok); font-weight: 700; }
+    .city-row.is-unknown { color: var(--muted); }
+    .city-row.is-unknown .city-name { font-weight: 600; }
+    .ctype-bar { display: flex; height: 10px; border-radius: 999px; background: var(--ct-none-soft); box-shadow: none; overflow: hidden; }
+    .ctype-seg { display: block; height: 100%; min-width: 3px; background: var(--ct-none); }
+    .ctype-seg[data-ct="央国企"] { background: var(--ct-soe); }
+    .ctype-seg[data-ct="民企"] { background: var(--ct-private); }
+    .ctype-seg[data-ct="外企"] { background: var(--ct-foreign); }
+    .ctype-seg:hover, .ctype-seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .ctype-legend { display: grid; gap: 2px; margin-top: 9px; }
+    .ctype-legend-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto 62px; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--r-sm); font-size: 12.5px; }
+    .ctype-legend-row.is-empty { color: var(--muted); }
+    .ctype-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ct-none); }
+    .ctype-legend-row[data-ct="央国企"] .ctype-dot { background: var(--ct-soe); }
+    .ctype-legend-row[data-ct="民企"] .ctype-dot { background: var(--ct-private); }
+    .ctype-legend-row[data-ct="外企"] .ctype-dot { background: var(--ct-foreign); }
+    .ctype-label { overflow: hidden; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+    .ctype-num { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .ctype-offer { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
+    .ctype-offer.has { color: var(--ok); font-weight: 700; }
+
+    /* ===== v4.6.0：悬浮明细浮层（自绘 tooltip）===== */
+    /* 磨砂浮层。不透明度刻意提到 .85（高于设计资源玻璃配方的 .72）：tip 是小面积浮层且
+       承载 12px 密集文本，.72 在复杂背景上会糊；这是**有记录的偏离**，不是漏改。 */
+    .tip { position: fixed; z-index: 60; left: 0; top: 0; display: block; max-width: min(360px, calc(100vw - 16px)); padding: 9px 11px; border-radius: var(--r-md); background: rgba(255, 255, 255, .85); border: 1px solid var(--line); box-shadow: var(--sh-pop); font-size: 12px; line-height: 1.55; pointer-events: none; }
+    @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
+      .tip { backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+    }
+    /* 关键守卫：.tip 自身设了 display:block，会覆盖 UA 的 [hidden]{display:none}。
+       漏了这条就会常驻一个隐形浮层盖在页面上（.drawer 曾因此吞掉 7 个可交互元素的点击）。
+       pointer-events:none 也是必需的：否则鼠标移到浮层上会触发 mouseout → 隐藏 → 又触发 mouseover，来回闪。 */
+    .tip[hidden] { display: none; }
+    .tip-head { margin-bottom: 6px; font-size: 12.5px; font-weight: 700; }
+    .tip-list { display: grid; gap: 3px; }
+    .tip-row { display: flex; align-items: center; gap: 8px; }
+    .tip-k { flex: 0 0 auto; color: var(--muted); }
+    .tip-v { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tip-more { margin-top: 5px; color: var(--muted); font-size: 11.5px; }
+    .tip-note { color: var(--ink-2); }
+    /* 可悬浮读取明细的元素给一致的可发现性：help 光标 + 悬浮/聚焦时描边加深 */
+    .city-row, .ctype-seg, .insight-metric[data-tip-kind] { cursor: help; }
+    /* hover 只升阴影；focus-visible 改用真 outline（旧版拿弱阴影当焦点指示，a11y 不足） */
+    .insight-metric[data-tip-kind]:hover { box-shadow: var(--sh-ambient); outline: none; }
+    .insight-metric[data-tip-kind]:focus-visible { box-shadow: none; outline: 2px solid var(--accent); outline-offset: 2px; }
+    .multi-company-item[data-tip-kind] { cursor: pointer; }
+
+    /* ===== v4.4.0：记录表单「更多字段」折叠区 ===== */
+    .form-more { border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; overflow: hidden; }
+    .form-more summary { padding: 10px 13px; color: var(--ink-2); font-size: 12.5px; font-weight: 650; cursor: pointer; list-style: none; }
+    .form-more summary::-webkit-details-marker { display: none; }
+    .form-more summary::before { content: "▸ "; color: var(--muted); }
+    .form-more[open] summary::before { content: "▾ "; }
+    .form-more[open] summary { border-bottom: 1px solid var(--line); }
+    .form-more-grid { padding: 13px 13px 5px; }
+
+    /* ===== v4.4.0：表格/看板切换器 + 看板 ===== */
+    td[data-label="公司 / 岗位"] { cursor: pointer; }
+    td[data-label="公司 / 岗位"]:hover .company { color: var(--accent-ink); }
+    /* Apple 分段控件：灰轨 + 白滑块 + 微影（废弃 ring + 蓝字）。这里刻意用分段控件而非
+       设计资源的「2px ink 下划线标签页」——表格↔看板是互斥**视图**切换，分段控件更符合 HIG；
+       下划线标签页是内容型分页的语言。 */
+    .view-switch { display: inline-flex; flex: 0 0 auto; padding: 3px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; }
+    .view-switch-btn { border: 0; border-radius: var(--r-pill); background: transparent; color: var(--muted); padding: 0 14px; min-height: 28px; font-size: 12.5px; font-weight: 500; transition: background .18s var(--ease), color .18s var(--ease); }
+    .view-switch-btn:hover { color: var(--ink); }
+    .view-switch-btn.is-active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    .board { padding: 12px 16px 18px; }
+    /* 看板顶部整宽推进投放区（v4.8.0）：常驻可见、不参与 .board-cols 的横向滚动，阶段列再多也始终可拖。
+       它自身设了 display:flex，但从不被 hidden 切换（父级 #boardView 隐藏时整体随之隐藏），故无需 [hidden] 守卫。 */
+    .board-drop-zone { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 54px; margin-bottom: 12px; padding: 12px 16px; border: 1.5px dashed var(--line-strong); border-radius: var(--r-lg); background: rgba(0, 0, 0, .02); color: var(--muted); font-size: 12.5px; text-align: center; transition: border-color .18s var(--ease), background .18s var(--ease), color .18s var(--ease), box-shadow .18s var(--ease); }
+    .board-drop-zone .drop-icon { font-size: 17px; line-height: 1; }
+    .board-drop-zone.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+    .board-drop-zone.is-drop { border-style: solid; border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 2px var(--accent); }
+    .board-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(232px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
+    .board-col { min-width: 0; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: none; }
+    .board-col.is-drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+    .board-col-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: var(--r-lg) var(--r-lg) 0 0; transition: background .16s var(--ease); }
+    /* hover 中性化（accent-soft 太响）；focus-visible 必须给可见 outline——div/button 型可交互元素
+       不在全局 focus-visible 规则覆盖范围内，不给就是键盘用户看不见焦点（§2.18）。 */
+    .board-col-head:hover { background: rgba(0, 0, 0, .03); }
+    .board-col-head:focus-visible { background: rgba(0, 0, 0, .03); outline: 2px solid var(--accent); outline-offset: -2px; }
+    .board-col-head .badge { flex: 0 0 auto; }
+    .board-col-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .board-col-body { display: grid; gap: 8px; padding: 10px; min-height: 62px; }
+    .board-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 12px 4px; }
+    .board-card { position: relative; padding: 10px 12px 10px 14px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line); box-shadow: none; cursor: grab; text-align: left; width: 100%; transition: transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease); }
+    /* hover 阴影用规范的 lift 档（--sh-pop）而不是自定义的 .08——设计资源 RadiusShadow 明确
+       「lift = hover / drag」，看板卡正是可拖拽的悬浮元素。 */
+    .board-card:hover { transform: translateY(-1px); box-shadow: var(--sh-pop); border-color: var(--line-strong); }
+    .board-card:active { cursor: grabbing; }
+    .board-card.is-dragging { opacity: .45; }
+    .board-card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--company-color, var(--accent)); }
+    /* 停滞标记（v4.8.0）：洞察算出的停滞 >14 天，在看板卡片上用警示色条 + chip 暴露，操作面一眼可见该跟进谁 */
+    .board-card.is-stalled::before { background: var(--warn-bright); }
+    .board-chip.stalled { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
+    .board-card-company { font-size: 13.5px; font-weight: 680; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .board-card-position { margin-top: 2px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .board-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+    .board-chip { padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; border: 0; font-size: 11px; font-weight: 650; color: var(--ink-2); }
+    .board-chip.warn { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
+    .board-chip.danger { background: var(--danger-soft); color: var(--danger); box-shadow: none; }
+    .intent-dots { display: inline-flex; gap: 2px; align-items: center; }
+    .intent-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line-strong); }
+    .intent-dots i.on { background: var(--ok-bright); }
+
+    /* ===== v4.4.0：记录详情抽屉 ===== */
+    .drawer-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .3); backdrop-filter: blur(6px); }
+    .drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 41; display: flex; flex-direction: column; width: min(560px, 100vw); background: var(--surface); box-shadow: -12px 0 40px rgba(0, 0, 0, .10); animation: drawer-in .32s var(--ease); }
+    /* 关键：作者样式的 display:flex 会覆盖 [hidden] 的 UA display:none（同 .view[hidden] 的处理）。
+       漏了这条，关闭态的抽屉仍占位 560px 并吞掉右侧元素的点击，只是靠动画停在 opacity:0 才看不见。 */
+    .drawer[hidden], .drawer-backdrop[hidden] { display: none; }
+    @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
+    .drawer-head-text { min-width: 0; flex: 1 1 auto; }
+    .drawer-head h2 { margin: 0; font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -.015em; line-height: 1.2; overflow-wrap: anywhere; }
+    .drawer-sub { margin-top: 4px; color: var(--muted); font-size: 12.5px; }
+    .drawer-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px 20px; display: grid; gap: 18px; align-content: start; }
+    .drawer-section > h3 { margin: 0 0 9px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .drawer-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 9px; }
+    .drawer-fact { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; min-width: 0; }
+    .drawer-fact dt { color: var(--muted); font-size: 11px; font-weight: 650; }
+    .drawer-fact dd { margin: 3px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+    .steps { display: grid; gap: 0; }
+    .step { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 11px; padding-bottom: 14px; }
+    .step:last-child { padding-bottom: 0; }
+    .step-rail { position: relative; display: grid; place-items: start center; }
+    .step-dot { width: 10px; height: 10px; margin-top: 5px; border-radius: 50%; background: var(--stage-color, var(--accent)); box-shadow: 0 0 0 3px var(--stage-soft, var(--accent-soft)); z-index: 1; }
+    .step:not(:last-child) .step-rail::after { content: ""; position: absolute; top: 14px; bottom: -4px; left: 50%; width: 1.5px; transform: translateX(-50%); background: var(--line-strong); }
+    .step-main { min-width: 0; }
+    .step-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .step-date { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+    .step-gap { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+    .step-note { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
+    .note-list { display: grid; gap: 8px; }
+    .note-item { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
+    .note-item-head { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 11.5px; }
+    .note-item-head .text-button { margin-left: auto; }
+    .note-text { margin-top: 3px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .note-add { display: grid; gap: 7px; }
+    .sibling-list { display: grid; gap: 6px; }
+    .sibling-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px; border: 0; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; font-size: 12.5px; text-align: left; }
+    .sibling-item:hover { background: var(--accent-soft); }
+    .sibling-item .badge { margin-left: auto; flex: 0 0 auto; }
+    .drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 13px 20px; border-top: 1px solid var(--line); background: var(--surface-2); }
+    .drawer-actions .spacer { flex: 1 1 auto; }
+    @media (max-width: 620px) { .drawer { width: 100vw; } }
+
+    /* ===== v4.4.0：⌘K 命令面板 ===== */
+    #cmdPalette { width: min(620px, calc(100vw - 32px)); max-height: min(70vh, 560px); padding: 0; margin: 12vh auto 0; }
+    /* 桌面端 dialog 默认不设 max-height，这里显式让面板成为 flex 容器，结果区内部滚动而不撑破弹窗 */
+    #cmdPalette[open] { display: flex; flex-direction: column; }
+    .cmd-inner { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    .cmd-input-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .cmd-glyph { color: var(--muted); font-size: 16px; }
+    .cmd-input-row .control { flex: 1 1 auto; border: 0; background: transparent; box-shadow: none; min-height: 30px; padding: 0; font-size: 15px; }
+    .cmd-input-row .control:focus { background: transparent; box-shadow: none; border-color: transparent; }
+    .cmd-kbd { flex: 0 0 auto; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); box-shadow: none; color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+    .cmd-results { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px; display: grid; gap: 2px; align-content: start; }
+    .cmd-group { padding: 8px 10px 4px; color: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .cmd-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border: 0; border-radius: var(--r-md); background: transparent; text-align: left; font-size: 13.5px; color: var(--ink); }
+    /* Spotlight 选中态：蓝底白字（不是浅蓝底深蓝字） */
+    .cmd-item.is-active { background: var(--accent); color: #fff; }
+    .cmd-item-main { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cmd-item-sub { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; }
+    .cmd-item.is-active .cmd-item-sub { color: rgba(255, 255, 255, .75); }
+    .cmd-empty { padding: 24px 12px; text-align: center; color: var(--muted); font-size: 13px; }
+    .cmd-foot { display: flex; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
+
+    /* ===== v4.4.0：同公司多岗位（chip / 聚合组头）、空状态三态、首启引导、Offer 矩阵 ===== */
+    .company-chip { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink-2); font-size: 11px; font-weight: 700; white-space: nowrap; border-left: 3px solid var(--company-color, var(--accent)); }
+    /* ===== v4.6.0：企业性质徽章（台账 / 看板 / 抽屉 / Offer 矩阵共用）===== */
+    .ct-chip { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--ct-none-soft); color: var(--ct-none); font-size: 10.5px; font-weight: 700; white-space: nowrap; vertical-align: 1px; }
+    .ct-chip[data-ct="央国企"] { background: var(--ct-soe-soft); color: var(--ct-soe); }
+    .ct-chip[data-ct="民企"] { background: var(--ct-private-soft); color: var(--ct-private); }
+    .ct-chip[data-ct="外企"] { background: var(--ct-foreign-soft); color: var(--ct-foreign); }
+    /* 录入表单里的「该公司已有 N 个岗位」前置提示（挂在 #sameCompanyHint 内，
+       注意不要给 #sameCompanyHint 本身设 display，否则会盖掉 hidden 属性） */
+    .same-company-item { display: inline-block; margin: 3px 5px 0 0; padding: 1px 8px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; border: 0; color: var(--ink-2); font-size: 11.5px; font-weight: 620; }
+    .same-company-item.is-similar { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
+    .same-company-more { margin-left: 2px; color: var(--muted); font-size: 11.5px; }
+    .company-group-row > td { padding: 6px 12px 4px; background: transparent; border-top: 0; }
+    .company-group-row:not(:first-child) > td { padding-top: 14px; }
+    .group-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 10px; border: 0; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; font-size: 12.5px; font-weight: 600; color: var(--ink); text-align: left; }
+    .group-toggle:hover { background: var(--accent-soft); color: var(--accent-ink); }
+    .group-caret { color: var(--muted); font-size: 11px; }
+    .group-label { border-left: 3px solid var(--company-color, var(--accent)); padding-left: 8px; }
+    .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; }
+    .empty-icon svg { width: 30px; height: 30px; }
+    .empty-title { margin-top: 8px; font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--ink); }
+    .empty-text { margin: 6px auto 0; max-width: 460px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+    .guide { padding: 16px; }
+    .guide-note { padding: 11px 13px; border-radius: var(--r-md); border-left: 3px solid var(--warn-bright); background: var(--warn-soft); color: var(--warn); font-size: 13px; line-height: 1.7; }
+    .guide-note strong { display: block; margin-bottom: 2px; font-size: 13.5px; }
+    .guide-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
+    .guide-step { display: flex; gap: 11px; align-items: flex-start; padding: 12px 13px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
+    .guide-no { flex: 0 0 auto; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .guide-text { min-width: 0; display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+    .guide-text strong { color: var(--ink); font-size: 13.5px; }
+    .guide-text kbd { padding: 0 5px; border-radius: 5px; background: var(--surface); border: 1px solid var(--line); box-shadow: none; color: var(--ink-2); font-family: var(--font-mono); font-size: 11px; }
+    /* 盖章动效：本条只为去掉基础层的弹跳曲线 cubic-bezier(.2,1.2,.4,1)（Apple 禁忌「弹跳动效」）。
+       ⚠️ animation 简写必须**整条重写**：只改曲线会把 offer-fade 那段一起删掉，章就不淡出了。 */
+    .stamp-seal { animation: offer-pop .3s var(--ease) both, offer-fade .4s ease .9s forwards; }
+    .guide-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .offer-row { cursor: pointer; }
+    .offer-matrix th:last-child, .offer-matrix td:last-child { max-width: 220px; }
+    .muted-text { color: var(--muted); font-size: 12px; }
+    /* 中间断点（561–900px）：台账 8 列太挤，隐藏「编号」「城市」并收窄最小宽度，避免横向滚动。
+       投递记录独立成视图后可用宽度变大，断点从 1100px 下调到 900px（不必那么早隐藏列）。
+       只作用于台账表格（#records），不影响洞察里的 Offer 矩阵；≤560px 的卡片化布局也不受影响。 */
+    @media (max-width: 900px) and (min-width: 561px) {
+      #records table { min-width: 780px; }
+      #records thead th:nth-child(1), #records tbody td:nth-child(1):not([colspan]),
+      #records thead th:nth-child(3), #records tbody td:nth-child(3) { display: none; }
+    }
+
+    /* ===== 邮件提醒视图（M3）+ 导航角标 ===== */
+    .nav-badge { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+    /* flex-wrap + nowrap 两个都不能少：没有 wrap 时，.panel-head 把剩余宽度压给 actions，
+       两个按钮会被挤到 CJK 最小内容宽（中文允许逐字断行）→「设/置」「重/新/读/取」竖排，
+       按钮被撑到 60px 高（窄屏实测）；没有 nowrap 则 wrap 也救不了逐字断行。 */
+    .mail-head-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .mail-head-actions .btn { flex: 0 0 auto; white-space: nowrap; }
+    /* 三个状态变体统一改成规范 alert 式：base-200 底 + 左 3px **亮档**语义条 + 语义色标题。
+       旧版是整块语义色底（soft），三态并排时颜色太吵，且与洞察的 .alert-item 风格不一致。 */
+    .mail-statusbar { margin-bottom: 14px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); border-left: 3px solid transparent; box-shadow: none; color: var(--muted); font-size: 13px; }
+    .mail-statusbar strong { display: block; margin-bottom: 3px; color: var(--ink); font-size: 14px; }
+    .mail-statusbar.ok { border-left-color: var(--ok-bright); color: var(--ink-2); }
+    .mail-statusbar.ok strong { color: var(--ok); }
+    .mail-statusbar.warning { border-left-color: var(--warn-bright); color: var(--ink-2); }
+    .mail-statusbar.warning strong { color: var(--warn); }
+    .mail-statusbar.error { border-left-color: var(--danger-bright); color: var(--ink-2); }
+    .mail-statusbar.error strong { color: var(--danger); }
+    .mail-help { margin-top: 8px; }
+    .mail-help summary { cursor: pointer; font-weight: 600; }
+    .mail-help ol { margin: 8px 0 0 18px; line-height: 1.7; }
+    /* ===== v4.6.1：邮件丢弃明细（状态栏折叠区内）=====
+       这些容器都不由 hidden 属性切换显隐，因此无需 [hidden] 守卫；
+       刻意不给 .mail-help 本身设 display，避免覆盖 details 的原生行为。 */
+    .drop-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .drop-counts span { padding: 2px 9px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); box-shadow: none; font-size: 11.5px; }
+    .drop-counts b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .drop-list { margin: 9px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+    .drop-list li { padding: 6px 9px; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--line); box-shadow: none; }
+    .drop-mail { font-size: 12px; line-height: 1.5; word-break: break-all; }
+    .drop-mail b { display: block; color: var(--ink); font-weight: 680; }
+    .drop-meta { margin-top: 2px; color: var(--muted); font-size: 11px; font-family: var(--font-mono); }
+    .drop-note { margin-top: 9px; color: var(--muted); font-size: 11.5px; line-height: 1.65; }
+    .drop-note code { padding: 0 4px; border-radius: 4px; background: var(--surface-2); box-shadow: none; font-family: var(--font-mono); font-size: 11px; }
+    /* ===== v4.7.0：AI 提示词快照（只读展示 Action 实际生效的那一份）=====
+       details/pre 都不设作者层 display，因此 hidden 属性能正常生效；
+       仍显式补一条 [hidden] 守卫，防止日后有人给它加 display 时踩「幽灵占位」的坑。 */
+    .prompt-snapshot { border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; overflow: hidden; }
+    .prompt-snapshot[hidden] { display: none; }
+    .prompt-snapshot summary { padding: 10px 13px; color: var(--ink-2); font-size: 12.5px; font-weight: 650; cursor: pointer; }
+    .prompt-snapshot summary:hover { color: var(--accent-ink); }
+    .prompt-snapshot-body { margin: 0; padding: 12px 13px; border-top: 1px solid var(--line); max-height: 320px; overflow: auto; background: var(--surface); color: var(--ink-2); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
+    .prompt-snapshot .hint { padding: 8px 13px 10px; border-top: 1px solid var(--line); }
+    .mail-list { display: grid; gap: 12px; }
+    .mail-empty { padding: 30px 16px; text-align: center; color: var(--muted); }
+    .mail-card { padding: 14px 16px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    /* 低置信描边：ring → 真边框，用**亮档** warn-bright（描边是装饰，不承载文字） */
+    .mail-card.low-conf { border: 1px solid var(--warn-bright); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    .mail-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .mail-type { padding: 2px 10px; border-radius: var(--r-pill); font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--ink-2); box-shadow: none; border: 0; }
+    .mail-type[data-type="Offer"] { background: var(--ok); color: #fff; box-shadow: none; }
+    .mail-type[data-type="拒信"] { background: var(--silver-soft); color: var(--muted); box-shadow: none; }
+    .mail-type[data-type="面试邀请"] { background: var(--accent-soft); color: var(--accent-ink); box-shadow: none; }
+    .mail-company { font-size: 15px; font-weight: 700; }
+    .mail-position { color: var(--muted); font-size: 13px; }
+    .mail-conf { margin-left: auto; font-size: 12px; color: var(--muted); }
+    .mail-conf.low { color: var(--warn); font-weight: 700; }
+    .mail-subject { margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+    .mail-summary { margin-top: 4px; font-size: 13px; color: var(--muted); }
+    .mail-meta { margin-top: 6px; font-size: 12px; color: var(--muted); }
+    .mail-match { margin-top: 10px; padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
+    .mail-match.single { box-shadow: inset 3px 0 0 var(--ok-bright); }
+    .mail-match.none { box-shadow: inset 3px 0 0 var(--warn-bright); color: var(--warn); }
+    .mail-match label { display: block; }
+    .mail-match select { width: 100%; margin-top: 6px; }
+    .mail-fields { display: grid; gap: 6px; margin-top: 10px; }
+    .mail-field { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer; }
+    .mail-field input { margin-top: 2px; accent-color: var(--accent); }
+    .mail-fields-empty { color: var(--muted); font-size: 13px; }
+    .mail-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .mail-key-row { display: flex; gap: 8px; align-items: center; }
+    .mail-key-row .control { flex: 1 1 auto; min-width: 0; }

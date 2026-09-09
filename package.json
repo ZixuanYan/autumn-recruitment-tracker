@@ -6,6 +6,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node test/run.js && node test/integration.js && node test/web-check.js && node test/web-runtime.js && node test/company-dedup.js && node test/extension-bridge.js && node test/extension-parsers.js && node test/extension-ui.js && node test/extension-panel.js"
+    "build": "node build.js",
+    "build:write": "node build.js --write",
+    "test": "node build.js && diff -q dist/index.html index.html && node test/run.js && node test/integration.js && node test/web-check.js && node test/web-runtime.js && node test/company-dedup.js && node test/extension-bridge.js && node test/extension-parsers.js && node test/extension-ui.js && node test/extension-panel.js"
   }
 }
