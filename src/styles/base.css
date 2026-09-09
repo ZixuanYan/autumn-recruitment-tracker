@@ -97,7 +97,9 @@
     .bar { height: 5px; background: var(--surface-soft); border-radius: 999px; overflow: hidden; }
     .bar-fill { height: 100%; min-width: 0; border-radius: inherit; background: var(--stage-color, var(--accent)); transition: width .25s ease; }
 
-    .filters { display: grid; grid-template-columns: minmax(180px, 1fr) 140px 170px; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    /* 第 4 列是「同企业收纳」开关（v4.11.0）：auto 让它按文字宽度取值，不挤占搜索框。
+       窄屏的两处覆盖（1fr 1fr / 1fr）不需要跟着改——4 个项在 2 列下正好两行、1 列下四行。 */
+    .filters { display: grid; grid-template-columns: minmax(180px, 1fr) 140px 170px auto; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
     .control { width: 100%; min-height: 36px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; color: var(--ink); background: #fff; font-size: 13.5px; }
     .search-wrap { position: relative; }
     .search-wrap .control { padding-left: 36px; }

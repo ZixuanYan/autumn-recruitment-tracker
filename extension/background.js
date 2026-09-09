@@ -53,10 +53,15 @@ function findDuplicateRecord(records, incoming) {
   if (!company || !position) return null;
   const posKey = AJA.positionKey(position);
   const looseKey = AJA.loosePositionKey(position);
+  // v5.3.0：机构（orgUnit）参与判重，与网页端 src/core/dedupe.js 的三要素保持一致。
+  // 不加的话暂存箱会把「招商银行/杭州分行/客户经理」与「招商银行/成都分行/客户经理」判成同一条，
+  // 命中下面的 duplicate 合并分支 → Object.assign 让第二条**覆盖**第一条，一次真实投递静默消失。
+  // 机构不同、岗位相同时会落到 variant（looseKey 相等），与网页端同款语义：提示但不合并。
+  const unit = String((incoming && incoming.orgUnit) || '').trim();
   let variant = null;
   for (const r of list) {
     if (!AJA.sameCompany(company, r.company)) continue;
-    if (AJA.positionKey(r.position) === posKey) return { record: r, mode: 'duplicate' };
+    if (AJA.positionKey(r.position) === posKey && String(r.orgUnit || '').trim() === unit) return { record: r, mode: 'duplicate' };
     if (!variant && looseKey.length >= 2 && AJA.loosePositionKey(r.position) === looseKey) variant = r;
   }
   return variant ? { record: variant, mode: 'variant' } : null;
@@ -169,6 +174,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           // 企业性质（v4.2.0）：只做透传与类型收敛，不做白名单校验——
           // 网页端 normalizeRecord 才是唯一真相源，插件侧再维护一份枚举只会增加漂移面。
           companyType: String(request.record.companyType || ''),
+          // 机构（v5.3.0）：同样只透传与类型收敛，不做任何校验或推断 ——
+          // 网页端 normalizeRecord 才是唯一真相源，插件侧再维护一份规则只会增加漂移面。
+          orgUnit: String(request.record.orgUnit || '').trim().slice(0, 60),
           applicationUrl: String(request.record.applicationUrl || ''),
           scheduleAt: String(request.record.scheduleAt || ''),
           recentSchedule: String(request.record.recentSchedule || ''),
@@ -189,6 +197,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             stage: staged.stage || existing.stage,
             // 已选过的企业性质不能被「这次没选」冲掉（与 city 同款语义），否则重复收录同一岗位会丢字段
             companyType: staged.companyType || existing.companyType || '',
+            // 已填过的机构不能被「这次没填」冲掉（与 city / companyType 同款语义）
+            orgUnit: staged.orgUnit || existing.orgUnit || '',
             applicationUrl: staged.applicationUrl || existing.applicationUrl,
             recentSchedule: staged.recentSchedule || existing.recentSchedule,
             nextAction: staged.nextAction || existing.nextAction,

@@ -8,14 +8,17 @@
       // 宽松版：再去掉括号与连字符后缀。**只用于「疑似同岗位不同方向」提示，绝不用于判重**
       const loosePositionSlug = AJA.loosePositionSlug;
       // 返回 { mode: 'duplicate' | 'variant' | 'same-company', reason, matches } 或 null
-      //   duplicate    ：同投递网址，或 同公司 + 岗位归一化严格相等 + 同批次 → 应改为编辑既有记录
-      //   variant      ：同公司 + 岗位宽松相等 + （严格不等或批次不等）→ 疑似同一岗位的不同方向/城市/批次，
+      //   duplicate    ：同投递网址，或 同公司 + 同机构 + 岗位归一化严格相等 → 应改为编辑既有记录
+      //   variant      ：同公司 + 岗位宽松相等 + （严格不等或机构不等）→ 疑似同一岗位的不同方向/城市/机构，
       //                  合法但值得提醒，必须给用户「是独立投递 / 其实是同一条」二选一，不得静默拦截
       //   same-company ：同公司但岗位无关 → 合法（同公司多岗位），只做非阻断提示
       // 公司判定统一走 companyGroupKey + sameCompanyGroup，与展示分组同源（见上方「公司维度分组」注释）。
-      // 不再有 options.ignoreBatch：插件不传批次（恒为空），已有记录填了批次时自然不等 → 走 variant/same-company
-      // 非阻断放行；两边都没批次才判 duplicate 并给逃生口。旧版插件路径 ignoreBatch:true 会把
-      // 「已有提前批 + 新收正式批」判成 duplicate 并强制打开旧记录编辑，污染已有里程碑。
+      // v4.11.0：第三要素从 batch（批次）换成 orgUnit（机构 / 子公司 / BU）。orgUnit 接替的正是
+      // batch 原来承担的区分职责，而且更贴合实际 —— 同一家银行的杭州分行与成都分行招同名岗位
+      // 是两次真实投递，不是重复；而「提前批 / 正式批」是时间维度，与「是不是同一次投递」关系更弱。
+      // 顺带保留旧版那条教训：不再有 options.ignoreBatch 这类「忽略第三要素」的开关。插件若没填机构
+      // （恒为空）而已有记录填了，两者不等 → 走 variant/same-company 非阻断放行，绝不强制打开旧记录
+      // 编辑（旧版 ignoreBatch:true 会把「已有提前批 + 新收正式批」判成 duplicate，污染已有里程碑）。
       function findDuplicateRecord(records, seed) {
         const list = Array.isArray(records) ? records : [];
         const url = String((seed && seed.applicationUrl) || '').trim();
@@ -29,16 +32,18 @@
         if (!sameCompany.length) return null;
         const position = normalizePositionSlug(seed && seed.position);
         const loose = loosePositionSlug(seed && seed.position);
-        const batch = String((seed && seed.batch) || '').trim();
+        const unit = String((seed && seed.orgUnit) || '').trim();
         const exact = sameCompany.filter(record => normalizePositionSlug(record.position) === position
-          && String(record.batch || '').trim() === batch);
-        if (exact.length) return { mode: 'duplicate', reason: 'company+position+batch', matches: exact };
+          && String(record.orgUnit || '').trim() === unit);
+        // reason 是 UI 文案的来源（查重提示会说清「为什么判重复」），改它要同步改
+        // test/web-check.js 与 test/company-dedup.js 里盯着这个字符串的断言。
+        if (exact.length) return { mode: 'duplicate', reason: 'company+unit+position', matches: exact };
         if (loose && loose.length >= 2) {
           const variant = sameCompany.filter(record => {
             const otherLoose = loosePositionSlug(record.position);
             if (!otherLoose || otherLoose !== loose) return false;
             return normalizePositionSlug(record.position) !== position
-              || String(record.batch || '').trim() !== batch;
+              || String(record.orgUnit || '').trim() !== unit;
           });
           if (variant.length) return { mode: 'variant', reason: 'company+position-loose', matches: variant };
         }

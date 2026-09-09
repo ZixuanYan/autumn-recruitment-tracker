@@ -18,7 +18,7 @@
       /* --offer-gold 名称保留兼容，值已改 Apple 绿（v4.10.0 决策：Offer = 成功语义，金色废除）。
          白字压 #1f7a35 实测 5.39:1 达标；#248a3d 只有 4.40:1 不达标，故不用。 */
       --offer-gold: #1f7a35; --offer-gold-soft: #e3f7e8;
-      /* v4.6.0 企业性质专用色（央国企 / 民企 / 外企 / 未设置），v4.10.0 Apple 化。
+      /* v4.6.0 企业性质专用色（央国企 / 私企 / 外企 / 未设置），v4.10.0 Apple 化。
          刻意与阶段色阶、状态色分离：这套色只出现在 ct-chip 与洞察的「企业性质」块里，
          不参与任何阶段或成功/警告语义，避免用户在台账里把颜色当成进度信号。 */
       --ct-soe: #c93400; --ct-soe-soft: #faebe6;
@@ -203,6 +203,26 @@
     .kv-del-btn { border-radius: 8px; background: var(--danger-soft); color: var(--danger); }
     .exp-item-card { border: 0; box-shadow: none; border-radius: var(--r-md); background: var(--surface-2); }
     .exp-item-header h4 { color: var(--accent-ink); }
+    /* exp 卡片的字段级删除（v4.11.0）：与 .kv-row 的 ✕ 同语义，但 exp 字段是
+       「label 在上、input 在下」的竖排结构，34×38 的 .kv-del-btn 塞进去会挤窄输入框，
+       所以改成绝对定位到 label 行右侧的小方块，并给 label 留出右侧内边距，
+       否则长字段名会钻到按钮底下。静态时不给底色（一堆 ✕ 常驻会让卡片看起来很吵），hover 才显色。 */
+    .exp-field-wrap { position: relative; }
+    .exp-field-wrap > label { padding-right: 24px; }
+    .exp-field-del { position: absolute; top: -1px; right: 0; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); font-size: 12px; line-height: 1; cursor: pointer; transition: background .18s var(--ease), color .18s var(--ease); }
+    .exp-field-del:hover { background: var(--danger-soft); color: var(--danger); }
+    .exp-field-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* 新增简历区块的「类型二选一」（v4.11.0）：整张 label 可点，选中态用发丝线卡片 + 浅底，
+       与全站卡片语言一致；不用原生 radio 的默认外观（各浏览器差异大、与 Apple 风格不符）。 */
+    .section-type-set { margin: 4px 0 0; padding: 0; border: 0; }
+    .section-type-set legend { padding: 0; color: var(--ink); font-size: 13px; font-weight: 600; }
+    .section-type-opt { display: flex; align-items: flex-start; gap: 9px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); cursor: pointer; transition: border-color .18s var(--ease), background .18s var(--ease); }
+    .section-type-opt:hover { background: var(--surface-2); }
+    .section-type-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+    .section-type-opt input { flex: 0 0 auto; margin: 3px 0 0; accent-color: var(--accent); }
+    .section-type-body { display: grid; gap: 2px; min-width: 0; }
+    .section-type-body strong { color: var(--ink); font-size: 13px; font-weight: 600; }
+    .section-type-body span { color: var(--muted); font-size: 12px; line-height: 1.5; }
     .field-library-item { border: 1px solid var(--line); box-shadow: none; border-radius: var(--r-md); background: var(--surface); }
     .field-library-item:hover { background: var(--accent-soft); border-color: rgba(0, 113, 227, .3); box-shadow: none; }
     .modal-head { padding: 16px 24px; }
@@ -292,6 +312,18 @@
     .alert-item.danger { border-left-color: var(--danger-bright); color: var(--danger); }
     .alert-item.warn { border-left-color: var(--warn-bright); color: var(--warn); }
     .alert-item.info { border-left-color: var(--accent); }
+    /* v4.11.0 换位：「需要关注」从整宽移进 .insight-grid 的半宽列。条目文本是
+       「公司 · 岗位 · 还剩 N 天」，半宽下会折到两三行，所以降一档字号与内边距、
+       左色条 3px→2px，让一屏能看到的条目数与换位前相当。
+       只改尺寸不改颜色，因此与后面的 .alert-item.danger/.warn/.info 同特异性也不冲突。 */
+    .insight-grid .alert-list { gap: 5px; }
+    .insight-grid .alert-item { padding: 7px 10px; border-left-width: 2px; font-size: 12px; line-height: 1.45; }
+    /* 顶层那张 grid 把较宽的一列给「需要关注」（第二列）：它的条目是会折行的文本，
+       而转化漏斗是一排紧凑色块，对宽度没那么敏感。
+       刻意用 .insights-body > 直接子选择器限定——#insightDetails 里还有三张 .insight-grid
+       （城市|企业性质、节奏|停留、多岗位|Offer 对比），它们的「第一列更宽」是原本就调好的，
+       全局改比例会把那三张一起翻过来。 */
+    .insights-body > .insight-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
     .offer-matrix { min-width: 620px; }
     .multi-company-list { display: grid; gap: 8px; }
     .multi-company { padding: 10px 12px 10px 14px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; position: relative; }
@@ -306,6 +338,14 @@
     @media (max-width: 900px) {
       .insight-grid { grid-template-columns: minmax(0, 1fr); }
       .insight-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      /* 看板窄屏（v4.11.0）：从「四列横向滚」改为「单列纵向堆叠」。
+         .board-cols 是 grid-auto-flow:column + grid-auto-columns:minmax(232px,1fr)，四列最小 928px，
+         而 apple.css 此前**一条 board 窄屏规则都没有**（v4.10.0 重刷了看板的全部视觉却漏了适配，
+         base.css 里也从来没有过）→ 手机上只能横向滚整个看板，列头一滚出视口就看不出当前是哪个阶段。
+         改回 row 之后 grid-auto-columns 自动失效，不需要单独覆盖；overflow-x 收成 visible，
+         否则会留下一条没有内容的横向滚动槽。 */
+      .board-cols { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); overflow-x: visible; gap: 12px; }
+      .board-col-body { min-height: 0; }   /* 62px 的最小高度在纵向堆叠下会变成大片空白 */
     }
 
     /* ===== v4.6.0：洞察明细折叠容器 + 城市分布 + 企业性质 ===== */
@@ -331,7 +371,7 @@
     .ctype-bar { display: flex; height: 10px; border-radius: 999px; background: var(--ct-none-soft); box-shadow: none; overflow: hidden; }
     .ctype-seg { display: block; height: 100%; min-width: 3px; background: var(--ct-none); }
     .ctype-seg[data-ct="央国企"] { background: var(--ct-soe); }
-    .ctype-seg[data-ct="民企"] { background: var(--ct-private); }
+    .ctype-seg[data-ct="私企"] { background: var(--ct-private); }
     .ctype-seg[data-ct="外企"] { background: var(--ct-foreign); }
     .ctype-seg:hover, .ctype-seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .ctype-legend { display: grid; gap: 2px; margin-top: 9px; }
@@ -339,7 +379,7 @@
     .ctype-legend-row.is-empty { color: var(--muted); }
     .ctype-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ct-none); }
     .ctype-legend-row[data-ct="央国企"] .ctype-dot { background: var(--ct-soe); }
-    .ctype-legend-row[data-ct="民企"] .ctype-dot { background: var(--ct-private); }
+    .ctype-legend-row[data-ct="私企"] .ctype-dot { background: var(--ct-private); }
     .ctype-legend-row[data-ct="外企"] .ctype-dot { background: var(--ct-foreign); }
     .ctype-label { overflow: hidden; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
     .ctype-num { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -497,7 +537,7 @@
     /* ===== v4.6.0：企业性质徽章（台账 / 看板 / 抽屉 / Offer 矩阵共用）===== */
     .ct-chip { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--ct-none-soft); color: var(--ct-none); font-size: 10.5px; font-weight: 700; white-space: nowrap; vertical-align: 1px; }
     .ct-chip[data-ct="央国企"] { background: var(--ct-soe-soft); color: var(--ct-soe); }
-    .ct-chip[data-ct="民企"] { background: var(--ct-private-soft); color: var(--ct-private); }
+    .ct-chip[data-ct="私企"] { background: var(--ct-private-soft); color: var(--ct-private); }
     .ct-chip[data-ct="外企"] { background: var(--ct-foreign-soft); color: var(--ct-foreign); }
     /* 录入表单里的「该公司已有 N 个岗位」前置提示（挂在 #sameCompanyHint 内，
        注意不要给 #sameCompanyHint 本身设 display，否则会盖掉 hidden 属性） */
@@ -511,6 +551,21 @@
     .group-caret { color: var(--muted); font-size: 11px; }
     .group-label { border-left: 3px solid var(--company-color, var(--accent)); padding-left: 8px; }
     .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; }
+    /* 机构子组头（v4.11.0）：与企业组头同款胶囊，靠缩进与更弱的底色区分层级。
+       企业组头 padding 左 12px，机构组头 32px —— 两级都靠 padding 而不是 border/背景块，
+       否则密集表格里会形成一层层的色带，比缩进更吵。 */
+    .company-unit-row > td { padding: 2px 12px 2px 32px; background: transparent; border-top: 0; }
+    .unit-toggle { background: transparent; box-shadow: none; }
+    .unit-toggle:hover { background: var(--surface-2); }
+    .unit-label { border-left: 0; padding-left: 0; color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
+    /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽 */
+    .group-switch { justify-self: start; align-self: center; }
+    .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    /* 机构名在公司名 / 看板卡里都是次要信息：降一档字号与颜色，不与主体争视觉重量 */
+    .company-unit, .board-card-unit { color: var(--muted); font-size: 12px; font-weight: 500; }
+    /* 公司名 → 企业 + 机构 的拆分**建议**（不是自动执行）：拆错了用户未必发现，机构层会静默错位 */
+    .org-split-hint { margin-top: 5px; }
+    .org-split-hint .text-button { padding: 0; font-size: 12px; }
     .empty-icon svg { width: 30px; height: 30px; }
     .empty-title { margin-top: 8px; font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--ink); }
     .empty-text { margin: 6px auto 0; max-width: 460px; color: var(--muted); font-size: 13px; line-height: 1.7; }

@@ -84,7 +84,7 @@
     <section class="panel insights" id="insights" aria-labelledby="insightsTitle">
       <div class="panel-head">
         <div><h2 class="panel-title" id="insightsTitle">洞察</h2><div class="panel-caption">全部由你的记录与阶段时间线本机算出：卡点提醒、转化漏斗、城市分布、企业性质、投递节奏与各阶段停留</div></div>
-        <button class="btn btn-small" id="insightsCompactBtn" type="button" title="精简模式只保留概览、需要关注与转化漏斗，把城市 / 企业性质 / 节奏 / 停留等明细折起来">精简</button>
+        <button class="btn btn-small" id="insightsCompactBtn" type="button" title="精简模式只保留概览、阶段分布、转化漏斗与需要关注，把城市 / 企业性质 / 节奏 / 停留等明细折起来">精简</button>
       </div>
       <div class="guide" id="firstRunGuide" hidden>
         <div class="guide-note" id="guideNote"></div>
@@ -96,12 +96,15 @@
         <div class="guide-actions" id="guideActions"></div>
       </div>
       <div class="insights-body" id="insightsBody">
-        <!-- 信息层级：① 概览数字 → ② 需要行动 → ③ 转化 → ④~⑦ 分析明细。
-             此前指标条夹在两张图之后、最需要行动的「需要关注」被压到第 5 块，读起来要来回跳。 -->
+        <!-- 信息层级：① 概览数字 → ② 阶段分布（整宽）→ ③ 转化漏斗 | 需要关注 → ④~⑦ 分析明细。
+             v4.11.0 把「阶段分布」从两列 grid 的右列提到整宽第 2 位：14 个阶段色阶块挤在半宽的一半里，
+             每块只有 ~44px，灰→蓝→绿的递进根本看不清；整宽后 .stage-grid 的 auto-fit 能排下更多列。
+             「需要关注」换到 grid 里与漏斗并排——它的条目是纯文本按钮，半宽下折行仍可读，
+             而阶段分布是色块矩阵，对宽度敏感得多。紧凑规则见 apple.css 的 .insight-grid .alert-item。 -->
         <div class="insight-metrics" id="insightMetrics"></div>
         <div class="insight-block">
-          <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
-          <div class="alert-list" id="alertList"></div>
+          <div class="insight-block-head"><h3>阶段分布</h3><span class="insight-note">当前存量，按阶段计数</span></div>
+          <div class="stage-grid" id="stageGrid"></div>
         </div>
         <div class="insight-grid">
           <div class="insight-block">
@@ -110,8 +113,8 @@
             <button class="text-button insight-toggle" id="funnelScopeBtn" type="button">切换为公司去重口径</button>
           </div>
           <div class="insight-block">
-            <div class="insight-block-head"><h3>阶段分布</h3><span class="insight-note">当前存量，按阶段计数</span></div>
-            <div class="stage-grid" id="stageGrid"></div>
+            <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
+            <div class="alert-list" id="alertList"></div>
           </div>
         </div>
         <!-- ④~⑦ 分析明细：精简模式整块折叠（偏好存本机 ui.v1，不进云同步 envelope） -->
@@ -175,8 +178,14 @@
           <option value="applied-desc">投递日期：从新到旧</option>
           <option value="updated-desc">最近更新优先</option>
           <option value="company">公司名称排序</option>
-          <option value="company-group">按公司聚合（同公司多岗位）</option>
         </select>
+        <!-- 同企业收纳（v4.11.0）：从排序下拉里搬出来做成独立开关。
+             原先它是第 5 个排序选项，于是「分组」与「排序」互斥——想按公司收纳就用不了
+             「最近安排优先」。现在是正交的两件事：排序决定顺序，开关决定要不要插组头。
+             删掉那个选项**零迁移成本**：排序选择从来不持久化（uiPrefs 里没有 sort 键）。 -->
+        <div class="view-switch group-switch" role="group" aria-label="同企业收纳">
+          <button class="view-switch-btn" id="groupToggle" type="button" aria-pressed="false" title="把同一家企业的多条投递收进一个可折叠的组；同企业内填了不同「机构」时再分一层">同企业收纳</button>
+        </div>
       </div>
       <div class="table-scroll" id="recordsTableScroll">
         <table>
@@ -337,13 +346,18 @@
       <div class="modal-head"><h2 id="dialogTitle">新增投递</h2><button class="close-btn" id="closeDialog" type="button" aria-label="关闭">×</button></div>
       <div class="form-body">
         <div class="form-grid">
-          <div class="field"><label for="company">公司 <span class="required">*</span></label><input class="control" id="company" name="company" required maxlength="60" placeholder="例如：星海科技"><div class="hint" id="sameCompanyHint" hidden></div></div>
+          <div class="field"><label for="company">公司 <span class="required">*</span></label><input class="control" id="company" name="company" required maxlength="60" placeholder="例如：星海科技"><div class="hint" id="sameCompanyHint" hidden></div><div class="hint org-split-hint" id="orgSplitHint" hidden></div></div>
+          <div class="field">
+            <label for="orgUnit">机构 / 子公司 / BU</label>
+            <input class="control" id="orgUnit" name="orgUnit" maxlength="60" placeholder="例如：杭州分行 / 招银网络科技 / 云计算事业部">
+            <div class="hint">选填。同一家企业的不同分行、子公司、事业部靠它区分——填了才算两次独立投递，不会被判重复</div>
+          </div>
           <div class="field"><label for="position">岗位 <span class="required">*</span></label><input class="control" id="position" name="position" required maxlength="80" placeholder="例如：产品经理校招生"></div>
           <div class="field"><label for="city">城市 <span class="required">*</span></label><input class="control" id="city" name="city" required maxlength="30" placeholder="例如：上海"></div>
           <div class="field">
             <label for="companyType">企业性质</label>
             <select class="control" id="companyType" name="companyType"><option value="">未设置</option></select>
-            <div class="hint">用于洞察里的央国企 / 民企 / 外企统计；插件一键收录时也能直接选</div>
+            <div class="hint">用于洞察里的央国企 / 私企 / 外企统计；插件一键收录时也能直接选</div>
           </div>
           <div class="field"><label for="applicationDate">投递日期 <span class="required">*</span></label><input class="control" id="applicationDate" name="applicationDate" type="date" required></div>
           <div class="field"><label for="scheduleAt">安排时间</label><input class="control" id="scheduleAt" name="scheduleAt" type="datetime-local"><div class="hint">有面试、笔试或跟进时间时填写</div></div>
@@ -400,6 +414,36 @@
     <div class="modal-head"><h2 id="confirmTitle">请确认</h2></div>
     <div class="form-body"><p class="capture-note" id="confirmMessage"></p></div>
     <div class="modal-actions"><button class="btn" id="confirmCancelBtn" type="button">取消</button><button class="btn btn-primary" id="confirmOkBtn" type="button">确定</button></div>
+  </dialog>
+
+  <!-- 新增简历区块（v4.11.0）：区块名 + 类型二选一。
+       此前是一行 prompt() 取名然后硬编码 resume[key] = {}，而渲染靠 Array.isArray(val) 分叉，
+       于是新区块**在结构上永远拿不到**「＋ 添加」按钮——用户报的「自定义区块没法添加子标题项目」
+       就是这个硬编码。原生 prompt 拿不到第二个输入维度，且与全站「不用原生弹窗」的既有风格
+       不一致（confirmInApp 正是为此存在的），所以做成 dialog。 -->
+  <dialog id="sectionDialog" aria-label="新增简历区块">
+    <form id="sectionForm">
+      <div class="modal-head"><h2>新增简历区块</h2><button class="close-btn" id="closeSectionDialog" type="button" aria-label="关闭">×</button></div>
+      <div class="form-body">
+        <div class="field">
+          <label for="sectionName">区块名称 <span class="required">*</span></label>
+          <input class="control" id="sectionName" name="sectionName" required maxlength="20" placeholder="例如：校园经历 / 技能证书">
+          <div class="hint">保存简历后成为 JSON 里的一个段</div>
+        </div>
+        <fieldset class="section-type-set">
+          <legend>区块类型</legend>
+          <label class="section-type-opt">
+            <input type="radio" name="sectionType" value="exp" checked>
+            <span class="section-type-body"><strong>列表型</strong><span>适合项目、实习、校园经历：可加多段，每段有多个字段，能上移 / 下移 / 复制 / 删除</span></span>
+          </label>
+          <label class="section-type-opt">
+            <input type="radio" name="sectionType" value="kv">
+            <span class="section-type-body"><strong>键值型</strong><span>适合技能证书、基本信息：一行一项（字段名 + 内容）</span></span>
+          </label>
+        </fieldset>
+      </div>
+      <div class="modal-actions"><button class="btn" id="sectionCancelBtn" type="button">取消</button><button class="btn btn-primary" type="submit">添加区块</button></div>
+    </form>
   </dialog>
 
   <dialog id="advanceDialog">

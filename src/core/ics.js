@@ -30,9 +30,12 @@
           const start = ev.at instanceof Date ? ev.at : (ev.allDay ? parseDay(ev.at) : parseLocal(ev.at));
           if (!start) continue;
           const end = new Date(start.getTime() + (ev.allDay ? 86400000 : 3600000));
-          const title = `${r.company || '投递'} · ${ev.type === 'deadline' ? `截止（${r.position || '岗位'}）` : (r.recentSchedule || r.position || '安排')}`;
+          // 机构进标题（v4.11.0）：不进的话日历上会出现三个一模一样的「招商银行 · 客户经理」，
+          // 分不清哪个是杭州分行、哪个是成都分行 —— 而日历正是靠标题扫读的。
+          const companyBit = [r.company || '投递', r.orgUnit].filter(Boolean).join(' ');
+          const title = `${companyBit} · ${ev.type === 'deadline' ? `截止（${r.position || '岗位'}）` : (r.recentSchedule || r.position || '安排')}`;
           const desc = [
-            `岗位：${r.position || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
+            `岗位：${r.position || '—'}`, `机构：${r.orgUnit || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
             ev.type === 'deadline' ? `截止日期：${r.deadline || '—'}` : `安排时间：${r.scheduleAt || '—'}`,
             r.nextAction ? `下一步：${r.nextAction}` : ''
           ].filter(Boolean).join('\n');

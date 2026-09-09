@@ -470,6 +470,9 @@ function resolveEl(sel) {
 const STAGE_PRESETS_LIVE = extractConst(html, 'STAGE_PRESETS');
 const COMPANY_TYPES_LIVE = extractConst(html, 'COMPANY_TYPES');
 const COMPANY_TYPE_UNSET_LIVE = extractConst(html, 'COMPANY_TYPE_UNSET');
+// v4.11.0 企业性质改名的读时迁移表。normalizeRecord 用的是真实现（见下方注入），
+// 它会读这个符号 —— 不注入就是一串 ReferenceError，而且报错点离原因（改名）很远。
+const COMPANY_TYPE_ALIASES_LIVE = extractConst(html, 'COMPANY_TYPE_ALIASES');
 let confirmAnswer = true;
 // 确认框三态：'ok' | 'cancel' | 'dismiss'（Esc/点遮罩）。resolveDuplicate 靠 lastConfirmOutcome()
 // 区分「用户明确选了取消按钮」与「什么都没选就关掉」，后者必须中止入库而不是等同于某个按钮。
@@ -502,6 +505,7 @@ const sandbox2 = {
   STAGE_PRESETS: STAGE_PRESETS_LIVE,
   COMPANY_TYPES: COMPANY_TYPES_LIVE,
   COMPANY_TYPE_UNSET: COMPANY_TYPE_UNSET_LIVE,
+  COMPANY_TYPE_ALIASES: COMPANY_TYPE_ALIASES_LIVE,
   syncConfig: { token: 'tok' },
   records: [],
   jobs: [], // 岗位库（handleJobAction 从这里按 data-job-id 取岗位）
@@ -570,6 +574,8 @@ function seedRecords() {
   sandbox2.els.search.value = '';
   sandbox2.els.filter.value = 'all';
   sandbox2.els.sort.value = 'schedule';
+  // 分组相关的 UI 偏好一并复位（见上面的说明：uiPrefs 只能用 runInContext 改）
+  vm.runInContext('uiPrefs.groupByCompany = false; uiPrefs.collapsedGroups = []; uiPrefs.collapsedUnits = [];', sandbox2);
   sandbox2.records = [
     { id: 'r1', company: '腾讯', position: '后端', city: '深圳', stage: '一面', batch: '提前批', intent: 4, deadline: '', scheduleAt: '', applicationDate: '2026-09-01', updatedAt: 30, timeline: [{ stage: '已投递', at: '2026-09-01', note: '' }, { stage: '一面', at: '2026-09-04', note: '业务面' }], notes: [{ id: 'n1', at: 1, text: '问了项目难点' }], nextAction: '准备二面' },
     { id: 'r2', company: '腾讯科技有限公司', position: '前端', city: '深圳', stage: '已投递', batch: '', intent: 0, deadline: '', scheduleAt: '', applicationDate: '2026-09-02', updatedAt: 20, timeline: [{ stage: '已投递', at: '2026-09-02', note: '' }], notes: [], nextAction: '' },
@@ -671,9 +677,12 @@ check('advanceRecordTo 回退需二次确认：取消则不落库', async () => 
   assert.strictEqual(sandbox2.records[0].timeline.length, 3, '回退同样是追加里程碑');
 });
 
-check('toggleCompanyGroup 折叠态持久化，且聚合排序下折叠组不渲染明细行', () => {
+check('toggleCompanyGroup 折叠态持久化，且收纳开启时折叠组不渲染明细行', () => {
   seedRecords();
-  sandbox2.els.sort.value = 'company-group';
+  // v4.11.0：分组从「第 5 个排序选项」变成独立开关。uiPrefs 是 v44Section 里的顶层 let，
+  // 不会成为 sandbox 的属性（let/const 只进全局词法环境），所以必须用 runInContext 改，
+  // 写 sandbox2.uiPrefs.x 只会给沙箱对象挂一个没人读的属性、断言照旧绿——那是假绿。
+  vm.runInContext('uiPrefs.groupByCompany = true', sandbox2);
   sandbox2.renderRecordsView();
   let h = sandbox2.els.body.innerHTML;
   assert.ok(h.includes('company-group-row'), '聚合排序应有组头行');
@@ -747,12 +756,12 @@ check('表格行与看板卡片都带企业性质徽章', () => {
 
 check('详情抽屉：副标题带色徽章 + 关键信息有「企业性质」一行', () => {
   seedRecords();
-  sandbox2.records[0].companyType = '民企';
+  sandbox2.records[0].companyType = '私企';
   sandbox2.openRecordDrawer('r1');
-  assert.ok(els2['#drawerSub'].innerHTML.includes('data-ct="民企"'), '副标题阶段徽章后紧跟企业性质');
+  assert.ok(els2['#drawerSub'].innerHTML.includes('data-ct="私企"'), '副标题阶段徽章后紧跟企业性质');
   const body = els2['#drawerBody'].innerHTML;
   assert.ok(body.includes('企业性质'), '关键信息列出企业性质');
-  assert.ok(body.includes('data-ct="民企"'), '关键信息里也用带色徽章');
+  assert.ok(body.includes('data-ct="私企"'), '关键信息里也用带色徽章');
   // 未设置时给明确文案，而不是空白（用户要能分辨「没填」与「渲染漏了」）
   sandbox2.records[0].companyType = '';
   sandbox2.renderDrawer();
@@ -1104,7 +1113,7 @@ function formEntries(overrides = {}) {
   const base = {
     company: '腾讯', position: '前端', city: '深圳', applicationDate: '2026-09-06',
     applicationUrl: '', scheduleAt: '', deadline: '', recentSchedule: '', nextAction: '',
-    batch: '', channel: '', referral: '', intent: '', salary: ''
+    orgUnit: '', batch: '', channel: '', referral: '', intent: '', salary: ''
   };
   return Object.entries(Object.assign(base, overrides));
 }
@@ -1123,10 +1132,10 @@ check('submitForm：同公司不同岗位 → 新增成功，且提示并入保�
   assert.ok(msg.includes('名下现在共 2 个岗位'), `提示必须并入同一条 toast：${msg}`);
 });
 
-check('submitForm：同公司同岗位同批次 → 弹「疑似重复投递」；选「编辑已有」则不新增', async () => {
-  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '提前批', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+check('submitForm：同公司同机构同岗位 → 弹「疑似重复投递」；选「编辑已有」则不新增', async () => {
+  sandbox2.records = [{ id: 'x1', company: '招商银行', position: '客户经理', orgUnit: '杭州分行', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   sandbox2.editingId = null;
-  sandbox2.els.form._entries = formEntries({ position: '后端', batch: '提前批' });
+  sandbox2.els.form._entries = formEntries({ company: '招商银行', position: '客户经理', orgUnit: '杭州分行' });
   calls.confirm.length = 0; calls.openDialog.length = 0; calls.saveRecords.length = 0;
   confirmAnswer = true; confirmOutcomeValue = 'ok';
   await sandbox2.submitForm({ preventDefault() {} });
@@ -1140,24 +1149,24 @@ check('submitForm：同公司同岗位同批次 → 弹「疑似重复投递」�
   confirmAnswer = true;
 });
 
-check('submitForm：同公司同岗位但批次不同 → variant 提示，选「是独立投递」则正常新增', async () => {
-  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '提前批', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+check('submitForm：同公司同岗位但机构不同 → variant 提示，选「是独立投递」则正常新增', async () => {
+  sandbox2.records = [{ id: 'x1', company: '招商银行', position: '客户经理', orgUnit: '杭州分行', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   sandbox2.editingId = null;
-  sandbox2.els.form._entries = formEntries({ position: '后端', batch: '正式批' });
+  sandbox2.els.form._entries = formEntries({ company: '招商银行', position: '客户经理', orgUnit: '成都分行' });
   calls.confirm.length = 0; calls.saveRecords.length = 0;
   confirmAnswer = true; confirmOutcomeValue = 'ok'; // variant 的主按钮就是「是独立投递，新增」
   await sandbox2.submitForm({ preventDefault() {} });
-  assert.strictEqual(calls.confirm.length, 1, '提前批/正式批应给 variant 提示，而不是无声合并或无声放行');
+  assert.strictEqual(calls.confirm.length, 1, '杭州分行/成都分行应给 variant 提示，而不是无声合并或无声放行');
   assert.strictEqual(calls.confirm[0].title, '疑似同岗位不同方向');
   assert.strictEqual(calls.confirm[0].confirmText, '是独立投递，新增');
   assert.strictEqual(sandbox2.records.length, 2);
-  assert.strictEqual(sandbox2.records[0].batch, '正式批');
+  assert.strictEqual(sandbox2.records[0].orgUnit, '成都分行', '新记录带着自己的机构入库');
 });
 
 check('submitForm：variant 选「其实是同一条」→ 打开既有记录、不新增', async () => {
-  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '提前批', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'x1', company: '招商银行', position: '客户经理', orgUnit: '杭州分行', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   sandbox2.editingId = null;
-  sandbox2.els.form._entries = formEntries({ position: '后端', batch: '正式批' });
+  sandbox2.els.form._entries = formEntries({ company: '招商银行', position: '客户经理', orgUnit: '成都分行' });
   calls.confirm.length = 0; calls.openDialog.length = 0; calls.saveRecords.length = 0;
   confirmAnswer = false; confirmOutcomeValue = 'cancel';
   await sandbox2.submitForm({ preventDefault() {} });
@@ -1464,7 +1473,7 @@ check('企业性质：比例条只画非零段，图例固定 4 行，未设置�
   sandbox2.renderCompanyTypeStats();
   const legend = ctypeLegendEl().innerHTML;
   const rows = [...legend.matchAll(/ctype-label">([^<]+)</g)].map(m => m[1]);
-  assert.deepStrictEqual(rows, ['央国企', '民企', '外企', '未设置'], '图例固定 4 行，为 0 也出现');
+  assert.deepStrictEqual(rows, ['央国企', '私企', '外企', '未设置'], '图例固定 4 行，为 0 也出现');
   assert.ok(legend.includes('is-empty'), '为 0 的档位灰显');
   assert.strictEqual((ctypeBarEl().innerHTML.match(/ctype-seg/g) || []).length, 1, '只有未设置有数据 → 只画一段');
   assert.ok(ctypeBarEl().innerHTML.includes('data-tip-kind="ctype"'), '每段挂悬浮明细钩子');

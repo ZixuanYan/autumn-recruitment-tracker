@@ -132,7 +132,8 @@ assert.ok(bgDupSrc && bgDupSrc.length > 80, '未能从 background.js 抽取 find
 vm.runInContext(`${bgDupSrc}\n;__bg = findDuplicateRecord;`, bgBox, { filename: 'background-dedup.js' });
 const bgFindDuplicate = bgBox.__bg;
 
-const rec = (id, company, position, batch) => ({ id, company, position, batch: batch || '', stage: '已投递', applicationUrl: '', updatedAt: 1 });
+// 第 4 个参数从 batch 换成 orgUnit：v4.11.0 起查重的第三要素是机构（批次字段已在同版删除）
+const rec = (id, company, position, orgUnit) => ({ id, company, position, orgUnit: orgUnit || '', stage: '已投递', applicationUrl: '', updatedAt: 1 });
 
 async function runAll() {
   for (const item of cases) {
@@ -306,14 +307,28 @@ check('仅空格/大小写/全半角差异 → 仍是 duplicate（真重复不�
   assert.strictEqual(web.findDuplicateRecord([rec('1', '腾讯', '后端开发（深圳）')], { company: '腾讯', position: '后端开发(深圳)' }).mode, 'duplicate');
 });
 
-check('批次不同 → variant（提前批/正式批既不合并也不无声放行）', () => {
-  const res = web.findDuplicateRecord([rec('1', '腾讯', '后端开发', '提前批')], { company: '腾讯', position: '后端开发', batch: '正式批' });
+check('机构不同 → variant（杭州分行/成都分行既不合并也不无声放行）', () => {
+  const res = web.findDuplicateRecord([rec('1', '招商银行', '客户经理', '杭州分行')], { company: '招商银行', position: '客户经理', orgUnit: '成都分行' });
   assert.strictEqual(res.mode, 'variant');
 });
 
-check('插件不传批次时不会误判 duplicate（旧版 ignoreBatch:true 的后果）', () => {
-  const res = web.findDuplicateRecord([rec('1', '腾讯', '后端开发', '提前批')], { company: '腾讯', position: '后端开发' });
+check('新记录没填机构、已有记录填了 → 不误判 duplicate（旧版 ignoreBatch:true 的后果）', () => {
+  const res = web.findDuplicateRecord([rec('1', '招商银行', '客户经理', '杭州分行')], { company: '招商银行', position: '客户经理' });
   assert.strictEqual(res.mode, 'variant');
+});
+
+check('同公司同岗位同机构 → duplicate（网页端与插件端结论必须一致）', () => {
+  const webHit = web.findDuplicateRecord([rec('1', '招商银行', '客户经理', '杭州分行')],
+    { company: '招商银行', position: '客户经理', orgUnit: '杭州分行' });
+  assert.strictEqual(webHit.mode, 'duplicate');
+  // 插件端那份是简化实现（只比 company + positionKey + orgUnit），两端必须同结论：
+  // 分叉的话会出现「网页说是独立投递、插件把它们合并成一条」，用户看到的取决于走哪条路径。
+  const bgHit = bgFindDuplicate([rec('1', '招商银行', '客户经理', '杭州分行')],
+    { company: '招商银行', position: '客户经理', orgUnit: '杭州分行' });
+  assert.strictEqual(bgHit.mode, 'duplicate');
+  const bgOtherUnit = bgFindDuplicate([rec('1', '招商银行', '客户经理', '杭州分行')],
+    { company: '招商银行', position: '客户经理', orgUnit: '成都分行' });
+  assert.notStrictEqual(bgOtherUnit && bgOtherUnit.mode, 'duplicate', '机构不同不得在暂存箱里被合并');
 });
 
 check('同公司不同岗位 → same-company；不同公司/空公司 → null', () => {

@@ -357,7 +357,7 @@ function extractConstLine(src, name) {
   const line = src.split('\n').find(l => l.includes(`const ${name} =`));
   return line ? line.trim() : '';
 }
-const CORE_CONST_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET'];
+const CORE_CONST_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET', 'COMPANY_TYPE_ALIASES'];
 const coreConsts = CORE_CONST_NAMES.map(name => extractConstLine(html, name));
 check('CORE 依赖的顶层常量全部从 index.html 抽取到', () => {
   const missing = CORE_CONST_NAMES.filter((name, idx) => !coreConsts[idx]);
@@ -384,13 +384,14 @@ const ALIAS_ONLY = {
   STAGE_PRESETS: /^const STAGE_PRESETS = AJA\.STAGE_PRESETS;$/,
   COMPANY_TYPES: /^const COMPANY_TYPES = AJA\.COMPANY_TYPES;$/,
   COMPANY_TYPE_UNSET: /^const COMPANY_TYPE_UNSET = AJA\.COMPANY_TYPE_UNSET;$/,
+  COMPANY_TYPE_ALIASES: /^const COMPANY_TYPE_ALIASES = AJA\.COMPANY_TYPE_ALIASES;$/,
   DEFAULT_RESUME: /^const DEFAULT_RESUME = AJA\.DEFAULT_RESUME;$/,
   companyGroupKey: /^const companyGroupKey = AJA\.companyGroupKey;$/,
   sameCompanyGroup: /^const sameCompanyGroup = AJA\.sameCompanyGroup;$/,
   normalizePositionSlug: /^const normalizePositionSlug = AJA\.normalizePositionSlug;$/,
   loosePositionSlug: /^const loosePositionSlug = AJA\.loosePositionSlug;$/
 };
-check('别名守卫：index.html 的八个跨端符号只能是 shared 的转发，不得再出现第二份字面量/实现', () => {
+check('别名守卫：index.html 的九个跨端符号只能是 shared 的转发，不得再出现第二份字面量/实现', () => {
   for (const [name, re] of Object.entries(ALIAS_ONLY)) {
     const line = html.split('\n').find(l => l.includes(`const ${name} =`));
     assert.ok(line, `index.html 里找不到 ${name} 的声明行`);
@@ -400,6 +401,7 @@ check('别名守卫：index.html 的八个跨端符号只能是 shared 的转发
   // 反向兜底：整份 index.html 里不该再有这些字面量/实现体
   assert.ok(!/const STAGE_PRESETS = \[/.test(html), 'index.html 又出现了阶段字面量');
   assert.ok(!/const COMPANY_TYPES = \[/.test(html), 'index.html 又出现了企业性质字面量');
+  assert.ok(!/const COMPANY_TYPE_ALIASES = \{/.test(html), 'index.html 又出现了企业性质别名表字面量');
   assert.ok(!/const LEGAL_SUFFIX_RE = \//.test(html), 'index.html 又出现了法人后缀正则副本');
   assert.ok(!/function companyGroupKey\(/.test(html), 'index.html 又出现了 companyGroupKey 的实现体');
   assert.ok(!/function sameCompanyGroup\(/.test(html), 'index.html 又出现了 sameCompanyGroup 的实现体');
@@ -751,11 +753,11 @@ check('findDuplicateRecord：同链接判重', () => {
   assert.strictEqual(hit.reason, 'url');
 });
 
-check('findDuplicateRecord：同公司+同岗位+同批次才算重复', () => {
-  const recs = [{ id: '1', company: '腾讯科技有限公司', position: '后端开发', applicationUrl: '', batch: '提前批' }];
-  const dup = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发', batch: '提前批' });
+check('findDuplicateRecord：同公司+同机构+同岗位才算重复', () => {
+  const recs = [{ id: '1', company: '腾讯科技有限公司', position: '后端开发', applicationUrl: '', orgUnit: '云计算事业部' }];
+  const dup = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发', orgUnit: '云计算事业部' });
   assert.strictEqual(dup.mode, 'duplicate');
-  assert.strictEqual(dup.reason, 'company+position+batch');
+  assert.strictEqual(dup.reason, 'company+unit+position');
   assert.strictEqual(dup.matches[0].id, '1', '公司键统一后，简称与全称也能对上');
 });
 
@@ -782,17 +784,17 @@ check('findDuplicateRecord：括号里的城市/端/批次不同 → variant（�
   }
 });
 
-check('findDuplicateRecord：批次不同 → variant（提前批/正式批不再被误合并）', () => {
-  const recs = [{ id: '1', company: '腾讯', position: '后端开发', applicationUrl: '', batch: '提前批' }];
-  const res = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发', batch: '正式批' });
+check('findDuplicateRecord：机构不同 → variant（杭州分行/成都分行不再被误合并）', () => {
+  const recs = [{ id: '1', company: '招商银行', position: '客户经理', applicationUrl: '', orgUnit: '杭州分行' }];
+  const res = core.findDuplicateRecord(recs, { company: '招商银行', position: '客户经理', orgUnit: '成都分行' });
   assert.strictEqual(res.mode, 'variant');
   assert.strictEqual(res.matches.length, 1);
 });
 
-check('findDuplicateRecord：插件不传批次时不再误判为 duplicate（旧版 ignoreBatch:true 的后果）', () => {
-  const recs = [{ id: '1', company: '腾讯', position: '后端开发', applicationUrl: '', batch: '提前批' }];
-  // 插件收录路径没有批次字段 → seed.batch 恒为空 → 与已有「提前批」不等 → 非阻断放行
-  const res = core.findDuplicateRecord(recs, { company: '腾讯', position: '后端开发' });
+check('findDuplicateRecord：新记录没填机构、已有记录填了 → 不误判 duplicate（旧版 ignoreBatch:true 的后果）', () => {
+  const recs = [{ id: '1', company: '招商银行', position: '客户经理', applicationUrl: '', orgUnit: '杭州分行' }];
+  // seed.orgUnit 为空 → 与已有「杭州分行」不等 → 非阻断放行，让用户自己决定是不是同一条
+  const res = core.findDuplicateRecord(recs, { company: '招商银行', position: '客户经理' });
   assert.strictEqual(res.mode, 'variant');
   assert.notStrictEqual(res.mode, 'duplicate', '绝不能再强制打开旧记录编辑，否则会污染已有里程碑');
 });
@@ -839,7 +841,9 @@ check('洞察面板信息层级：概览 → 行动 → 转化 → 明细（重�
   // 面板结束边界随之从已删除的 distributionTitle 改为紧随其后的「未来安排」aside（id="upcoming"）。
   const panel = html.slice(html.indexOf('id="insightsBody"'), html.indexOf('id="upcoming"'));
   assert.ok(panel.length > 500, '未定位到洞察面板 HTML');
-  const order = ['insightMetrics', 'alertList', 'funnelRow', 'stageGrid', 'insightDetails', 'cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'multiCompanyWrap', 'offerMatrixWrap'];
+  // v4.11.0 换位：阶段分布提到整宽第 2 位（14 个色阶块在半宽的一半里每块只有 ~44px，
+  // 灰→蓝→绿的递进看不清），需要关注移进 grid 与漏斗并排。常驻区仍是这四块，精简模式不变。
+  const order = ['insightMetrics', 'stageGrid', 'funnelRow', 'alertList', 'insightDetails', 'cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'multiCompanyWrap', 'offerMatrixWrap'];
   const positions = order.map(id => panel.indexOf(`id="${id}"`));
   assert.ok(positions.every(p => p > 0), `有块缺失：${order.filter((id, i) => positions[i] < 0).join(', ')}`);
   for (let i = 1; i < positions.length; i += 1) {
@@ -856,19 +860,22 @@ check('洞察面板信息层级：概览 → 行动 → 转化 → 明细（重�
   }
 });
 
-check('阶段分布已并入洞察常驻区：独立 .distribution panel 被移除、#stageGrid 唯一且与漏斗同排', () => {
-  // stageGrid 的 id 不变（els.stageGrid / renderDistribution 零改动），但外壳从总览的独立 panel
-  // 迁进洞察面板，与转化漏斗组成 .insight-grid 两列。旧的 <section class="panel distribution"> 必须消失，
-  // 否则会出现两个 stageGrid 或两处「阶段分布」标题。
+check('阶段分布独占整宽、漏斗与需要关注同排（v4.11.0 换位后的结构）', () => {
+  // stageGrid 的 id 不变（els.stageGrid / renderDistribution 零改动）。旧的独立
+  // <section class="panel distribution"> 必须消失，否则会出现两个 stageGrid 或两处标题。
   assert.ok(!/class="panel distribution"/.test(html), '独立的 .distribution panel 外壳应已删除');
   assert.ok(!/id="distributionTitle"/.test(html), '旧的 distributionTitle 应随外壳一起删除');
   const stageGridCount = (html.match(/id="stageGrid"/g) || []).length;
   assert.strictEqual(stageGridCount, 1, '#stageGrid 必须唯一');
-  // stageGrid 与 funnelRow 必须同在一个 .insight-grid 里（左右两列），且都在常驻区
+  // 换位前 stageGrid 与 funnelRow 同在两列 grid 里各占一半；换位后 stageGrid 必须是
+  // **整宽的独立块**（不在任何 .insight-grid 内），漏斗与需要关注并排。
   const gridStart = html.lastIndexOf('class="insight-grid"', html.indexOf('id="funnelRow"'));
   const gridSlice = html.slice(gridStart, html.indexOf('id="insightDetails"'));
-  assert.ok(gridSlice.includes('id="funnelRow"') && gridSlice.includes('id="stageGrid"'), '漏斗与阶段分布应同处一个 .insight-grid');
-  assert.ok(/阶段分布[\s\S]*?当前存量，按阶段计数/.test(gridSlice), '阶段分布块头应带口径说明，与漏斗的「累计转化」区分');
+  assert.ok(gridSlice.includes('id="funnelRow"') && gridSlice.includes('id="alertList"'), '漏斗与需要关注应同处一个 .insight-grid');
+  assert.ok(!gridSlice.includes('id="stageGrid"'), '阶段分布必须移出 .insight-grid——整宽才放得下 14 个色阶块');
+  assert.ok(html.indexOf('id="stageGrid"') < gridStart, '阶段分布应排在 .insight-grid 之前');
+  assert.ok(/阶段分布[\s\S]*?当前存量，按阶段计数/.test(html.slice(html.indexOf('id="insightsBody"'), gridStart)),
+    '阶段分布块头应带口径说明，与漏斗的「累计转化」区分');
 });
 
 
@@ -925,14 +932,14 @@ check('computeCityStats：多城市各计一次、Offer 率、未填桶排最后
 check('computeCompanyTypeStats：固定 4 行顺序，非法值落未设置，空台账也给出 4 行', () => {
   const recs = [
     { id: '1', company: '国家电网', position: 'a', city: '北京', companyType: '央国企', stage: 'Offer' },
-    { id: '2', company: '字节', position: 'b', city: '北京', companyType: '民企', stage: '一面' },
+    { id: '2', company: '字节', position: 'b', city: '北京', companyType: '私企', stage: '一面' },
     { id: '3', company: '宝洁', position: 'c', city: '广州', companyType: '外企', stage: '已结束' },
     { id: '4', company: '某司', position: 'd', city: '上海', companyType: '', stage: '已投递' },
     { id: '5', company: '某司2', position: 'e', city: '上海', companyType: '国企', stage: '已投递' }
   ];
   const stats = core.computeCompanyTypeStats(recs);
-  assert.deepStrictEqual(stats.map(row => row.label), ['央国企', '民企', '外企', '未设置'], '顺序固定，面板结构才稳定');
-  assert.deepStrictEqual(stats.map(row => row.type), ['央国企', '民企', '外企', ''], 'type 用空串表示未设置，便于按值查色');
+  assert.deepStrictEqual(stats.map(row => row.label), ['央国企', '私企', '外企', '未设置'], '顺序固定，面板结构才稳定');
+  assert.deepStrictEqual(stats.map(row => row.type), ['央国企', '私企', '外企', ''], 'type 用空串表示未设置，便于按值查色');
   assert.strictEqual(stats[0].total, 1);
   assert.strictEqual(stats[0].offers, 1);
   assert.strictEqual(stats[0].offerRate, 1);
@@ -985,14 +992,14 @@ check('tipContentFor ctype：按公司聚类列出并给最好阶段，空档返
   const recs = [
     { id: '1', company: '国家电网', position: 'a', city: '北京', companyType: '央国企', stage: '一面' },
     { id: '2', company: '国家电网', position: 'b', city: '上海', companyType: '央国企', stage: 'Offer' },
-    { id: '3', company: '字节', position: 'c', city: '北京', companyType: '民企', stage: '已投递' }
+    { id: '3', company: '字节', position: 'c', city: '北京', companyType: '私企', stage: '已投递' }
   ];
   const out = core.tipContentFor(recs, 'ctype', '央国企');
   assert.ok(out.includes('央国企 · 2 条投递 · 1 家公司'), '同一家公司两个岗位只算一家');
   assert.ok(out.includes('1 个 Offer'));
   assert.ok(out.includes('2 个岗位'), '标出该公司岗位数');
   assert.ok(out.includes('data-stage="Offer"'), '最好阶段取 stageOrder 最大的那个，而不是第一条');
-  assert.ok(core.tipContentFor(recs, 'ctype', '民企').includes('字节'));
+  assert.ok(core.tipContentFor(recs, 'ctype', '私企').includes('字节'));
   assert.strictEqual(core.tipContentFor(recs, 'ctype', '外企'), '', '这一档没有记录 → 不弹空壳');
   // 未设置档用空串做 key（与 data-ct="" 对应）
   assert.ok(core.tipContentFor([{ id: '9', company: 'X', position: 'p', city: 'C', companyType: '', stage: '已投递' }], 'ctype', '').includes('未设置'));
@@ -1018,6 +1025,33 @@ check('tipContentFor：用户数据一律转义（悬浮层是 innerHTML 注入�
   }
   const evilType = [{ id: 'e2', company: evil, position: 'p', city: 'C', companyType: '央国企', stage: '已投递' }];
   assert.ok(!core.tipContentFor(evilType, 'ctype', '央国企').includes('<img'));
+});
+
+check('企业性质改名（民企→私企）：别名表合法、读时迁移生效、CSS 选择器与枚举一一对应', () => {
+  const aliases = require(path.resolve(__dirname, '../shared/company-types.js')).COMPANY_TYPE_ALIASES;
+  const types = require(path.resolve(__dirname, '../shared/company-types.js')).COMPANY_TYPES;
+  // ① 别名的**值**必须都是合法档位。迁到一个不在枚举里的值等于没迁：
+  //    紧接着的白名单校验会把它打回「未设置」，用户看到的就是"我明明选过、统计里没有"。
+  for (const [from, to] of Object.entries(aliases)) {
+    assert.ok(types.includes(to), `别名 ${from} → ${to}，但 ${to} 不在 COMPANY_TYPES 里（迁移后会被白名单打回未设置）`);
+    assert.ok(!types.includes(from), `别名键 ${from} 仍是现行档位，说明改名没改干净`);
+  }
+  assert.strictEqual(aliases['民企'], '私企', '旧档位「民企」必须能迁到「私企」');
+  // ② 读时迁移真的生效（不是只写在注释里）
+  assert.strictEqual(core.normalizeRecord({ id: 'm1', company: 'A', position: 'B', city: 'C', applicationDate: '2026-09-01', companyType: '民企' }).companyType, '私企');
+  assert.strictEqual(core.normalizeRecord({ id: 'm2', company: 'A', position: 'B', city: 'C', applicationDate: '2026-09-01', companyType: '私企' }).companyType, '私企');
+  assert.strictEqual(core.normalizeRecord({ id: 'm3', company: 'A', position: 'B', city: 'C', applicationDate: '2026-09-01', companyType: '不存在档' }).companyType, '', '非法值仍归未设置');
+  // ③ CSS 的 [data-ct="…"] 选择器必须与枚举**一一对应**。
+  //    企业性质的配色靠属性选择器命中，改档位名而漏改 CSS 不会报错 —— 徽章还在、字还在，
+  //    只是静默退化成灰色兜底色。三处：洞察比例条 .ctype-seg、图例圆点 .ctype-legend-row、台账徽章 .ct-chip。
+  const cssSelectors = [...new Set([...html.matchAll(/\[data-ct="([^"]+)"\]/g)].map(m => m[1]))].filter(v => v !== '');
+  assert.deepStrictEqual(cssSelectors.slice().sort(), [...types].sort(),
+    `CSS 的 data-ct 选择器 ${JSON.stringify(cssSelectors)} 与企业性质枚举 ${JSON.stringify(types)} 不一致`);
+  for (const t of types) {
+    for (const sel of ['.ctype-seg', '.ctype-legend-row', '.ct-chip']) {
+      assert.ok(html.includes(`${sel}[data-ct="${t}"]`), `${sel} 缺 ${t} 的配色规则（会静默变灰）`);
+    }
+  }
 });
 
 check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、intent 夹取、notes 清洗', () => {
@@ -1061,11 +1095,14 @@ check('normalizeRecord companyType：白名单校验，老数据与非法值一�
   assert.strictEqual(legacy.batch, '提前批', '既有字段不受新字段影响');
   assert.strictEqual(legacy.intent, 3);
   // 三个合法档位原样保留
-  for (const type of ['央国企', '民企', '外企']) {
+  for (const type of ['央国企', '私企', '外企']) {
     assert.strictEqual(core.normalizeRecord({ company: 'x', companyType: type }).companyType, type);
   }
   // 非法值一律归 ''：自由文本、近似写法、null、数字、带空格
-  for (const bad of ['国企', '央企', '民营企业', 'state-owned', null, undefined, 0, 1, {}, '央国企 ']) {
+  // 注意「民营企业」**不在**这个清单里 —— v4.11.0 起它是「私企」的旧写法别名（读时迁移）。
+  // 把它归 '' 才是 bug：用户的老数据会静默从企业性质统计里消失，而界面上看不出任何异常。
+  // 别名表与迁移行为由前面那条「企业性质改名（民企→私企）」专门盯。
+  for (const bad of ['国企', '央企', 'state-owned', null, undefined, 0, 1, {}, '央国企 ']) {
     const got = core.normalizeRecord({ company: 'x', companyType: bad }).companyType;
     // '央国企 ' 带尾空格应被 trim 后接受，其余全部归 ''
     assert.strictEqual(got, bad === '央国企 ' ? '央国企' : '', `companyType=${JSON.stringify(bad)} 应归一，实际 ${JSON.stringify(got)}`);
@@ -1154,7 +1191,7 @@ check('投递记录视图容器存在，且位于总览之后、岗位库之前�
 
 check('记录面板迁移后所有既有 id 原样保留（els 映射与事件绑定零改动的前提）', () => {
   // 迁移的铁律：id 一个都不能变，否则 els.* / addEventListener 全部失联
-  const ids = ['records', 'resultCaption', 'viewTableBtn', 'viewBoardBtn', 'searchInput', 'stageFilter', 'sortSelect', 'recordsTableScroll', 'recordBody', 'boardView', 'boardCols', 'emptyState'];
+  const ids = ['records', 'resultCaption', 'viewTableBtn', 'viewBoardBtn', 'searchInput', 'stageFilter', 'sortSelect', 'groupToggle', 'recordsTableScroll', 'recordBody', 'boardView', 'boardCols', 'emptyState'];
   const missing = ids.filter(id => !new RegExp(`id="${id}"`).test(html));
   assert.deepStrictEqual(missing, [], `记录面板缺失 id：${missing.join(', ')}`);
   // 这些 id 都必须落在 records 视图容器内（而不是散落到别处）

@@ -211,11 +211,11 @@ check('契约：企业性质只有一份（在 shared/company-types.js），两�
   assert.ok(/const COMPANY_TYPE_UNSET = AJA\.COMPANY_TYPE_UNSET;/.test(htmlSrc2), '同上（「未设置」文案）');
   assert.ok(!/AJA\.COMPANY_TYPES = \[/.test(constantsSrc2),
     'constants.js 又出现了企业性质字面量：它在 shared 之后加载，会覆盖单一事实源');
-  assert.ok(!/央国企|民企|外企/.test(constantsSrc2), 'constants.js 里不该再有企业性质的中文字面量');
+  assert.ok(!/央国企|私企|外企/.test(constantsSrc2), 'constants.js 里不该再有企业性质的中文字面量');
   const shared = requireShared('company-types.js');
   // 网页端 normalizeRecord 做白名单校验：多写或写错一个字，用户选了也等于没选（静默落回未设置），
   // 且洞察的企业性质统计永远缺这一档
-  assert.deepStrictEqual([...shared.COMPANY_TYPES], ['央国企', '民企', '外企'], '档位应为约定的 3 档');
+  assert.deepStrictEqual([...shared.COMPANY_TYPES], ['央国企', '私企', '外企'], '档位应为约定的 3 档');
   assert.strictEqual(shared.COMPANY_TYPE_UNSET, '未设置');
   // 插件的收录表单必须真的用这份值生成下拉（而不是自己硬编码三个 option）
   assert.ok(/AJA\.COMPANY_TYPES\s*\|\|\s*\[\]\)\.map/.test(formSrc), '收录表单的下拉选项应由 AJA.COMPANY_TYPES 动态生成');

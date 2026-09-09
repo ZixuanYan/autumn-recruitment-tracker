@@ -469,7 +469,7 @@ check('暂存箱：计数徽标、列表渲染、空态引导', async () => {
     respond: (msg) => (msg.type === 'GET_PENDING_RECORDS' ? {
       ok: true,
       records: [
-        { id: 'a1', company: '腾讯', position: '后端（深圳）', stage: '一面', applicationDate: '2026-09-01', companyType: '民企' },
+        { id: 'a1', company: '腾讯', position: '后端（深圳）', stage: '一面', applicationDate: '2026-09-01', companyType: '私企' },
         { id: 'a2', company: '腾讯', position: '后端（北京）', stage: '已投递', applicationDate: '2026-09-02', variantOf: '腾讯 · 后端（深圳）' }
       ]
     } : { ok: true })
@@ -478,7 +478,7 @@ check('暂存箱：计数徽标、列表渲染、空态引导', async () => {
   assert.strictEqual(el('p-pend-count').hidden, false, '有条目时徽标不该隐藏');
   const html = el('p-pend-list').innerHTML;
   assert.ok(html.includes('腾讯 · 后端（深圳）'), '应渲染公司与岗位');
-  assert.ok(html.includes('民企'), '应渲染企业性质');
+  assert.ok(html.includes('私企'), '应渲染企业性质');
   assert.ok(html.includes('是同公司的相近岗位'), '同公司多岗位要说明不是重复堆积');
   assert.ok(html.includes('data-discard="a1"'), '每条要有丢弃入口');
   assert.ok(html.includes('data-fill="a1"'), '每条要可点击回填');
@@ -494,7 +494,7 @@ check('暂存箱：丢弃发 REMOVE_PENDING_RECORD，点击条目回填表单且
     quiet: true,
     respond: (msg) => (msg.type === 'GET_PENDING_RECORDS' ? {
       ok: true,
-      records: [{ id: 'x1', company: '字节跳动', position: '前端（北京）', city: '北京', stage: '二面', applicationDate: '2026-09-03', companyType: '民企', applicationUrl: 'https://job.bytedance.com/x' }]
+      records: [{ id: 'x1', company: '字节跳动', position: '前端（北京）', city: '北京', stage: '二面', applicationDate: '2026-09-03', companyType: '私企', applicationUrl: 'https://job.bytedance.com/x' }]
     } : { ok: true, total: 0 })
   });
   // 丢弃：事件委托，target 是按钮本身
@@ -513,7 +513,7 @@ check('暂存箱：丢弃发 REMOVE_PENDING_RECORD，点击条目回填表单且
   await settle();
   assert.strictEqual(el('cap-company').value, '字节跳动');
   assert.strictEqual(el('cap-position').value, '前端（北京）', '岗位名的括号修饰不能被丢');
-  assert.strictEqual(el('cap-company-type').value, '民企', '企业性质必须一并回填，否则重复收录会冲掉已选值');
+  assert.strictEqual(el('cap-company-type').value, '私企', '企业性质必须一并回填，否则重复收录会冲掉已选值');
   assert.strictEqual(el('cap-stage').value, '二面');
   assert.strictEqual(el('aja-capture-form').hidden, false, '回填后应展开表单');
   assert.strictEqual(el('p-cap-body').hidden, false, '回填后应展开「一键收录」段');

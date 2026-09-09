@@ -622,7 +622,7 @@ check('下拉选项由常量生成：阶段 14 档、企业性质 3 档 + 未设
 check('collect() 的字段与 background 暂存的字段对得上（少一个就静默丢数据）', () => {
   const e = {
     company: { value: ' 腾讯 ' }, position: { value: '后端' }, city: { value: '深圳' },
-    stage: { value: '已投递' }, date: { value: '2026-09-08' }, companyType: { value: '民企' }
+    stage: { value: '已投递' }, date: { value: '2026-09-08' }, companyType: { value: '私企' }
   };
   const rec = AJA.CaptureForm.collect(e, 'https://careers.tencent.com/job/1');
   assert.strictEqual(rec.company, '腾讯', '公司名应 trim');
@@ -644,9 +644,9 @@ check('fillFromPending() 必须带回 companyType（漏了会把已选的企业�
   const e = { company: { value: '' }, position: { value: '' }, city: { value: '' }, stage: { value: '' }, date: { value: '' }, companyType: { value: '' } };
   AJA.CaptureForm.fillFromPending(e, {
     company: '字节跳动', position: '前端（北京）', city: '北京', stage: '一面',
-    applicationDate: '2026-09-01', companyType: '民企'
+    applicationDate: '2026-09-01', companyType: '私企'
   });
-  assert.strictEqual(e.companyType.value, '民企');
+  assert.strictEqual(e.companyType.value, '私企');
   assert.strictEqual(e.stage.value, '一面');
   assert.strictEqual(e.position.value, '前端（北京）', '岗位名的括号修饰不能被丢（同公司多岗位靠它区分）');
   // 缺字段时不抛错，stage 回落已投递
@@ -970,7 +970,7 @@ check('shared 的值本身正确（源头错了三端一起错，所以源头也
   // 跨 vm context 的数组原型不同，deepStrictEqual 会报「结构相同但引用不等」，所以先展开成本地数组
   assert.deepStrictEqual([...AJA.STAGE_PRESETS],
     ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束']);
-  assert.deepStrictEqual([...AJA.COMPANY_TYPES], ['央国企', '民企', '外企'], '企业性质应为约定的 3 档');
+  assert.deepStrictEqual([...AJA.COMPANY_TYPES], ['央国企', '私企', '外企'], '企业性质应为约定的 3 档');
   assert.strictEqual(AJA.COMPANY_TYPE_UNSET, '未设置');
   assert.strictEqual(Object.keys(AJA.DEFAULT_RESUME).length, 6, '默认简历应为 6 段');
   // 归一化两套 API 缺一不可：少字符串版插件要改调用点，少 record 版网页版要改 31 处
@@ -1010,7 +1010,7 @@ check('插件 constants.js 只做别名转发，不得再有阶段/企业性质�
     'constants.js 缺少 AJA.STAGES 的别名转发（插件全代码用的是 AJA.STAGES）');
   assert.ok(!/AJA\.STAGES = \[/.test(SRC.constants), 'constants.js 里又出现了阶段字面量数组');
   assert.ok(!/AJA\.COMPANY_TYPES = \[/.test(SRC.constants), 'constants.js 里又出现了企业性质字面量数组');
-  assert.ok(!/央国企|民企|外企/.test(SRC.constants), 'constants.js 里不该再有企业性质的中文字面量');
+  assert.ok(!/央国企|私企|外企/.test(SRC.constants), 'constants.js 里不该再有企业性质的中文字面量');
   // 插件专有常量必须保留原地（网页版与 Action 用不到，搬进 shared 只会制造新耦合）
   for (const k of ['TRACKER_URL', 'TRACKER_ORIGIN', 'TRACKER_PATH_PREFIX', 'UI_STORAGE_KEY', 'MSG', 'VERSION', 'BRIDGE_SOURCE']) {
     assert.ok(SRC.constants.includes(`AJA.${k}`), `constants.js 丢了插件专有常量 ${k}`);

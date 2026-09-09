@@ -56,6 +56,10 @@
           <input type="text" id="cap-company" placeholder="例如：字节跳动" autocomplete="off">
         </div>
         <div class="form-group">
+          <label for="cap-org-unit">机构 / 子公司（选填）</label>
+          <input type="text" id="cap-org-unit" placeholder="例如：杭州分行" autocomplete="off">
+        </div>
+        <div class="form-group">
           <label for="cap-position">投递岗位</label>
           <input type="text" id="cap-position" placeholder="例如：AI产品经理" autocomplete="off">
         </div>
@@ -226,6 +230,7 @@
       titleText: q('#cap-title-text'),
       detectHint: q('#cap-detect-hint'),
       company: q('#cap-company'),
+      orgUnit: q('#cap-org-unit'),
       position: q('#cap-position'),
       city: q('#cap-city'),
       stage: q('#cap-stage'),
@@ -267,6 +272,8 @@
   function fillFromPending(e, item) {
     const it = item || {};
     if (e.company) e.company.value = it.company || '';
+    // 机构也要回填：漏了的话，用户点暂存箱里的某条想改一下再存，机构会被静默清空
+    if (e.orgUnit) e.orgUnit.value = it.orgUnit || '';
     if (e.position) e.position.value = it.position || '';
     if (e.city) e.city.value = it.city || '';
     if (e.stage) e.stage.value = it.stage || '已投递';
@@ -299,7 +306,7 @@
       hintEl.className = 'detect-hint';
       // 企业性质从来不自动识别，所以识别全中时也要提一句，否则用户不会注意到这个下拉，
       // 洞察的企业性质统计就一直缺这一维。
-      hintEl.innerHTML = `<span>已自动识别，请核对后保存；「企业性质」需手动选一次（央国企 / 民企 / 外企）。</span>`
+      hintEl.innerHTML = `<span>已自动识别，请核对后保存；「企业性质」需手动选一次（央国企 / 私企 / 外企）。</span>`
         + (srcText ? `<div class="detect-hint-src">${escapeHtml(srcText)}</div>` : '');
     }
     hintEl.hidden = false;
@@ -316,6 +323,8 @@
     const val = (el) => (el && typeof el.value === 'string' ? el.value : '');
     return {
       company: val(e.company).trim() || '待确认公司',
+      // 机构：选填，识别链路拿不到（页面上没有可靠依据，猜错比留空更糟），一律由用户手填
+      orgUnit: val(e.orgUnit).trim(),
       position: val(e.position).trim() || '待确认岗位',
       city: val(e.city).trim(),
       stage: val(e.stage) || '已投递',

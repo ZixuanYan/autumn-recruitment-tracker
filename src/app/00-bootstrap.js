@@ -15,6 +15,8 @@
       // 现在结构上不可能漂移了。
       const COMPANY_TYPES = AJA.COMPANY_TYPES;
       const COMPANY_TYPE_UNSET = AJA.COMPANY_TYPE_UNSET;
+      // v4.11.0 改名的读时迁移表（旧值「民企」→「私企」），同样只是 shared/ 的转发别名
+      const COMPANY_TYPE_ALIASES = AJA.COMPANY_TYPE_ALIASES;
       // 阶段排序：预设返回索引；自定义/未知返回大值（视为“更靠后”），用 9000 规避 2^53 精度问题
       function stageOrder(stage) {
         const i = STAGE_PRESETS.indexOf(stage);
@@ -217,6 +219,12 @@
         const rec = {
           id: String(item.id || cryptoId()),
           company: String(item.company || ''), position: String(item.position || ''), city: String(item.city || ''),
+          // v4.11.0 机构 / 子公司 / BU（选填，上限 60 字）。必须在 normalizeRecord 里显式携带 ——
+          // 这里的对象是**白名单式重建**，漏写的字段会在每次 load / 云同步 / 导入时被静默丢弃。
+          // 为什么不能靠算法推断：companyKey 的「互相包含」规则会把「招商银行杭州分行」吸进
+          // 「招商银行」，但「招银网络科技」与「招商银行」互不包含 → 判成两家。那是刻意的保守
+          // （猜错会把两家真不同的公司并成一家），所以中间层只能由用户显式填。
+          orgUnit: String(item.orgUnit || '').trim().slice(0, 60),
           applicationDate: String(item.applicationDate || ''),
           applicationUrl: /^https?:\/\//i.test(String(item.applicationUrl || '')) ? String(item.applicationUrl) : '',
           scheduleAt: String(item.scheduleAt || ''), recentSchedule: String(item.recentSchedule || ''),
@@ -228,9 +236,16 @@
           referral: String(item.referral || ''),            // 内推人或联系方式
           salary: String(item.salary || ''),                // 薪资文本（Offer 对比用）
           intent: Math.min(5, Math.max(0, Number(item.intent) || 0)), // 意向度 0-5，0=未设
-          // v4.6.0：企业性质（央国企/民企/外企）。封闭枚举 + 白名单校验，非法值一律归 ''（未设置），
+          // v4.6.0：企业性质（央国企/私企/外企）。封闭枚举 + 白名单校验，非法值一律归 ''（未设置），
           // 避免插件旧版本或手工改 JSON 塞进自由文本后污染洞察统计的分桶。
-          companyType: COMPANY_TYPES.includes(String(item.companyType || '').trim()) ? String(item.companyType).trim() : '',
+          // v4.11.0：先过一遍别名表再查白名单 —— 第二档从「民企」改名成「私企」，不迁移的话
+          // 用户已有记录会被白名单静默打回「未设置」（洞察少一档、徽章变灰，都不报错）。
+          // 读时迁移而不是写时批量改写：记录分散在 localStorage / 快照 / 云端三处，见 shared 的说明。
+          companyType: (() => {
+            const raw = String(item.companyType || '').trim();
+            const mapped = Object.prototype.hasOwnProperty.call(COMPANY_TYPE_ALIASES, raw) ? COMPANY_TYPE_ALIASES[raw] : raw;
+            return COMPANY_TYPES.includes(mapped) ? mapped : '';
+          })(),
           notes: (Array.isArray(item.notes) ? item.notes : [])
             .filter(n => n && String(n.text || '').trim())
             .map(n => ({ id: String(n.id || cryptoId()), at: Number(n.at) || Date.now(), text: String(n.text).trim() }))
@@ -907,20 +922,29 @@
         return 'text';
       }
 
+      // 字段外壳（v4.11.0）：四个分支共用，这样「加删除按钮」只需要改一处。
+      // 此前四个分支各写一遍 <div><label>…</label><input …></div>，而 kvRowHtml 一直带 ✕ ——
+      // 两个渲染函数不对称，exp 卡片里字段库加进去的字段只能靠删掉整段卡片来去掉。
+      // 「经历标签」_rowName 不会走到这里：它由 expCardHtml 单独硬编码渲染（是卡片标题与
+      // expSummary 的来源，删了卡片就没名字），所以下面的过滤已经排除了它。
+      function expFieldShell(keyAttr, fullW, controlHtml) {
+        return `<div class="exp-field-wrap${fullW ? ' full-w' : ''}"><label>${keyAttr}</label>${controlHtml}<button type="button" class="exp-field-del" data-action="del-exp-field" data-key="${keyAttr}" title="删除此字段" aria-label="删除字段 ${keyAttr}">✕</button></div>`;
+      }
+
       function expFieldHtml(key, value, presetType) {
         const type = presetType || inferFieldType(key);
         const val = escapeHtml(String(value ?? ''));
         const keyAttr = escapeHtml(key);
         if (type === 'longtext') {
-          return `<div class="full-w"><label>${keyAttr}</label><textarea class="control exp-field" data-key="${keyAttr}" rows="3" placeholder="填写内容...">${val}</textarea></div>`;
+          return expFieldShell(keyAttr, true, `<textarea class="control exp-field" data-key="${keyAttr}" rows="3" placeholder="填写内容...">${val}</textarea>`);
         }
         if (type === 'date') {
-          return `<div><label>${keyAttr}</label><input type="date" class="control exp-field" data-key="${keyAttr}" value="${val}"></div>`;
+          return expFieldShell(keyAttr, false, `<input type="date" class="control exp-field" data-key="${keyAttr}" value="${val}">`);
         }
         if (type === 'url') {
-          return `<div class="full-w"><label>${keyAttr}</label><input type="url" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="https://..."></div>`;
+          return expFieldShell(keyAttr, true, `<input type="url" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="https://...">`);
         }
-        return `<div><label>${keyAttr}</label><input type="text" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="填写内容..."></div>`;
+        return expFieldShell(keyAttr, false, `<input type="text" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="填写内容...">`);
       }
 
       function expSummary(item) {
@@ -1512,23 +1536,16 @@
         const keyword = els.search.value.trim().toLocaleLowerCase('zh-CN');
         const stage = els.filter.value;
         const filtered = records.filter(record => {
-          const matchesText = !keyword || `${record.company} ${record.position}`.toLocaleLowerCase('zh-CN').includes(keyword);
+          const matchesText = !keyword || `${record.company} ${record.orgUnit || ''} ${record.position}`.toLocaleLowerCase('zh-CN').includes(keyword);
           return matchesText && (stage === 'all' || record.stage === stage);
         });
-        // 「按公司聚合」需要聚类后的规范键；建一次索引，避免在比较器里对每对记录重复聚类
-        const groupKeyById = els.sort.value === 'company-group' ? companyGroupIndex(records) : null;
+        // v4.11.0：这里不再有 company-group 分支。「按公司聚合」从排序选项变成了独立开关，
+        // 聚拢动作挪到 renderTable 的 clusterByCompanyGroup —— 排序只管顺序，分组只管插组头，
+        // 两件事正交。原先它俩挤在一个下拉里，想收纳就用不了「最近安排优先」。
         filtered.sort((a, b) => {
           if (els.sort.value === 'applied-desc') return (b.applicationDate || '').localeCompare(a.applicationDate || '');
           if (els.sort.value === 'updated-desc') return b.updatedAt - a.updatedAt;
           if (els.sort.value === 'company') return a.company.localeCompare(b.company, 'zh-CN');
-          if (els.sort.value === 'company-group') {
-            // 同公司多岗位：按聚类规范键聚拢（「腾讯」与「腾讯科技（深圳）有限公司」视为同一家，
-            // 但「星海科技」与「星海互娱」不会被误并），组内按最近更新倒序
-            const ka = String((groupKeyById && groupKeyById.get(a.id)) || companyGroupKey(a));
-            const kb = String((groupKeyById && groupKeyById.get(b.id)) || companyGroupKey(b));
-            if (ka !== kb) return ka.localeCompare(kb, 'zh-CN');
-            return (b.updatedAt || 0) - (a.updatedAt || 0);
-          }
           // 默认「最近安排优先」：分层比较，避免用 Number.MAX_SAFE_INTEGER 相加超过 2^53 丢精度
           // tier 0 = 未来安排（按时间升序，最近的最靠前）；tier 1 = 无安排（居中）；tier 2 = 已过期（置底）
           const now = Date.now();
@@ -1986,7 +2003,7 @@
           : '';
         return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}" data-company="${escapeHtml(key)}">
           <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
-          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
@@ -2000,39 +2017,99 @@
         </tr>`;
       }
 
+      // 收纳开启时把同一企业的记录**聚拢**：组间顺序 = 该企业第一条记录在当前排序里的位置，
+      // 组内保持当前排序的相对顺序（Map 保留插入序，所以一次遍历就够）。
+      // 不做这一步的话，非公司类排序（如默认的「最近安排优先」）下同企业的记录本来就不相邻，
+      // 逐行遍历会为同一家企业插出好几个重复组头 —— 这正是「分组」与「排序」解耦后必须补的一环。
+      function clusterByCompanyGroup(list, groupKeyById) {
+        const buckets = new Map();
+        for (const record of list) {
+          const key = groupKeyById.get(record.id) || companyGroupKey(record);
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push(record);
+        }
+        return [...buckets.values()].flat();
+      }
+
+      // 企业组头行。colspan=8 与表头列数一致，改列数要同步改这里（漏改会让组头只占一列宽）。
+      function companyGroupRowHtml(key, company, count, isCollapsed) {
+        return `<tr class="company-group-row" data-group="${escapeHtml(key)}"><td colspan="8">
+          <button class="group-toggle" type="button" data-group-toggle="${escapeHtml(key)}" aria-expanded="${String(!isCollapsed)}">
+            <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
+            <span class="group-label" style="--company-color:${companyColor(key)}">${escapeHtml(company)}</span>
+            <span class="group-count">${count} 个岗位</span>
+          </button>
+        </td></tr>`;
+      }
+
+      // 机构子组头行。unitKey 是 `${companyGroupKey}::${orgUnit}` 复合键（两家银行都能有「杭州分行」）。
+      function companyUnitRowHtml(unitKey, unit, count, isCollapsed) {
+        return `<tr class="company-unit-row" data-unit="${escapeHtml(unitKey)}"><td colspan="8">
+          <button class="group-toggle unit-toggle" type="button" data-unit-toggle="${escapeHtml(unitKey)}" aria-expanded="${String(!isCollapsed)}">
+            <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
+            <span class="group-label unit-label">${escapeHtml(unit || '（未填机构）')}</span>
+            <span class="group-count">${count} 个岗位</span>
+          </button>
+        </td></tr>`;
+      }
+
       function renderTable() {
         const visible = getVisibleRecords();
-        // 台账编号：按 updatedAt 从新到旧稳定编号（编辑不会重排，新增排最前）
+        // 台账编号 = 「这是我第几次投递」：按投递日期**升序**，最早的 = #0001。
+        // 刻意不用 updatedAt——编辑任何一条记录都会刷新它，用它编号会让被编辑的那条跳到 #0001、
+        // 其余全部顺移（旧实现正是这样，注释却写着「编辑不会重排」，与实现互相矛盾）。
+        // applicationDate 是用户填的投递日期，改备注/推进阶段都不会动它，所以编号真正稳定。
+        // 日期是 YYYY-MM-DD 字符串，localeCompare 等价于时间序，不需要 parseDay。
+        // 同一天多次投递用 id 字典序兜底，保证同一份数据每次渲染编号一致。
+        // 编号是**派生值、不存储**，所以换算法不需要数据迁移，也不影响云同步。
         const recordNo = new Map(
-          [...records].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || String(a.id).localeCompare(String(b.id)))
+          [...records].sort((a, b) => String(a.applicationDate || '').localeCompare(String(b.applicationDate || ''))
+            || String(a.id).localeCompare(String(b.id)))
             .map((record, index) => [record.id, String(index + 1).padStart(4, '0')])
         );
         // 公司索引按**全量台账**统计（不是只按筛选结果），chip 才能回答「我在这家一共投了几个岗」
         const groups = groupRecordsByCompany(records);
         const companyIndex = new Map(groups.map(group => [group.key, group.records]));
         const groupKeyById = companyGroupIndex(records);
-        const grouped = els.sort.value === 'company-group';
+        // v4.11.0：分组由独立开关决定，不再看排序下拉（两者正交，见 getVisibleRecords 的注释）
+        const grouped = !!uiPrefs.groupByCompany;
+        const ordered = grouped ? clusterByCompanyGroup(visible, groupKeyById) : visible;
         const collapsed = new Set(uiPrefs.collapsedGroups);
+        const collapsedUnits = new Set(uiPrefs.collapsedUnits);
+        // 机构层的渲染决策基于**筛选后**的记录：若按 companyIndex（全量台账）算，
+        // 阶段筛选把某个机构的记录全滤掉时会渲染出一个没有任何明细行的空机构头。
+        const unitsByGroup = new Map();
+        if (grouped) {
+          for (const record of ordered) {
+            const key = groupKeyById.get(record.id) || companyGroupKey(record);
+            const unit = String(record.orgUnit || '').trim();
+            if (!unitsByGroup.has(key)) unitsByGroup.set(key, new Map());
+            const units = unitsByGroup.get(key);
+            units.set(unit, (units.get(unit) || 0) + 1);
+          }
+        }
         const rows = [];
         let lastKey = null;
-        for (const record of visible) {
+        let lastUnitKey = null;
+        for (const record of ordered) {
           const key = groupKeyById.get(record.id) || companyGroupKey(record);
-          if (!grouped || key === lastKey) {
-            if (grouped && collapsed.has(key)) continue; // 该组已折叠：跳过明细行
-            rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
-            continue;
+          const unit = String(record.orgUnit || '').trim();
+          const unitKey = `${key}::${unit}`;
+          if (grouped && key !== lastKey) {
+            lastKey = key;
+            lastUnitKey = null;   // 换企业了：机构层的「上一组」必须重置，否则同名机构会被误判成连续
+            const siblings = companyIndex.get(key) || [];
+            rows.push(companyGroupRowHtml(key, record.company, siblings.length, collapsed.has(key)));
           }
-          lastKey = key;
-          const siblings = companyIndex.get(key) || [];
-          const isCollapsed = collapsed.has(key);
-          rows.push(`<tr class="company-group-row" data-group="${escapeHtml(key)}"><td colspan="8">
-            <button class="group-toggle" type="button" data-group-toggle="${escapeHtml(key)}" aria-expanded="${String(!isCollapsed)}">
-              <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
-              <span class="group-label" style="--company-color:${companyColor(key)}">${escapeHtml(record.company)}</span>
-              <span class="group-count">${siblings.length} 个岗位</span>
-            </button>
-          </td></tr>`);
-          if (isCollapsed) continue;
+          if (grouped && collapsed.has(key)) continue;   // 企业折叠：机构层与明细行整体隐藏
+          // 只有同一企业内出现 **2 个以上不同 orgUnit**（空串算一种）时才渲染机构层：
+          // 单一机构或全为空时多一层缩进没有任何信息量，只是把明细往右推。
+          const showUnits = grouped && (unitsByGroup.get(key)?.size || 0) >= 2;
+          if (showUnits && unitKey !== lastUnitKey) {
+            lastUnitKey = unitKey;
+            rows.push(companyUnitRowHtml(unitKey, unit, unitsByGroup.get(key).get(unit), collapsedUnits.has(unitKey)));
+          }
+          if (showUnits && collapsedUnits.has(unitKey)) continue;
           rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
         }
         els.body.innerHTML = rows.join('');

@@ -493,6 +493,51 @@
         if (last) last.focus();
       }
 
+      // 公司名 → 企业 + 机构 的拆分**建议**（v4.11.0）。
+      // 刻意只给建议、点了才拆：正则对「中国银行股份有限公司杭州分行」这类含法人后缀的名字会拆错，
+      // 而拆错了用户未必发现（公司名看着仍然合理），机构层就静默错位。
+      // 「招银网络科技」这种无法从字面推断母企业的情况不给任何提示 —— 提示了也猜不出来，
+      // 正确录法是用户自己填 company='招商银行' + orgUnit='招银网络科技'。
+      const ORG_SPLIT_RE = /^(.{2,}?)([\u4e00-\u9fa5]{2,8}(?:分行|支行|分公司|子公司|事业部|研究院|办事处|分部|分中心))$/;
+      function updateOrgSplitHint() {
+        const hint = $('#orgSplitHint');
+        if (!hint) return;
+        const company = $('#company').value.trim();
+        const m = ORG_SPLIT_RE.exec(company);
+        // 已经填了机构就不再建议：用户显然有自己的分法，反复提示只是干扰
+        if (!m || $('#orgUnit').value.trim()) { hint.hidden = true; hint.innerHTML = ''; return; }
+        hint.innerHTML = `这个名字像是「企业 + 机构」：<button class="text-button" type="button" id="orgSplitBtn">拆成「${escapeHtml(m[1])}」+「${escapeHtml(m[2])}」</button>`;
+        hint.hidden = false;
+      }
+
+      // 新增简历区块：名字 + 类型二选一（v4.11.0，取代原来的一行 prompt）
+      function openSectionDialog() {
+        const dialog = $('#sectionDialog');
+        if (!dialog) return;
+        $('#sectionForm').reset();
+        // reset() 会把 radio 恢复成 HTML 里的 checked（列表型）——这是刻意的默认：
+        // 用户报的诉求就是要列表型，键值型是少数场景（技能证书那种一行一项）。
+        dialog.showModal();
+        requestAnimationFrame(() => $('#sectionName').focus());
+      }
+
+      function submitSectionForm(event) {
+        event.preventDefault();
+        const name = $('#sectionName').value.trim();
+        if (!name) { showToast('请填写区块名称'); return; }
+        const isKv = $('#sectionForm').querySelector('input[name="sectionType"]:checked')?.value === 'kv';
+        // 先收回 DOM 再判重名：不收回的话，用户在本页尚未保存的简历编辑会被下面的
+        // renderResumeEditor() 整体冲掉（旧实现同样是这个顺序，保留）。
+        resume = collectResumeFromDom();
+        if (name in resume) { $('#sectionDialog').close(); showToast('该区块已存在'); renderResumeEditor(); return; }
+        // 列表型 = []（渲染走 exp 分支 → 有「＋ 添加」，每段是可上移/下移/复制/删除的卡片）
+        // 键值型 = {}（走 kv 分支 → 「自定义」加键值对行）
+        resume[name] = isKv ? {} : [];
+        $('#sectionDialog').close();
+        renderResumeEditor();
+        showToast(`已添加${isKv ? '键值' : '列表'}型区块「${name}」，点「保存简历」后写入 JSON`);
+      }
+
       function openDialog(record = null, seed = null) {
         const source = record || seed;
         editingId = record?.id || null;
@@ -502,7 +547,7 @@
         renderTimelineEditor(source);
         // 回填字段清单：新增任何表单字段都必须同步加进这里，否则「编辑」时该字段会被静默清空。
         // 取不到元素时跳过（null 安全），便于分阶段加字段。
-        for (const field of ['company', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
+        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
           const input = document.getElementById(field);
           if (!input) continue;
           // intent 是下拉框：0（未设）要映射成空字符串，否则 select 会落在无匹配项的状态
@@ -514,6 +559,7 @@
         const more = $('#formMore');
         if (more) more.open = !!source && ['batch', 'channel', 'referral', 'salary'].some(f => String(source[f] || '').trim());
         updateSameCompanyHint(); // 打开即显示「该公司已有哪几个岗位」，录入第二个岗位时心里有数
+        updateOrgSplitHint();    // 公司名带「XX分行」时给出「拆成企业 + 机构」的建议（不自动执行）
         els.dialog.showModal();
         requestAnimationFrame(() => $('#company').focus());
       }
@@ -670,6 +716,8 @@
             // 插件收录表单里选的企业性质直接透传；normalizeRecord 会做白名单校验，
             // 因此旧版插件（不传该字段）或异常值都会安全落回「未设置」
             companyType: submitted.companyType,
+            // 机构同理透传。旧版插件不传 → normalizeRecord 收敛成 ''，不会报错也不会脏
+            orgUnit: submitted.orgUnit,
             applicationUrl: submitted.applicationUrl,
             recentSchedule: submitted.recentSchedule || '',
             nextAction: submitted.nextAction || ''
@@ -685,7 +733,7 @@
           if (decision.action === 'edit') {
             const target = decision.target;
             const merged = { ...target };
-            ['city', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction'].forEach(key => {
+            ['city', 'orgUnit', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction'].forEach(key => {
               if (seed[key] && !merged[key]) merged[key] = seed[key];
             });
             if (stageOrder(seed.stage) > stageOrder(merged.stage)) {
@@ -1155,6 +1203,9 @@
         // 公司分组折叠开关（只在「按公司聚合」排序时出现）
         const groupToggle = event.target.closest('button[data-group-toggle]');
         if (groupToggle) { toggleCompanyGroup(groupToggle.dataset.groupToggle); return; }
+        // 机构子组头（v4.11.0）：与企业组头是两个独立的折叠态，键也不同（复合键）
+        const unitToggle = event.target.closest('button[data-unit-toggle]');
+        if (unitToggle) { toggleCompanyUnit(unitToggle.dataset.unitToggle); return; }
         const button = event.target.closest('button[data-action]');
         if (!button) {
           // 点公司 / 岗位单元格 → 打开详情抽屉；点链接仍走原生跳转（不打断）
@@ -1467,6 +1518,17 @@
           card.parentElement.insertBefore(clone, card.nextSibling);
           renumberExpCards(card.parentElement);
           showToast('已复制此段经历，记得修改内容后保存');
+        } else if (action === 'del-exp-field') {
+          event.preventDefault();
+          // 与 del-kv / del-exp 同款：**只动 DOM，不碰 resume**。简历是「DOM 为草稿、
+          // 点保存时才 collectResumeFromDom 收回」的模型；若在这里直接改 resume 再
+          // renderResumeEditor()，用户在同一页其他字段里尚未保存的输入会被整体重渲染冲掉。
+          // 同理不调 updateResumeCompletion()——它统计的是内存里的 resume（不是 DOM），
+          // 此刻调用只会显示过期数字；计数在保存时随 renderResumeEditor 一起刷新。
+          const wrap = target.closest('.exp-field-wrap');
+          const name = target.getAttribute('data-key') || '该字段';
+          wrap?.remove();
+          showToast(`已删除字段「${name}」，点「保存简历」后生效`);
         } else if (action === 'del-kv') {
           event.preventDefault();
           const row = target.closest('.kv-row');
@@ -1498,14 +1560,7 @@
           });
         } else if (action === 'add-section') {
           event.preventDefault();
-          const name = prompt('新区块名称（保存后成为简历 JSON 的一个段）：');
-          if (!name || !name.trim()) return;
-          const key = name.trim();
-          resume = collectResumeFromDom();
-          if (key in resume) { showToast('该区块已存在'); renderResumeEditor(); return; }
-          resume[key] = {};
-          renderResumeEditor();
-          showToast(`已添加区块「${key}」，点「保存简历」后写入 JSON`);
+          openSectionDialog();
         }
       });
       // 字段库弹层
@@ -1620,6 +1675,21 @@
       // ===== v4.4.0：表格/看板切换、看板拖拽、详情抽屉、⌘K 命令面板 =====
       $('#viewTableBtn').addEventListener('click', () => setRecordsView('table'));
       $('#viewBoardBtn').addEventListener('click', () => setRecordsView('board'));
+      // 同企业收纳开关（v4.11.0）：视觉态由 renderRecordsView 统一回填，这里只翻偏好
+      $('#groupToggle').addEventListener('click', () => setGroupByCompany(!uiPrefs.groupByCompany));
+      // 公司名失焦时给「拆成企业 + 机构」的建议；建议按钮是动态生成的，所以走容器委托
+      $('#company').addEventListener('blur', updateOrgSplitHint);
+      $('#orgUnit').addEventListener('input', updateOrgSplitHint);
+      $('#orgSplitHint').addEventListener('click', event => {
+        if (event.target.id !== 'orgSplitBtn') return;
+        const m = ORG_SPLIT_RE.exec($('#company').value.trim());
+        if (!m) return;
+        $('#company').value = m[1];
+        $('#orgUnit').value = m[2];
+        updateOrgSplitHint();
+        updateSameCompanyHint();   // 公司名变了，「该公司已有 N 个岗位」提示要跟着刷新
+        showToast('已拆成企业与机构，两个都还能改');
+      });
       const boardCols = $('#boardCols');
       boardCols.addEventListener('dragstart', event => {
         const card = event.target.closest('.board-card[data-id]');
@@ -1767,6 +1837,12 @@
       // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
       $('#closeDialog').addEventListener('click', closeDialog);
       $('#cancelDialog').addEventListener('click', closeDialog);
+      // 新增区块弹窗（v4.11.0）：与 recordDialog 同款三处绑定 —— 提交、两个关闭按钮、
+      // 点遮罩关闭。少绑任何一个都会留下「点了没反应」的死按钮。
+      $('#sectionForm').addEventListener('submit', submitSectionForm);
+      $('#closeSectionDialog').addEventListener('click', () => $('#sectionDialog').close());
+      $('#sectionCancelBtn').addEventListener('click', () => $('#sectionDialog').close());
+      $('#sectionDialog').addEventListener('click', event => { if (event.target === $('#sectionDialog')) $('#sectionDialog').close(); });
       els.form.addEventListener('submit', submitForm);
       // 公司名 / 岗位名输入时实时刷新「该公司已有 N 个岗位」提示
       $('#company').addEventListener('input', scheduleSameCompanyHint);

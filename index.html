@@ -113,7 +113,9 @@
     .bar { height: 5px; background: var(--surface-soft); border-radius: 999px; overflow: hidden; }
     .bar-fill { height: 100%; min-width: 0; border-radius: inherit; background: var(--stage-color, var(--accent)); transition: width .25s ease; }
 
-    .filters { display: grid; grid-template-columns: minmax(180px, 1fr) 140px 170px; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    /* 第 4 列是「同企业收纳」开关（v4.11.0）：auto 让它按文字宽度取值，不挤占搜索框。
+       窄屏的两处覆盖（1fr 1fr / 1fr）不需要跟着改——4 个项在 2 列下正好两行、1 列下四行。 */
+    .filters { display: grid; grid-template-columns: minmax(180px, 1fr) 140px 170px auto; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
     .control { width: 100%; min-height: 36px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; color: var(--ink); background: #fff; font-size: 13.5px; }
     .search-wrap { position: relative; }
     .search-wrap .control { padding-left: 36px; }
@@ -448,7 +450,7 @@
       /* --offer-gold 名称保留兼容，值已改 Apple 绿（v4.10.0 决策：Offer = 成功语义，金色废除）。
          白字压 #1f7a35 实测 5.39:1 达标；#248a3d 只有 4.40:1 不达标，故不用。 */
       --offer-gold: #1f7a35; --offer-gold-soft: #e3f7e8;
-      /* v4.6.0 企业性质专用色（央国企 / 民企 / 外企 / 未设置），v4.10.0 Apple 化。
+      /* v4.6.0 企业性质专用色（央国企 / 私企 / 外企 / 未设置），v4.10.0 Apple 化。
          刻意与阶段色阶、状态色分离：这套色只出现在 ct-chip 与洞察的「企业性质」块里，
          不参与任何阶段或成功/警告语义，避免用户在台账里把颜色当成进度信号。 */
       --ct-soe: #c93400; --ct-soe-soft: #faebe6;
@@ -633,6 +635,26 @@
     .kv-del-btn { border-radius: 8px; background: var(--danger-soft); color: var(--danger); }
     .exp-item-card { border: 0; box-shadow: none; border-radius: var(--r-md); background: var(--surface-2); }
     .exp-item-header h4 { color: var(--accent-ink); }
+    /* exp 卡片的字段级删除（v4.11.0）：与 .kv-row 的 ✕ 同语义，但 exp 字段是
+       「label 在上、input 在下」的竖排结构，34×38 的 .kv-del-btn 塞进去会挤窄输入框，
+       所以改成绝对定位到 label 行右侧的小方块，并给 label 留出右侧内边距，
+       否则长字段名会钻到按钮底下。静态时不给底色（一堆 ✕ 常驻会让卡片看起来很吵），hover 才显色。 */
+    .exp-field-wrap { position: relative; }
+    .exp-field-wrap > label { padding-right: 24px; }
+    .exp-field-del { position: absolute; top: -1px; right: 0; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); font-size: 12px; line-height: 1; cursor: pointer; transition: background .18s var(--ease), color .18s var(--ease); }
+    .exp-field-del:hover { background: var(--danger-soft); color: var(--danger); }
+    .exp-field-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* 新增简历区块的「类型二选一」（v4.11.0）：整张 label 可点，选中态用发丝线卡片 + 浅底，
+       与全站卡片语言一致；不用原生 radio 的默认外观（各浏览器差异大、与 Apple 风格不符）。 */
+    .section-type-set { margin: 4px 0 0; padding: 0; border: 0; }
+    .section-type-set legend { padding: 0; color: var(--ink); font-size: 13px; font-weight: 600; }
+    .section-type-opt { display: flex; align-items: flex-start; gap: 9px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); cursor: pointer; transition: border-color .18s var(--ease), background .18s var(--ease); }
+    .section-type-opt:hover { background: var(--surface-2); }
+    .section-type-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+    .section-type-opt input { flex: 0 0 auto; margin: 3px 0 0; accent-color: var(--accent); }
+    .section-type-body { display: grid; gap: 2px; min-width: 0; }
+    .section-type-body strong { color: var(--ink); font-size: 13px; font-weight: 600; }
+    .section-type-body span { color: var(--muted); font-size: 12px; line-height: 1.5; }
     .field-library-item { border: 1px solid var(--line); box-shadow: none; border-radius: var(--r-md); background: var(--surface); }
     .field-library-item:hover { background: var(--accent-soft); border-color: rgba(0, 113, 227, .3); box-shadow: none; }
     .modal-head { padding: 16px 24px; }
@@ -722,6 +744,18 @@
     .alert-item.danger { border-left-color: var(--danger-bright); color: var(--danger); }
     .alert-item.warn { border-left-color: var(--warn-bright); color: var(--warn); }
     .alert-item.info { border-left-color: var(--accent); }
+    /* v4.11.0 换位：「需要关注」从整宽移进 .insight-grid 的半宽列。条目文本是
+       「公司 · 岗位 · 还剩 N 天」，半宽下会折到两三行，所以降一档字号与内边距、
+       左色条 3px→2px，让一屏能看到的条目数与换位前相当。
+       只改尺寸不改颜色，因此与后面的 .alert-item.danger/.warn/.info 同特异性也不冲突。 */
+    .insight-grid .alert-list { gap: 5px; }
+    .insight-grid .alert-item { padding: 7px 10px; border-left-width: 2px; font-size: 12px; line-height: 1.45; }
+    /* 顶层那张 grid 把较宽的一列给「需要关注」（第二列）：它的条目是会折行的文本，
+       而转化漏斗是一排紧凑色块，对宽度没那么敏感。
+       刻意用 .insights-body > 直接子选择器限定——#insightDetails 里还有三张 .insight-grid
+       （城市|企业性质、节奏|停留、多岗位|Offer 对比），它们的「第一列更宽」是原本就调好的，
+       全局改比例会把那三张一起翻过来。 */
+    .insights-body > .insight-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
     .offer-matrix { min-width: 620px; }
     .multi-company-list { display: grid; gap: 8px; }
     .multi-company { padding: 10px 12px 10px 14px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; position: relative; }
@@ -736,6 +770,14 @@
     @media (max-width: 900px) {
       .insight-grid { grid-template-columns: minmax(0, 1fr); }
       .insight-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      /* 看板窄屏（v4.11.0）：从「四列横向滚」改为「单列纵向堆叠」。
+         .board-cols 是 grid-auto-flow:column + grid-auto-columns:minmax(232px,1fr)，四列最小 928px，
+         而 apple.css 此前**一条 board 窄屏规则都没有**（v4.10.0 重刷了看板的全部视觉却漏了适配，
+         base.css 里也从来没有过）→ 手机上只能横向滚整个看板，列头一滚出视口就看不出当前是哪个阶段。
+         改回 row 之后 grid-auto-columns 自动失效，不需要单独覆盖；overflow-x 收成 visible，
+         否则会留下一条没有内容的横向滚动槽。 */
+      .board-cols { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); overflow-x: visible; gap: 12px; }
+      .board-col-body { min-height: 0; }   /* 62px 的最小高度在纵向堆叠下会变成大片空白 */
     }
 
     /* ===== v4.6.0：洞察明细折叠容器 + 城市分布 + 企业性质 ===== */
@@ -761,7 +803,7 @@
     .ctype-bar { display: flex; height: 10px; border-radius: 999px; background: var(--ct-none-soft); box-shadow: none; overflow: hidden; }
     .ctype-seg { display: block; height: 100%; min-width: 3px; background: var(--ct-none); }
     .ctype-seg[data-ct="央国企"] { background: var(--ct-soe); }
-    .ctype-seg[data-ct="民企"] { background: var(--ct-private); }
+    .ctype-seg[data-ct="私企"] { background: var(--ct-private); }
     .ctype-seg[data-ct="外企"] { background: var(--ct-foreign); }
     .ctype-seg:hover, .ctype-seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .ctype-legend { display: grid; gap: 2px; margin-top: 9px; }
@@ -769,7 +811,7 @@
     .ctype-legend-row.is-empty { color: var(--muted); }
     .ctype-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ct-none); }
     .ctype-legend-row[data-ct="央国企"] .ctype-dot { background: var(--ct-soe); }
-    .ctype-legend-row[data-ct="民企"] .ctype-dot { background: var(--ct-private); }
+    .ctype-legend-row[data-ct="私企"] .ctype-dot { background: var(--ct-private); }
     .ctype-legend-row[data-ct="外企"] .ctype-dot { background: var(--ct-foreign); }
     .ctype-label { overflow: hidden; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
     .ctype-num { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -927,7 +969,7 @@
     /* ===== v4.6.0：企业性质徽章（台账 / 看板 / 抽屉 / Offer 矩阵共用）===== */
     .ct-chip { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--ct-none-soft); color: var(--ct-none); font-size: 10.5px; font-weight: 700; white-space: nowrap; vertical-align: 1px; }
     .ct-chip[data-ct="央国企"] { background: var(--ct-soe-soft); color: var(--ct-soe); }
-    .ct-chip[data-ct="民企"] { background: var(--ct-private-soft); color: var(--ct-private); }
+    .ct-chip[data-ct="私企"] { background: var(--ct-private-soft); color: var(--ct-private); }
     .ct-chip[data-ct="外企"] { background: var(--ct-foreign-soft); color: var(--ct-foreign); }
     /* 录入表单里的「该公司已有 N 个岗位」前置提示（挂在 #sameCompanyHint 内，
        注意不要给 #sameCompanyHint 本身设 display，否则会盖掉 hidden 属性） */
@@ -941,6 +983,21 @@
     .group-caret { color: var(--muted); font-size: 11px; }
     .group-label { border-left: 3px solid var(--company-color, var(--accent)); padding-left: 8px; }
     .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; }
+    /* 机构子组头（v4.11.0）：与企业组头同款胶囊，靠缩进与更弱的底色区分层级。
+       企业组头 padding 左 12px，机构组头 32px —— 两级都靠 padding 而不是 border/背景块，
+       否则密集表格里会形成一层层的色带，比缩进更吵。 */
+    .company-unit-row > td { padding: 2px 12px 2px 32px; background: transparent; border-top: 0; }
+    .unit-toggle { background: transparent; box-shadow: none; }
+    .unit-toggle:hover { background: var(--surface-2); }
+    .unit-label { border-left: 0; padding-left: 0; color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
+    /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽 */
+    .group-switch { justify-self: start; align-self: center; }
+    .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    /* 机构名在公司名 / 看板卡里都是次要信息：降一档字号与颜色，不与主体争视觉重量 */
+    .company-unit, .board-card-unit { color: var(--muted); font-size: 12px; font-weight: 500; }
+    /* 公司名 → 企业 + 机构 的拆分**建议**（不是自动执行）：拆错了用户未必发现，机构层会静默错位 */
+    .org-split-hint { margin-top: 5px; }
+    .org-split-hint .text-button { padding: 0; font-size: 12px; }
     .empty-icon svg { width: 30px; height: 30px; }
     .empty-title { margin-top: 8px; font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--ink); }
     .empty-text { margin: 6px auto 0; max-width: 460px; color: var(--muted); font-size: 13px; line-height: 1.7; }
@@ -1110,7 +1167,7 @@
     <section class="panel insights" id="insights" aria-labelledby="insightsTitle">
       <div class="panel-head">
         <div><h2 class="panel-title" id="insightsTitle">洞察</h2><div class="panel-caption">全部由你的记录与阶段时间线本机算出：卡点提醒、转化漏斗、城市分布、企业性质、投递节奏与各阶段停留</div></div>
-        <button class="btn btn-small" id="insightsCompactBtn" type="button" title="精简模式只保留概览、需要关注与转化漏斗，把城市 / 企业性质 / 节奏 / 停留等明细折起来">精简</button>
+        <button class="btn btn-small" id="insightsCompactBtn" type="button" title="精简模式只保留概览、阶段分布、转化漏斗与需要关注，把城市 / 企业性质 / 节奏 / 停留等明细折起来">精简</button>
       </div>
       <div class="guide" id="firstRunGuide" hidden>
         <div class="guide-note" id="guideNote"></div>
@@ -1122,12 +1179,15 @@
         <div class="guide-actions" id="guideActions"></div>
       </div>
       <div class="insights-body" id="insightsBody">
-        <!-- 信息层级：① 概览数字 → ② 需要行动 → ③ 转化 → ④~⑦ 分析明细。
-             此前指标条夹在两张图之后、最需要行动的「需要关注」被压到第 5 块，读起来要来回跳。 -->
+        <!-- 信息层级：① 概览数字 → ② 阶段分布（整宽）→ ③ 转化漏斗 | 需要关注 → ④~⑦ 分析明细。
+             v4.11.0 把「阶段分布」从两列 grid 的右列提到整宽第 2 位：14 个阶段色阶块挤在半宽的一半里，
+             每块只有 ~44px，灰→蓝→绿的递进根本看不清；整宽后 .stage-grid 的 auto-fit 能排下更多列。
+             「需要关注」换到 grid 里与漏斗并排——它的条目是纯文本按钮，半宽下折行仍可读，
+             而阶段分布是色块矩阵，对宽度敏感得多。紧凑规则见 apple.css 的 .insight-grid .alert-item。 -->
         <div class="insight-metrics" id="insightMetrics"></div>
         <div class="insight-block">
-          <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
-          <div class="alert-list" id="alertList"></div>
+          <div class="insight-block-head"><h3>阶段分布</h3><span class="insight-note">当前存量，按阶段计数</span></div>
+          <div class="stage-grid" id="stageGrid"></div>
         </div>
         <div class="insight-grid">
           <div class="insight-block">
@@ -1136,8 +1196,8 @@
             <button class="text-button insight-toggle" id="funnelScopeBtn" type="button">切换为公司去重口径</button>
           </div>
           <div class="insight-block">
-            <div class="insight-block-head"><h3>阶段分布</h3><span class="insight-note">当前存量，按阶段计数</span></div>
-            <div class="stage-grid" id="stageGrid"></div>
+            <div class="insight-block-head"><h3>需要关注</h3><span class="insight-note" id="alertCount"></span></div>
+            <div class="alert-list" id="alertList"></div>
           </div>
         </div>
         <!-- ④~⑦ 分析明细：精简模式整块折叠（偏好存本机 ui.v1，不进云同步 envelope） -->
@@ -1201,8 +1261,14 @@
           <option value="applied-desc">投递日期：从新到旧</option>
           <option value="updated-desc">最近更新优先</option>
           <option value="company">公司名称排序</option>
-          <option value="company-group">按公司聚合（同公司多岗位）</option>
         </select>
+        <!-- 同企业收纳（v4.11.0）：从排序下拉里搬出来做成独立开关。
+             原先它是第 5 个排序选项，于是「分组」与「排序」互斥——想按公司收纳就用不了
+             「最近安排优先」。现在是正交的两件事：排序决定顺序，开关决定要不要插组头。
+             删掉那个选项**零迁移成本**：排序选择从来不持久化（uiPrefs 里没有 sort 键）。 -->
+        <div class="view-switch group-switch" role="group" aria-label="同企业收纳">
+          <button class="view-switch-btn" id="groupToggle" type="button" aria-pressed="false" title="把同一家企业的多条投递收进一个可折叠的组；同企业内填了不同「机构」时再分一层">同企业收纳</button>
+        </div>
       </div>
       <div class="table-scroll" id="recordsTableScroll">
         <table>
@@ -1363,13 +1429,18 @@
       <div class="modal-head"><h2 id="dialogTitle">新增投递</h2><button class="close-btn" id="closeDialog" type="button" aria-label="关闭">×</button></div>
       <div class="form-body">
         <div class="form-grid">
-          <div class="field"><label for="company">公司 <span class="required">*</span></label><input class="control" id="company" name="company" required maxlength="60" placeholder="例如：星海科技"><div class="hint" id="sameCompanyHint" hidden></div></div>
+          <div class="field"><label for="company">公司 <span class="required">*</span></label><input class="control" id="company" name="company" required maxlength="60" placeholder="例如：星海科技"><div class="hint" id="sameCompanyHint" hidden></div><div class="hint org-split-hint" id="orgSplitHint" hidden></div></div>
+          <div class="field">
+            <label for="orgUnit">机构 / 子公司 / BU</label>
+            <input class="control" id="orgUnit" name="orgUnit" maxlength="60" placeholder="例如：杭州分行 / 招银网络科技 / 云计算事业部">
+            <div class="hint">选填。同一家企业的不同分行、子公司、事业部靠它区分——填了才算两次独立投递，不会被判重复</div>
+          </div>
           <div class="field"><label for="position">岗位 <span class="required">*</span></label><input class="control" id="position" name="position" required maxlength="80" placeholder="例如：产品经理校招生"></div>
           <div class="field"><label for="city">城市 <span class="required">*</span></label><input class="control" id="city" name="city" required maxlength="30" placeholder="例如：上海"></div>
           <div class="field">
             <label for="companyType">企业性质</label>
             <select class="control" id="companyType" name="companyType"><option value="">未设置</option></select>
-            <div class="hint">用于洞察里的央国企 / 民企 / 外企统计；插件一键收录时也能直接选</div>
+            <div class="hint">用于洞察里的央国企 / 私企 / 外企统计；插件一键收录时也能直接选</div>
           </div>
           <div class="field"><label for="applicationDate">投递日期 <span class="required">*</span></label><input class="control" id="applicationDate" name="applicationDate" type="date" required></div>
           <div class="field"><label for="scheduleAt">安排时间</label><input class="control" id="scheduleAt" name="scheduleAt" type="datetime-local"><div class="hint">有面试、笔试或跟进时间时填写</div></div>
@@ -1426,6 +1497,36 @@
     <div class="modal-head"><h2 id="confirmTitle">请确认</h2></div>
     <div class="form-body"><p class="capture-note" id="confirmMessage"></p></div>
     <div class="modal-actions"><button class="btn" id="confirmCancelBtn" type="button">取消</button><button class="btn btn-primary" id="confirmOkBtn" type="button">确定</button></div>
+  </dialog>
+
+  <!-- 新增简历区块（v4.11.0）：区块名 + 类型二选一。
+       此前是一行 prompt() 取名然后硬编码 resume[key] = {}，而渲染靠 Array.isArray(val) 分叉，
+       于是新区块**在结构上永远拿不到**「＋ 添加」按钮——用户报的「自定义区块没法添加子标题项目」
+       就是这个硬编码。原生 prompt 拿不到第二个输入维度，且与全站「不用原生弹窗」的既有风格
+       不一致（confirmInApp 正是为此存在的），所以做成 dialog。 -->
+  <dialog id="sectionDialog" aria-label="新增简历区块">
+    <form id="sectionForm">
+      <div class="modal-head"><h2>新增简历区块</h2><button class="close-btn" id="closeSectionDialog" type="button" aria-label="关闭">×</button></div>
+      <div class="form-body">
+        <div class="field">
+          <label for="sectionName">区块名称 <span class="required">*</span></label>
+          <input class="control" id="sectionName" name="sectionName" required maxlength="20" placeholder="例如：校园经历 / 技能证书">
+          <div class="hint">保存简历后成为 JSON 里的一个段</div>
+        </div>
+        <fieldset class="section-type-set">
+          <legend>区块类型</legend>
+          <label class="section-type-opt">
+            <input type="radio" name="sectionType" value="exp" checked>
+            <span class="section-type-body"><strong>列表型</strong><span>适合项目、实习、校园经历：可加多段，每段有多个字段，能上移 / 下移 / 复制 / 删除</span></span>
+          </label>
+          <label class="section-type-opt">
+            <input type="radio" name="sectionType" value="kv">
+            <span class="section-type-body"><strong>键值型</strong><span>适合技能证书、基本信息：一行一项（字段名 + 内容）</span></span>
+          </label>
+        </fieldset>
+      </div>
+      <div class="modal-actions"><button class="btn" id="sectionCancelBtn" type="button">取消</button><button class="btn btn-primary" type="submit">添加区块</button></div>
+    </form>
   </dialog>
 
   <dialog id="advanceDialog">
@@ -1631,6 +1732,8 @@
       // 现在结构上不可能漂移了。
       const COMPANY_TYPES = AJA.COMPANY_TYPES;
       const COMPANY_TYPE_UNSET = AJA.COMPANY_TYPE_UNSET;
+      // v4.11.0 改名的读时迁移表（旧值「民企」→「私企」），同样只是 shared/ 的转发别名
+      const COMPANY_TYPE_ALIASES = AJA.COMPANY_TYPE_ALIASES;
       // 阶段排序：预设返回索引；自定义/未知返回大值（视为“更靠后”），用 9000 规避 2^53 精度问题
       function stageOrder(stage) {
         const i = STAGE_PRESETS.indexOf(stage);
@@ -1833,6 +1936,12 @@
         const rec = {
           id: String(item.id || cryptoId()),
           company: String(item.company || ''), position: String(item.position || ''), city: String(item.city || ''),
+          // v4.11.0 机构 / 子公司 / BU（选填，上限 60 字）。必须在 normalizeRecord 里显式携带 ——
+          // 这里的对象是**白名单式重建**，漏写的字段会在每次 load / 云同步 / 导入时被静默丢弃。
+          // 为什么不能靠算法推断：companyKey 的「互相包含」规则会把「招商银行杭州分行」吸进
+          // 「招商银行」，但「招银网络科技」与「招商银行」互不包含 → 判成两家。那是刻意的保守
+          // （猜错会把两家真不同的公司并成一家），所以中间层只能由用户显式填。
+          orgUnit: String(item.orgUnit || '').trim().slice(0, 60),
           applicationDate: String(item.applicationDate || ''),
           applicationUrl: /^https?:\/\//i.test(String(item.applicationUrl || '')) ? String(item.applicationUrl) : '',
           scheduleAt: String(item.scheduleAt || ''), recentSchedule: String(item.recentSchedule || ''),
@@ -1844,9 +1953,16 @@
           referral: String(item.referral || ''),            // 内推人或联系方式
           salary: String(item.salary || ''),                // 薪资文本（Offer 对比用）
           intent: Math.min(5, Math.max(0, Number(item.intent) || 0)), // 意向度 0-5，0=未设
-          // v4.6.0：企业性质（央国企/民企/外企）。封闭枚举 + 白名单校验，非法值一律归 ''（未设置），
+          // v4.6.0：企业性质（央国企/私企/外企）。封闭枚举 + 白名单校验，非法值一律归 ''（未设置），
           // 避免插件旧版本或手工改 JSON 塞进自由文本后污染洞察统计的分桶。
-          companyType: COMPANY_TYPES.includes(String(item.companyType || '').trim()) ? String(item.companyType).trim() : '',
+          // v4.11.0：先过一遍别名表再查白名单 —— 第二档从「民企」改名成「私企」，不迁移的话
+          // 用户已有记录会被白名单静默打回「未设置」（洞察少一档、徽章变灰，都不报错）。
+          // 读时迁移而不是写时批量改写：记录分散在 localStorage / 快照 / 云端三处，见 shared 的说明。
+          companyType: (() => {
+            const raw = String(item.companyType || '').trim();
+            const mapped = Object.prototype.hasOwnProperty.call(COMPANY_TYPE_ALIASES, raw) ? COMPANY_TYPE_ALIASES[raw] : raw;
+            return COMPANY_TYPES.includes(mapped) ? mapped : '';
+          })(),
           notes: (Array.isArray(item.notes) ? item.notes : [])
             .filter(n => n && String(n.text || '').trim())
             .map(n => ({ id: String(n.id || cryptoId()), at: Number(n.at) || Date.now(), text: String(n.text).trim() }))
@@ -2523,20 +2639,29 @@
         return 'text';
       }
 
+      // 字段外壳（v4.11.0）：四个分支共用，这样「加删除按钮」只需要改一处。
+      // 此前四个分支各写一遍 <div><label>…</label><input …></div>，而 kvRowHtml 一直带 ✕ ——
+      // 两个渲染函数不对称，exp 卡片里字段库加进去的字段只能靠删掉整段卡片来去掉。
+      // 「经历标签」_rowName 不会走到这里：它由 expCardHtml 单独硬编码渲染（是卡片标题与
+      // expSummary 的来源，删了卡片就没名字），所以下面的过滤已经排除了它。
+      function expFieldShell(keyAttr, fullW, controlHtml) {
+        return `<div class="exp-field-wrap${fullW ? ' full-w' : ''}"><label>${keyAttr}</label>${controlHtml}<button type="button" class="exp-field-del" data-action="del-exp-field" data-key="${keyAttr}" title="删除此字段" aria-label="删除字段 ${keyAttr}">✕</button></div>`;
+      }
+
       function expFieldHtml(key, value, presetType) {
         const type = presetType || inferFieldType(key);
         const val = escapeHtml(String(value ?? ''));
         const keyAttr = escapeHtml(key);
         if (type === 'longtext') {
-          return `<div class="full-w"><label>${keyAttr}</label><textarea class="control exp-field" data-key="${keyAttr}" rows="3" placeholder="填写内容...">${val}</textarea></div>`;
+          return expFieldShell(keyAttr, true, `<textarea class="control exp-field" data-key="${keyAttr}" rows="3" placeholder="填写内容...">${val}</textarea>`);
         }
         if (type === 'date') {
-          return `<div><label>${keyAttr}</label><input type="date" class="control exp-field" data-key="${keyAttr}" value="${val}"></div>`;
+          return expFieldShell(keyAttr, false, `<input type="date" class="control exp-field" data-key="${keyAttr}" value="${val}">`);
         }
         if (type === 'url') {
-          return `<div class="full-w"><label>${keyAttr}</label><input type="url" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="https://..."></div>`;
+          return expFieldShell(keyAttr, true, `<input type="url" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="https://...">`);
         }
-        return `<div><label>${keyAttr}</label><input type="text" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="填写内容..."></div>`;
+        return expFieldShell(keyAttr, false, `<input type="text" class="control exp-field" data-key="${keyAttr}" value="${val}" placeholder="填写内容...">`);
       }
 
       function expSummary(item) {
@@ -3128,23 +3253,16 @@
         const keyword = els.search.value.trim().toLocaleLowerCase('zh-CN');
         const stage = els.filter.value;
         const filtered = records.filter(record => {
-          const matchesText = !keyword || `${record.company} ${record.position}`.toLocaleLowerCase('zh-CN').includes(keyword);
+          const matchesText = !keyword || `${record.company} ${record.orgUnit || ''} ${record.position}`.toLocaleLowerCase('zh-CN').includes(keyword);
           return matchesText && (stage === 'all' || record.stage === stage);
         });
-        // 「按公司聚合」需要聚类后的规范键；建一次索引，避免在比较器里对每对记录重复聚类
-        const groupKeyById = els.sort.value === 'company-group' ? companyGroupIndex(records) : null;
+        // v4.11.0：这里不再有 company-group 分支。「按公司聚合」从排序选项变成了独立开关，
+        // 聚拢动作挪到 renderTable 的 clusterByCompanyGroup —— 排序只管顺序，分组只管插组头，
+        // 两件事正交。原先它俩挤在一个下拉里，想收纳就用不了「最近安排优先」。
         filtered.sort((a, b) => {
           if (els.sort.value === 'applied-desc') return (b.applicationDate || '').localeCompare(a.applicationDate || '');
           if (els.sort.value === 'updated-desc') return b.updatedAt - a.updatedAt;
           if (els.sort.value === 'company') return a.company.localeCompare(b.company, 'zh-CN');
-          if (els.sort.value === 'company-group') {
-            // 同公司多岗位：按聚类规范键聚拢（「腾讯」与「腾讯科技（深圳）有限公司」视为同一家，
-            // 但「星海科技」与「星海互娱」不会被误并），组内按最近更新倒序
-            const ka = String((groupKeyById && groupKeyById.get(a.id)) || companyGroupKey(a));
-            const kb = String((groupKeyById && groupKeyById.get(b.id)) || companyGroupKey(b));
-            if (ka !== kb) return ka.localeCompare(kb, 'zh-CN');
-            return (b.updatedAt || 0) - (a.updatedAt || 0);
-          }
           // 默认「最近安排优先」：分层比较，避免用 Number.MAX_SAFE_INTEGER 相加超过 2^53 丢精度
           // tier 0 = 未来安排（按时间升序，最近的最靠前）；tier 1 = 无安排（居中）；tier 2 = 已过期（置底）
           const now = Date.now();
@@ -3602,7 +3720,7 @@
           : '';
         return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}" data-company="${escapeHtml(key)}">
           <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
-          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
@@ -3616,39 +3734,99 @@
         </tr>`;
       }
 
+      // 收纳开启时把同一企业的记录**聚拢**：组间顺序 = 该企业第一条记录在当前排序里的位置，
+      // 组内保持当前排序的相对顺序（Map 保留插入序，所以一次遍历就够）。
+      // 不做这一步的话，非公司类排序（如默认的「最近安排优先」）下同企业的记录本来就不相邻，
+      // 逐行遍历会为同一家企业插出好几个重复组头 —— 这正是「分组」与「排序」解耦后必须补的一环。
+      function clusterByCompanyGroup(list, groupKeyById) {
+        const buckets = new Map();
+        for (const record of list) {
+          const key = groupKeyById.get(record.id) || companyGroupKey(record);
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push(record);
+        }
+        return [...buckets.values()].flat();
+      }
+
+      // 企业组头行。colspan=8 与表头列数一致，改列数要同步改这里（漏改会让组头只占一列宽）。
+      function companyGroupRowHtml(key, company, count, isCollapsed) {
+        return `<tr class="company-group-row" data-group="${escapeHtml(key)}"><td colspan="8">
+          <button class="group-toggle" type="button" data-group-toggle="${escapeHtml(key)}" aria-expanded="${String(!isCollapsed)}">
+            <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
+            <span class="group-label" style="--company-color:${companyColor(key)}">${escapeHtml(company)}</span>
+            <span class="group-count">${count} 个岗位</span>
+          </button>
+        </td></tr>`;
+      }
+
+      // 机构子组头行。unitKey 是 `${companyGroupKey}::${orgUnit}` 复合键（两家银行都能有「杭州分行」）。
+      function companyUnitRowHtml(unitKey, unit, count, isCollapsed) {
+        return `<tr class="company-unit-row" data-unit="${escapeHtml(unitKey)}"><td colspan="8">
+          <button class="group-toggle unit-toggle" type="button" data-unit-toggle="${escapeHtml(unitKey)}" aria-expanded="${String(!isCollapsed)}">
+            <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
+            <span class="group-label unit-label">${escapeHtml(unit || '（未填机构）')}</span>
+            <span class="group-count">${count} 个岗位</span>
+          </button>
+        </td></tr>`;
+      }
+
       function renderTable() {
         const visible = getVisibleRecords();
-        // 台账编号：按 updatedAt 从新到旧稳定编号（编辑不会重排，新增排最前）
+        // 台账编号 = 「这是我第几次投递」：按投递日期**升序**，最早的 = #0001。
+        // 刻意不用 updatedAt——编辑任何一条记录都会刷新它，用它编号会让被编辑的那条跳到 #0001、
+        // 其余全部顺移（旧实现正是这样，注释却写着「编辑不会重排」，与实现互相矛盾）。
+        // applicationDate 是用户填的投递日期，改备注/推进阶段都不会动它，所以编号真正稳定。
+        // 日期是 YYYY-MM-DD 字符串，localeCompare 等价于时间序，不需要 parseDay。
+        // 同一天多次投递用 id 字典序兜底，保证同一份数据每次渲染编号一致。
+        // 编号是**派生值、不存储**，所以换算法不需要数据迁移，也不影响云同步。
         const recordNo = new Map(
-          [...records].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || String(a.id).localeCompare(String(b.id)))
+          [...records].sort((a, b) => String(a.applicationDate || '').localeCompare(String(b.applicationDate || ''))
+            || String(a.id).localeCompare(String(b.id)))
             .map((record, index) => [record.id, String(index + 1).padStart(4, '0')])
         );
         // 公司索引按**全量台账**统计（不是只按筛选结果），chip 才能回答「我在这家一共投了几个岗」
         const groups = groupRecordsByCompany(records);
         const companyIndex = new Map(groups.map(group => [group.key, group.records]));
         const groupKeyById = companyGroupIndex(records);
-        const grouped = els.sort.value === 'company-group';
+        // v4.11.0：分组由独立开关决定，不再看排序下拉（两者正交，见 getVisibleRecords 的注释）
+        const grouped = !!uiPrefs.groupByCompany;
+        const ordered = grouped ? clusterByCompanyGroup(visible, groupKeyById) : visible;
         const collapsed = new Set(uiPrefs.collapsedGroups);
+        const collapsedUnits = new Set(uiPrefs.collapsedUnits);
+        // 机构层的渲染决策基于**筛选后**的记录：若按 companyIndex（全量台账）算，
+        // 阶段筛选把某个机构的记录全滤掉时会渲染出一个没有任何明细行的空机构头。
+        const unitsByGroup = new Map();
+        if (grouped) {
+          for (const record of ordered) {
+            const key = groupKeyById.get(record.id) || companyGroupKey(record);
+            const unit = String(record.orgUnit || '').trim();
+            if (!unitsByGroup.has(key)) unitsByGroup.set(key, new Map());
+            const units = unitsByGroup.get(key);
+            units.set(unit, (units.get(unit) || 0) + 1);
+          }
+        }
         const rows = [];
         let lastKey = null;
-        for (const record of visible) {
+        let lastUnitKey = null;
+        for (const record of ordered) {
           const key = groupKeyById.get(record.id) || companyGroupKey(record);
-          if (!grouped || key === lastKey) {
-            if (grouped && collapsed.has(key)) continue; // 该组已折叠：跳过明细行
-            rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
-            continue;
+          const unit = String(record.orgUnit || '').trim();
+          const unitKey = `${key}::${unit}`;
+          if (grouped && key !== lastKey) {
+            lastKey = key;
+            lastUnitKey = null;   // 换企业了：机构层的「上一组」必须重置，否则同名机构会被误判成连续
+            const siblings = companyIndex.get(key) || [];
+            rows.push(companyGroupRowHtml(key, record.company, siblings.length, collapsed.has(key)));
           }
-          lastKey = key;
-          const siblings = companyIndex.get(key) || [];
-          const isCollapsed = collapsed.has(key);
-          rows.push(`<tr class="company-group-row" data-group="${escapeHtml(key)}"><td colspan="8">
-            <button class="group-toggle" type="button" data-group-toggle="${escapeHtml(key)}" aria-expanded="${String(!isCollapsed)}">
-              <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
-              <span class="group-label" style="--company-color:${companyColor(key)}">${escapeHtml(record.company)}</span>
-              <span class="group-count">${siblings.length} 个岗位</span>
-            </button>
-          </td></tr>`);
-          if (isCollapsed) continue;
+          if (grouped && collapsed.has(key)) continue;   // 企业折叠：机构层与明细行整体隐藏
+          // 只有同一企业内出现 **2 个以上不同 orgUnit**（空串算一种）时才渲染机构层：
+          // 单一机构或全为空时多一层缩进没有任何信息量，只是把明细往右推。
+          const showUnits = grouped && (unitsByGroup.get(key)?.size || 0) >= 2;
+          if (showUnits && unitKey !== lastUnitKey) {
+            lastUnitKey = unitKey;
+            rows.push(companyUnitRowHtml(unitKey, unit, unitsByGroup.get(key).get(unit), collapsedUnits.has(unitKey)));
+          }
+          if (showUnits && collapsedUnits.has(unitKey)) continue;
           rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
         }
         els.body.innerHTML = rows.join('');
@@ -3765,9 +3943,12 @@
           const start = ev.at instanceof Date ? ev.at : (ev.allDay ? parseDay(ev.at) : parseLocal(ev.at));
           if (!start) continue;
           const end = new Date(start.getTime() + (ev.allDay ? 86400000 : 3600000));
-          const title = `${r.company || '投递'} · ${ev.type === 'deadline' ? `截止（${r.position || '岗位'}）` : (r.recentSchedule || r.position || '安排')}`;
+          // 机构进标题（v4.11.0）：不进的话日历上会出现三个一模一样的「招商银行 · 客户经理」，
+          // 分不清哪个是杭州分行、哪个是成都分行 —— 而日历正是靠标题扫读的。
+          const companyBit = [r.company || '投递', r.orgUnit].filter(Boolean).join(' ');
+          const title = `${companyBit} · ${ev.type === 'deadline' ? `截止（${r.position || '岗位'}）` : (r.recentSchedule || r.position || '安排')}`;
           const desc = [
-            `岗位：${r.position || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
+            `岗位：${r.position || '—'}`, `机构：${r.orgUnit || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
             ev.type === 'deadline' ? `截止日期：${r.deadline || '—'}` : `安排时间：${r.scheduleAt || '—'}`,
             r.nextAction ? `下一步：${r.nextAction}` : ''
           ].filter(Boolean).join('\n');
@@ -4031,14 +4212,17 @@
       // 宽松版：再去掉括号与连字符后缀。**只用于「疑似同岗位不同方向」提示，绝不用于判重**
       const loosePositionSlug = AJA.loosePositionSlug;
       // 返回 { mode: 'duplicate' | 'variant' | 'same-company', reason, matches } 或 null
-      //   duplicate    ：同投递网址，或 同公司 + 岗位归一化严格相等 + 同批次 → 应改为编辑既有记录
-      //   variant      ：同公司 + 岗位宽松相等 + （严格不等或批次不等）→ 疑似同一岗位的不同方向/城市/批次，
+      //   duplicate    ：同投递网址，或 同公司 + 同机构 + 岗位归一化严格相等 → 应改为编辑既有记录
+      //   variant      ：同公司 + 岗位宽松相等 + （严格不等或机构不等）→ 疑似同一岗位的不同方向/城市/机构，
       //                  合法但值得提醒，必须给用户「是独立投递 / 其实是同一条」二选一，不得静默拦截
       //   same-company ：同公司但岗位无关 → 合法（同公司多岗位），只做非阻断提示
       // 公司判定统一走 companyGroupKey + sameCompanyGroup，与展示分组同源（见上方「公司维度分组」注释）。
-      // 不再有 options.ignoreBatch：插件不传批次（恒为空），已有记录填了批次时自然不等 → 走 variant/same-company
-      // 非阻断放行；两边都没批次才判 duplicate 并给逃生口。旧版插件路径 ignoreBatch:true 会把
-      // 「已有提前批 + 新收正式批」判成 duplicate 并强制打开旧记录编辑，污染已有里程碑。
+      // v4.11.0：第三要素从 batch（批次）换成 orgUnit（机构 / 子公司 / BU）。orgUnit 接替的正是
+      // batch 原来承担的区分职责，而且更贴合实际 —— 同一家银行的杭州分行与成都分行招同名岗位
+      // 是两次真实投递，不是重复；而「提前批 / 正式批」是时间维度，与「是不是同一次投递」关系更弱。
+      // 顺带保留旧版那条教训：不再有 options.ignoreBatch 这类「忽略第三要素」的开关。插件若没填机构
+      // （恒为空）而已有记录填了，两者不等 → 走 variant/same-company 非阻断放行，绝不强制打开旧记录
+      // 编辑（旧版 ignoreBatch:true 会把「已有提前批 + 新收正式批」判成 duplicate，污染已有里程碑）。
       function findDuplicateRecord(records, seed) {
         const list = Array.isArray(records) ? records : [];
         const url = String((seed && seed.applicationUrl) || '').trim();
@@ -4052,16 +4236,18 @@
         if (!sameCompany.length) return null;
         const position = normalizePositionSlug(seed && seed.position);
         const loose = loosePositionSlug(seed && seed.position);
-        const batch = String((seed && seed.batch) || '').trim();
+        const unit = String((seed && seed.orgUnit) || '').trim();
         const exact = sameCompany.filter(record => normalizePositionSlug(record.position) === position
-          && String(record.batch || '').trim() === batch);
-        if (exact.length) return { mode: 'duplicate', reason: 'company+position+batch', matches: exact };
+          && String(record.orgUnit || '').trim() === unit);
+        // reason 是 UI 文案的来源（查重提示会说清「为什么判重复」），改它要同步改
+        // test/web-check.js 与 test/company-dedup.js 里盯着这个字符串的断言。
+        if (exact.length) return { mode: 'duplicate', reason: 'company+unit+position', matches: exact };
         if (loose && loose.length >= 2) {
           const variant = sameCompany.filter(record => {
             const otherLoose = loosePositionSlug(record.position);
             if (!otherLoose || otherLoose !== loose) return false;
             return normalizePositionSlug(record.position) !== position
-              || String(record.batch || '').trim() !== batch;
+              || String(record.orgUnit || '').trim() !== unit;
           });
           if (variant.length) return { mode: 'variant', reason: 'company+position-loose', matches: variant };
         }
@@ -4186,6 +4372,7 @@
           const rows = [
             ['公司', record.company],
             ['岗位', record.position || '未填岗位'],
+            ['机构', record.orgUnit],
             ['批次', record.batch],
             ['城市', record.city],
             ['企业性质', record.companyType || COMPANY_TYPE_UNSET],
@@ -4306,12 +4493,16 @@
           return {
             recordsView: parsed.recordsView === 'board' ? 'board' : 'table',
             collapsedGroups: Array.isArray(parsed.collapsedGroups) ? parsed.collapsedGroups.map(String) : [],
+            // 同企业收纳（v4.11.0）：开关 + 机构层折叠态。两个都是纯 UI 偏好，
+            // 按既有惯例只存本机 ui.v1、不进云同步 envelope。
+            groupByCompany: !!parsed.groupByCompany,
+            collapsedUnits: Array.isArray(parsed.collapsedUnits) ? parsed.collapsedUnits.map(String) : [],
             hideGuide: !!parsed.hideGuide,
             // 洞察精简模式（v4.6.0）：只显示概览 / 需要关注 / 转化漏斗，明细块整体折叠
             insightsCompact: !!parsed.insightsCompact
           };
         } catch (_) {
-          return { recordsView: 'table', collapsedGroups: [], hideGuide: false, insightsCompact: false };
+          return { recordsView: 'table', collapsedGroups: [], collapsedUnits: [], groupByCompany: false, hideGuide: false, insightsCompact: false };
         }
       }
       function saveUiPrefs() {
@@ -4347,13 +4538,30 @@
         saveUiPrefs();
         renderRecordsView();
       }
-      // 「按公司聚合」排序下的分组折叠：折叠态存本机 ui 偏好（上限 100 个键防膨胀）
+      // 企业组折叠：折叠态存本机 ui 偏好（上限 100 个键防膨胀）
       function toggleCompanyGroup(key) {
         const value = String(key || '');
         if (!value) return;
         const set = new Set(uiPrefs.collapsedGroups);
         if (set.has(value)) set.delete(value); else set.add(value);
         uiPrefs.collapsedGroups = [...set].slice(-100);
+        saveUiPrefs();
+        renderRecordsView();
+      }
+      // 机构子组折叠（v4.11.0）：键是 `${companyGroupKey}::${orgUnit}` 复合键 ——
+      // 不同企业下可以有同名机构（两家银行都有「杭州分行」），只用机构名会串台。
+      function toggleCompanyUnit(unitKey) {
+        const value = String(unitKey || '');
+        if (!value) return;
+        const set = new Set(uiPrefs.collapsedUnits);
+        if (set.has(value)) set.delete(value); else set.add(value);
+        uiPrefs.collapsedUnits = [...set].slice(-100);
+        saveUiPrefs();
+        renderRecordsView();
+      }
+      // 「同企业收纳」开关：与排序正交（排序决定顺序，开关决定要不要插组头）
+      function setGroupByCompany(on) {
+        uiPrefs.groupByCompany = !!on;
         saveUiPrefs();
         renderRecordsView();
       }
@@ -4386,6 +4594,13 @@
         const tableBtn = $('#viewTableBtn'), boardBtn = $('#viewBoardBtn');
         if (tableBtn) { tableBtn.classList.toggle('is-active', !isBoard); tableBtn.setAttribute('aria-selected', String(!isBoard)); }
         if (boardBtn) { boardBtn.classList.toggle('is-active', isBoard); boardBtn.setAttribute('aria-selected', String(isBoard)); }
+        // 收纳开关的态在这里同步（而不是在 click 处理里）：刷新后、云同步拉回数据后
+        // 都要重新渲染视图，走同一条路才不会漏掉某一次的状态回填。
+        const groupBtn = $('#groupToggle');
+        if (groupBtn) {
+          groupBtn.classList.toggle('is-active', !!uiPrefs.groupByCompany);
+          groupBtn.setAttribute('aria-pressed', String(!!uiPrefs.groupByCompany));
+        }
         if (board) board.hidden = !isBoard;
         if (scroll) scroll.hidden = isBoard;
         if (isBoard) renderBoard(); else renderTable();
@@ -4430,7 +4645,7 @@
         if (stalled) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
         const dots = intentDotsHtml(record.intent);
         return `<button class="board-card${stalled ? ' is-stalled' : ''}" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
-          <div class="board-card-company">${escapeHtml(record.company)}</div>
+          <div class="board-card-company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="board-card-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}</div>
           <div class="board-card-position">${escapeHtml(record.position || '—')}</div>
           <div class="board-card-meta">${dots}${companyTypeChipHtml(record.companyType)}${chips.join('')}</div>
         </button>`;
@@ -4589,7 +4804,7 @@
         if (!record) { closeRecordDrawer(); return; }
         if (title) title.textContent = `${record.company} · ${record.position || '未填岗位'}`;
         if (sub) {
-          const bits = [record.city, record.batch, record.channel].filter(Boolean);
+          const bits = [record.city, record.orgUnit, record.batch, record.channel].filter(Boolean);
           // 企业性质用带色徽章紧跟阶段徽章；facts 里的 value 是 HTML，两处都能安全注入
           sub.innerHTML = `<span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>${companyTypeChipHtml(record.companyType)} ${escapeHtml(bits.join(' · '))}`;
         }
@@ -4599,6 +4814,9 @@
         // （企业性质徽章第一次加进来时就踩了：抽屉里显示成 &lt;span class="ct-chip"…）。
         const HTML_FACT_LABELS = ['投递网址', '企业性质'];
         const facts = [
+          // 机构排在最前：它限定的是标题里那个公司名（「招商银行 · 杭州分行」），
+          // 放在末尾会让人先读完一圈日期与阶段才知道这条到底属于哪个分行。
+          { label: '机构', value: record.orgUnit || '—' },
           { label: '投递日期', value: formatDate(record.applicationDate) },
           { label: '批次', value: record.batch || '—' },
           { label: '企业性质', value: companyTypeChipHtml(record.companyType) || '<span class="muted-text">未设置</span>' },
@@ -4697,7 +4915,7 @@
         const q = String(query || '').trim().toLowerCase();
         const items = [];
         const matched = q
-          ? records.filter(record => `${record.company} ${record.position} ${record.batch} ${record.city}`.toLowerCase().includes(q))
+          ? records.filter(record => `${record.company} ${record.orgUnit || ''} ${record.position} ${record.batch} ${record.city}`.toLowerCase().includes(q))
           : records.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 5);
         for (const record of matched.slice(0, 8)) {
           items.push({
@@ -5469,6 +5687,51 @@
         if (last) last.focus();
       }
 
+      // 公司名 → 企业 + 机构 的拆分**建议**（v4.11.0）。
+      // 刻意只给建议、点了才拆：正则对「中国银行股份有限公司杭州分行」这类含法人后缀的名字会拆错，
+      // 而拆错了用户未必发现（公司名看着仍然合理），机构层就静默错位。
+      // 「招银网络科技」这种无法从字面推断母企业的情况不给任何提示 —— 提示了也猜不出来，
+      // 正确录法是用户自己填 company='招商银行' + orgUnit='招银网络科技'。
+      const ORG_SPLIT_RE = /^(.{2,}?)([\u4e00-\u9fa5]{2,8}(?:分行|支行|分公司|子公司|事业部|研究院|办事处|分部|分中心))$/;
+      function updateOrgSplitHint() {
+        const hint = $('#orgSplitHint');
+        if (!hint) return;
+        const company = $('#company').value.trim();
+        const m = ORG_SPLIT_RE.exec(company);
+        // 已经填了机构就不再建议：用户显然有自己的分法，反复提示只是干扰
+        if (!m || $('#orgUnit').value.trim()) { hint.hidden = true; hint.innerHTML = ''; return; }
+        hint.innerHTML = `这个名字像是「企业 + 机构」：<button class="text-button" type="button" id="orgSplitBtn">拆成「${escapeHtml(m[1])}」+「${escapeHtml(m[2])}」</button>`;
+        hint.hidden = false;
+      }
+
+      // 新增简历区块：名字 + 类型二选一（v4.11.0，取代原来的一行 prompt）
+      function openSectionDialog() {
+        const dialog = $('#sectionDialog');
+        if (!dialog) return;
+        $('#sectionForm').reset();
+        // reset() 会把 radio 恢复成 HTML 里的 checked（列表型）——这是刻意的默认：
+        // 用户报的诉求就是要列表型，键值型是少数场景（技能证书那种一行一项）。
+        dialog.showModal();
+        requestAnimationFrame(() => $('#sectionName').focus());
+      }
+
+      function submitSectionForm(event) {
+        event.preventDefault();
+        const name = $('#sectionName').value.trim();
+        if (!name) { showToast('请填写区块名称'); return; }
+        const isKv = $('#sectionForm').querySelector('input[name="sectionType"]:checked')?.value === 'kv';
+        // 先收回 DOM 再判重名：不收回的话，用户在本页尚未保存的简历编辑会被下面的
+        // renderResumeEditor() 整体冲掉（旧实现同样是这个顺序，保留）。
+        resume = collectResumeFromDom();
+        if (name in resume) { $('#sectionDialog').close(); showToast('该区块已存在'); renderResumeEditor(); return; }
+        // 列表型 = []（渲染走 exp 分支 → 有「＋ 添加」，每段是可上移/下移/复制/删除的卡片）
+        // 键值型 = {}（走 kv 分支 → 「自定义」加键值对行）
+        resume[name] = isKv ? {} : [];
+        $('#sectionDialog').close();
+        renderResumeEditor();
+        showToast(`已添加${isKv ? '键值' : '列表'}型区块「${name}」，点「保存简历」后写入 JSON`);
+      }
+
       function openDialog(record = null, seed = null) {
         const source = record || seed;
         editingId = record?.id || null;
@@ -5478,7 +5741,7 @@
         renderTimelineEditor(source);
         // 回填字段清单：新增任何表单字段都必须同步加进这里，否则「编辑」时该字段会被静默清空。
         // 取不到元素时跳过（null 安全），便于分阶段加字段。
-        for (const field of ['company', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
+        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
           const input = document.getElementById(field);
           if (!input) continue;
           // intent 是下拉框：0（未设）要映射成空字符串，否则 select 会落在无匹配项的状态
@@ -5490,6 +5753,7 @@
         const more = $('#formMore');
         if (more) more.open = !!source && ['batch', 'channel', 'referral', 'salary'].some(f => String(source[f] || '').trim());
         updateSameCompanyHint(); // 打开即显示「该公司已有哪几个岗位」，录入第二个岗位时心里有数
+        updateOrgSplitHint();    // 公司名带「XX分行」时给出「拆成企业 + 机构」的建议（不自动执行）
         els.dialog.showModal();
         requestAnimationFrame(() => $('#company').focus());
       }
@@ -5646,6 +5910,8 @@
             // 插件收录表单里选的企业性质直接透传；normalizeRecord 会做白名单校验，
             // 因此旧版插件（不传该字段）或异常值都会安全落回「未设置」
             companyType: submitted.companyType,
+            // 机构同理透传。旧版插件不传 → normalizeRecord 收敛成 ''，不会报错也不会脏
+            orgUnit: submitted.orgUnit,
             applicationUrl: submitted.applicationUrl,
             recentSchedule: submitted.recentSchedule || '',
             nextAction: submitted.nextAction || ''
@@ -5661,7 +5927,7 @@
           if (decision.action === 'edit') {
             const target = decision.target;
             const merged = { ...target };
-            ['city', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction'].forEach(key => {
+            ['city', 'orgUnit', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction'].forEach(key => {
               if (seed[key] && !merged[key]) merged[key] = seed[key];
             });
             if (stageOrder(seed.stage) > stageOrder(merged.stage)) {
@@ -6131,6 +6397,9 @@
         // 公司分组折叠开关（只在「按公司聚合」排序时出现）
         const groupToggle = event.target.closest('button[data-group-toggle]');
         if (groupToggle) { toggleCompanyGroup(groupToggle.dataset.groupToggle); return; }
+        // 机构子组头（v4.11.0）：与企业组头是两个独立的折叠态，键也不同（复合键）
+        const unitToggle = event.target.closest('button[data-unit-toggle]');
+        if (unitToggle) { toggleCompanyUnit(unitToggle.dataset.unitToggle); return; }
         const button = event.target.closest('button[data-action]');
         if (!button) {
           // 点公司 / 岗位单元格 → 打开详情抽屉；点链接仍走原生跳转（不打断）
@@ -6443,6 +6712,17 @@
           card.parentElement.insertBefore(clone, card.nextSibling);
           renumberExpCards(card.parentElement);
           showToast('已复制此段经历，记得修改内容后保存');
+        } else if (action === 'del-exp-field') {
+          event.preventDefault();
+          // 与 del-kv / del-exp 同款：**只动 DOM，不碰 resume**。简历是「DOM 为草稿、
+          // 点保存时才 collectResumeFromDom 收回」的模型；若在这里直接改 resume 再
+          // renderResumeEditor()，用户在同一页其他字段里尚未保存的输入会被整体重渲染冲掉。
+          // 同理不调 updateResumeCompletion()——它统计的是内存里的 resume（不是 DOM），
+          // 此刻调用只会显示过期数字；计数在保存时随 renderResumeEditor 一起刷新。
+          const wrap = target.closest('.exp-field-wrap');
+          const name = target.getAttribute('data-key') || '该字段';
+          wrap?.remove();
+          showToast(`已删除字段「${name}」，点「保存简历」后生效`);
         } else if (action === 'del-kv') {
           event.preventDefault();
           const row = target.closest('.kv-row');
@@ -6474,14 +6754,7 @@
           });
         } else if (action === 'add-section') {
           event.preventDefault();
-          const name = prompt('新区块名称（保存后成为简历 JSON 的一个段）：');
-          if (!name || !name.trim()) return;
-          const key = name.trim();
-          resume = collectResumeFromDom();
-          if (key in resume) { showToast('该区块已存在'); renderResumeEditor(); return; }
-          resume[key] = {};
-          renderResumeEditor();
-          showToast(`已添加区块「${key}」，点「保存简历」后写入 JSON`);
+          openSectionDialog();
         }
       });
       // 字段库弹层
@@ -6596,6 +6869,21 @@
       // ===== v4.4.0：表格/看板切换、看板拖拽、详情抽屉、⌘K 命令面板 =====
       $('#viewTableBtn').addEventListener('click', () => setRecordsView('table'));
       $('#viewBoardBtn').addEventListener('click', () => setRecordsView('board'));
+      // 同企业收纳开关（v4.11.0）：视觉态由 renderRecordsView 统一回填，这里只翻偏好
+      $('#groupToggle').addEventListener('click', () => setGroupByCompany(!uiPrefs.groupByCompany));
+      // 公司名失焦时给「拆成企业 + 机构」的建议；建议按钮是动态生成的，所以走容器委托
+      $('#company').addEventListener('blur', updateOrgSplitHint);
+      $('#orgUnit').addEventListener('input', updateOrgSplitHint);
+      $('#orgSplitHint').addEventListener('click', event => {
+        if (event.target.id !== 'orgSplitBtn') return;
+        const m = ORG_SPLIT_RE.exec($('#company').value.trim());
+        if (!m) return;
+        $('#company').value = m[1];
+        $('#orgUnit').value = m[2];
+        updateOrgSplitHint();
+        updateSameCompanyHint();   // 公司名变了，「该公司已有 N 个岗位」提示要跟着刷新
+        showToast('已拆成企业与机构，两个都还能改');
+      });
       const boardCols = $('#boardCols');
       boardCols.addEventListener('dragstart', event => {
         const card = event.target.closest('.board-card[data-id]');
@@ -6743,6 +7031,12 @@
       // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
       $('#closeDialog').addEventListener('click', closeDialog);
       $('#cancelDialog').addEventListener('click', closeDialog);
+      // 新增区块弹窗（v4.11.0）：与 recordDialog 同款三处绑定 —— 提交、两个关闭按钮、
+      // 点遮罩关闭。少绑任何一个都会留下「点了没反应」的死按钮。
+      $('#sectionForm').addEventListener('submit', submitSectionForm);
+      $('#closeSectionDialog').addEventListener('click', () => $('#sectionDialog').close());
+      $('#sectionCancelBtn').addEventListener('click', () => $('#sectionDialog').close());
+      $('#sectionDialog').addEventListener('click', event => { if (event.target === $('#sectionDialog')) $('#sectionDialog').close(); });
       els.form.addEventListener('submit', submitForm);
       // 公司名 / 岗位名输入时实时刷新「该公司已有 N 个岗位」提示
       $('#company').addEventListener('input', scheduleSameCompanyHint);

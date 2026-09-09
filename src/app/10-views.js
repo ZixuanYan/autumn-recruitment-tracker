@@ -83,12 +83,16 @@
           return {
             recordsView: parsed.recordsView === 'board' ? 'board' : 'table',
             collapsedGroups: Array.isArray(parsed.collapsedGroups) ? parsed.collapsedGroups.map(String) : [],
+            // 同企业收纳（v4.11.0）：开关 + 机构层折叠态。两个都是纯 UI 偏好，
+            // 按既有惯例只存本机 ui.v1、不进云同步 envelope。
+            groupByCompany: !!parsed.groupByCompany,
+            collapsedUnits: Array.isArray(parsed.collapsedUnits) ? parsed.collapsedUnits.map(String) : [],
             hideGuide: !!parsed.hideGuide,
             // 洞察精简模式（v4.6.0）：只显示概览 / 需要关注 / 转化漏斗，明细块整体折叠
             insightsCompact: !!parsed.insightsCompact
           };
         } catch (_) {
-          return { recordsView: 'table', collapsedGroups: [], hideGuide: false, insightsCompact: false };
+          return { recordsView: 'table', collapsedGroups: [], collapsedUnits: [], groupByCompany: false, hideGuide: false, insightsCompact: false };
         }
       }
       function saveUiPrefs() {
@@ -124,13 +128,30 @@
         saveUiPrefs();
         renderRecordsView();
       }
-      // 「按公司聚合」排序下的分组折叠：折叠态存本机 ui 偏好（上限 100 个键防膨胀）
+      // 企业组折叠：折叠态存本机 ui 偏好（上限 100 个键防膨胀）
       function toggleCompanyGroup(key) {
         const value = String(key || '');
         if (!value) return;
         const set = new Set(uiPrefs.collapsedGroups);
         if (set.has(value)) set.delete(value); else set.add(value);
         uiPrefs.collapsedGroups = [...set].slice(-100);
+        saveUiPrefs();
+        renderRecordsView();
+      }
+      // 机构子组折叠（v4.11.0）：键是 `${companyGroupKey}::${orgUnit}` 复合键 ——
+      // 不同企业下可以有同名机构（两家银行都有「杭州分行」），只用机构名会串台。
+      function toggleCompanyUnit(unitKey) {
+        const value = String(unitKey || '');
+        if (!value) return;
+        const set = new Set(uiPrefs.collapsedUnits);
+        if (set.has(value)) set.delete(value); else set.add(value);
+        uiPrefs.collapsedUnits = [...set].slice(-100);
+        saveUiPrefs();
+        renderRecordsView();
+      }
+      // 「同企业收纳」开关：与排序正交（排序决定顺序，开关决定要不要插组头）
+      function setGroupByCompany(on) {
+        uiPrefs.groupByCompany = !!on;
         saveUiPrefs();
         renderRecordsView();
       }
@@ -163,6 +184,13 @@
         const tableBtn = $('#viewTableBtn'), boardBtn = $('#viewBoardBtn');
         if (tableBtn) { tableBtn.classList.toggle('is-active', !isBoard); tableBtn.setAttribute('aria-selected', String(!isBoard)); }
         if (boardBtn) { boardBtn.classList.toggle('is-active', isBoard); boardBtn.setAttribute('aria-selected', String(isBoard)); }
+        // 收纳开关的态在这里同步（而不是在 click 处理里）：刷新后、云同步拉回数据后
+        // 都要重新渲染视图，走同一条路才不会漏掉某一次的状态回填。
+        const groupBtn = $('#groupToggle');
+        if (groupBtn) {
+          groupBtn.classList.toggle('is-active', !!uiPrefs.groupByCompany);
+          groupBtn.setAttribute('aria-pressed', String(!!uiPrefs.groupByCompany));
+        }
         if (board) board.hidden = !isBoard;
         if (scroll) scroll.hidden = isBoard;
         if (isBoard) renderBoard(); else renderTable();
@@ -207,7 +235,7 @@
         if (stalled) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
         const dots = intentDotsHtml(record.intent);
         return `<button class="board-card${stalled ? ' is-stalled' : ''}" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
-          <div class="board-card-company">${escapeHtml(record.company)}</div>
+          <div class="board-card-company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="board-card-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}</div>
           <div class="board-card-position">${escapeHtml(record.position || '—')}</div>
           <div class="board-card-meta">${dots}${companyTypeChipHtml(record.companyType)}${chips.join('')}</div>
         </button>`;
@@ -366,7 +394,7 @@
         if (!record) { closeRecordDrawer(); return; }
         if (title) title.textContent = `${record.company} · ${record.position || '未填岗位'}`;
         if (sub) {
-          const bits = [record.city, record.batch, record.channel].filter(Boolean);
+          const bits = [record.city, record.orgUnit, record.batch, record.channel].filter(Boolean);
           // 企业性质用带色徽章紧跟阶段徽章；facts 里的 value 是 HTML，两处都能安全注入
           sub.innerHTML = `<span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>${companyTypeChipHtml(record.companyType)} ${escapeHtml(bits.join(' · '))}`;
         }
@@ -376,6 +404,9 @@
         // （企业性质徽章第一次加进来时就踩了：抽屉里显示成 &lt;span class="ct-chip"…）。
         const HTML_FACT_LABELS = ['投递网址', '企业性质'];
         const facts = [
+          // 机构排在最前：它限定的是标题里那个公司名（「招商银行 · 杭州分行」），
+          // 放在末尾会让人先读完一圈日期与阶段才知道这条到底属于哪个分行。
+          { label: '机构', value: record.orgUnit || '—' },
           { label: '投递日期', value: formatDate(record.applicationDate) },
           { label: '批次', value: record.batch || '—' },
           { label: '企业性质', value: companyTypeChipHtml(record.companyType) || '<span class="muted-text">未设置</span>' },
@@ -474,7 +505,7 @@
         const q = String(query || '').trim().toLowerCase();
         const items = [];
         const matched = q
-          ? records.filter(record => `${record.company} ${record.position} ${record.batch} ${record.city}`.toLowerCase().includes(q))
+          ? records.filter(record => `${record.company} ${record.orgUnit || ''} ${record.position} ${record.batch} ${record.city}`.toLowerCase().includes(q))
           : records.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 5);
         for (const record of matched.slice(0, 8)) {
           items.push({

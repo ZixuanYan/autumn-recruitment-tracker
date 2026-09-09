@@ -116,6 +116,7 @@
           const rows = [
             ['公司', record.company],
             ['岗位', record.position || '未填岗位'],
+            ['机构', record.orgUnit],
             ['批次', record.batch],
             ['城市', record.city],
             ['企业性质', record.companyType || COMPANY_TYPE_UNSET],
