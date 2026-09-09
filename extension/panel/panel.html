@@ -45,7 +45,30 @@
       </div>
     </section>
 
-    <section class="p-section">
+    <!-- 区块顺序（v5.3.1）：一键收录 → 简历字段 → 暂存箱。
+         前两个是"正在网申页上做的事"（收录岗位、点字段速填），暂存箱是"事后待办"，
+         放最下面才符合使用频率 —— 原来它夹在中间，把高频的简历字段挤到要滚一屏才够得着。
+         默认展开态同步调整：一键收录与简历字段展开，暂存箱折叠（它头上有数量角标，
+         不展开也看得出有没有东西）。面板**不持久化**折叠状态，所以下面这些属性就是默认值的
+         唯一来源，改默认态就是改这里（test/extension-panel.js 与 extension-ui.js 各有一条断言盯着）。 -->
+    <section class="p-section" id="p-sec-resume">
+      <button class="p-sec-head" id="p-res-head" type="button" aria-expanded="true" aria-controls="p-res-body">
+        <span class="p-sec-title">简历字段</span>
+        <span class="p-badge" id="p-res-count">0</span>
+        <span class="p-sec-arrow" id="p-res-arrow"></span>
+      </button>
+      <div class="p-sec-body" id="p-res-body">
+        <p class="p-status" id="p-resume-status"></p>
+        <p class="p-hint">① 先点网页里的输入框 → ② 再点下方字段即可填入；<b>右键字段 = 复制内容</b></p>
+        <div class="p-search">
+          <span class="p-search-ico" id="p-search-ico"></span>
+          <input id="p-resume-search" type="text" placeholder="搜索字段名或内容" autocomplete="off">
+        </div>
+        <div class="p-resume-list" id="p-resume-list"></div>
+      </div>
+    </section>
+
+    <section class="p-section" id="p-sec-pending">
       <button class="p-sec-head" id="p-pend-head" type="button" aria-expanded="false" aria-controls="p-pend-body">
         <span class="p-sec-title">暂存箱</span>
         <span class="p-badge" id="p-pend-count">0</span>
@@ -54,23 +77,6 @@
       <div class="p-sec-body" id="p-pend-body" hidden>
         <p class="p-hint">网页版管理器没打开时，收录的岗位在这里排队；打开网页版后逐条确认入库。</p>
         <div class="p-pend-list" id="p-pend-list"></div>
-      </div>
-    </section>
-
-    <section class="p-section">
-      <button class="p-sec-head" id="p-res-head" type="button" aria-expanded="false" aria-controls="p-res-body">
-        <span class="p-sec-title">简历字段</span>
-        <span class="p-badge" id="p-res-count">0</span>
-        <span class="p-sec-arrow" id="p-res-arrow"></span>
-      </button>
-      <div class="p-sec-body" id="p-res-body" hidden>
-        <p class="p-status" id="p-resume-status"></p>
-        <p class="p-hint">① 先点网页里的输入框 → ② 再点下方字段即可填入；<b>右键字段 = 复制内容</b></p>
-        <div class="p-search">
-          <span class="p-search-ico" id="p-search-ico"></span>
-          <input id="p-resume-search" type="text" placeholder="搜索字段名或内容" autocomplete="off">
-        </div>
-        <div class="p-resume-list" id="p-resume-list"></div>
       </div>
     </section>
 

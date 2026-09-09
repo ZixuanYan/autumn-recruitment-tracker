@@ -551,13 +551,6 @@
     .group-caret { color: var(--muted); font-size: 11px; }
     .group-label { border-left: 3px solid var(--company-color, var(--accent)); padding-left: 8px; }
     .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; }
-    /* 机构子组头（v4.11.0）：与企业组头同款胶囊，靠缩进与更弱的底色区分层级。
-       企业组头 padding 左 12px，机构组头 32px —— 两级都靠 padding 而不是 border/背景块，
-       否则密集表格里会形成一层层的色带，比缩进更吵。 */
-    .company-unit-row > td { padding: 2px 12px 2px 32px; background: transparent; border-top: 0; }
-    .unit-toggle { background: transparent; box-shadow: none; }
-    .unit-toggle:hover { background: var(--surface-2); }
-    .unit-label { border-left: 0; padding-left: 0; color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
     /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽 */
     .group-switch { justify-self: start; align-self: center; }
     .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }

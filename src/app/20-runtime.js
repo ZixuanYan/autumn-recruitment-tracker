@@ -525,6 +525,38 @@
       }
 
       // 新增简历区块：名字 + 类型二选一（v4.11.0，取代原来的一行 prompt）
+      // 区块类型转换（v4.11.1）。两个方向都**不丢字段**，所以不需要二次确认：
+      //   键值型 → 列表型：现有键值对整体装进第一段经历（经历标签留空给你填）；空对象直接变空数组
+      //   列表型 → 键值型：只有 0 或 1 段时允许（把该段字段摊平，经历标签存成「经历标签」这一项）；
+      //     多段时**明确拒绝**并说清会丢几段 —— 多段经历没法摊平成一层键值对，
+      //     而静默丢掉 N-1 段正是这个项目里最不能接受的那类缺陷（不报错、事后才发现数据没了）
+      function convertSectionType(name) {
+        if (!name) return;
+        // 先收回 DOM 再改：与新增区块同一套顺序。不收回的话，用户在**别的**区块里
+        // 尚未保存的编辑会被下面的整体重渲染冲掉。
+        resume = collectResumeFromDom();
+        if (!(name in resume)) { showToast('找不到这个区块'); return; }
+        const current = resume[name];
+        const toExp = !Array.isArray(current);
+        if (toExp) {
+          const entries = Object.entries(current || {});
+          resume[name] = entries.length ? [Object.assign({ _rowName: '' }, current)] : [];
+        } else {
+          if (current.length > 1) {
+            showToast(`「${name}」有 ${current.length} 段经历，转成键值型会丢掉 ${current.length - 1} 段。请先删到只剩一段`);
+            return;
+          }
+          const flat = {};
+          for (const [k, v] of Object.entries(current[0] || {})) flat[k === '_rowName' ? '经历标签' : k] = v;
+          resume[name] = flat;
+        }
+        // 这里**必须**整体重渲染（与字段级删除刻意只动 DOM 相反）：类型变了，
+        // 区块的 data-type、头部按钮（＋ 添加 / 自定义）与 body 的整套结构都要换，
+        // 局部改 DOM 只会留下一个「按钮是列表型、body 还是键值行」的半新半旧状态。
+        renderResumeEditor();
+        showToast(`「${name}」已转为${toExp ? '列表' : '键值'}型，点「保存简历」后写入 JSON`);
+      }
+
       function openSectionDialog() {
         const dialog = $('#sectionDialog');
         if (!dialog) return;
@@ -1219,9 +1251,6 @@
         // 公司分组折叠开关（只在「按公司聚合」排序时出现）
         const groupToggle = event.target.closest('button[data-group-toggle]');
         if (groupToggle) { toggleCompanyGroup(groupToggle.dataset.groupToggle); return; }
-        // 机构子组头（v4.11.0）：与企业组头是两个独立的折叠态，键也不同（复合键）
-        const unitToggle = event.target.closest('button[data-unit-toggle]');
-        if (unitToggle) { toggleCompanyUnit(unitToggle.dataset.unitToggle); return; }
         const button = event.target.closest('button[data-action]');
         if (!button) {
           // 点公司 / 岗位单元格 → 打开详情抽屉；点链接仍走原生跳转（不打断）
@@ -1563,6 +1592,10 @@
               parent.innerHTML = '<div class="resume-empty-hint">还没有经历，点「＋ 添加」开始</div>';
             }
           }
+        } else if (action === 'convert-section') {
+          event.preventDefault();
+          const block = target.closest('.resume-section-block');
+          if (block) convertSectionType(block.getAttribute('data-section'));
         } else if (action === 'del-section') {
           event.preventDefault();
           const block = target.closest('.resume-section-block');

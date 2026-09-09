@@ -83,16 +83,14 @@
           return {
             recordsView: parsed.recordsView === 'board' ? 'board' : 'table',
             collapsedGroups: Array.isArray(parsed.collapsedGroups) ? parsed.collapsedGroups.map(String) : [],
-            // 同企业收纳（v4.11.0）：开关 + 机构层折叠态。两个都是纯 UI 偏好，
-            // 按既有惯例只存本机 ui.v1、不进云同步 envelope。
+            // 同企业收纳开关（v4.11.0）：纯 UI 偏好，按既有惯例只存本机 ui.v1、不进云同步 envelope
             groupByCompany: !!parsed.groupByCompany,
-            collapsedUnits: Array.isArray(parsed.collapsedUnits) ? parsed.collapsedUnits.map(String) : [],
             hideGuide: !!parsed.hideGuide,
             // 洞察精简模式（v4.6.0）：只显示概览 / 需要关注 / 转化漏斗，明细块整体折叠
             insightsCompact: !!parsed.insightsCompact
           };
         } catch (_) {
-          return { recordsView: 'table', collapsedGroups: [], collapsedUnits: [], groupByCompany: false, hideGuide: false, insightsCompact: false };
+          return { recordsView: 'table', collapsedGroups: [], groupByCompany: false, hideGuide: false, insightsCompact: false };
         }
       }
       function saveUiPrefs() {
@@ -135,17 +133,6 @@
         const set = new Set(uiPrefs.collapsedGroups);
         if (set.has(value)) set.delete(value); else set.add(value);
         uiPrefs.collapsedGroups = [...set].slice(-100);
-        saveUiPrefs();
-        renderRecordsView();
-      }
-      // 机构子组折叠（v4.11.0）：键是 `${companyGroupKey}::${orgUnit}` 复合键 ——
-      // 不同企业下可以有同名机构（两家银行都有「杭州分行」），只用机构名会串台。
-      function toggleCompanyUnit(unitKey) {
-        const value = String(unitKey || '');
-        if (!value) return;
-        const set = new Set(uiPrefs.collapsedUnits);
-        if (set.has(value)) set.delete(value); else set.add(value);
-        uiPrefs.collapsedUnits = [...set].slice(-100);
         saveUiPrefs();
         renderRecordsView();
       }

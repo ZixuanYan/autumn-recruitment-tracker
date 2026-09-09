@@ -109,6 +109,14 @@ body {
 .p-body::-webkit-scrollbar-thumb { background: var(--aja-border); border-radius: var(--aja-radius-sm); }
 
 .p-section {
+  /* 【不可删】flex: 0 0 auto 是滚动能力的**前提**，删掉它整个面板就滚不动了（v5.3.1 修的就是这个）。
+     .p-body 是高度被限死（flex:1 1 auto + min-height:0）的 flex 纵向滚动容器，而 flex 子项
+     默认 flex-shrink:1 —— 内容超高时浏览器不会让它溢出去触发滚动条，而是**按比例把各段压扁**；
+     本规则又带 overflow:hidden（为了圆角裁切段头底色），压扁后多出来的内容就被直接裁掉。
+     结果是：.p-body 永不溢出 → overflow-y:auto 永不出滚动条 → 展开的段下半截够不着，
+     且控制台零报错、元素也都在 DOM 里，只是看不见。症状与老抽屉缺 min-height:0 那次一模一样，
+     但成因是另一半：那次是滚动容器自己不肯收缩，这次是子项不该收缩却收缩了。 */
+  flex: 0 0 auto;
   border: 1px solid var(--aja-border-soft);
   border-radius: var(--aja-radius-md);
   background: var(--aja-bg);

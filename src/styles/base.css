@@ -278,9 +278,12 @@
     .resume-progress-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s ease; }
     .resume-progress-hint { color: var(--muted); font-size: 12px; }
     .resume-section-block { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
-    .resume-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
+    /* 两处 flex-wrap 是 v4.11.1 加类型转换按钮后必须的：区块头现在有 计数 + 4 个按钮，
+       不换行的话窄屏下会把 h3 挤到 0 宽（CJK 允许逐字断行，标题会竖排），
+       或者按钮溢出被 .resume-section-block 的 overflow:hidden 直接裁掉 —— 两种都不报错。 */
+    .resume-block-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
     .resume-block-head h3 { margin: 0; font-size: 15px; font-family: var(--font-display); letter-spacing: .03em; }
-    .resume-block-meta { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .resume-block-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
     .resume-block-count { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .resume-block-head .btn-small { min-height: 29px; font-size: 12px; }
     .resume-block-body { padding: 13px 15px; display: grid; gap: 10px; }

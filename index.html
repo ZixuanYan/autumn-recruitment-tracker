@@ -294,9 +294,12 @@
     .resume-progress-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s ease; }
     .resume-progress-hint { color: var(--muted); font-size: 12px; }
     .resume-section-block { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
-    .resume-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
+    /* 两处 flex-wrap 是 v4.11.1 加类型转换按钮后必须的：区块头现在有 计数 + 4 个按钮，
+       不换行的话窄屏下会把 h3 挤到 0 宽（CJK 允许逐字断行，标题会竖排），
+       或者按钮溢出被 .resume-section-block 的 overflow:hidden 直接裁掉 —— 两种都不报错。 */
+    .resume-block-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
     .resume-block-head h3 { margin: 0; font-size: 15px; font-family: var(--font-display); letter-spacing: .03em; }
-    .resume-block-meta { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .resume-block-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
     .resume-block-count { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .resume-block-head .btn-small { min-height: 29px; font-size: 12px; }
     .resume-block-body { padding: 13px 15px; display: grid; gap: 10px; }
@@ -983,13 +986,6 @@
     .group-caret { color: var(--muted); font-size: 11px; }
     .group-label { border-left: 3px solid var(--company-color, var(--accent)); padding-left: 8px; }
     .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; }
-    /* 机构子组头（v4.11.0）：与企业组头同款胶囊，靠缩进与更弱的底色区分层级。
-       企业组头 padding 左 12px，机构组头 32px —— 两级都靠 padding 而不是 border/背景块，
-       否则密集表格里会形成一层层的色带，比缩进更吵。 */
-    .company-unit-row > td { padding: 2px 12px 2px 32px; background: transparent; border-top: 0; }
-    .unit-toggle { background: transparent; box-shadow: none; }
-    .unit-toggle:hover { background: var(--surface-2); }
-    .unit-label { border-left: 0; padding-left: 0; color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
     /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽 */
     .group-switch { justify-self: start; align-self: center; }
     .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
@@ -1769,7 +1765,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.11.0';
+      const APP_VERSION = '4.11.1';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2748,11 +2744,17 @@
           const addBtn = isExp
             ? `<button class="btn btn-primary btn-small" data-action="add-exp" data-section="${s}" type="button">＋ 添加</button>`
             : `<button class="btn btn-small" data-action="add-kv" data-section="${s}" type="button">自定义</button>`;
+          // 类型转换（v4.11.1）：新增区块时选错类型、或在这个能力上线**之前**建的区块，
+          // 都需要这条逃生口。后者才是用户实际撞上的：那时新增区块被硬编码成空对象，
+          // 而这里靠 Array.isArray(val) 分叉，键值型的区块结构上就拿不到「＋ 添加」按钮，
+          // 于是「新增的区块没法加多条经历」对**已存在**的区块依然成立 —— 只修新增路径等于没修。
+          const convertBtn = `<button class="btn btn-small" data-action="convert-section" data-section="${s}" type="button" title="列表型：可加多段经历，每段有多个字段，能上移 / 下移 / 复制 / 删除。键值型：一行一项。转换不丢字段；多段经历转键值型会被拒绝并提示">转为${isExp ? '键值' : '列表'}型</button>`;
           return `<div class="resume-section-block" data-section="${s}" data-type="${isExp ? 'exp' : 'kv'}">
             <div class="resume-block-head"><h3>${s}</h3><div class="resume-block-meta">
               <span class="resume-block-count" data-section="${s}">—</span>
               ${addBtn}
               <button class="btn btn-soft btn-small" data-action="open-lib" data-section="${s}" type="button">＋ 字段库</button>
+              ${convertBtn}
               <button class="btn btn-small btn-danger" data-action="del-section" data-section="${s}" type="button">删除</button>
             </div></div>
             <div class="resume-block-body" data-body="${s}"></div>
@@ -3748,17 +3750,9 @@
         </td></tr>`;
       }
 
-      // 机构子组头行。unitKey 是 `${companyGroupKey}::${orgUnit}` 复合键（两家银行都能有「杭州分行」）。
-      function companyUnitRowHtml(unitKey, unit, count, isCollapsed) {
-        return `<tr class="company-unit-row" data-unit="${escapeHtml(unitKey)}"><td colspan="8">
-          <button class="group-toggle unit-toggle" type="button" data-unit-toggle="${escapeHtml(unitKey)}" aria-expanded="${String(!isCollapsed)}">
-            <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
-            <span class="group-label unit-label">${escapeHtml(unit || '（未填机构）')}</span>
-            <span class="group-count">${count} 个岗位</span>
-          </button>
-        </td></tr>`;
-      }
-
+      // 机构（orgUnit）**不单独成层**：它已经印在每一行的公司名后面（recordRowHtml 的
+      // .company-unit），再套一层可折叠的机构组头只是把明细往右推、多一次点击，信息量为零。
+      // 所以这里只有企业组头一个层级；机构的价值在查重（公司+机构+岗位三要素）与逐行辨识上。
       function renderTable() {
         const visible = getVisibleRecords();
         // 台账编号 = 「这是我第几次投递」：按投递日期**升序**，最早的 = #0001。
@@ -3781,41 +3775,16 @@
         const grouped = !!uiPrefs.groupByCompany;
         const ordered = grouped ? clusterByCompanyGroup(visible, groupKeyById) : visible;
         const collapsed = new Set(uiPrefs.collapsedGroups);
-        const collapsedUnits = new Set(uiPrefs.collapsedUnits);
-        // 机构层的渲染决策基于**筛选后**的记录：若按 companyIndex（全量台账）算，
-        // 阶段筛选把某个机构的记录全滤掉时会渲染出一个没有任何明细行的空机构头。
-        const unitsByGroup = new Map();
-        if (grouped) {
-          for (const record of ordered) {
-            const key = groupKeyById.get(record.id) || companyGroupKey(record);
-            const unit = String(record.orgUnit || '').trim();
-            if (!unitsByGroup.has(key)) unitsByGroup.set(key, new Map());
-            const units = unitsByGroup.get(key);
-            units.set(unit, (units.get(unit) || 0) + 1);
-          }
-        }
         const rows = [];
         let lastKey = null;
-        let lastUnitKey = null;
         for (const record of ordered) {
           const key = groupKeyById.get(record.id) || companyGroupKey(record);
-          const unit = String(record.orgUnit || '').trim();
-          const unitKey = `${key}::${unit}`;
           if (grouped && key !== lastKey) {
             lastKey = key;
-            lastUnitKey = null;   // 换企业了：机构层的「上一组」必须重置，否则同名机构会被误判成连续
             const siblings = companyIndex.get(key) || [];
             rows.push(companyGroupRowHtml(key, record.company, siblings.length, collapsed.has(key)));
           }
-          if (grouped && collapsed.has(key)) continue;   // 企业折叠：机构层与明细行整体隐藏
-          // 只有同一企业内出现 **2 个以上不同 orgUnit**（空串算一种）时才渲染机构层：
-          // 单一机构或全为空时多一层缩进没有任何信息量，只是把明细往右推。
-          const showUnits = grouped && (unitsByGroup.get(key)?.size || 0) >= 2;
-          if (showUnits && unitKey !== lastUnitKey) {
-            lastUnitKey = unitKey;
-            rows.push(companyUnitRowHtml(unitKey, unit, unitsByGroup.get(key).get(unit), collapsedUnits.has(unitKey)));
-          }
-          if (showUnits && collapsedUnits.has(unitKey)) continue;
+          if (grouped && collapsed.has(key)) continue;   // 该企业已折叠：跳过它的全部明细行
           rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
         }
         els.body.innerHTML = rows.join('');
@@ -4481,16 +4450,14 @@
           return {
             recordsView: parsed.recordsView === 'board' ? 'board' : 'table',
             collapsedGroups: Array.isArray(parsed.collapsedGroups) ? parsed.collapsedGroups.map(String) : [],
-            // 同企业收纳（v4.11.0）：开关 + 机构层折叠态。两个都是纯 UI 偏好，
-            // 按既有惯例只存本机 ui.v1、不进云同步 envelope。
+            // 同企业收纳开关（v4.11.0）：纯 UI 偏好，按既有惯例只存本机 ui.v1、不进云同步 envelope
             groupByCompany: !!parsed.groupByCompany,
-            collapsedUnits: Array.isArray(parsed.collapsedUnits) ? parsed.collapsedUnits.map(String) : [],
             hideGuide: !!parsed.hideGuide,
             // 洞察精简模式（v4.6.0）：只显示概览 / 需要关注 / 转化漏斗，明细块整体折叠
             insightsCompact: !!parsed.insightsCompact
           };
         } catch (_) {
-          return { recordsView: 'table', collapsedGroups: [], collapsedUnits: [], groupByCompany: false, hideGuide: false, insightsCompact: false };
+          return { recordsView: 'table', collapsedGroups: [], groupByCompany: false, hideGuide: false, insightsCompact: false };
         }
       }
       function saveUiPrefs() {
@@ -4533,17 +4500,6 @@
         const set = new Set(uiPrefs.collapsedGroups);
         if (set.has(value)) set.delete(value); else set.add(value);
         uiPrefs.collapsedGroups = [...set].slice(-100);
-        saveUiPrefs();
-        renderRecordsView();
-      }
-      // 机构子组折叠（v4.11.0）：键是 `${companyGroupKey}::${orgUnit}` 复合键 ——
-      // 不同企业下可以有同名机构（两家银行都有「杭州分行」），只用机构名会串台。
-      function toggleCompanyUnit(unitKey) {
-        const value = String(unitKey || '');
-        if (!value) return;
-        const set = new Set(uiPrefs.collapsedUnits);
-        if (set.has(value)) set.delete(value); else set.add(value);
-        uiPrefs.collapsedUnits = [...set].slice(-100);
         saveUiPrefs();
         renderRecordsView();
       }
@@ -5706,6 +5662,38 @@
       }
 
       // 新增简历区块：名字 + 类型二选一（v4.11.0，取代原来的一行 prompt）
+      // 区块类型转换（v4.11.1）。两个方向都**不丢字段**，所以不需要二次确认：
+      //   键值型 → 列表型：现有键值对整体装进第一段经历（经历标签留空给你填）；空对象直接变空数组
+      //   列表型 → 键值型：只有 0 或 1 段时允许（把该段字段摊平，经历标签存成「经历标签」这一项）；
+      //     多段时**明确拒绝**并说清会丢几段 —— 多段经历没法摊平成一层键值对，
+      //     而静默丢掉 N-1 段正是这个项目里最不能接受的那类缺陷（不报错、事后才发现数据没了）
+      function convertSectionType(name) {
+        if (!name) return;
+        // 先收回 DOM 再改：与新增区块同一套顺序。不收回的话，用户在**别的**区块里
+        // 尚未保存的编辑会被下面的整体重渲染冲掉。
+        resume = collectResumeFromDom();
+        if (!(name in resume)) { showToast('找不到这个区块'); return; }
+        const current = resume[name];
+        const toExp = !Array.isArray(current);
+        if (toExp) {
+          const entries = Object.entries(current || {});
+          resume[name] = entries.length ? [Object.assign({ _rowName: '' }, current)] : [];
+        } else {
+          if (current.length > 1) {
+            showToast(`「${name}」有 ${current.length} 段经历，转成键值型会丢掉 ${current.length - 1} 段。请先删到只剩一段`);
+            return;
+          }
+          const flat = {};
+          for (const [k, v] of Object.entries(current[0] || {})) flat[k === '_rowName' ? '经历标签' : k] = v;
+          resume[name] = flat;
+        }
+        // 这里**必须**整体重渲染（与字段级删除刻意只动 DOM 相反）：类型变了，
+        // 区块的 data-type、头部按钮（＋ 添加 / 自定义）与 body 的整套结构都要换，
+        // 局部改 DOM 只会留下一个「按钮是列表型、body 还是键值行」的半新半旧状态。
+        renderResumeEditor();
+        showToast(`「${name}」已转为${toExp ? '列表' : '键值'}型，点「保存简历」后写入 JSON`);
+      }
+
       function openSectionDialog() {
         const dialog = $('#sectionDialog');
         if (!dialog) return;
@@ -6400,9 +6388,6 @@
         // 公司分组折叠开关（只在「按公司聚合」排序时出现）
         const groupToggle = event.target.closest('button[data-group-toggle]');
         if (groupToggle) { toggleCompanyGroup(groupToggle.dataset.groupToggle); return; }
-        // 机构子组头（v4.11.0）：与企业组头是两个独立的折叠态，键也不同（复合键）
-        const unitToggle = event.target.closest('button[data-unit-toggle]');
-        if (unitToggle) { toggleCompanyUnit(unitToggle.dataset.unitToggle); return; }
         const button = event.target.closest('button[data-action]');
         if (!button) {
           // 点公司 / 岗位单元格 → 打开详情抽屉；点链接仍走原生跳转（不打断）
@@ -6744,6 +6729,10 @@
               parent.innerHTML = '<div class="resume-empty-hint">还没有经历，点「＋ 添加」开始</div>';
             }
           }
+        } else if (action === 'convert-section') {
+          event.preventDefault();
+          const block = target.closest('.resume-section-block');
+          if (block) convertSectionType(block.getAttribute('data-section'));
         } else if (action === 'del-section') {
           event.preventDefault();
           const block = target.closest('.resume-section-block');

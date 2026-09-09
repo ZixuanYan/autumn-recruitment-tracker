@@ -63,7 +63,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.11.0';
+      const APP_VERSION = '4.11.1';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1042,11 +1042,17 @@
           const addBtn = isExp
             ? `<button class="btn btn-primary btn-small" data-action="add-exp" data-section="${s}" type="button">＋ 添加</button>`
             : `<button class="btn btn-small" data-action="add-kv" data-section="${s}" type="button">自定义</button>`;
+          // 类型转换（v4.11.1）：新增区块时选错类型、或在这个能力上线**之前**建的区块，
+          // 都需要这条逃生口。后者才是用户实际撞上的：那时新增区块被硬编码成空对象，
+          // 而这里靠 Array.isArray(val) 分叉，键值型的区块结构上就拿不到「＋ 添加」按钮，
+          // 于是「新增的区块没法加多条经历」对**已存在**的区块依然成立 —— 只修新增路径等于没修。
+          const convertBtn = `<button class="btn btn-small" data-action="convert-section" data-section="${s}" type="button" title="列表型：可加多段经历，每段有多个字段，能上移 / 下移 / 复制 / 删除。键值型：一行一项。转换不丢字段；多段经历转键值型会被拒绝并提示">转为${isExp ? '键值' : '列表'}型</button>`;
           return `<div class="resume-section-block" data-section="${s}" data-type="${isExp ? 'exp' : 'kv'}">
             <div class="resume-block-head"><h3>${s}</h3><div class="resume-block-meta">
               <span class="resume-block-count" data-section="${s}">—</span>
               ${addBtn}
               <button class="btn btn-soft btn-small" data-action="open-lib" data-section="${s}" type="button">＋ 字段库</button>
+              ${convertBtn}
               <button class="btn btn-small btn-danger" data-action="del-section" data-section="${s}" type="button">删除</button>
             </div></div>
             <div class="resume-block-body" data-body="${s}"></div>
@@ -2042,17 +2048,9 @@
         </td></tr>`;
       }
 
-      // 机构子组头行。unitKey 是 `${companyGroupKey}::${orgUnit}` 复合键（两家银行都能有「杭州分行」）。
-      function companyUnitRowHtml(unitKey, unit, count, isCollapsed) {
-        return `<tr class="company-unit-row" data-unit="${escapeHtml(unitKey)}"><td colspan="8">
-          <button class="group-toggle unit-toggle" type="button" data-unit-toggle="${escapeHtml(unitKey)}" aria-expanded="${String(!isCollapsed)}">
-            <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
-            <span class="group-label unit-label">${escapeHtml(unit || '（未填机构）')}</span>
-            <span class="group-count">${count} 个岗位</span>
-          </button>
-        </td></tr>`;
-      }
-
+      // 机构（orgUnit）**不单独成层**：它已经印在每一行的公司名后面（recordRowHtml 的
+      // .company-unit），再套一层可折叠的机构组头只是把明细往右推、多一次点击，信息量为零。
+      // 所以这里只有企业组头一个层级；机构的价值在查重（公司+机构+岗位三要素）与逐行辨识上。
       function renderTable() {
         const visible = getVisibleRecords();
         // 台账编号 = 「这是我第几次投递」：按投递日期**升序**，最早的 = #0001。
@@ -2075,41 +2073,16 @@
         const grouped = !!uiPrefs.groupByCompany;
         const ordered = grouped ? clusterByCompanyGroup(visible, groupKeyById) : visible;
         const collapsed = new Set(uiPrefs.collapsedGroups);
-        const collapsedUnits = new Set(uiPrefs.collapsedUnits);
-        // 机构层的渲染决策基于**筛选后**的记录：若按 companyIndex（全量台账）算，
-        // 阶段筛选把某个机构的记录全滤掉时会渲染出一个没有任何明细行的空机构头。
-        const unitsByGroup = new Map();
-        if (grouped) {
-          for (const record of ordered) {
-            const key = groupKeyById.get(record.id) || companyGroupKey(record);
-            const unit = String(record.orgUnit || '').trim();
-            if (!unitsByGroup.has(key)) unitsByGroup.set(key, new Map());
-            const units = unitsByGroup.get(key);
-            units.set(unit, (units.get(unit) || 0) + 1);
-          }
-        }
         const rows = [];
         let lastKey = null;
-        let lastUnitKey = null;
         for (const record of ordered) {
           const key = groupKeyById.get(record.id) || companyGroupKey(record);
-          const unit = String(record.orgUnit || '').trim();
-          const unitKey = `${key}::${unit}`;
           if (grouped && key !== lastKey) {
             lastKey = key;
-            lastUnitKey = null;   // 换企业了：机构层的「上一组」必须重置，否则同名机构会被误判成连续
             const siblings = companyIndex.get(key) || [];
             rows.push(companyGroupRowHtml(key, record.company, siblings.length, collapsed.has(key)));
           }
-          if (grouped && collapsed.has(key)) continue;   // 企业折叠：机构层与明细行整体隐藏
-          // 只有同一企业内出现 **2 个以上不同 orgUnit**（空串算一种）时才渲染机构层：
-          // 单一机构或全为空时多一层缩进没有任何信息量，只是把明细往右推。
-          const showUnits = grouped && (unitsByGroup.get(key)?.size || 0) >= 2;
-          if (showUnits && unitKey !== lastUnitKey) {
-            lastUnitKey = unitKey;
-            rows.push(companyUnitRowHtml(unitKey, unit, unitsByGroup.get(key).get(unit), collapsedUnits.has(unitKey)));
-          }
-          if (showUnits && collapsedUnits.has(unitKey)) continue;
+          if (grouped && collapsed.has(key)) continue;   // 该企业已折叠：跳过它的全部明细行
           rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
         }
         els.body.innerHTML = rows.join('');

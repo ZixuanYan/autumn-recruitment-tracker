@@ -1081,4 +1081,33 @@ check('shared/ 进了 dist 白名单与 APP_SHELL，且两边一一对应', () =
   }
 });
 
+check('panel.css 的 .p-section 必须 flex: 0 0 auto（删了它整个 Side Panel 就滚不动）', () => {
+  // 失效模式完全静默：.p-body 是高度被限死的 flex 纵向滚动容器，子项默认可收缩，
+  // 于是内容超高时浏览器**压扁子项**而不是让它溢出；.p-section 又带 overflow:hidden，
+  // 被压扁后多出的内容直接裁掉 → .p-body 永不溢出 → overflow-y:auto 永不出滚动条。
+  // 控制台零报错、元素都在 DOM 里，只是够不着。v5.0.0 起就潜伏着（默认全折叠时高度不够触发），
+  // 用户展开暂存箱才复现，报上来的症状是"打开后不能下滑"。
+  const m = /\.p-section\s*\{[^}]*\}/.exec(SRC.panelCss);
+  assert.ok(m, 'panel.css 里找不到 .p-section 规则');
+  // 剥掉 CSS 注释再断言。本规则的注释里就写着「flex: 0 0 auto 是滚动能力的前提」来解释为什么，
+  // 不剥的话**把声明删掉守卫依然绿** —— 第一次做 negative test 时正是这样漏过去的。
+  // 同一个坑在 web-check.js 的 del-exp-field 守卫上踩过一次（那里是 JS 行注释），
+  // 规律是：凡 negative 断言扫源码文本，就必须先剥注释，否则解释性注释会替被删的代码"顶罪"。
+  const decls = m[0].replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(/flex:\s*0 0 auto/.test(decls) || /flex-shrink:\s*0/.test(decls),
+    '.p-section 必须声明 flex: 0 0 auto（或 flex-shrink: 0），否则在 .p-body 里会被压扁、内容被 overflow:hidden 裁掉，面板滚不动');
+  // 滚动容器自身那半也不能少：min-height:0 是让 flex 子项肯收缩到内容以下的前提
+  const body = /\.p-body\s*\{[^}]*\}/.exec(SRC.panelCss);
+  assert.ok(body, 'panel.css 里找不到 .p-body 规则');
+  const bodyDecls = body[0].replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(/overflow-y:\s*auto/.test(bodyDecls), '.p-body 必须是滚动容器');
+  assert.ok(/min-height:\s*0/.test(bodyDecls), '.p-body 必须有 min-height:0，否则它自己不肯收缩、滚动同样失效');
+});
+
+check('panel.html 的区块 id 齐全（顺序断言与桩初始化都按 id 定位）', () => {
+  for (const id of ['p-sec-capture', 'p-sec-resume', 'p-sec-pending']) {
+    assert.ok(SRC.panelHtml.includes(`id="${id}"`), `panel.html 缺 ${id}`);
+  }
+});
+
 runAll();

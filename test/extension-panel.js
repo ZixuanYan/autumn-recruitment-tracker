@@ -632,6 +632,32 @@ check('段落折叠：点击段头翻转 hidden 与 aria-expanded', async () => 
   assert.strictEqual(el('p-pend-body').hidden, true, '再点应收起');
   // 一键收录段默认展开
   assert.strictEqual(el('p-cap-body').hidden, false, '一键收录应默认展开（主操作）');
+  // 简历字段也默认展开（v5.3.1）：它是网申页上的高频操作（点字段速填），
+  // 折叠着等于每次打开面板都要多点一下；暂存箱反而是事后待办，留在折叠态。
+  assert.strictEqual(el('p-res-body').hidden, false, '简历字段应默认展开');
+  assert.strictEqual(el('p-res-head').getAttribute('aria-expanded'), 'true', 'aria-expanded 要与 hidden 一致');
+});
+
+check('panel.html 的区块顺序：一键收录 → 简历字段 → 暂存箱（v5.3.1）', () => {
+  // 顺序写在 HTML 里、panel.js 全部按 id 取元素，所以重排是安全的；但也因此**没有任何运行时
+  // 信号**能发现顺序被改回去 —— 只能靠这条静态断言。放错的症状是高频的简历字段被挤到
+  // 需要滚一屏才够得着，属纯体验退化、不报错。
+  const src = read('panel/panel.html');
+  const ids = ['p-sec-capture', 'p-sec-resume', 'p-sec-pending'];
+  const at = ids.map(id => src.indexOf(`id="${id}"`));
+  assert.ok(at.every(i => i > 0), `三个区块都要有 id，实际位置 ${JSON.stringify(at)}`);
+  assert.ok(at[0] < at[1] && at[1] < at[2],
+    `顺序应为 一键收录 → 简历字段 → 暂存箱，实际位置 ${JSON.stringify(at)}`);
+  // 默认展开态也在 HTML 属性里（面板不持久化折叠状态），一并钉住
+  const tagOf = (id) => {
+    const m = new RegExp(`<[^>]*\\bid="${id}"[^>]*>`).exec(src);
+    assert.ok(m, `panel.html 里找不到 id="${id}" 的标签`);
+    return m[0];
+  };
+  for (const [head, body, wantOpen] of [['p-cap-head', 'p-cap-body', true], ['p-res-head', 'p-res-body', true], ['p-pend-head', 'p-pend-body', false]]) {
+    assert.strictEqual(/aria-expanded="true"/.test(tagOf(head)), wantOpen, `${head} 的默认展开态应为 ${wantOpen}`);
+    assert.strictEqual(!/\bhidden\b/.test(tagOf(body)), wantOpen, `${body} 的 hidden 必须与 aria-expanded 一致（不一致就是"看着展开了但内容不在"/反之）`);
+  }
 });
 
 check('storage.onChanged：网页版下发简历 / 迷你卡片存暂存，面板都自动刷新', async () => {

@@ -1486,12 +1486,15 @@ check('同企业收纳是独立开关、与排序解耦（排序下拉不得再�
   assert.ok(/const grouped = !!uiPrefs\.groupByCompany;/.test(html), 'renderTable 必须读开关而不是排序值');
   assert.ok(/function clusterByCompanyGroup\(/.test(html),
     '开关 ON 时要先把同企业记录聚拢：非公司类排序下它们本来就不相邻，逐行遍历会插出重复组头');
-  assert.ok(/function toggleCompanyUnit\(/.test(html), '机构层要能独立折叠');
-  assert.ok(/collapsedUnits/.test(html), '机构折叠态要持久化');
-  assert.ok(/\$\{key\}::\$\{unit\}/.test(html),
-    '机构折叠键必须是 企业::机构 的复合键（两家银行都能有「杭州分行」，只用机构名会串台）');
-  assert.ok(/unitsByGroup\.get\(key\)\?\.size \|\| 0\) >= 2/.test(html),
-    '机构层只在同一企业内有 2 个以上不同机构时渲染，否则只是多一层没信息量的缩进');
+  // v4.11.1 删掉了机构层（每行本来就显示机构名，再套一层折叠组头信息量为零）。
+  // 三条反向断言钉住它不会被顺手加回来 —— 加回来的症状只是台账多一层缩进 + 多一个
+  // 没人需要的持久化偏好键，构建全绿、控制台零报错，属于典型的"不报错型"退化。
+  // 注意：这里刻意用标识符而不是中文词做断言，所以源码的解释性注释里不要写出这三个标识符。
+  assert.ok(!/companyUnitRowHtml/.test(html), '机构子组头的渲染函数应已删除');
+  assert.ok(!/data-unit-toggle/.test(html), '机构折叠按钮与它的事件分支应已删除');
+  assert.ok(!/collapsedUnits/.test(html), '机构折叠态偏好应已删除（留着就是没人读的僵尸键）');
+  // 但 orgUnit 的**行内展示**必须留着：删机构层不等于删机构
+  assert.ok(/class="company-unit"/.test(html), '每行公司名后面的机构标注必须保留');
 });
 
 check('orgUnit 全链路：normalizeRecord 携带、表单可填、编辑能回填、查重纳入判定', () => {
@@ -1544,6 +1547,25 @@ check('新增简历区块走应用内弹窗选类型，不得回到 prompt + 硬
   // 否则空的列表型区块保存一次就退化成键值型
   assert.ok(/block\.getAttribute\('data-type'\) === 'exp'/.test(html),
     'collectResumeFromDom 必须按 data-type 判类型，空的列表型区块才不会退化成键值型');
+});
+
+check('简历区块类型可转换：按钮与分支都在，且多段经历转键值型会被拒绝（不静默丢数据）', () => {
+  // 这条守的是上一轮修复的**缺口**：只修「新增区块时能选类型」，对在此之前就已经
+  // 以键值型存进 JSON 的区块毫无帮助 —— 渲染靠 Array.isArray 分叉，那些区块永远
+  // 拿不到「＋ 添加」，用户报的症状原样复现。所以转换入口是必需的，不是可选优化。
+  assert.ok(/data-action="convert-section"/.test(html), '区块头要有类型转换按钮');
+  assert.ok(/action === 'convert-section'/.test(html), '要有对应的事件分支');
+  const fn = /function convertSectionType\([\s\S]*?\n      \}/.exec(html);
+  assert.ok(fn, '找不到 convertSectionType 的实现');
+  // 剥掉行注释再断言：函数体里的注释就写着「必须整体重渲染」，负向/正向断言都会被它干扰
+  const code = fn[0].replace(/\/\/[^\n]*/g, '');
+  assert.ok(/collectResumeFromDom\(\)/.test(code),
+    '转换前必须先收回 DOM，否则用户在别的区块里未保存的编辑会被整体重渲染冲掉');
+  assert.ok(/current\.length > 1/.test(code), '多段经历转键值型必须被拒绝（摊平会丢掉 N-1 段）');
+  assert.ok(/Object\.assign\(\{ _rowName: '' \}, current\)/.test(code),
+    '键值型转列表型要把现有键值对装进第一段经历，不能直接给空数组（那等于删数据）');
+  assert.ok(/renderResumeEditor\(\)/.test(code),
+    '转换后必须整体重渲染：类型变了，data-type、头部按钮与 body 结构都要换');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
