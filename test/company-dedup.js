@@ -339,7 +339,7 @@ check('同公司不同岗位 → same-company；不同公司/空公司 → null'
 
 check('同链接优先判 duplicate（不看公司岗位）', () => {
   const res = web.findDuplicateRecord(
-    [{ id: '1', company: '别家', position: '别的', applicationUrl: 'https://x/a', batch: '' }],
+    [{ id: '1', company: '别家', position: '别的', applicationUrl: 'https://x/a' }],
     { company: '腾讯', position: '后端', applicationUrl: 'https://x/a' }
   );
   assert.strictEqual(res.mode, 'duplicate');

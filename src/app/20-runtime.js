@@ -39,7 +39,7 @@
           const r = matches[0];
           matchHtml = `<div class="mail-match single" data-target-id="${escapeHtml(r.id)}">匹配到台账：<strong>${escapeHtml(r.company)}</strong> · ${escapeHtml(r.position)}（当前阶段：${escapeHtml(r.stage)}）</div>`;
         } else if (matches.length > 1) {
-          matchHtml = `<div class="mail-match multi"><label>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），请选择目标：<select class="control mail-target-select">${orderedMatches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}${r.batch ? `（${escapeHtml(r.batch)}）` : ''} · ${escapeHtml(r.stage)}</option>`).join('')}</select></label></div>`;
+          matchHtml = `<div class="mail-match multi"><label>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），请选择目标：<select class="control mail-target-select">${orderedMatches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}${r.orgUnit ? `（${escapeHtml(r.orgUnit)}）` : ''} · ${escapeHtml(r.stage)}</option>`).join('')}</select></label></div>`;
         } else {
           matchHtml = '<div class="mail-match none">未匹配到台账记录——可「新建记录」并预填邮件信息（走人工补全），或忽略。</div>';
         }
@@ -433,11 +433,6 @@
       function populateSelects() {
         // 阶段组合框预设候选（时间线编辑器与推进自定义共用）
         $('#stagePresets').innerHTML = STAGE_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
-        // 批次 / 渠道候选（v4.4.0）：datalist 允许自由输入，取不到元素时静默跳过
-        const batchList = $('#batchPresets');
-        if (batchList) batchList.innerHTML = BATCH_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
-        const channelList = $('#channelPresets');
-        if (channelList) channelList.innerHTML = CHANNEL_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
         // 企业性质（v4.6.0）：选项由 COMPANY_TYPES 生成，HTML 里只留「未设置」，避免两处枚举漂移
         const companyTypeSelect = $('#companyType');
         if (companyTypeSelect) {
@@ -547,7 +542,7 @@
         renderTimelineEditor(source);
         // 回填字段清单：新增任何表单字段都必须同步加进这里，否则「编辑」时该字段会被静默清空。
         // 取不到元素时跳过（null 安全），便于分阶段加字段。
-        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
+        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'referral', 'intent', 'salary']) {
           const input = document.getElementById(field);
           if (!input) continue;
           // intent 是下拉框：0（未设）要映射成空字符串，否则 select 会落在无匹配项的状态
@@ -555,9 +550,11 @@
           input.value = field === 'intent' ? (Number(raw) > 0 ? String(Number(raw)) : '') : (raw ?? '');
         }
         // 已填过任一「更多字段」时自动展开折叠区，避免用户以为数据丢了
-        // （意向度与企业性质已上移到主网格，不再参与这里的判定）
+        // （意向度与企业性质已上移到主网格、批次与渠道已在 v4.11.0 删除，都不再参与判定。
+        //   折叠区现在只剩内推人与薪资两项 —— 刻意保留折叠：这两项是低频字段，
+        //   平铺会让新增弹窗的常用路径变长，而「已填过就自动展开」已经解决了"以为数据丢了"。）
         const more = $('#formMore');
-        if (more) more.open = !!source && ['batch', 'channel', 'referral', 'salary'].some(f => String(source[f] || '').trim());
+        if (more) more.open = !!source && ['referral', 'salary'].some(f => String(source[f] || '').trim());
         updateSameCompanyHint(); // 打开即显示「该公司已有哪几个岗位」，录入第二个岗位时心里有数
         updateOrgSplitHint();    // 公司名带「XX分行」时给出「拆成企业 + 机构」的建议（不自动执行）
         els.dialog.showModal();

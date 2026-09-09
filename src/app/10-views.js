@@ -19,11 +19,11 @@
           return { action: 'add', target: null, hint: countHint };
         }
         const target = dup.matches[0];
-        const targetLabel = `${target.company} · ${target.position}${target.batch ? `（${target.batch}）` : ''}`;
+        const targetLabel = `${target.company} · ${target.position}${target.orgUnit ? `（${target.orgUnit}）` : ''}`;
         if (dup.mode === 'variant') {
-          // 疑似同一岗位的不同方向 / 城市 / 批次：绝大多数情况确实是两条独立投递，故主按钮是「新增」
+          // 疑似同一岗位的不同方向 / 城市 / 机构：绝大多数情况确实是两条独立投递，故主按钮是「新增」
           const isSeparate = await confirmInApp(
-            `${label} 已有相似岗位「${targetLabel}」（当前阶段：${target.stage}）。\n\n这条是不同方向 / 城市 / 批次的独立投递吗？`,
+            `${label} 已有相似岗位「${targetLabel}」（当前阶段：${target.stage}）。\n\n这条是不同方向 / 城市 / 机构的独立投递吗？`,
             { title: '疑似同岗位不同方向', confirmText: '是独立投递，新增', cancelText: '其实是同一条，编辑已有' }
           );
           if (lastConfirmOutcome() === 'dismiss') return { action: 'cancel', target: null, hint: '' };
@@ -57,7 +57,7 @@
         const items = siblings.slice(0, 4).map(record => {
           // 与当前正在填的岗位「宽松相等」→ 标黄，提示保存时会再确认一次是不是同一条
           const similar = loose.length >= 2 && loosePositionSlug(record.position) === loose;
-          return `<span class="same-company-item${similar ? ' is-similar' : ''}">${escapeHtml(record.position || '未填岗位')}${record.batch ? `（${escapeHtml(record.batch)}）` : ''} · ${escapeHtml(record.stage)}</span>`;
+          return `<span class="same-company-item${similar ? ' is-similar' : ''}">${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? `（${escapeHtml(record.orgUnit)}）` : ''} · ${escapeHtml(record.stage)}</span>`;
         }).join('');
         const more = siblings.length > 4 ? `<span class="same-company-more">等 ${siblings.length} 个</span>` : '';
         box.innerHTML = `该公司已有 ${siblings.length} 个岗位：${items}${more}`;
@@ -229,7 +229,8 @@
         const schedule = parseLocal(record.scheduleAt);
         const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
         const chips = [];
-        if (record.batch) chips.push(`<span class="board-chip">${escapeHtml(record.batch)}</span>`);
+        // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
+        // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
         if (dl && !dlClosed) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
         if (schedule && !dlClosed) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
         if (stalled) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
@@ -394,7 +395,7 @@
         if (!record) { closeRecordDrawer(); return; }
         if (title) title.textContent = `${record.company} · ${record.position || '未填岗位'}`;
         if (sub) {
-          const bits = [record.city, record.orgUnit, record.batch, record.channel].filter(Boolean);
+          const bits = [record.city, record.orgUnit].filter(Boolean);
           // 企业性质用带色徽章紧跟阶段徽章；facts 里的 value 是 HTML，两处都能安全注入
           sub.innerHTML = `<span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>${companyTypeChipHtml(record.companyType)} ${escapeHtml(bits.join(' · '))}`;
         }
@@ -408,12 +409,10 @@
           // 放在末尾会让人先读完一圈日期与阶段才知道这条到底属于哪个分行。
           { label: '机构', value: record.orgUnit || '—' },
           { label: '投递日期', value: formatDate(record.applicationDate) },
-          { label: '批次', value: record.batch || '—' },
           { label: '企业性质', value: companyTypeChipHtml(record.companyType) || '<span class="muted-text">未设置</span>' },
           { label: '安排时间', value: record.scheduleAt ? formatDateTime(record.scheduleAt) : '—' },
           { label: '截止日期', value: record.deadline ? `${formatDate(record.deadline)}${dl ? `（${dl.text.replace('截止 · ', '')}）` : ''}` : '—' },
           { label: '意向度', value: record.intent ? `${record.intent} / 5` : '未设' },
-          { label: '渠道', value: record.channel || '—' },
           { label: '内推人', value: record.referral || '—' },
           { label: '薪资 / 待遇', value: record.salary || '—' },
           { label: '投递网址', value: record.applicationUrl ? '<a class="company-link" href="' + escapeHtml(record.applicationUrl) + '" target="_blank" rel="noopener noreferrer">打开 ↗</a>' : '—' }
@@ -441,7 +440,7 @@
               </div>
             </div>
             ${others.length ? `<div class="drawer-section"><h3>同公司其它投递（${others.length}）</h3><div class="sibling-list">${others.map(item => `
-              <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(item.position || '未填岗位')}${item.batch ? ` · ${escapeHtml(item.batch)}` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
+              <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(item.position || '未填岗位')}${item.orgUnit ? ` · ${escapeHtml(item.orgUnit)}` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
         }
         if (actions) {
           actions.innerHTML = `
@@ -505,7 +504,7 @@
         const q = String(query || '').trim().toLowerCase();
         const items = [];
         const matched = q
-          ? records.filter(record => `${record.company} ${record.orgUnit || ''} ${record.position} ${record.batch} ${record.city}`.toLowerCase().includes(q))
+          ? records.filter(record => `${record.company} ${record.orgUnit || ''} ${record.position} ${record.city}`.toLowerCase().includes(q))
           : records.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 5);
         for (const record of matched.slice(0, 8)) {
           items.push({

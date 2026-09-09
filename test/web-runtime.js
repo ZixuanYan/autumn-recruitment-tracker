@@ -577,9 +577,9 @@ function seedRecords() {
   // 分组相关的 UI 偏好一并复位（见上面的说明：uiPrefs 只能用 runInContext 改）
   vm.runInContext('uiPrefs.groupByCompany = false; uiPrefs.collapsedGroups = []; uiPrefs.collapsedUnits = [];', sandbox2);
   sandbox2.records = [
-    { id: 'r1', company: '腾讯', position: '后端', city: '深圳', stage: '一面', batch: '提前批', intent: 4, deadline: '', scheduleAt: '', applicationDate: '2026-09-01', updatedAt: 30, timeline: [{ stage: '已投递', at: '2026-09-01', note: '' }, { stage: '一面', at: '2026-09-04', note: '业务面' }], notes: [{ id: 'n1', at: 1, text: '问了项目难点' }], nextAction: '准备二面' },
-    { id: 'r2', company: '腾讯科技有限公司', position: '前端', city: '深圳', stage: '已投递', batch: '', intent: 0, deadline: '', scheduleAt: '', applicationDate: '2026-09-02', updatedAt: 20, timeline: [{ stage: '已投递', at: '2026-09-02', note: '' }], notes: [], nextAction: '' },
-    { id: 'r3', company: '阿里', position: '算法', city: '杭州', stage: 'Offer', batch: '', intent: 5, deadline: '', scheduleAt: '', applicationDate: '2026-08-20', updatedAt: 10, timeline: [{ stage: '已投递', at: '2026-08-20', note: '' }, { stage: 'Offer', at: '2026-09-03', note: '' }], notes: [], nextAction: '谈薪' }
+    { id: 'r1', company: '腾讯', position: '后端', city: '深圳', stage: '一面', orgUnit: '云计算事业部', intent: 4, deadline: '', scheduleAt: '', applicationDate: '2026-09-01', updatedAt: 30, timeline: [{ stage: '已投递', at: '2026-09-01', note: '' }, { stage: '一面', at: '2026-09-04', note: '业务面' }], notes: [{ id: 'n1', at: 1, text: '问了项目难点' }], nextAction: '准备二面' },
+    { id: 'r2', company: '腾讯科技有限公司', position: '前端', city: '深圳', stage: '已投递', orgUnit: '', intent: 0, deadline: '', scheduleAt: '', applicationDate: '2026-09-02', updatedAt: 20, timeline: [{ stage: '已投递', at: '2026-09-02', note: '' }], notes: [], nextAction: '' },
+    { id: 'r3', company: '阿里', position: '算法', city: '杭州', stage: 'Offer', orgUnit: '', intent: 5, deadline: '', scheduleAt: '', applicationDate: '2026-08-20', updatedAt: 10, timeline: [{ stage: '已投递', at: '2026-08-20', note: '' }, { stage: 'Offer', at: '2026-09-03', note: '' }], notes: [], nextAction: '谈薪' }
   ];
 }
 
@@ -607,14 +607,17 @@ check('renderBoard 渲染列与卡片，同公司卡片共用 companyColor', () 
   assert.notStrictEqual(colorOf('r1'), colorOf('r3'));
 });
 
-check('boardCardHtml 带批次 chip 与意向度点', () => {
+check('boardCardHtml 带机构与意向度点（批次 chip 已随字段删除）', () => {
   seedRecords();
   const h = sandbox2.boardCardHtml(sandbox2.records[0]);
-  assert.ok(h.includes('board-chip">提前批'), '批次 chip');
+  // 机构跟在卡片的公司名后面（.board-card-unit），刻意不做成 chip：
+  // 公司名 + 机构 + chip 会让同一信息在一张 232px 的卡上出现两次。
+  assert.ok(h.includes('board-card-unit'), '有机构容器');
+  assert.ok(h.includes('云计算事业部'), '且显示实际机构值');
   assert.ok(h.includes('intent-dots'), '意向度点');
   assert.ok(h.includes('draggable="true"'));
-  const noBatch = sandbox2.boardCardHtml(sandbox2.records[2]);
-  assert.ok(!noBatch.includes('board-chip">提前批'));
+  const noUnit = sandbox2.boardCardHtml(sandbox2.records[2]);
+  assert.ok(!noUnit.includes('board-card-unit'), '没填机构时不渲染空容器');
 });
 
 check('setRecordsView 切换容器可见性 / 按钮态，并把偏好写进 localStorage', () => {
@@ -702,7 +705,7 @@ check('toggleCompanyGroup 折叠态持久化，且收纳开启时折叠组不渲
   assert.ok(sandbox2.els.body.innerHTML.includes('data-id="r1"'), '再次点击展开');
 });
 
-check('recordRowHtml：同公司 +N 岗位 chip、批次、截止倒计时分级', () => {
+check('recordRowHtml：同公司 +N 岗位 chip、机构、截止倒计时分级', () => {
   seedRecords();
   // 截止日按「今天 +2 天」动态生成，避免测试随真实日期漂移而失效
   const soon = new Date(Date.now() + 2 * 86400000);
@@ -714,7 +717,8 @@ check('recordRowHtml：同公司 +N 岗位 chip、批次、截止倒计时分级
   const h = sandbox2.recordRowHtml(sandbox2.records[0], rowNo, index, groupKeyById);
   assert.ok(h.includes('company-chip'), '同公司多岗位应有 chip');
   assert.ok(h.includes('+1 岗位'), 'chip 显示除自己以外的岗位数');
-  assert.ok(h.includes('提前批'), '岗位行显示批次');
+  assert.ok(h.includes('company-unit'), '公司列有机构容器');
+  assert.ok(h.includes('云计算事业部'), '且显示实际机构值');
   assert.ok(h.includes('deadline-hint warn'), '2 天内截止 → warn 配色');
   assert.strictEqual(groupKeyById.get('r1'), groupKeyById.get('r2'), '腾讯与腾讯科技有限公司同组');
   const solo = sandbox2.recordRowHtml(sandbox2.records[2], rowNo, index, groupKeyById);
@@ -908,8 +912,8 @@ check('buildCmdItems 空 query 给默认清单；有 query 时过滤记录/视�
   const byName = sandbox2.buildCmdItems('阿里');
   assert.ok(byName.some(i => i.group === '记录' && i.label.includes('阿里')));
   assert.ok(!byName.some(i => i.label.includes('腾讯')), '不匹配的记录被过滤');
-  const byBatch = sandbox2.buildCmdItems('提前批');
-  assert.ok(byBatch.some(i => i.group === '记录'), '批次也可被搜到');
+  const byUnit = sandbox2.buildCmdItems('云计算事业部');
+  assert.ok(byUnit.some(i => i.group === '记录'), '机构也可被搜到（批次字段已删除，搜的是机构）');
   assert.ok(sandbox2.buildCmdItems('zzz不存在').length === 0);
 });
 
@@ -1019,7 +1023,7 @@ check('Offer 对比矩阵：<2 个隐藏，≥2 个按意向度降序显示', ()
   seedRecords();
   sandbox2.renderOfferMatrix();
   assert.strictEqual(els2['#offerMatrixWrap'].hidden, true, '只有 1 个 Offer 时不显示');
-  sandbox2.records.push({ id: 'r4', company: '字节', position: '后端', city: '北京', stage: 'Offer', intent: 3, salary: '30k×15', deadline: '2026-09-30', batch: '', notes: [], nextAction: '考虑中', timeline: [{ stage: 'Offer', at: '2026-09-04', note: '' }], applicationDate: '2026-09-01', updatedAt: 5 });
+  sandbox2.records.push({ id: 'r4', company: '字节', position: '后端', city: '北京', stage: 'Offer', intent: 3, salary: '30k×15', deadline: '2026-09-30', notes: [], nextAction: '考虑中', timeline: [{ stage: 'Offer', at: '2026-09-04', note: '' }], applicationDate: '2026-09-01', updatedAt: 5 });
   sandbox2.renderOfferMatrix();
   assert.strictEqual(els2['#offerMatrixWrap'].hidden, false);
   const h = els2['#offerMatrix'].innerHTML;
@@ -1036,7 +1040,7 @@ check('多岗位公司清单：每家一个岗位时隐藏，有多岗位时列�
   assert.ok(h.includes('multi-company'), '有清单容器');
   assert.ok(h.includes('2 个岗位'), '标出岗位数');
   assert.ok(h.includes('data-id="r1"') && h.includes('data-id="r2"'), '两个岗位都可点开');
-  assert.ok(h.includes('提前批'), '带批次');
+  assert.ok(h.includes('云计算事业部'), '带机构');
   assert.ok(h.includes('--company-color:#'), '带公司标识色');
   assert.strictEqual(els2['#multiCompanyNote'].textContent, '1 家公司投了多个岗位');
   // 只剩互不相同的公司时应隐藏
@@ -1113,13 +1117,13 @@ function formEntries(overrides = {}) {
   const base = {
     company: '腾讯', position: '前端', city: '深圳', applicationDate: '2026-09-06',
     applicationUrl: '', scheduleAt: '', deadline: '', recentSchedule: '', nextAction: '',
-    orgUnit: '', batch: '', channel: '', referral: '', intent: '', salary: ''
+    orgUnit: '', referral: '', intent: '', salary: ''
   };
   return Object.entries(Object.assign(base, overrides));
 }
 
 check('submitForm：同公司不同岗位 → 新增成功，且提示并入保存 toast（不被顶掉）', async () => {
-  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   sandbox2.editingId = null;
   sandbox2.els.form._entries = formEntries({ position: '前端' });
   calls.saveRecords.length = 0; calls.confirm.length = 0; calls.toast.length = 0;
@@ -1178,9 +1182,9 @@ check('submitForm：variant 选「其实是同一条」→ 打开既有记录、
 });
 
 check('submitForm：确认框被 Esc/点遮罩关掉 → 中止入库，什么都不写', async () => {
-  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   sandbox2.editingId = null;
-  sandbox2.els.form._entries = formEntries({ position: '后端', batch: '' });
+  sandbox2.els.form._entries = formEntries({ position: '后端' });
   calls.confirm.length = 0; calls.openDialog.length = 0; calls.saveRecords.length = 0;
   confirmAnswer = false; confirmOutcomeValue = 'dismiss';
   await sandbox2.submitForm({ preventDefault() {} });
@@ -1191,7 +1195,7 @@ check('submitForm：确认框被 Esc/点遮罩关掉 → 中止入库，什么�
 });
 
 check('submitForm：同一家公司的第二个岗位（括号里是不同城市）能录进去 —— 用户报告的核心场景', async () => {
-  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端开发工程师（深圳）', batch: '', stage: '一面', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端开发工程师（深圳）', stage: '一面', applicationUrl: '', updatedAt: 1 }];
   sandbox2.editingId = null;
   sandbox2.els.form._entries = formEntries({ position: '后端开发工程师（北京）' });
   calls.confirm.length = 0; calls.saveRecords.length = 0;
@@ -1213,7 +1217,7 @@ function setCompanyForm(company, position) {
 }
 
 check('公司名为空或过短 → 提示隐藏（不打扰）', () => {
-  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '', stage: '一面' }];
+  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', stage: '一面' }];
   sandbox2.editingId = null;
   setCompanyForm('', '后端');
   sandbox2.updateSameCompanyHint();
@@ -1225,8 +1229,8 @@ check('公司名为空或过短 → 提示隐藏（不打扰）', () => {
 
 check('同一家公司已有岗位 → 列出岗位名与阶段，让用户知道自己是在加第二个', () => {
   sandbox2.records = [
-    { id: 'x1', company: '腾讯', position: '后端开发', batch: '', stage: '一面' },
-    { id: 'x2', company: '腾讯科技（深圳）有限公司', position: '产品经理', batch: '提前批', stage: '已投递' }
+    { id: 'x1', company: '腾讯', position: '后端开发', stage: '一面' },
+    { id: 'x2', company: '腾讯科技（深圳）有限公司', position: '产品经理', orgUnit: '云计算事业部', stage: '已投递' }
   ];
   sandbox2.editingId = null;
   setCompanyForm('腾讯', '客户端开发');
@@ -1236,11 +1240,11 @@ check('同一家公司已有岗位 → 列出岗位名与阶段，让用户知�
   assert.ok(box.innerHTML.includes('该公司已有 2 个岗位'), box.innerHTML);
   assert.ok(box.innerHTML.includes('后端开发'), '列出已有岗位');
   assert.ok(box.innerHTML.includes('一面'), '并带当前阶段');
-  assert.ok(box.innerHTML.includes('产品经理（提前批）'), '带批次');
+  assert.ok(box.innerHTML.includes('产品经理（云计算事业部）'), '带机构 —— 同名岗位靠它区分');
 });
 
 check('简称与法人全称算同一家（与查重、展示分组同源）', () => {
-  sandbox2.records = [{ id: 'x1', company: '腾讯科技（深圳）有限公司', position: '后端', batch: '', stage: '已投递' }];
+  sandbox2.records = [{ id: 'x1', company: '腾讯科技（深圳）有限公司', position: '后端', stage: '已投递' }];
   sandbox2.editingId = null;
   setCompanyForm('腾讯', '前端');
   sandbox2.updateSameCompanyHint();
@@ -1249,7 +1253,7 @@ check('简称与法人全称算同一家（与查重、展示分组同源）', (
 });
 
 check('不同公司 → 隐藏；星海科技 与 星海互娱 不得互相误认', () => {
-  sandbox2.records = [{ id: 'x1', company: '星海互娱', position: '后端', batch: '', stage: '已投递' }];
+  sandbox2.records = [{ id: 'x1', company: '星海互娱', position: '后端', stage: '已投递' }];
   sandbox2.editingId = null;
   setCompanyForm('星海科技', '后端');
   sandbox2.updateSameCompanyHint();
@@ -1260,12 +1264,12 @@ check('不同公司 → 隐藏；星海科技 与 星海互娱 不得互相误�
 });
 
 check('编辑态排除自身：编辑一条记录时不会把自己算成「已有岗位」', () => {
-  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', batch: '', stage: '一面' }];
+  sandbox2.records = [{ id: 'x1', company: '腾讯', position: '后端', stage: '一面' }];
   sandbox2.editingId = 'x1';
   setCompanyForm('腾讯', '后端');
   sandbox2.updateSameCompanyHint();
   assert.strictEqual(hintText().hidden, true, '只有它自己一条时不该提示');
-  sandbox2.records.push({ id: 'x2', company: '腾讯', position: '产品', batch: '', stage: '已投递' });
+  sandbox2.records.push({ id: 'x2', company: '腾讯', position: '产品', stage: '已投递' });
   sandbox2.updateSameCompanyHint();
   assert.ok(hintText().innerHTML.includes('该公司已有 1 个岗位'), '应只算另一条');
   assert.ok(!hintText().innerHTML.includes('>后端'), '不含自身');
@@ -1274,8 +1278,8 @@ check('编辑态排除自身：编辑一条记录时不会把自己算成「已�
 
 check('当前填的岗位与已有岗位宽松相等 → 该项标黄预警（保存时会再确认）', () => {
   sandbox2.records = [
-    { id: 'x1', company: '腾讯', position: '后端开发工程师（深圳）', batch: '', stage: '一面' },
-    { id: 'x2', company: '腾讯', position: '产品经理', batch: '', stage: '已投递' }
+    { id: 'x1', company: '腾讯', position: '后端开发工程师（深圳）', stage: '一面' },
+    { id: 'x2', company: '腾讯', position: '产品经理', stage: '已投递' }
   ];
   sandbox2.editingId = null;
   setCompanyForm('腾讯', '后端开发工程师（北京）');
@@ -1287,7 +1291,7 @@ check('当前填的岗位与已有岗位宽松相等 → 该项标黄预警（�
 });
 
 check('超过 4 条时折叠为「等 N 个」，避免提示区把表单撑爆', () => {
-  sandbox2.records = [1, 2, 3, 4, 5, 6].map(n => ({ id: `x${n}`, company: '腾讯', position: `岗位${n}`, batch: '', stage: '已投递' }));
+  sandbox2.records = [1, 2, 3, 4, 5, 6].map(n => ({ id: `x${n}`, company: '腾讯', position: `岗位${n}`, stage: '已投递' }));
   sandbox2.editingId = null;
   setCompanyForm('腾讯', '新岗位');
   sandbox2.updateSameCompanyHint();
@@ -1316,7 +1320,7 @@ const jobEvent = (jobId, action = 'applied') => ({
 function seedJobs(list) { sandbox2.jobs = list; }
 
 check('同公司不同岗位 → 直接新增，不弹框打断（岗位库路径此前是硬拦截）', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', batch: '', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   seedJobs([{ id: 'job1', company: '腾讯', position: '产品经理', city: '深圳', category: '腾讯文档', applicationUrl: '' }]);
   calls.confirm.length = 0; calls.saveRecords.length = 0; calls.openDialog.length = 0;
   confirmAnswer = true; confirmOutcomeValue = 'ok';
@@ -1329,7 +1333,7 @@ check('同公司不同岗位 → 直接新增，不弹框打断（岗位库路�
 });
 
 check('相近岗位（括号里是不同城市）→ 弹「疑似同岗位不同方向」，选新增则入库', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发工程师（深圳）', batch: '', stage: '一面', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发工程师（深圳）', stage: '一面', applicationUrl: '', updatedAt: 1 }];
   seedJobs([{ id: 'job2', company: '腾讯', position: '后端开发工程师（北京）', city: '北京', category: '腾讯文档', applicationUrl: '' }]);
   calls.confirm.length = 0; calls.saveRecords.length = 0;
   confirmAnswer = true; confirmOutcomeValue = 'ok';
@@ -1341,7 +1345,7 @@ check('相近岗位（括号里是不同城市）→ 弹「疑似同岗位不同
 });
 
 check('真重复 → 弹「疑似重复投递」；选「编辑已有」打开既有记录且不新增', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', batch: '', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   seedJobs([{ id: 'job3', company: '腾讯', position: '后端开发', city: '深圳', category: '腾讯文档', applicationUrl: '' }]);
   calls.confirm.length = 0; calls.openDialog.length = 0; calls.saveRecords.length = 0;
   confirmAnswer = true; confirmOutcomeValue = 'ok';
@@ -1354,7 +1358,7 @@ check('真重复 → 弹「疑似重复投递」；选「编辑已有」打开�
 });
 
 check('真重复 → 选「仍然新增」则放行（修复前岗位库路径完全没有这个逃生口）', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', batch: '', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   seedJobs([{ id: 'job4', company: '腾讯', position: '后端开发', city: '深圳', category: '腾讯文档', applicationUrl: '' }]);
   calls.confirm.length = 0; calls.saveRecords.length = 0;
   confirmAnswer = false; confirmOutcomeValue = 'cancel';
@@ -1365,7 +1369,7 @@ check('真重复 → 选「仍然新增」则放行（修复前岗位库路径�
 });
 
 check('Esc / 点遮罩关掉确认框 → 中止入库，什么都不写', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', batch: '', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   seedJobs([{ id: 'job5', company: '腾讯', position: '后端开发', city: '深圳', category: '腾讯文档', applicationUrl: '' }]);
   calls.confirm.length = 0; calls.saveRecords.length = 0; calls.openDialog.length = 0;
   confirmAnswer = false; confirmOutcomeValue = 'dismiss';
@@ -1377,7 +1381,7 @@ check('Esc / 点遮罩关掉确认框 → 中止入库，什么都不写', async
 });
 
 check('非 applied 动作、未知岗位 id、空事件 → 安全空操作', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', batch: '', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
+  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
   seedJobs([{ id: 'job6', company: '腾讯', position: '前端', city: '', category: '腾讯文档', applicationUrl: '' }]);
   calls.saveRecords.length = 0;
   await sandbox2.handleJobAction({ target: { closest: () => null } });
@@ -1387,12 +1391,15 @@ check('非 applied 动作、未知岗位 id、空事件 → 安全空操作', as
   assert.strictEqual(calls.saveRecords.length, 0);
 });
 
-check('详情抽屉「关键信息」包含批次（此前缺失）', () => {
+check('详情抽屉「关键信息」包含机构，且批次与渠道两行已随字段删除', () => {
   seedRecords();
   sandbox2.openRecordDrawer('r1');
   const h = els2['#drawerBody'].innerHTML;
-  assert.ok(h.includes('<dt>批次</dt>'), '应有批次一行');
-  assert.ok(h.includes('提前批'), '且显示实际批次值');
+  assert.ok(h.includes('<dt>机构</dt>'), '应有机构一行');
+  assert.ok(h.includes('云计算事业部'), '且显示实际机构值');
+  // 删字段最容易留下的尾巴：值不显示了，但 <dt> 还在，于是抽屉里多出一行永远的「—」
+  assert.ok(!h.includes('<dt>批次</dt>'), '批次一行应已删除');
+  assert.ok(!h.includes('<dt>渠道</dt>'), '渠道一行应已删除');
   sandbox2.closeRecordDrawer();
 });
 

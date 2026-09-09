@@ -6,9 +6,11 @@
       // 阶段预设（仅用于排序/推进建议/分布/配色）：实际阶段可自定义，允许跳过笔试、支持三/四/五面、交叉面等。
       const STAGE_PRESETS = AJA.STAGE_PRESETS;
       const STAGES = STAGE_PRESETS; // 兼容别名：旧引用（分布/筛选/采集）仍可用
-      // v4.4.0 批次与渠道候选（datalist，允许自由输入，不做强约束）
-      const BATCH_PRESETS = ['提前批', '正式批', '补录', '内推批', '春招', '实习转正'];
-      const CHANNEL_PRESETS = ['官网', '内推', 'BOSS直聘', '猎聘', '智联招聘', '实习僧', '牛客', '校园宣讲', '学长推荐', '其他'];
+      // v4.11.0：批次（BATCH_PRESETS）与渠道（CHANNEL_PRESETS）两个字段整体删除。
+      // 批次原本承担「同公司同岗位但不是同一次投递」的区分职责，现由 orgUnit（机构 / 子公司 / BU）
+      // 接替，而且更贴合实际 —— 杭州分行与成都分行招同名岗位是两次真实投递，
+      // 而「提前批 / 正式批」是时间维度，与「是不是同一次投递」关系更弱。
+      // 渠道则与 referral（内推人 / 联系方式）语义重叠：删掉分类标签、留下具体的人，信息反而更清楚。
       // v4.6.0 企业性质（封闭枚举，白名单校验，非法值归 ''=未设置）。
       // v4.9.0 起值来自 ./shared/company-types.js，与插件端同源；此前要靠 extension-bridge.js 的
       // 逐值一致性断言防漂移（多写或写错一个字，用户选了也等于没选、洞察统计永远缺这一档），
@@ -61,7 +63,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.10.1';
+      const APP_VERSION = '4.11.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -231,8 +233,6 @@
           nextAction: String(item.nextAction || ''), updatedAt: Number(item.updatedAt) || Date.now(),
           // ===== v4.4.0 新增字段（全部可选，老数据缺省即为空；必须在此显式携带，否则每次 load/sync 会静默丢失）=====
           deadline: String(item.deadline || ''),            // 网申/测评/笔试/签约截止日（YYYY-MM-DD）
-          batch: String(item.batch || ''),                  // 批次：提前批/正式批/补录/内推批/春招/自定义
-          channel: String(item.channel || ''),              // 渠道：官网/内推/BOSS直聘/…
           referral: String(item.referral || ''),            // 内推人或联系方式
           salary: String(item.salary || ''),                // 薪资文本（Offer 对比用）
           intent: Math.min(5, Math.max(0, Number(item.intent) || 0)), // 意向度 0-5，0=未设
@@ -1587,7 +1587,7 @@
           // 按钮 disabled 态必须与点击时的判定同源。此前这里用「公司名与岗位名原文精确相等」，
           // 而点击时走 findDuplicateRecord 的归一化比较，两者会给出不同结论：
           // 按钮可点但点了说重复，或按钮被禁用但其实是一条合法的新岗位。
-          // variant（同岗位不同方向/城市/批次）不禁用 —— 那正是需要放行的「第二个岗位」。
+          // variant（同岗位不同方向 / 城市 / 机构）不禁用 —— 那正是需要放行的「第二个岗位」。
           const dupHit = findDuplicateRecord(records, job);
           const alreadyAdded = !!dupHit && dupHit.mode === 'duplicate';
           return `<article class="job-card">
@@ -1906,7 +1906,7 @@
             const notes = Array.isArray(record.notes) ? record.notes : [];
             const lastNote = notes.length ? notes[notes.length - 1].text : (record.nextAction || '—');
             return `<tr class="offer-row" data-id="${escapeHtml(record.id)}">
-              <td data-label="公司 / 岗位"><div class="company">${escapeHtml(record.company)}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position || '—')}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+              <td data-label="公司 / 岗位"><div class="company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position || '—')}</div></td>
               <td data-label="城市">${escapeHtml(record.city || '—')}</td>
               <td data-label="薪资 / 待遇">${escapeHtml(record.salary || '—')}</td>
               <td data-label="意向度">${intentDotsHtml(record.intent) || '<span class="muted-text">未设</span>'}</td>
@@ -1930,7 +1930,7 @@
           return `<div class="multi-company" style="--company-color:${companyColor(group.key)}">
             <div class="multi-company-head"><strong>${escapeHtml(group.label)}</strong><span class="multi-company-count">${group.records.length} 个岗位</span></div>
             <div class="multi-company-items">${items.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" data-tip-kind="record" data-tip-key="${escapeHtml(record.id)}" aria-label="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}，悬浮看详情，点击打开抽屉">
-              <span class="multi-company-pos">${escapeHtml(record.position || '未填岗位')}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</span>
+              <span class="multi-company-pos">${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? ` · ${escapeHtml(record.orgUnit)}` : ''}</span>
               <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
             </button>`).join('')}</div>
           </div>`;
@@ -1999,11 +1999,11 @@
         const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
         const siblings = (companyIndex && companyIndex.get(key)) || [];
         const chipHtml = siblings.length > 1
-          ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${item.position || '未填岗位'}${item.batch ? `（${item.batch}）` : ''} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
+          ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${item.position || '未填岗位'}${item.orgUnit ? `（${item.orgUnit}）` : ''} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
           : '';
         return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}" data-company="${escapeHtml(key)}">
           <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
-          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}</div></td>
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>

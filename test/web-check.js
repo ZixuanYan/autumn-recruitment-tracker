@@ -747,7 +747,7 @@ check('collectAlerts danger 优先且受 limit 约束', () => {
 });
 
 check('findDuplicateRecord：同链接判重', () => {
-  const recs = [{ id: '1', company: '腾讯', position: '后端', applicationUrl: 'https://x/a', batch: '' }];
+  const recs = [{ id: '1', company: '腾讯', position: '后端', applicationUrl: 'https://x/a' }];
   const hit = core.findDuplicateRecord(recs, { company: '别家', position: '别的', applicationUrl: 'https://x/a' });
   assert.strictEqual(hit.mode, 'duplicate');
   assert.strictEqual(hit.reason, 'url');
@@ -762,9 +762,9 @@ check('findDuplicateRecord：同公司+同机构+同岗位才算重复', () => {
 });
 
 check('findDuplicateRecord：岗位名仅空格/大小写差异仍判重复（真重复不能漏）', () => {
-  const recs = [{ id: '1', company: '字节跳动', position: 'Java 开发工程师', applicationUrl: '', batch: '' }];
+  const recs = [{ id: '1', company: '字节跳动', position: 'Java 开发工程师', applicationUrl: '' }];
   assert.strictEqual(core.findDuplicateRecord(recs, { company: '字节', position: 'Java开发工程师' }).mode, 'duplicate');
-  const recs2 = [{ id: '1', company: '小米', position: 'Android开发', applicationUrl: '', batch: '' }];
+  const recs2 = [{ id: '1', company: '小米', position: 'Android开发', applicationUrl: '' }];
   assert.strictEqual(core.findDuplicateRecord(recs2, { company: '小米', position: 'android开发' }).mode, 'duplicate');
 });
 
@@ -776,7 +776,7 @@ check('findDuplicateRecord：括号里的城市/端/批次不同 → variant（�
     ['算法工程师-推荐', '算法工程师-广告', '不同方向']
   ];
   for (const [existing, incoming, note] of cases) {
-    const recs = [{ id: '1', company: '腾讯', position: existing, applicationUrl: '', batch: '' }];
+    const recs = [{ id: '1', company: '腾讯', position: existing, applicationUrl: '' }];
     const res = core.findDuplicateRecord(recs, { company: '腾讯', position: incoming });
     assert.ok(res, `${note}：应有判定结果`);
     assert.strictEqual(res.mode, 'variant', `${note}：「${existing}」vs「${incoming}」应为 variant 而非 duplicate`);
@@ -800,7 +800,7 @@ check('findDuplicateRecord：新记录没填机构、已有记录填了 → 不�
 });
 
 check('findDuplicateRecord：同公司不同岗位 → same-company；无关联 → null', () => {
-  const recs = [{ id: '1', company: '腾讯', position: '后端', applicationUrl: '', batch: '' }];
+  const recs = [{ id: '1', company: '腾讯', position: '后端', applicationUrl: '' }];
   assert.strictEqual(core.findDuplicateRecord(recs, { company: '腾讯', position: '前端' }).mode, 'same-company');
   assert.strictEqual(core.findDuplicateRecord(recs, { company: '阿里', position: '前端' }), null);
   assert.strictEqual(core.findDuplicateRecord(recs, { company: '' }), null);
@@ -822,7 +822,7 @@ check('展示分组与查重判定必须同源（修复前 5 个案例里 3 个�
     ]);
     const displaySame = groups.length === 1;
     const dup = core.findDuplicateRecord(
-      [{ id: '1', company: a, position: '后端', batch: '' }],
+      [{ id: '1', company: a, position: '后端' }],
       { company: b, position: '前端' }
     );
     // 岗位不同 → 同公司时应命中（same-company），不同公司时应为 null
@@ -966,15 +966,15 @@ check('tipContentFor metric：每个指标都有口径说明，未知 key 返回
 
 check('tipContentFor city：头部给汇总、明细列到记录，未填桶也有内容，超量截断', () => {
   const recs = [
-    { id: '1', company: '腾讯', position: '后端', city: '深圳', stage: 'Offer', batch: '提前批' },
-    { id: '2', company: '腾讯科技', position: '前端', city: '深圳市', stage: '一面', batch: '' },
+    { id: '1', company: '腾讯', position: '后端', city: '深圳', stage: 'Offer', orgUnit: '云计算事业部' },
+    { id: '2', company: '腾讯科技', position: '前端', city: '深圳市', stage: '一面', orgUnit: '' },
     { id: '3', company: '某司', position: '运营', city: '待确认', stage: '已投递' }
   ];
   const out = core.tipContentFor(recs, 'city', '深圳');
   assert.ok(out.includes('深圳 · 2 条投递'), '「深圳市」归一化后与「深圳」同桶');
   assert.ok(out.includes('1 家公司'), '腾讯与腾讯科技聚类为一家');
   assert.ok(out.includes('1 个 Offer'));
-  assert.ok(out.includes('后端（提前批）'), '岗位带批次');
+  assert.ok(out.includes('后端（云计算事业部）'), '岗位带机构');
   assert.ok(out.includes('data-stage="Offer"'), '每行带阶段徽章');
   // 未填桶（key=''）也要能查，否则灰显那一行悬浮没反应像是坏了
   const unknown = core.tipContentFor(recs, 'city', '');
@@ -1006,12 +1006,13 @@ check('tipContentFor ctype：按公司聚类列出并给最好阶段，空档返
 });
 
 check('tipContentFor record：只列有值的字段，企业性质未设置显式标注，未知 id 返回空串', () => {
-  const recs = [{ id: 'r1', company: '腾讯', position: '后端', city: '深圳', batch: '', companyType: '', stage: '一面', nextAction: '准备二面' }];
+  const recs = [{ id: 'r1', company: '腾讯', position: '后端', city: '深圳', orgUnit: '', companyType: '', stage: '一面', nextAction: '准备二面' }];
   const out = core.tipContentFor(recs, 'record', 'r1');
   assert.ok(out.includes('tip-head">腾讯'), '标题是公司名');
   assert.ok(out.includes('准备二面'));
   assert.ok(out.includes('未设置'), '企业性质没填也要显式说出来');
-  assert.ok(!out.includes('>批次<'), '空字段不占一行');
+  assert.ok(!out.includes('>机构<'), '空字段不占一行');
+  assert.ok(!out.includes('>批次<'), '批次一行已随字段删除（不是"值为空所以不显示"）');
   assert.strictEqual(core.tipContentFor(recs, 'record', 'nope'), '');
   assert.strictEqual(core.tipContentFor(recs, 'unknown-kind', 'r1'), '', '未知 kind 不弹空壳');
 });
@@ -1058,8 +1059,7 @@ check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、
   // 老数据（完全没有 v4.4.0 字段）
   const legacy = core.normalizeRecord({ id: 'old1', company: '星海科技', position: '产品', city: '上海', applicationDate: '2026-09-01', stage: '一面', updatedAt: 1 });
   assert.strictEqual(legacy.deadline, '');
-  assert.strictEqual(legacy.batch, '');
-  assert.strictEqual(legacy.channel, '');
+  assert.strictEqual(legacy.orgUnit, '', 'v4.11.0 新增的机构：老数据缺省为空');
   assert.strictEqual(legacy.referral, '');
   assert.strictEqual(legacy.salary, '');
   assert.strictEqual(legacy.intent, 0);
@@ -1069,14 +1069,20 @@ check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、
   // 新字段必须原样保留（漏一个就会在每次 load/sync 静默丢失）
   const full = core.normalizeRecord({
     id: 'n1', company: 'A', position: 'B', city: 'C', applicationDate: '2026-09-01',
-    deadline: '2026-09-20', batch: '提前批', channel: '内推', referral: '张三', salary: '25k×16', intent: 4,
+    deadline: '2026-09-20', orgUnit: '云计算事业部', referral: '张三', salary: '25k×16', intent: 4,
+    // 旧备份里还可能带着已删除的字段：导入时应当被**忽略**（不报错、也不留成僵尸数据）
+    batch: '提前批', channel: '内推',
     notes: [{ id: 'k1', at: 5, text: '一面问了项目' }, { text: '' }, null, { text: '  补一条  ' }],
     timeline: [{ stage: '已投递', at: '2026-09-01', note: '' }, { stage: '一面', at: '2026-09-05', note: '' }]
   });
   assert.strictEqual(full.deadline, '2026-09-20');
-  assert.strictEqual(full.batch, '提前批');
-  assert.strictEqual(full.channel, '内推');
+  assert.strictEqual(full.orgUnit, '云计算事业部');
   assert.strictEqual(full.referral, '张三');
+  // 已删除的字段必须**真的不在**结果里（而不是留一个空值）。
+  // normalizeRecord 是白名单式重建，留着不显示的字段会变成僵尸数据：
+  // 导入导出还在传、每次 load/sync 还在清洗，但界面上没人看得见 —— 比删掉更容易出问题。
+  assert.ok(!('batch' in full), 'batch 应已彻底删除，不得复活');
+  assert.ok(!('channel' in full), 'channel 应已彻底删除，不得复活');
   assert.strictEqual(full.salary, '25k×16');
   assert.strictEqual(full.intent, 4);
   assert.strictEqual(full.notes.length, 2, '空文本与 null 被过滤');
@@ -1090,9 +1096,12 @@ check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、
 
 check('normalizeRecord companyType：白名单校验，老数据与非法值一律归「未设置」', () => {
   // 老数据（v4.5.0 之前，完全没有该字段）→ ''，且不报错、其余字段零丢失
-  const legacy = core.normalizeRecord({ id: 'old2', company: '星海科技', position: '产品', city: '上海', applicationDate: '2026-09-01', stage: '一面', batch: '提前批', intent: 3 });
+  // 这里用 referral 当"既有字段"的代表：它和 batch/channel 同属 v4.4.0 那批新增字段，
+  // 但 batch 与 channel 已在 v4.11.0 删除（机构 orgUnit 接替了 batch 的区分职责），
+  // referral 承载的是具体的人与联系方式，与「渠道=内推」这种分类标签不是一回事，刻意保留。
+  const legacy = core.normalizeRecord({ id: 'old2', company: '星海科技', position: '产品', city: '上海', applicationDate: '2026-09-01', stage: '一面', referral: '张三', intent: 3 });
   assert.strictEqual(legacy.companyType, '');
-  assert.strictEqual(legacy.batch, '提前批', '既有字段不受新字段影响');
+  assert.strictEqual(legacy.referral, '张三', '既有字段不受新字段影响');
   assert.strictEqual(legacy.intent, 3);
   // 三个合法档位原样保留
   for (const type of ['央国企', '私企', '外企']) {
@@ -1411,6 +1420,130 @@ check('示例数据标记必须持久化（刷新丢失的三个后果都不报�
   assert.ok(/localStorage\.removeItem\(SAMPLE_FLAG_KEY\)/.test(html),
     'setSampleMode(false) 必须删 flag，否则清空/keep/云同步丢弃后刷新又变回示例态');
   assert.ok(/localStorage\.getItem\(SAMPLE_FLAG_KEY\)/.test(html), '刷新后必须读回 flag');
+});
+
+// ---- v4.11.0 台账与简历优化的守卫 ----
+// 七条守的都是「不报错型」缺陷：编号悄悄重排、某个字段类型删不掉、窄屏只能横滚、
+// 分组与排序又耦回去、已删字段复活成僵尸数据、新区块又硬编码成空对象。
+// 共同特征是构建全绿、语法全对、界面看着也正常，只会在事后发现数据或行为不对。
+console.log('v4.11.0 守卫（编号 / 字段删除 / 看板窄屏 / 收纳解耦 / orgUnit 全链路 / 死字段零残留 / 区块类型）');
+
+check('台账编号按 applicationDate 升序，不得用 updatedAt（编辑一条就跳到 #0001、其余全部顺移）', () => {
+  const m = /const recordNo = new Map\([\s\S]*?\);/.exec(html);
+  assert.ok(m, '找不到 recordNo 的构造');
+  assert.ok(/applicationDate/.test(m[0]), '编号必须基于投递日期');
+  // 旧实现按 updatedAt 降序，注释却写着「编辑不会重排」——两者矛盾：编辑任何一条记录都会
+  // 刷新 updatedAt，用它编号会让被编辑的那条跳到最前、其余全部顺移。
+  assert.ok(!/updatedAt/.test(m[0]), '不得用 updatedAt 编号：编辑任何一条都会让编号整体顺移');
+  assert.ok(/padStart\(4, '0'\)/.test(m[0]), '编号仍是 4 位补零');
+});
+
+check('exp 卡片的每个字段都有删除按钮，且「经历标签」_rowName 不给（删了卡片就没标题）', () => {
+  const shell = /function expFieldShell\([\s\S]*?\n      \}/.exec(html);
+  assert.ok(shell, '找不到 expFieldShell');
+  assert.ok(/data-action="del-exp-field"/.test(shell[0]), '字段外壳必须带删除按钮');
+  assert.ok(/exp-field-wrap/.test(shell[0]), '外层要有 exp-field-wrap（删除按钮靠它绝对定位）');
+  // 四个类型分支都必须走这个外壳，否则又会出现「某种字段类型删不掉」——
+  // 这正是本轮修的 bug：kvRowHtml 一直有 ✕ 而 expFieldHtml 四个分支一个都没有。
+  const fieldFn = /function expFieldHtml\([\s\S]*?\n      \}/.exec(html);
+  assert.ok(fieldFn, '找不到 expFieldHtml');
+  assert.strictEqual((fieldFn[0].match(/return expFieldShell\(/g) || []).length, 4,
+    '四个类型分支（text / longtext / date / url）都应走 expFieldShell');
+  // _rowName 是卡片标题与 expSummary 的来源，由 expCardHtml 单独渲染并过滤掉
+  assert.ok(/filter\(\(\[k\]\) => k !== '_rowName'\)/.test(html), 'expCardHtml 必须继续过滤 _rowName');
+  const handler = /action === 'del-exp-field'[\s\S]*?\} else if/.exec(html);
+  assert.ok(handler, '缺少 del-exp-field 的事件处理分支');
+  // 只动 DOM 不整体重渲染：简历是「DOM 为草稿、保存时才 collectResumeFromDom 收回」的模型，
+  // 在这里改 resume 再重渲染会冲掉用户在同一页其他字段里尚未保存的输入。
+  // 断言前先剥掉行注释 —— 这个分支的注释里就写着「不要调 renderResumeEditor()」来解释为什么，
+  // 不剥的话守卫会被自己的解释性注释绊倒（与下面 batch/channel 那条收紧匹配模式是同一个道理）。
+  const handlerCode = handler[0].replace(/\/\/[^\n]*/g, '');
+  assert.ok(!/renderResumeEditor\(\)/.test(handlerCode),
+    'del-exp-field 不得整体重渲染（会冲掉未保存的输入），应与 del-kv / del-exp 一样只动 DOM');
+  assert.ok(!/updateResumeCompletion\(\)/.test(handlerCode),
+    'del-exp-field 不得调 updateResumeCompletion：它统计的是内存里的 resume 而不是 DOM，此刻调只会显示过期数字');
+});
+
+check('看板有窄屏适配：≤900px 纵向堆叠（此前 apple.css 的媒体查询里 board 规则为 0 条）', () => {
+  // base.css 与 apple.css 各有一个 900px 段（bundle 里 base 在前），所以必须逐个看完：
+  // 只取第一个会永远匹配到 base.css 那段、然后误报"看板没有窄屏适配"。
+  // 另一个 "900px) and (min-width: 561px)" 管的是表格列隐藏，形态不同不会被这个正则匹配。
+  const blocks = [...html.matchAll(/@media \(max-width: 900px\) \{[\s\S]*?\n    \}/g)].map(m => m[0]);
+  assert.ok(blocks.length >= 2, `900px 媒体查询应至少 2 处（base.css 与 apple.css 各一），实得 ${blocks.length}`);
+  const withBoard = blocks.filter(b => /\.board-cols \{/.test(b));
+  assert.strictEqual(withBoard.length, 1,
+    `board 的窄屏规则应恰好写在一处（两处都写就看不出哪条生效），实得 ${withBoard.length}`);
+  assert.ok(/grid-auto-flow: row/.test(withBoard[0]),
+    '看板列在窄屏必须改为纵向堆叠——四列最小 928px，横滚时列头一出视口就看不出当前是哪个阶段');
+  assert.ok(/\.board-col-body \{ min-height: 0; \}/.test(withBoard[0]),
+    '堆叠模式下要取消 62px 的最小高度，否则空列下方留大片空白');
+});
+
+check('同企业收纳是独立开关、与排序解耦（排序下拉不得再有 company-group 选项）', () => {
+  assert.ok(!/value="company-group"/.test(html),
+    '排序下拉里的「按公司聚合」应已删除——留着就有两种分组语义并存，同时作用时的行为没有定义');
+  assert.ok(/id="groupToggle"/.test(html), '应有独立的收纳开关');
+  assert.ok(/const grouped = !!uiPrefs\.groupByCompany;/.test(html), 'renderTable 必须读开关而不是排序值');
+  assert.ok(/function clusterByCompanyGroup\(/.test(html),
+    '开关 ON 时要先把同企业记录聚拢：非公司类排序下它们本来就不相邻，逐行遍历会插出重复组头');
+  assert.ok(/function toggleCompanyUnit\(/.test(html), '机构层要能独立折叠');
+  assert.ok(/collapsedUnits/.test(html), '机构折叠态要持久化');
+  assert.ok(/\$\{key\}::\$\{unit\}/.test(html),
+    '机构折叠键必须是 企业::机构 的复合键（两家银行都能有「杭州分行」，只用机构名会串台）');
+  assert.ok(/unitsByGroup\.get\(key\)\?\.size \|\| 0\) >= 2/.test(html),
+    '机构层只在同一企业内有 2 个以上不同机构时渲染，否则只是多一层没信息量的缩进');
+});
+
+check('orgUnit 全链路：normalizeRecord 携带、表单可填、编辑能回填、查重纳入判定', () => {
+  assert.ok(/orgUnit: String\(item\.orgUnit \|\| ''\)\.trim\(\)\.slice\(0, 60\)/.test(html),
+    'normalizeRecord 必须显式携带 orgUnit——它是白名单式重建，漏写就会在每次 load/sync 静默丢失');
+  assert.ok(/name="orgUnit"/.test(html), '记录表单要有机构输入框');
+  const refill = /for \(const field of \[[^\]]*\]\) \{/.exec(html);
+  assert.ok(refill, '找不到 openDialog 的回填清单');
+  assert.ok(refill[0].includes("'orgUnit'"), '回填清单里必须有 orgUnit，否则点「编辑」时机构被静默清空');
+  assert.ok(/reason: 'company\+unit\+position'/.test(html), '查重的三要素应是 公司+机构+岗位');
+  assert.ok(!/reason: 'company\+position\+batch'/.test(html), '旧的 batch 判定应已移除');
+  // 云同步：envelope 整条打包 record（{ ...record }），所以新字段自动跟随；
+  // 但推送判定 sameRecordSet 只比 updatedAt/stage/company/position —— 靠「保存时刷新 updatedAt」
+  // 间接察觉。这条断言钉住那个前提：一旦有人把 updatedAt 的刷新去掉，orgUnit 就会静默单向不同步。
+  assert.ok(/updatedAt: Date\.now\(\)/.test(html), '保存记录时必须刷新 updatedAt（云同步的推送判定依赖它）');
+});
+
+check('已删除的字段零残留：batch / channel 不得复活（僵尸数据比删掉更容易出问题）', () => {
+  // 只匹配**代码形态**，不匹配注释里的历史说明：00-bootstrap.js 顶部那段注释刻意写着
+  // 「批次（BATCH_PRESETS）与渠道（CHANNEL_PRESETS）两个字段整体删除」来解释为什么没有这两个字段，
+  // 无差别扫词会让这条守卫永远不干净。（icons/app-icon.svg 那条纪律选择的是改注释，
+  // 这里选择收紧匹配模式 —— 字段名出现在解释性注释里是有价值的，色值不是。）
+  const PATTERNS = [
+    [/const BATCH_PRESETS\s*=/, 'BATCH_PRESETS 常量'],
+    [/const CHANNEL_PRESETS\s*=/, 'CHANNEL_PRESETS 常量'],
+    [/\brecord\.batch\b/, 'record.batch'],
+    [/\brecord\.channel\b/, 'record.channel'],
+    [/\bitem\.batch\b/, 'item.batch'],
+    [/\bitem\.channel\b/, 'item.channel'],
+    [/name="batch"|id="batch"/, '表单里的 batch 输入'],
+    [/name="channel"|id="channel"/, '表单里的 channel 输入'],
+    [/label: '批次'|label: '渠道'/, '抽屉字段表的批次 / 渠道行']
+  ];
+  for (const [re, name] of PATTERNS) {
+    assert.ok(!re.test(html), `${name} 又出现了——字段已在 v4.11.0 删除，留半截引用就变成僵尸数据`);
+  }
+  // referral 刻意保留：它承载的是具体的人与联系方式，与「渠道=内推」这种分类标签不是一回事
+  assert.ok(/referral: String\(item\.referral/.test(html), 'referral 应保留（删掉会真的丢信息）');
+});
+
+check('新增简历区块走应用内弹窗选类型，不得回到 prompt + 硬编码空对象', () => {
+  assert.ok(/id="sectionDialog"/.test(html), '应有新增区块的弹窗');
+  assert.ok(/name="sectionType"/.test(html), '弹窗里要能选类型（列表型 / 键值型）');
+  assert.ok(!/prompt\('新区块名称/.test(html),
+    '不得用原生 prompt：拿不到第二个输入维度，且与全站 confirmInApp 的风格不一致');
+  // 硬编码 {} 正是「自定义区块加不了子项目」的根因：渲染靠 Array.isArray(val) 分叉，
+  // 对象永远拿不到「＋ 添加」按钮，用户在结构上就没有入口。
+  assert.ok(/resume\[name\] = isKv \? \{\} : \[\];/.test(html), '类型必须由用户选，不得硬编码');
+  // collectResumeFromDom 靠 data-type 属性判类型（不是靠"有没有子元素"猜），
+  // 否则空的列表型区块保存一次就退化成键值型
+  assert.ok(/block\.getAttribute\('data-type'\) === 'exp'/.test(html),
+    'collectResumeFromDom 必须按 data-type 判类型，空的列表型区块才不会退化成键值型');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

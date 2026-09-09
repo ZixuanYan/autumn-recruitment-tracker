@@ -1469,19 +1469,8 @@
           <div class="field full"><label for="nextAction">下一步行动</label><textarea class="control" id="nextAction" name="nextAction" maxlength="200" placeholder="例如：准备项目复盘，提前测试摄像头"></textarea></div>
           <div class="field full">
             <details class="form-more" id="formMore">
-              <summary>更多字段（批次 / 渠道 / 内推人 / 薪资）· 可选</summary>
+              <summary>更多字段（内推人 / 薪资）· 可选</summary>
               <div class="form-grid form-more-grid">
-                <div class="field">
-                  <label for="batch">批次</label>
-                  <input class="control" id="batch" name="batch" list="batchPresets" maxlength="20" placeholder="例如：提前批">
-                  <datalist id="batchPresets"></datalist>
-                  <div class="hint">同公司同岗位、不同批次不会被判为重复投递</div>
-                </div>
-                <div class="field">
-                  <label for="channel">渠道</label>
-                  <input class="control" id="channel" name="channel" list="channelPresets" maxlength="20" placeholder="例如：内推">
-                  <datalist id="channelPresets"></datalist>
-                </div>
                 <div class="field"><label for="referral">内推人 / 联系方式</label><input class="control" id="referral" name="referral" maxlength="60" placeholder="例如：学长张三（微信 zhangsan）"></div>
                 <div class="field"><label for="salary">薪资 / 待遇</label><input class="control" id="salary" name="salary" maxlength="40" placeholder="例如：25k×16 或 面议"></div>
               </div>
@@ -1723,9 +1712,11 @@
       // 阶段预设（仅用于排序/推进建议/分布/配色）：实际阶段可自定义，允许跳过笔试、支持三/四/五面、交叉面等。
       const STAGE_PRESETS = AJA.STAGE_PRESETS;
       const STAGES = STAGE_PRESETS; // 兼容别名：旧引用（分布/筛选/采集）仍可用
-      // v4.4.0 批次与渠道候选（datalist，允许自由输入，不做强约束）
-      const BATCH_PRESETS = ['提前批', '正式批', '补录', '内推批', '春招', '实习转正'];
-      const CHANNEL_PRESETS = ['官网', '内推', 'BOSS直聘', '猎聘', '智联招聘', '实习僧', '牛客', '校园宣讲', '学长推荐', '其他'];
+      // v4.11.0：批次（BATCH_PRESETS）与渠道（CHANNEL_PRESETS）两个字段整体删除。
+      // 批次原本承担「同公司同岗位但不是同一次投递」的区分职责，现由 orgUnit（机构 / 子公司 / BU）
+      // 接替，而且更贴合实际 —— 杭州分行与成都分行招同名岗位是两次真实投递，
+      // 而「提前批 / 正式批」是时间维度，与「是不是同一次投递」关系更弱。
+      // 渠道则与 referral（内推人 / 联系方式）语义重叠：删掉分类标签、留下具体的人，信息反而更清楚。
       // v4.6.0 企业性质（封闭枚举，白名单校验，非法值归 ''=未设置）。
       // v4.9.0 起值来自 ./shared/company-types.js，与插件端同源；此前要靠 extension-bridge.js 的
       // 逐值一致性断言防漂移（多写或写错一个字，用户选了也等于没选、洞察统计永远缺这一档），
@@ -1778,7 +1769,7 @@
       const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
       const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.10.1';
+      const APP_VERSION = '4.11.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1948,8 +1939,6 @@
           nextAction: String(item.nextAction || ''), updatedAt: Number(item.updatedAt) || Date.now(),
           // ===== v4.4.0 新增字段（全部可选，老数据缺省即为空；必须在此显式携带，否则每次 load/sync 会静默丢失）=====
           deadline: String(item.deadline || ''),            // 网申/测评/笔试/签约截止日（YYYY-MM-DD）
-          batch: String(item.batch || ''),                  // 批次：提前批/正式批/补录/内推批/春招/自定义
-          channel: String(item.channel || ''),              // 渠道：官网/内推/BOSS直聘/…
           referral: String(item.referral || ''),            // 内推人或联系方式
           salary: String(item.salary || ''),                // 薪资文本（Offer 对比用）
           intent: Math.min(5, Math.max(0, Number(item.intent) || 0)), // 意向度 0-5，0=未设
@@ -3304,7 +3293,7 @@
           // 按钮 disabled 态必须与点击时的判定同源。此前这里用「公司名与岗位名原文精确相等」，
           // 而点击时走 findDuplicateRecord 的归一化比较，两者会给出不同结论：
           // 按钮可点但点了说重复，或按钮被禁用但其实是一条合法的新岗位。
-          // variant（同岗位不同方向/城市/批次）不禁用 —— 那正是需要放行的「第二个岗位」。
+          // variant（同岗位不同方向 / 城市 / 机构）不禁用 —— 那正是需要放行的「第二个岗位」。
           const dupHit = findDuplicateRecord(records, job);
           const alreadyAdded = !!dupHit && dupHit.mode === 'duplicate';
           return `<article class="job-card">
@@ -3623,7 +3612,7 @@
             const notes = Array.isArray(record.notes) ? record.notes : [];
             const lastNote = notes.length ? notes[notes.length - 1].text : (record.nextAction || '—');
             return `<tr class="offer-row" data-id="${escapeHtml(record.id)}">
-              <td data-label="公司 / 岗位"><div class="company">${escapeHtml(record.company)}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position || '—')}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+              <td data-label="公司 / 岗位"><div class="company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position || '—')}</div></td>
               <td data-label="城市">${escapeHtml(record.city || '—')}</td>
               <td data-label="薪资 / 待遇">${escapeHtml(record.salary || '—')}</td>
               <td data-label="意向度">${intentDotsHtml(record.intent) || '<span class="muted-text">未设</span>'}</td>
@@ -3647,7 +3636,7 @@
           return `<div class="multi-company" style="--company-color:${companyColor(group.key)}">
             <div class="multi-company-head"><strong>${escapeHtml(group.label)}</strong><span class="multi-company-count">${group.records.length} 个岗位</span></div>
             <div class="multi-company-items">${items.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" data-tip-kind="record" data-tip-key="${escapeHtml(record.id)}" aria-label="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}，悬浮看详情，点击打开抽屉">
-              <span class="multi-company-pos">${escapeHtml(record.position || '未填岗位')}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</span>
+              <span class="multi-company-pos">${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? ` · ${escapeHtml(record.orgUnit)}` : ''}</span>
               <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
             </button>`).join('')}</div>
           </div>`;
@@ -3716,11 +3705,11 @@
         const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
         const siblings = (companyIndex && companyIndex.get(key)) || [];
         const chipHtml = siblings.length > 1
-          ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${item.position || '未填岗位'}${item.batch ? `（${item.batch}）` : ''} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
+          ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${item.position || '未填岗位'}${item.orgUnit ? `（${item.orgUnit}）` : ''} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
           : '';
         return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}" data-company="${escapeHtml(key)}">
           <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
-          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}${record.batch ? ` · ${escapeHtml(record.batch)}` : ''}</div></td>
+          <td data-label="公司 / 岗位"><div class="company">${companyHtml}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}</div></td>
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
@@ -4373,7 +4362,6 @@
             ['公司', record.company],
             ['岗位', record.position || '未填岗位'],
             ['机构', record.orgUnit],
-            ['批次', record.batch],
             ['城市', record.city],
             ['企业性质', record.companyType || COMPANY_TYPE_UNSET],
             ['当前阶段', record.stage],
@@ -4387,7 +4375,7 @@
           if (!bucket || !bucket.total) return '';
           const title = bucket.city || '没填城市';
           const items = bucket.records.slice(0, TIP_MAX_ROWS).map(record => `
-            <div class="tip-row"><span class="tip-v">${escapeHtml(record.company || '未填公司')} · ${escapeHtml(record.position || '未填岗位')}${record.batch ? `（${escapeHtml(record.batch)}）` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span></div>`).join('');
+            <div class="tip-row"><span class="tip-v">${escapeHtml(record.company || '未填公司')} · ${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? `（${escapeHtml(record.orgUnit)}）` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span></div>`).join('');
           const rest = bucket.records.length - TIP_MAX_ROWS;
           return `<div class="tip-head">${escapeHtml(title)} · ${bucket.total} 条投递 · ${bucket.companies} 家公司${bucket.offers ? ` · ${bucket.offers} 个 Offer` : ''}</div>
             <div class="tip-list">${items}${rest > 0 ? `<div class="tip-more">另有 ${rest} 条，去台账按城市搜索查看</div>` : ''}</div>`;
@@ -4429,11 +4417,11 @@
           return { action: 'add', target: null, hint: countHint };
         }
         const target = dup.matches[0];
-        const targetLabel = `${target.company} · ${target.position}${target.batch ? `（${target.batch}）` : ''}`;
+        const targetLabel = `${target.company} · ${target.position}${target.orgUnit ? `（${target.orgUnit}）` : ''}`;
         if (dup.mode === 'variant') {
-          // 疑似同一岗位的不同方向 / 城市 / 批次：绝大多数情况确实是两条独立投递，故主按钮是「新增」
+          // 疑似同一岗位的不同方向 / 城市 / 机构：绝大多数情况确实是两条独立投递，故主按钮是「新增」
           const isSeparate = await confirmInApp(
-            `${label} 已有相似岗位「${targetLabel}」（当前阶段：${target.stage}）。\n\n这条是不同方向 / 城市 / 批次的独立投递吗？`,
+            `${label} 已有相似岗位「${targetLabel}」（当前阶段：${target.stage}）。\n\n这条是不同方向 / 城市 / 机构的独立投递吗？`,
             { title: '疑似同岗位不同方向', confirmText: '是独立投递，新增', cancelText: '其实是同一条，编辑已有' }
           );
           if (lastConfirmOutcome() === 'dismiss') return { action: 'cancel', target: null, hint: '' };
@@ -4467,7 +4455,7 @@
         const items = siblings.slice(0, 4).map(record => {
           // 与当前正在填的岗位「宽松相等」→ 标黄，提示保存时会再确认一次是不是同一条
           const similar = loose.length >= 2 && loosePositionSlug(record.position) === loose;
-          return `<span class="same-company-item${similar ? ' is-similar' : ''}">${escapeHtml(record.position || '未填岗位')}${record.batch ? `（${escapeHtml(record.batch)}）` : ''} · ${escapeHtml(record.stage)}</span>`;
+          return `<span class="same-company-item${similar ? ' is-similar' : ''}">${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? `（${escapeHtml(record.orgUnit)}）` : ''} · ${escapeHtml(record.stage)}</span>`;
         }).join('');
         const more = siblings.length > 4 ? `<span class="same-company-more">等 ${siblings.length} 个</span>` : '';
         box.innerHTML = `该公司已有 ${siblings.length} 个岗位：${items}${more}`;
@@ -4639,7 +4627,8 @@
         const schedule = parseLocal(record.scheduleAt);
         const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
         const chips = [];
-        if (record.batch) chips.push(`<span class="board-chip">${escapeHtml(record.batch)}</span>`);
+        // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
+        // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
         if (dl && !dlClosed) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
         if (schedule && !dlClosed) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
         if (stalled) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
@@ -4804,7 +4793,7 @@
         if (!record) { closeRecordDrawer(); return; }
         if (title) title.textContent = `${record.company} · ${record.position || '未填岗位'}`;
         if (sub) {
-          const bits = [record.city, record.orgUnit, record.batch, record.channel].filter(Boolean);
+          const bits = [record.city, record.orgUnit].filter(Boolean);
           // 企业性质用带色徽章紧跟阶段徽章；facts 里的 value 是 HTML，两处都能安全注入
           sub.innerHTML = `<span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>${companyTypeChipHtml(record.companyType)} ${escapeHtml(bits.join(' · '))}`;
         }
@@ -4818,12 +4807,10 @@
           // 放在末尾会让人先读完一圈日期与阶段才知道这条到底属于哪个分行。
           { label: '机构', value: record.orgUnit || '—' },
           { label: '投递日期', value: formatDate(record.applicationDate) },
-          { label: '批次', value: record.batch || '—' },
           { label: '企业性质', value: companyTypeChipHtml(record.companyType) || '<span class="muted-text">未设置</span>' },
           { label: '安排时间', value: record.scheduleAt ? formatDateTime(record.scheduleAt) : '—' },
           { label: '截止日期', value: record.deadline ? `${formatDate(record.deadline)}${dl ? `（${dl.text.replace('截止 · ', '')}）` : ''}` : '—' },
           { label: '意向度', value: record.intent ? `${record.intent} / 5` : '未设' },
-          { label: '渠道', value: record.channel || '—' },
           { label: '内推人', value: record.referral || '—' },
           { label: '薪资 / 待遇', value: record.salary || '—' },
           { label: '投递网址', value: record.applicationUrl ? '<a class="company-link" href="' + escapeHtml(record.applicationUrl) + '" target="_blank" rel="noopener noreferrer">打开 ↗</a>' : '—' }
@@ -4851,7 +4838,7 @@
               </div>
             </div>
             ${others.length ? `<div class="drawer-section"><h3>同公司其它投递（${others.length}）</h3><div class="sibling-list">${others.map(item => `
-              <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(item.position || '未填岗位')}${item.batch ? ` · ${escapeHtml(item.batch)}` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
+              <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(item.position || '未填岗位')}${item.orgUnit ? ` · ${escapeHtml(item.orgUnit)}` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
         }
         if (actions) {
           actions.innerHTML = `
@@ -4915,7 +4902,7 @@
         const q = String(query || '').trim().toLowerCase();
         const items = [];
         const matched = q
-          ? records.filter(record => `${record.company} ${record.orgUnit || ''} ${record.position} ${record.batch} ${record.city}`.toLowerCase().includes(q))
+          ? records.filter(record => `${record.company} ${record.orgUnit || ''} ${record.position} ${record.city}`.toLowerCase().includes(q))
           : records.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 5);
         for (const record of matched.slice(0, 8)) {
           items.push({
@@ -5233,7 +5220,7 @@
           const r = matches[0];
           matchHtml = `<div class="mail-match single" data-target-id="${escapeHtml(r.id)}">匹配到台账：<strong>${escapeHtml(r.company)}</strong> · ${escapeHtml(r.position)}（当前阶段：${escapeHtml(r.stage)}）</div>`;
         } else if (matches.length > 1) {
-          matchHtml = `<div class="mail-match multi"><label>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），请选择目标：<select class="control mail-target-select">${orderedMatches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}${r.batch ? `（${escapeHtml(r.batch)}）` : ''} · ${escapeHtml(r.stage)}</option>`).join('')}</select></label></div>`;
+          matchHtml = `<div class="mail-match multi"><label>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），请选择目标：<select class="control mail-target-select">${orderedMatches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}${r.orgUnit ? `（${escapeHtml(r.orgUnit)}）` : ''} · ${escapeHtml(r.stage)}</option>`).join('')}</select></label></div>`;
         } else {
           matchHtml = '<div class="mail-match none">未匹配到台账记录——可「新建记录」并预填邮件信息（走人工补全），或忽略。</div>';
         }
@@ -5627,11 +5614,6 @@
       function populateSelects() {
         // 阶段组合框预设候选（时间线编辑器与推进自定义共用）
         $('#stagePresets').innerHTML = STAGE_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
-        // 批次 / 渠道候选（v4.4.0）：datalist 允许自由输入，取不到元素时静默跳过
-        const batchList = $('#batchPresets');
-        if (batchList) batchList.innerHTML = BATCH_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
-        const channelList = $('#channelPresets');
-        if (channelList) channelList.innerHTML = CHANNEL_PRESETS.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
         // 企业性质（v4.6.0）：选项由 COMPANY_TYPES 生成，HTML 里只留「未设置」，避免两处枚举漂移
         const companyTypeSelect = $('#companyType');
         if (companyTypeSelect) {
@@ -5741,7 +5723,7 @@
         renderTimelineEditor(source);
         // 回填字段清单：新增任何表单字段都必须同步加进这里，否则「编辑」时该字段会被静默清空。
         // 取不到元素时跳过（null 安全），便于分阶段加字段。
-        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'batch', 'channel', 'referral', 'intent', 'salary']) {
+        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'referral', 'intent', 'salary']) {
           const input = document.getElementById(field);
           if (!input) continue;
           // intent 是下拉框：0（未设）要映射成空字符串，否则 select 会落在无匹配项的状态
@@ -5749,9 +5731,11 @@
           input.value = field === 'intent' ? (Number(raw) > 0 ? String(Number(raw)) : '') : (raw ?? '');
         }
         // 已填过任一「更多字段」时自动展开折叠区，避免用户以为数据丢了
-        // （意向度与企业性质已上移到主网格，不再参与这里的判定）
+        // （意向度与企业性质已上移到主网格、批次与渠道已在 v4.11.0 删除，都不再参与判定。
+        //   折叠区现在只剩内推人与薪资两项 —— 刻意保留折叠：这两项是低频字段，
+        //   平铺会让新增弹窗的常用路径变长，而「已填过就自动展开」已经解决了"以为数据丢了"。）
         const more = $('#formMore');
-        if (more) more.open = !!source && ['batch', 'channel', 'referral', 'salary'].some(f => String(source[f] || '').trim());
+        if (more) more.open = !!source && ['referral', 'salary'].some(f => String(source[f] || '').trim());
         updateSameCompanyHint(); // 打开即显示「该公司已有哪几个岗位」，录入第二个岗位时心里有数
         updateOrgSplitHint();    // 公司名带「XX分行」时给出「拆成企业 + 机构」的建议（不自动执行）
         els.dialog.showModal();
