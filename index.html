@@ -5669,17 +5669,36 @@
         if (last) last.focus();
       }
 
-      // 公司名 → 企业 + 机构 的拆分**建议**（v4.11.0）。
-      // 刻意只给建议、点了才拆：正则对「中国银行股份有限公司杭州分行」这类含法人后缀的名字会拆错，
-      // 而拆错了用户未必发现（公司名看着仍然合理），机构层就静默错位。
-      // 「招银网络科技」这种无法从字面推断母企业的情况不给任何提示 —— 提示了也猜不出来，
-      // 正确录法是用户自己填 company='招商银行' + orgUnit='招银网络科技'。
-      const ORG_SPLIT_RE = /^(.{2,}?)([\u4e00-\u9fa5]{2,8}(?:分行|支行|分公司|子公司|事业部|研究院|办事处|分部|分中心))$/;
+      // 公司名 → 企业 + 机构 的拆分**建议**（v4.11.0）。三条精度纪律，都是实测出来的：
+      //
+      // 1. 企业名用**贪婪**匹配。机构名短（杭州分行）、企业名长（招商银行），贪婪才会在正确的
+      //    位置切开；惰性（.{2,}?）会把最常见的「招商银行杭州分行」拆成「招商」+「银行杭州分行」，
+      //    「中国银行杭州分行」拆成「中国」+「银行杭州分行」—— 第一版就是这么写的，实测全错。
+      // 2. 整串含法人后缀（有限公司 / 股份 / 集团）时**不给建议**。此时企业名的结尾无法可靠定位：
+      //    「中国银行股份有限公司杭州分行」贪婪会切成 中国银行 + 股份有限公司杭州分行，
+      //    后缀跑到了机构那一段。宁可不建议，让用户自己填 —— 与插件识别「宁空勿错」同一条原则。
+      //    注意这里**不能**把裸「公司」列进排除词，否则「杭州分公司」这种最需要拆的形态会被误伤。
+      // 3. 后缀只收「分行 / 支行 / 分公司 / 分部 / 办事处 / 分中心」这一族。事业部 / 研究院 / 子公司
+      //    前面通常是短品牌名，贪婪与惰性都容易切错（「星海科技云计算事业部」→ 星海 + 科技云计算事业部），
+      //    收益不抵误报，所以不给建议 —— 字段本身照样可以手填这些值。
+      //
+      // 仍然只给建议、点了才拆、拆完两个框都能改：建议是预览式的（按钮文本把两段都写出来），
+      // 所以像「工商银行北京市分行」→ 工商银行北 + 京市分行 这种一眼看得出不对的拆分不构成静默错位。
+      // 「招银网络科技」这种推断不出母企业的也不给提示（提示了也猜不出来），
+      // 正确录法是自己填 company='招商银行' + orgUnit='招银网络科技'。
+      const ORG_LEGAL_SUFFIX_RE = /股份有限公司|有限责任公司|有限公司|股份公司|集团/;
+      const ORG_SPLIT_RE = /^(.{2,})([\u4e00-\u9fa5]{2,8}(?:分行|支行|分公司|分部|办事处|分中心))$/;
+      // 提示与点击必须共用这一个函数：两边各写一份判定，就会出现「预览说能拆、点了没反应」
+      // 或「预览不显示、但残留的按钮点了拆出别的东西」。
+      function matchOrgSplit(name) {
+        const value = String(name || '').trim();
+        if (!value || ORG_LEGAL_SUFFIX_RE.test(value)) return null;
+        return ORG_SPLIT_RE.exec(value);
+      }
       function updateOrgSplitHint() {
         const hint = $('#orgSplitHint');
         if (!hint) return;
-        const company = $('#company').value.trim();
-        const m = ORG_SPLIT_RE.exec(company);
+        const m = matchOrgSplit($('#company').value);
         // 已经填了机构就不再建议：用户显然有自己的分法，反复提示只是干扰
         if (!m || $('#orgUnit').value.trim()) { hint.hidden = true; hint.innerHTML = ''; return; }
         hint.innerHTML = `这个名字像是「企业 + 机构」：<button class="text-button" type="button" id="orgSplitBtn">拆成「${escapeHtml(m[1])}」+「${escapeHtml(m[2])}」</button>`;
@@ -6860,7 +6879,7 @@
       $('#orgUnit').addEventListener('input', updateOrgSplitHint);
       $('#orgSplitHint').addEventListener('click', event => {
         if (event.target.id !== 'orgSplitBtn') return;
-        const m = ORG_SPLIT_RE.exec($('#company').value.trim());
+        const m = matchOrgSplit($('#company').value);   // 与预览同一个判定，见 matchOrgSplit 的注释
         if (!m) return;
         $('#company').value = m[1];
         $('#orgUnit').value = m[2];

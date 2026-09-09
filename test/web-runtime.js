@@ -705,6 +705,113 @@ check('toggleCompanyGroup 折叠态持久化，且收纳开启时折叠组不渲
   assert.ok(sandbox2.els.body.innerHTML.includes('data-id="r1"'), '再次点击展开');
 });
 
+// 机构层与聚拢测试共用的记录工厂。字段清单照 seedRecords 的形态给全 ——
+// recordRowHtml / boardCardHtml 会读其中十几个，缺了会读到 undefined 而静默渲染成空串，
+// 那种"测试通过但渲染其实是坏的"比直接报错更难发现。
+function orgRec(id, company, position, orgUnit, date) {
+  return {
+    id, company, position, orgUnit, city: '杭州', stage: '已投递', applicationDate: date,
+    applicationUrl: '', scheduleAt: '', deadline: '', intent: 0, notes: [], nextAction: '',
+    updatedAt: 1, timeline: [{ stage: '已投递', at: date, note: '' }]
+  };
+}
+const countClass = (h, cls) => (h.match(new RegExp(cls, 'g')) || []).length;
+
+check('同企业收纳：企业 → 机构两级组头，且机构层只在真有 2 个以上不同机构时才渲染', () => {
+  seedRecords();
+  sandbox2.records = [
+    orgRec('b1', '招商银行', '客户经理', '杭州分行', '2026-09-01'),
+    orgRec('b2', '招商银行', '理财顾问', '杭州分行', '2026-09-02'),
+    orgRec('b3', '招商银行', '管培生', '成都分行', '2026-09-03'),
+    orgRec('b4', '招商银行', '柜员', '', '2026-09-04'),
+    orgRec('c1', '阿里', '算法', '', '2026-08-20')
+  ];
+  vm.runInContext('uiPrefs.groupByCompany = true', sandbox2);
+  sandbox2.renderRecordsView();
+  let h = sandbox2.els.body.innerHTML;
+  assert.strictEqual(countClass(h, 'company-group-row'), 2, '招商银行与阿里各一个企业组头');
+  assert.strictEqual(countClass(h, 'company-unit-row'), 3, '招商银行下有 杭州分行 / 成都分行 / 未填机构 三个子组');
+  assert.ok(h.includes('（未填机构）'), '机构为空的记录归到「（未填机构）」子组，而不是被丢掉');
+  // 阿里只有一种机构取值（空）→ 不该多一层没信息量的缩进。它的组头在最后，所以取尾段检查
+  assert.ok(!h.slice(h.lastIndexOf('company-group-row')).includes('company-unit-row'),
+    '单一机构取值的企业不该渲染机构层');
+
+  // 折叠机构子组：键是「企业::机构」复合键（两家银行都能有「杭州分行」，只用机构名会串台）
+  const bankKey = sandbox2.companyGroupIndex(sandbox2.records).get('b1');
+  const unitKey = `${bankKey}::杭州分行`;
+  sandbox2.toggleCompanyUnit(unitKey);
+  assert.ok(JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).collapsedUnits.includes(unitKey),
+    '机构折叠态持久化，且用的是复合键');
+  h = sandbox2.els.body.innerHTML;
+  assert.ok(!h.includes('data-id="b1"') && !h.includes('data-id="b2"'), '折叠后该机构的明细行被跳过');
+  assert.ok(h.includes('data-id="b3"') && h.includes('data-id="b4"'), '其它机构不受影响');
+  assert.ok(h.includes('data-unit='), '机构组头仍在（只是折叠）');
+  sandbox2.toggleCompanyUnit(unitKey); // 复原
+
+  // 折叠企业组：机构层整体隐藏（不需要单独记忆）
+  sandbox2.toggleCompanyGroup(bankKey);
+  h = sandbox2.els.body.innerHTML;
+  assert.ok(!h.includes('data-id="b1"') && !h.includes('data-id="b4"'), '企业折叠时其明细行全部跳过');
+  assert.ok(!h.includes('data-unit='), '企业折叠时机构组头也不渲染');
+  assert.ok(h.includes('data-id="c1"'), '其它企业不受影响');
+  sandbox2.toggleCompanyGroup(bankKey); // 复原
+
+  // 全企业机构都为空 → 一个机构层都不该有
+  sandbox2.records = [orgRec('d1', '腾讯', '后端', '', '2026-09-01'), orgRec('d2', '腾讯', '前端', '', '2026-09-02')];
+  sandbox2.renderRecordsView();
+  h = sandbox2.els.body.innerHTML;
+  assert.strictEqual(countClass(h, 'company-group-row'), 1, '仍有一个企业组头');
+  assert.strictEqual(countClass(h, 'company-unit-row'), 0, '全为空时不渲染机构层');
+  assert.ok(h.includes('data-id="d1"') && h.includes('data-id="d2"'), '两条明细行直接挂在企业下');
+});
+
+check('收纳开启时先聚拢同企业记录：非公司类排序下不会插出重复组头', () => {
+  seedRecords();
+  // 这个数据在「投递日期从新到旧」下，腾讯的两条被阿里隔开 —— 不聚拢就会插出 3 个组头
+  sandbox2.records = [
+    orgRec('p1', '腾讯', '后端', '', '2026-09-03'),
+    orgRec('p2', '阿里', '算法', '', '2026-09-02'),
+    orgRec('p3', '腾讯科技有限公司', '前端', '', '2026-09-01')
+  ];
+  sandbox2.els.sort.value = 'applied-desc';
+  vm.runInContext('uiPrefs.groupByCompany = true', sandbox2);
+  sandbox2.renderRecordsView();
+  const h = sandbox2.els.body.innerHTML;
+  assert.strictEqual(countClass(h, 'company-group-row'), 2, '同一家企业只应有一个组头（腾讯 / 阿里）');
+  const i1 = h.indexOf('data-id="p1"'), i3 = h.indexOf('data-id="p3"'), i2 = h.indexOf('data-id="p2"');
+  assert.ok(i1 > -1 && i2 > -1 && i3 > -1, '三条明细行都在');
+  assert.ok(i1 < i3 && i3 < i2, '腾讯的两条应相邻，阿里那条排在它们之后（组间顺序 = 该企业首条记录在排序里的位置）');
+  assert.ok(h.includes('2 个岗位'), '组头计数是全量台账口径');
+});
+
+check('公司名拆分建议：贪婪切分 + 含法人后缀时不建议（精度优先于召回）', () => {
+  // 三个符号都从产物里现场取，不在测试里复制正则 —— 复制一份就会与源码漂移，
+  // 漂移之后测试测的是自己那份，改了源码也照样绿。
+  const SPLIT_RE = extractConst(html, 'ORG_SPLIT_RE');
+  const LEGAL_RE = extractConst(html, 'ORG_LEGAL_SUFFIX_RE');
+  const match = new Function('ORG_SPLIT_RE', 'ORG_LEGAL_SUFFIX_RE',
+    `${extractFunction(html, 'matchOrgSplit')}\nreturn matchOrgSplit;`)(SPLIT_RE, LEGAL_RE);
+  const parts = (name) => { const m = match(name); return m ? [m[1], m[2]] : null; };
+  // 常见形态必须拆对（机构名短、企业名长，所以企业名贪婪）
+  assert.deepStrictEqual(parts('招商银行杭州分行'), ['招商银行', '杭州分行']);
+  assert.deepStrictEqual(parts('中国银行杭州分行'), ['中国银行', '杭州分行']);
+  assert.deepStrictEqual(parts('招商银行杭州分公司'), ['招商银行', '杭州分公司']);
+  // 含法人后缀时企业名的结尾无法可靠定位，宁可不给建议
+  assert.strictEqual(parts('中国银行股份有限公司杭州分行'), null);
+  assert.strictEqual(parts('腾讯科技（深圳）有限公司杭州分公司'), null);
+  // 事业部 / 研究院 / 子公司不在建议范围内（前面通常是短品牌名，贪婪与惰性都容易切错）
+  assert.strictEqual(parts('星海科技云计算事业部'), null);
+  // 推断不出母企业的不给建议：提示了也猜不出来
+  assert.strictEqual(parts('招银网络科技'), null);
+  assert.strictEqual(parts('招商银行'), null);
+  assert.strictEqual(parts(''), null);
+  assert.strictEqual(parts(null), null);
+  // 已知的不完美形态，如实钉住当前行为：贪婪会切在「北京市」中间。
+  // 建议是预览式的（按钮文本把两段都写出来）且点完两个框都能改，所以这种一眼看得出不对的
+  // 拆分不构成静默错位。将来若改进正则，这条断言会提示行为变了 —— 那正是它存在的意义。
+  assert.deepStrictEqual(parts('工商银行北京市分行'), ['工商银行北', '京市分行'], '已知不完美，见上面的说明');
+});
+
 check('recordRowHtml：同公司 +N 岗位 chip、机构、截止倒计时分级', () => {
   seedRecords();
   // 截止日按「今天 +2 天」动态生成，避免测试随真实日期漂移而失效
