@@ -501,7 +501,7 @@
         }
         const views = [
           { label: '总览', hash: '#/overview' }, { label: '投递记录', hash: '#/records' }, { label: '邮件提醒', hash: '#/mail' },
-          { label: '我的简历', hash: '#/resume' }, { label: '岗位库', hash: '#/jobPool' }, { label: '工具', hash: '#/tools' }
+          { label: '我的简历', hash: '#/resume' }, { label: '工具', hash: '#/tools' }
         ];
         for (const view of views) {
           if (q && !view.label.toLowerCase().includes(q) && !view.hash.includes(q)) continue;

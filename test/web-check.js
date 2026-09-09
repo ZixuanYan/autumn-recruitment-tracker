@@ -1182,18 +1182,21 @@ check('被 hidden 切换且设了 display 的容器都有 [hidden]{display:none}
   assert.ok(hiddenGuards.has('.view'), '.view 的守卫应被识别到');
   assert.ok(hiddenGuards.has('.drawer'), '.drawer 的守卫应被识别到');
   assert.ok(hiddenGuards.has('.insights-body'), '.insights-body 的守卫应被识别到');
-  assert.ok(hiddenGuards.has('.ocr-results'), '.ocr-results 的守卫应被识别到');
   assert.ok(targets.length >= 8, `应扫到足够多的 hidden 目标，实际 ${targets.length}`);
 });
 
 console.log('v4.8.0 投递记录独立视图：路由 / 导航 / 命令面板 / 视图容器');
 
-check('投递记录视图容器存在，且位于总览之后、岗位库之前（与导航顺序一致）', () => {
+check('投递记录视图容器存在，且位于总览之后、我的简历之前（与导航顺序一致）', () => {
+  // v4.12.0：岗位库视图已删除，records 的下一个视图变成 resume。
+  // 这条断言的价值不在于"顺序好不好看"，而在于视图容器的先后必须与导航一致 ——
+  // 不一致时键盘 Tab 与读屏器的浏览顺序会和侧栏显示的顺序对不上，且没有任何报错。
   const overview = html.indexOf('data-view="overview"');
   const records = html.indexOf('data-view="records"');
-  const jobPool = html.indexOf('data-view="jobPool"');
-  assert.ok(overview > 0 && records > 0 && jobPool > 0, '三个视图容器都应存在');
-  assert.ok(overview < records && records < jobPool, `顺序应为 overview < records < jobPool，实际 ${overview} / ${records} / ${jobPool}`);
+  const resume = html.indexOf('data-view="resume"');
+  assert.ok(overview > 0 && records > 0 && resume > 0, '三个视图容器都应存在');
+  assert.ok(overview < records && records < resume, `顺序应为 overview < records < resume，实际 ${overview} / ${records} / ${resume}`);
+  assert.ok(!html.includes('data-view="jobPool"'), '岗位库视图应已删除');
   // 记录视图默认隐藏，靠既有的 .view[hidden]{display:none} 守卫（下方 hidden 守卫会复核）
   assert.ok(/<div class="view" data-view="records" hidden>/.test(html), 'records 视图初始应带 hidden');
 });
@@ -1205,7 +1208,7 @@ check('记录面板迁移后所有既有 id 原样保留（els 映射与事件�
   assert.deepStrictEqual(missing, [], `记录面板缺失 id：${missing.join(', ')}`);
   // 这些 id 都必须落在 records 视图容器内（而不是散落到别处）
   const recStart = html.indexOf('data-view="records"');
-  const recEnd = html.indexOf('data-view="jobPool"');
+  const recEnd = html.indexOf('data-view="resume"');   // v4.12.0：岗位库删除后，右边界换成下一个视图
   const recSlice = html.slice(recStart, recEnd);
   const outside = ids.filter(id => !recSlice.includes(`id="${id}"`));
   assert.deepStrictEqual(outside, [], `这些 id 不在 records 视图内：${outside.join(', ')}`);
@@ -1232,14 +1235,15 @@ check('ROUTE_ALIASES：records 恢复为独立视图，upcoming 仍并入总览'
   assert.strictEqual(aliases.overview, 'overview');
 });
 
-check('导航 6 项且顺序为 总览 / 投递记录 / 邮件提醒 / 我的简历 / 岗位库 / 工具', () => {
+check('导航 5 项且顺序为 总览 / 投递记录 / 邮件提醒 / 我的简历 / 工具', () => {
   const navStart = html.indexOf('<nav class="sidebar-nav">');
   const navEnd = html.indexOf('</nav>', navStart);
   const nav = html.slice(navStart, navEnd);
   const routes = [...nav.matchAll(/data-route="([\w-]+)"/g)].map(m => m[1]);
   const labels = [...nav.matchAll(/<span>([^<]+)<\/span>/g)].map(m => m[1]);
-  assert.deepStrictEqual(routes, ['overview', 'records', 'mail', 'resume', 'jobPool', 'tools']);
-  assert.deepStrictEqual(labels, ['总览', '投递记录', '邮件提醒', '我的简历', '岗位库', '工具']);
+  // v4.12.0：岗位库整页删除（它是截图识别与腾讯文档同步的唯一落点，那两个入口已随之移除）
+  assert.deepStrictEqual(routes, ['overview', 'records', 'mail', 'resume', 'tools']);
+  assert.deepStrictEqual(labels, ['总览', '投递记录', '邮件提醒', '我的简历', '工具']);
   // 投递记录复用既有 #i-stack sprite，不新增 symbol
   assert.ok(/data-route="records"[^>]*>[\s\S]*?#i-stack/.test(nav), 'records 导航项应复用 #i-stack 图标');
 });
@@ -1566,6 +1570,60 @@ check('简历区块类型可转换：按钮与分支都在，且多段经历转�
     '键值型转列表型要把现有键值对装进第一段经历，不能直接给空数组（那等于删数据）');
   assert.ok(/renderResumeEditor\(\)/.test(code),
     '转换后必须整体重渲染：类型变了，data-type、头部按钮与 body 结构都要换');
+});
+
+// ---- v4.12.0 大清理的守卫：跨端消息契约 + 已删功能不得半截复活 ----
+console.log('v4.12.0 守卫（跨端消息契约对账 / 岗位库与截图识别不得复活）');
+
+check('网页端只监听插件真的会发的消息类型（跨端契约对账）', () => {
+  // 这条守卫是本次清理的直接产物，也是整轮里最值得留下的一条。
+  // 此前网页端长期监听 6 个第三方旧插件（AUTUMN_JOB_CAPTURE）的消息类型，而当前插件一个都不发：
+  // bridgeReady 只在 CAPTURE_READY 分支里被置 true → 它恒为 false → 「同步腾讯文档」按钮永久禁用、
+  // 「识别投递网址」按钮永久隐藏、腾讯文档弹窗的三步指引教用户去装一个不干这事的插件。
+  // 控制台零报错、构建全绿、418 项测试也全绿 —— 因为没有任何断言去比对两端的消息集合。
+  // 死分支不会自己暴露，只能靠对账。
+  const extDir = path.resolve(__dirname, '../extension');
+  const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+  const extSrc = walk(extDir).filter(f => f.endsWith('.js')).map(f => fs.readFileSync(f, 'utf8')).join('\n');
+  const listened = [...new Set([...html.matchAll(/event\.data\.type === '([A-Z_]+)'/g)].map(m => m[1]))].sort();
+  assert.ok(listened.length >= 3, `网页端应至少监听 3 个消息类型，实际 ${JSON.stringify(listened)}`);
+  const unheard = listened.filter(t => !extSrc.includes(`'${t}'`));
+  assert.deepStrictEqual(unheard, [],
+    `网页端监听了插件从不发送的消息类型：${unheard.join(', ')} —— 那是永远等不到回应的死分支，` +
+    '症状通常是某个按钮永久禁用或某个入口永久隐藏，且不报错');
+  // 反向：已删除的旧插件协议标识不得复活（同样只匹配代码形态，注释里提到不算）
+  for (const dead of ['AUTUMN_JOB_CAPTURE', 'CAPTURE_PING', 'CAPTURE_READY', 'CAPTURE_RESULT',
+    'CAPTURE_ERROR', 'SYNC_JOBS_RESULT', 'SYNC_JOBS_ERROR', 'CAPTURE_REGISTER_TRACKER']) {
+    assert.ok(!html.includes(`'${dead}'`), `'${dead}' 属于已删除的第三方旧插件协议，不得复活`);
+  }
+  // 当前插件在用的那个 source 必须还在白名单里（它沿用了旧项目的命名，容易被当成死代码一起删掉）
+  assert.ok(/const BRIDGE_SOURCES = \['AUTUMN_JOB_ASSISTANT'\]/.test(html),
+    'BRIDGE_SOURCES 必须保留 AUTUMN_JOB_ASSISTANT —— 那是当前插件在用的标识，删了插件推送会全部被丢弃');
+});
+
+check('岗位库与截图识别已整体删除，不得半截复活（v4.12.0）', () => {
+  // 半截复活的两种形态都很难查：导航项回来了但视图容器没回来 → 点导航白屏；
+  // ocr/ 目录回来了但 build.js 白名单没加 → 只在用户真的用到那条低频路径时才 404。
+  // 所以这里把 HTML、JS 与构建白名单三处一起钉住。
+  const DEAD = [
+    'data-view="jobPool"', 'data-route="jobPool"', 'id="jobPool"', 'id="jobList"', 'id="syncJobsBtn"',
+    'id="jobSyncDialog"', 'id="screenshotDialog"', 'id="ocrDropzone"', 'id="toolScreenshotBtn"',
+    'id="captureDialog"', 'id="captureUrlBtn"',
+    'renderJobPool', 'handleJobAction', 'normalizeJob', 'parseJobRows', 'recognizeScreenshot',
+    './ocr/tesseract.min.js', './ocr/chi_sim-data.js'
+  ];
+  const alive = DEAD.filter(t => html.includes(t));
+  assert.deepStrictEqual(alive, [], `这些已删除的标识又出现在产物里：${alive.join(', ')}`);
+  // ocr/ 目录与它在白名单里的条目必须同时不存在
+  assert.ok(!fs.existsSync(path.resolve(__dirname, '../ocr')),
+    'ocr/ 目录应已删除（14 MB tesseract，占仓库体积的绝大部分）');
+  const buildSrc = fs.readFileSync(path.resolve(__dirname, '../build.js'), 'utf8');
+  const dirs = /const DIRS = \[[^\]]*\]/.exec(buildSrc);
+  assert.ok(dirs, 'build.js 里找不到 DIRS 白名单');
+  assert.ok(!dirs[0].includes('ocr'), `build.js 的 DIRS 不应再有 ocr：${dirs[0]}`);
+  // 导航与视图数量：删掉岗位库后是 5 个视图，多一个少一个都说明结构被动过
+  assert.strictEqual((html.match(/<div class="view" data-view=/g) || []).length, 5, '应有 5 个视图容器');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

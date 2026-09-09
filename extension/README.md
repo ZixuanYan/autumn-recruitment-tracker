@@ -132,12 +132,6 @@ v5.1.0 起 `common/` 里不再有 `company-key.js` 与 `default-resume.js`——
 - 简历、暂存记录与胶囊位置 100% 保存在本机浏览器（`chrome.storage.local`），不上传任何服务器
 - 投递记录的云端同步仅发生在网页版管理器（GitHub 私有 Gist，可口令加密），详见网页版仓库说明
 
-## 来源说明
-
-本项目基于以下开源项目修改而来：
-
-- [ljkss/autumn-job-assistant-tracker](https://github.com/ljkss/autumn-job-assistant-tracker)（秋招网申填写与投递管理助手 v2.0）——桥接协议 `AUTUMN_JOB_ASSISTANT` 与简历存储键的命名沿用自它
-
 ## 版本
 
 - 扩展：v5.3.1（阶段/企业性质/归一化/默认简历改为消费仓库根 `shared/` 的单一事实源；Side Panel + 可拖拽胶囊 + 设计令牌化样式自 v5.0.0 起）

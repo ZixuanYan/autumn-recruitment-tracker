@@ -59,11 +59,8 @@
       // 刻意不搬进 shared/——搬过去只会让 Action 与插件多一份用不到的耦合。
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
-      const JOB_POOL_KEY = 'autumnRecruitmentTracker.jobPool.v1';
-      const JOB_POOL_META_KEY = 'autumnRecruitmentTracker.jobPoolMeta.v1';
-      const QQ_JOB_DOC_URL = 'https://docs.qq.com/smartsheet/DUXJLSnZoTVFhVUVs?tab=tkaHEa&viewId=vKWCWH';
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.11.1';
+      const APP_VERSION = '4.12.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -109,24 +106,12 @@
       }
       let resume = loadResumeData();
       let resumeSavedAt = loadResumeMeta();
-      let jobs = loadJobs();
-      let jobPoolUpdatedAt = loadJobPoolMeta();
       let editingId = null;
       let toastTimer;
-      let bridgeReady = false;
-      let hasLegacyCapturePlugin = false; // 仅旧版 AUTUMN_JOB_CAPTURE 插件支持“识别投递网址 / 一键同步腾讯文档”
-      let bridgeCheckTimer;
-      let captureTimer;
-      let jobSyncTimer;
       let safetyDbPromise;
       let backupFileHandle = null;
       let lastFileBackupAt = '';
       let persistenceQueue = Promise.resolve();
-      let ocrFiles = [];
-      let ocrPreviewUrls = [];
-      let ocrCandidates = [];
-      let ocrWorker = null;
-      let ocrRunning = false;
       let syncConfig = loadSyncConfig();
       let tombstones = loadTombstones();
       let syncBusy = false;
@@ -255,122 +240,6 @@
         rec.stage = deriveStage(rec); // 当前阶段 = 时间线末项（派生缓存，兼容分布/筛选/排序/徽章/桥接/同步）
         return rec;
       }
-
-      function stableJobId(job) {
-        const source = `${job.company}|${job.position}|${job.applicationUrl || ''}`.toLocaleLowerCase('zh-CN');
-        let hash = 2166136261;
-        for (let i = 0; i < source.length; i += 1) hash = Math.imul(hash ^ source.charCodeAt(i), 16777619);
-        return `job-${(hash >>> 0).toString(16)}`;
-      }
-
-      function normalizeJob(item) {
-        const job = {
-          company: String(item.company || '').trim().slice(0, 80),
-          position: String(item.position || '').trim().slice(0, 120),
-          city: String(item.city || '').trim().slice(0, 50),
-          deadline: String(item.deadline || '').trim().slice(0, 60),
-          category: String(item.category || '').trim().slice(0, 60),
-          applicationDate: /^20\d{2}-\d{2}-\d{2}$/.test(String(item.applicationDate || '')) ? String(item.applicationDate) : '',
-          applicationUrl: /^https?:\/\//i.test(String(item.applicationUrl || '').trim()) ? String(item.applicationUrl).trim() : '',
-          sourceUrl: QQ_JOB_DOC_URL,
-          sourceUpdatedAt: String(item.sourceUpdatedAt || new Date().toISOString())
-        };
-        return { id: String(item.id || stableJobId(job)), ...job };
-      }
-
-      function loadJobs() {
-        try {
-          const parsed = JSON.parse(localStorage.getItem(JOB_POOL_KEY) || '[]');
-          return Array.isArray(parsed) ? parsed.map(normalizeJob).filter(job => job.company && job.position) : [];
-        } catch (_) {
-          return [];
-        }
-      }
-
-      function loadJobPoolMeta() {
-        try { return String(JSON.parse(localStorage.getItem(JOB_POOL_META_KEY) || '{}').updatedAt || ''); } catch (_) { return ''; }
-      }
-
-      function saveJobs(incoming, message = '') {
-        const merged = new Map(jobs.map(job => [job.id, job]));
-        incoming.map(normalizeJob).filter(job => job.company && job.position).forEach(job => merged.set(job.id, job));
-        jobs = [...merged.values()];
-        jobPoolUpdatedAt = new Date().toISOString();
-        localStorage.setItem(JOB_POOL_KEY, JSON.stringify(jobs));
-        localStorage.setItem(JOB_POOL_META_KEY, JSON.stringify({ updatedAt: jobPoolUpdatedAt, count: jobs.length, sourceUrl: QQ_JOB_DOC_URL }));
-        renderJobPool();
-        if (message) showToast(message);
-      }
-
-      function cleanJobCell(value) {
-        return String(value || '').replace(/\s+/g, ' ').replace(/^[|｜,，;；·•\-—\s]+|[|｜,，;；·•\-—\s]+$/g, '').trim();
-      }
-
-      function splitJobLine(line) {
-        const text = String(line || '').trim();
-        if (!text) return [];
-        const separator = text.includes('\t') ? /\t+/ : text.includes('|') || text.includes('｜') ? /[|｜]+/ : /[,，]+/;
-        return text.split(separator).map(cleanJobCell).filter(Boolean);
-      }
-
-      function parseJobRows(input) {
-        const rawRows = Array.isArray(input) ? input : String(input || '').split(/\r?\n/).map(line => ({ cells: splitJobLine(line), text: line, links: [] }));
-        const rows = rawRows.map(row => {
-          if (Array.isArray(row)) return { cells: row.map(cleanJobCell).filter(Boolean), text: row.join(' '), links: [] };
-          return {
-            cells: (Array.isArray(row?.cells) ? row.cells : splitJobLine(row?.text || '')).map(cleanJobCell).filter(Boolean),
-            text: cleanJobCell(row?.text || ''),
-            links: (Array.isArray(row?.links) ? row.links : []).filter(url => /^https?:\/\//i.test(String(url)))
-          };
-        }).filter(row => row.cells.length >= 2 || row.links.length);
-        if (!rows.length) return [];
-
-        const headerAliases = {
-          company: /公司|企业|单位|厂商|雇主/,
-          position: /岗位|职位|职务|方向/,
-          city: /城市|地点|地区|工作地/,
-          deadline: /截止|截止时间|网申时间|结束时间/,
-          category: /类型|性质|届次|批次|招聘类别/,
-          applicationUrl: /链接|投递|网申|申请|官网/
-        };
-        let headerIndex = -1;
-        let mapping = {};
-        rows.slice(0, 12).some((row, index) => {
-          const found = {};
-          row.cells.forEach((cell, cellIndex) => {
-            Object.entries(headerAliases).forEach(([field, pattern]) => { if (!(field in found) && pattern.test(cell)) found[field] = cellIndex; });
-          });
-          if ('company' in found && 'position' in found) { headerIndex = index; mapping = found; return true; }
-          return false;
-        });
-
-        const cities = ['北京','上海','广州','深圳','杭州','南京','苏州','成都','重庆','武汉','西安','长沙','天津','厦门','合肥','郑州','青岛','济南','宁波','无锡','珠海','佛山','东莞','福州','昆明','南昌','大连','沈阳','哈尔滨','石家庄','太原','贵阳','南宁','海口','兰州','乌鲁木齐','呼和浩特','长春','香港','澳门'];
-        const ignored = /腾讯文档|登录|注册|筛选|排序|视图|新建|分享|评论|工具栏|智能表格|加载中|搜索文档/;
-        const parsed = [];
-        rows.forEach((row, index) => {
-          if (index === headerIndex || (headerIndex >= 0 && index < headerIndex)) return;
-          const cells = row.cells.filter(cell => !/^https?:\/\//i.test(cell));
-          const get = field => Number.isInteger(mapping[field]) ? row.cells[mapping[field]] || '' : '';
-          const links = [...row.links, ...row.cells.filter(cell => /^https?:\/\//i.test(cell))];
-          let company = cleanJobCell(get('company'));
-          let position = cleanJobCell(get('position'));
-          let city = cleanJobCell(get('city'));
-          let deadline = cleanJobCell(get('deadline'));
-          let category = cleanJobCell(get('category'));
-          if (!company || !position) {
-            const useful = cells.filter(cell => cell.length >= 2 && cell.length <= 120 && !ignored.test(cell));
-            company ||= useful[0] || '';
-            position ||= useful.find((cell, cellIndex) => cellIndex > 0 && /实习|校招|管培|工程师|开发|算法|产品|运营|设计|销售|顾问|分析|研究|职能|岗位|招聘/.test(cell)) || useful[1] || '';
-          }
-          if (!city) city = cities.find(name => `${row.text} ${row.cells.join(' ')}`.includes(name)) || '';
-          if (!deadline) deadline = row.cells.find(cell => /(?:截止|长期|尽快|招满|20\d{2}[.\-/年]\d{1,2})/.test(cell)) || '';
-          if (!category) category = row.cells.find(cell => /暑期|日常实习|秋招|春招|校招|管培|提前批/.test(cell)) || '';
-          if (!company || !position || ignored.test(company) || ignored.test(position) || company === position) return;
-          parsed.push(normalizeJob({ company, position, city, deadline, category, applicationUrl: links[0] || '', sourceUpdatedAt: new Date().toISOString() }));
-        });
-        return [...new Map(parsed.map(job => [job.id, job])).values()];
-      }
-
       // ===== 云同步（可选）：把投递记录同步到自己的 GitHub 私有 Gist，实现跨设备修改 =====
       function loadSyncConfig() {
         const empty = { token: '', passphrase: '', gistId: '', lastSyncAt: '' };
@@ -1573,68 +1442,9 @@
         refreshStageFilter();
         renderDistribution();
         renderInsights();
-        renderJobPool();
         renderRecordsView();
         renderUpcoming();
       }
-
-      function renderJobPool() {
-        const keyword = $('#jobSearchInput').value.trim().toLocaleLowerCase('zh-CN');
-        const visible = jobs.filter(job => !keyword || `${job.company} ${job.position} ${job.city} ${job.category}`.toLocaleLowerCase('zh-CN').includes(keyword));
-        const shown = visible.slice(0, 60);
-        $('#jobSyncMeta').textContent = jobPoolUpdatedAt
-          ? `本地岗位 ${jobs.length} 条 · 最近同步 ${formatClock(jobPoolUpdatedAt)}${visible.length !== jobs.length ? ` · 找到 ${visible.length} 条` : ''}`
-          : '尚未同步岗位';
-        if (!shown.length) {
-          $('#jobList').innerHTML = `<div class="job-empty">${jobs.length ? '没有找到符合条件的岗位' : '岗位库是待投候选池：点右上「同步腾讯文档」粘贴导入，或用「工具 → 截图识别导入岗位」；确认要投时点「记为已投递」进入总览台账'}</div>`;
-          return;
-        }
-        $('#jobList').innerHTML = shown.map(job => {
-          // 按钮 disabled 态必须与点击时的判定同源。此前这里用「公司名与岗位名原文精确相等」，
-          // 而点击时走 findDuplicateRecord 的归一化比较，两者会给出不同结论：
-          // 按钮可点但点了说重复，或按钮被禁用但其实是一条合法的新岗位。
-          // variant（同岗位不同方向 / 城市 / 机构）不禁用 —— 那正是需要放行的「第二个岗位」。
-          const dupHit = findDuplicateRecord(records, job);
-          const alreadyAdded = !!dupHit && dupHit.mode === 'duplicate';
-          return `<article class="job-card">
-            <div class="job-card-top"><div class="job-company" title="${escapeHtml(job.company)}">${escapeHtml(job.company)}</div>${job.city ? `<span class="job-city">${escapeHtml(job.city)}</span>` : ''}</div>
-            <div class="job-position">${escapeHtml(job.position)}</div>
-            <div class="job-extra">${escapeHtml([job.category, job.deadline ? `截止：${job.deadline}` : ''].filter(Boolean).join(' · ') || '来自腾讯招聘岗位文档')}</div>
-            <div class="job-card-actions">
-              ${job.applicationUrl ? `<a class="btn btn-small" href="${escapeHtml(job.applicationUrl)}" target="_blank" rel="noopener noreferrer">打开岗位</a>` : '<button class="btn btn-small" type="button" disabled>暂无链接</button>'}
-              <button class="btn btn-soft btn-small" data-job-action="applied" data-job-id="${escapeHtml(job.id)}" type="button" ${alreadyAdded ? 'disabled' : ''}>${alreadyAdded ? '已在记录中' : '记为已投递'}</button>
-            </div>
-          </article>`;
-        }).join('') + (visible.length > shown.length ? `<div class="job-empty">已显示前 ${shown.length} 条，请使用搜索快速定位岗位</div>` : '');
-      }
-
-      async function handleJobAction(event) {
-        const button = event.target.closest('button[data-job-action]');
-        if (!button) return;
-        const job = jobs.find(item => item.id === button.dataset.jobId);
-        if (!job) return;
-        if (button.dataset.jobAction === 'applied') {
-          // 统一走 resolveDuplicate。此前这里是 `return showToast('这条岗位已经在投递记录中')` —— 直接 return
-          // 什么都不做；叠加旧版岗位归一化删括号的误判，同一家公司的第二个岗位根本录不进去，
-          // 用户侧只看到一句提示，像是按钮坏了。现在 duplicate / variant 都给二选一逃生口。
-          const decision = await resolveDuplicate(findDuplicateRecord(records, job), job);
-          if (decision.action === 'cancel') return; // Esc / 点遮罩：什么都不写
-          if (decision.action === 'edit') { openDialog(decision.target); return; }
-          records.unshift(normalizeRecord({
-            company: job.company,
-            position: job.position,
-            city: job.city || '待确认',
-            applicationDate: job.category === '截图识别' ? (job.applicationDate || '') : localDateInput(new Date()),
-            stage: '已投递',
-            applicationUrl: job.applicationUrl,
-            nextAction: '关注招聘通知并及时跟进',
-            updatedAt: Date.now()
-          }));
-          saveRecords(`已加入投递记录并自动保存${decision.hint || ''}`);
-          render();
-        }
-      }
-
       function renderStats() {
         const now = new Date();
         const sevenDays = new Date(now.getTime() + 7 * 86400000);

@@ -32,10 +32,10 @@ const SRC = path.join(ROOT, 'src');
 // 只有列在这里的才会进 dist（= 才会被 Pages 伺服）。依据见方案 4.2：
 // 四个入口文件的全部站内引用，加上第三方资源目录。
 //
-// 规则：第三方库的资源目录一律**整目录**拷贝，不按引用逐个挑——
-// tesseract 在运行时按配置动态加载 ocr/worker.min.js 与 ocr/core/*.wasm.js，
-// 而 index.html 只静态引用了 ocr/tesseract.min.js 与 ocr/chi_sim-data.js；
-// 按静态引用挑文件会漏掉它们，且只在用户真的用到 OCR 时才 404（低频路径，极易漏测）。
+// 规则：第三方库的资源目录一律**整目录**拷贝，不按引用逐个挑。
+// 曾经的教训：ocr/ 里的 tesseract 在运行时按 CPU 特性动态加载 worker.min.js 与 core/*.wasm.js，
+// 而 index.html 只静态引用了其中两个文件——按静态引用挑就会漏，且只在用户真的用到那条
+// 低频路径时才 404，极难测出来。（ocr/ 本身已随截图识别功能在 v4.12.0 删除，规则保留。）
 //
 // ⚠️ index.html **不在这里**：阶段 3 起它由 src/ 拼接生成（见下面的 buildIndexHtml），
 // 生成后直接写进 dist。若同时留在这个白名单里，就会变成"先拷旧的、再被生成的覆盖"，
@@ -49,7 +49,10 @@ const FILES = [
   // 缺了它会因下划线开头的文件被 Jekyll 忽略而出问题。
   '.nojekyll'
 ];
-const DIRS = ['icons', 'ocr', 'downloads', 'docs'];
+// v4.12.0：'ocr' 已从白名单移除 —— 截图识别功能与 ocr/ 那 14 MB tesseract 一起删了
+// （岗位库是它的唯一出口，岗位库删了它就没有落点）。少一个整目录上线，
+// dist 从 ~15 MB 降到 ~1 MB，Pages 部署与首屏都快一截。
+const DIRS = ['icons', 'downloads', 'docs'];
 
 // 阶段 2 引入 shared/ 后必须进 dist（index.html 会 <script src="./shared/…">），
 // 且要与 service-worker.js 的 APP_SHELL 在**同一次提交**里加上——
@@ -144,10 +147,12 @@ function selfCheck() {
     if (!fs.existsSync(path.join(DIST, rel))) missing.push(`${entry} → ${ref}`);
   };
 
-  // HTML：只扫 href/src **属性**。
-  // 刻意不扫内联 JS 里的任意 './x' 字符串——index.html:5738 有 `const key = './chi_sim.traineddata'`，
-  // 那是 tesseract 写进 IndexedDB keyval 的**键名**（中文语言数据由 ocr/chi_sim-data.js 的内联
-  // base64 解码后存入 IndexedDB，全程不发网络请求），不是要 fetch 的 URL。扫它会误报"上线就是 404"。
+  // HTML：只扫 href/src **属性**，不扫内联 JS 里的任意 './x' 字符串。
+  // 这条限制最初是被一个真实误报逼出来的：截图识别功能里有 `const key = './chi_sim.traineddata'`，
+  // 那是 tesseract 写进 IndexedDB keyval 的**键名**（中文语言数据由内联 base64 解码后存入 IndexedDB，
+  // 全程不发网络请求），根本不是要 fetch 的 URL，扫它就会报"上线就是 404"。
+  // 那个功能已随岗位库在 v4.12.0 删除，但限制保留 —— 内联 JS 里的字符串常量与真实 URL
+  // 从形态上就分不开，靠正则猜只会持续产生误报，而属性值是明确的资源引用。
   for (const entry of ['index.html', 'download.html']) {
     const src = fs.readFileSync(path.join(DIST, entry), 'utf8');
     for (const m of src.matchAll(/(?:href|src)="\.\/([^"]+)"/g)) check(entry, m[1]);

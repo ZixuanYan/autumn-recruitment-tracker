@@ -1,5 +1,81 @@
 # 更新记录
 
+## v4.12.0（网页：删掉岗位库、截图识别与旧插件兼容层，产物体积 -96%）
+
+这一版只做减法。三块东西互相关联，一起删才干净：
+
+**① 岗位库整页删除**
+
+它是「待投候选池」：从腾讯文档同步或粘贴表格导入岗位，确认后点「记为已投递」才进正式台账。
+删它的直接理由是**它的两个入口都已经死了**（见下），只剩手动粘贴一条路；而台账本身已经能
+直接新增记录，候选池这一层的价值不足以抵掉一个导航项、一套卡片 UI 与一份本地存储。
+
+删除范围：导航项、`data-view="jobPool"` 整个视图、`jobs` 状态与它的本地存储键
+（`jobPool.v1` / `jobPoolMeta.v1`）、`normalizeJob` / `stableJobId` / `parseJobRows` /
+`renderJobPool` / `handleJobAction`、路由与命令面板里的跳转项、19 条 `.job-*` CSS。
+`#/jobPool` 旧书签不会白屏——路由回退到总览，并有断言钉住这个兼容行为。
+
+**② 截图识别（OCR）与 `ocr/` 那 13.8 MB tesseract 一起删除**
+
+OCR 的产物**只能**写进岗位库（`importOcrCandidates` → `normalizeJob` → `saveJobs`），
+岗位库删了它就没有落点。删除范围：工具页的「截图识别导入岗位」卡片、`#screenshotDialog`、
+15 个 ocr 函数（含 tesseract 的 IndexedDB 缓存与中文语言包加载）、全部 `.ocr-*` CSS、
+两个 `<script src="./ocr/…">`，以及 `ocr/` 目录本身与它在 `build.js` 白名单里的条目。
+
+**最直接的收益是体积**：`dist/` 从 22 个文件 / 14.5 MB 降到 **16 个文件 / 589 KB（-96%）**。
+这不只是一个数字——Pages 每次部署要上传这些、手机 PWA 首次缓存要下载这些，
+而 tesseract 的三个 wasm 变体（各 3.8 MB）是按 CPU 特性运行时动态加载的，
+属于"绝大多数用户永远用不到、但每次部署都要搬一遍"的重量。
+
+**③ 旧插件兼容层删除（这是本次审计最有价值的发现）**
+
+网页端长期监听 6 个第三方旧插件（AUTUMN_JOB_CAPTURE）的消息类型，而当前插件一个都不发：
+`CAPTURE_PING` / `CAPTURE_READY` / `CAPTURE_RESULT` / `CAPTURE_ERROR` /
+`SYNC_JOBS_RESULT` / `SYNC_JOBS_ERROR`。后果是一条静默的连锁失效：
+
+- `bridgeReady` **只**在 `CAPTURE_READY` 分支里被置 true → 它恒为 false
+- → 「同步腾讯文档」弹窗里的按钮**永久禁用**，永远落到粘贴兜底
+- → 而弹窗的三步指引第 1 步还在教你"安装或更新一键收录插件"，你自己的插件并不做这件事
+- `applyLegacyCaptureUI()` 每次都把「识别投递网址」按钮设为 hidden → 该按钮与
+  `#captureDialog` 整套流程**永久不可达**
+
+控制台零报错、构建全绿、418 项测试也全绿——因为没有任何断言去比对两端的消息集合。
+这是 v5.0.0 把插件重写成 Side Panel 之后就留下的死代码，一直没被发现。
+
+`bridgeReady` / `hasLegacyCapturePlugin` / `bridgeCheckTimer` / `captureTimer` 四个恒假或
+恒空的变量一并删除。`BRIDGE_SOURCES` 里**保留** `AUTUMN_JOB_ASSISTANT`——那是当前插件
+在用的标识（沿用自旧项目的命名），删了插件推送会被全部丢弃；只摘掉 AUTUMN_JOB_CAPTURE。
+
+顺带删掉 `consumeQuickCapture()`：它解析 `?capture=` URL 参数，是旧插件的交接方式，
+当前插件打开网页版用的是裸 TRACKER_URL，从不产生这个参数。
+
+**新增守卫 2 条**（`npm test` 418 → 414：删掉 6 条岗位库测试，加 2 条）
+
+- **跨端消息契约对账**：网页端监听的每个 `event.data.type` 都必须能在 `extension/` 里找到
+  发送方，否则报"那是永远等不到回应的死分支"。这条是本次清理最有价值的产出——
+  死分支不会自己暴露，只能靠两端对账。已用 negative test 验证（注入一个假类型即红）
+- **岗位库与截图识别不得半截复活**：18 个标识（视图/路由/元素 id/函数名/script 路径）
+  逐个点名，外加 `ocr/` 目录必须不存在、`build.js` 的 DIRS 不得含 ocr、视图容器恰好 5 个。
+  半截复活最难查：导航项回来了但视图容器没回来 → 点导航白屏；ocr/ 回来了但白名单没加
+  → 只在用户真的用到那条低频路径时才 404
+
+**同时清理的仓库层面**
+
+- 仓库根新增 `LICENSE`（MIT）。此前只有 `extension/LICENSE`，GitHub 仓库页显示 "No license"
+- 去掉两处外部项目的致谢（README 的「来源说明」小节、extension/LICENSE 与 extension/README.md
+  的致谢块）。取证依据：两个上游仓库都**没有 LICENSE**（gh api 的 spdx_id 为空），
+  其提交历史里也从没有过 LICENSE/COPYING/NOTICE，所以不存在必须保留版权声明的义务；
+  且上游 v3.0.0 的代码逐字节残留到今天的只有 `.nojekyll` 与 ocr/ 里的第三方库（后者本轮也删了）
+- 删掉两个死 git remote：`upstream`（指向旧上游，项目已独立演进）与 `mailsync`
+  （阶段 0 为 subtree 临时加的，合并后再没用过）。顺带消除了"gh 不带 -R 会解析到 upstream
+  从而误判 CI 没跑"这个坑——现在只剩 origin
+- 修掉 README 里一处过时描述：还写着"v4.0 Soft Structuralism 视觉：银白底 + 单一钴蓝强调、
+  机加工质感卡片"，而 v4.10.0 已整体重刷为 Apple 风格
+
+**git 历史刻意不改写**：仓库里仍有 16 个上游作者的提交（`git shortlog -sne` 可见）。
+抹掉它需要 filter-repo + force push，会让全部 121 个提交的 SHA 变化，
+CHANGELOG 与方案文档里引用的提交号全部失效，且不可逆。
+
 ## v4.11.1（网页 + 插件 v5.3.1：修四处 v4.11.0 留下或没修完的问题）
 
 四条都是上一版发布后实际用出来的，其中两条是 v4.11.0 自己引入或只修了一半的。

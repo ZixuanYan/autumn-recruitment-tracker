@@ -397,9 +397,6 @@ const getVisibleRecordsSrc = extractFunction(html, 'getVisibleRecords');
 const applyAdvanceSrc = extractFunction(html, 'applyAdvance');
 const loadRecordsSrc = extractFunction(html, 'loadRecords');
 const submitFormSrc = extractFunction(html, 'submitForm');
-// 岗位库「记为已投递」入口：浏览器实证时岗位库为空（0 卡片）测不到，改由运行时测试覆盖。
-// 修复前这里是 `return showToast('这条岗位已经在投递记录中')` —— 硬拦截、点了没反应。
-const handleJobActionSrc = extractFunction(html, 'handleJobAction');
 // 时间线编辑器：新增表单的默认阶段就在这里决定（曾是「待投递」，会让记录在洞察里隐身）
 const timelineEditorSrc = ['timelineRowHtml', 'renderTimelineEditor'].map(name => extractFunction(html, name));
 // v4.5.0 区段：查重统一处置 resolveDuplicate + 录入时前置提示 updateSameCompanyHint。
@@ -411,7 +408,7 @@ const v45Section = extractBlock(html, V45_START, V44_START);
 const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId']
   .map(name => extractFunction(html, name));
 
-for (const [label, src] of [['CORE 纯函数块', coreBlock], ['邮件纯函数块', mailPureBlock], ['洞察/台账渲染段', insightSection], ['台账视图增强段', v44Section], ['getVisibleRecords', getVisibleRecordsSrc], ['查重统一处置段(v4.5.0)', v45Section], ['handleJobAction', handleJobActionSrc], ...timelineEditorSrc.map((src, i) => [[ 'timelineRowHtml', 'renderTimelineEditor' ][i], src])]) {
+for (const [label, src] of [['CORE 纯函数块', coreBlock], ['邮件纯函数块', mailPureBlock], ['洞察/台账渲染段', insightSection], ['台账视图增强段', v44Section], ['getVisibleRecords', getVisibleRecordsSrc], ['查重统一处置段(v4.5.0)', v45Section], ...timelineEditorSrc.map((src, i) => [[ 'timelineRowHtml', 'renderTimelineEditor' ][i], src])]) {
   if (!src || src.length < 40) { console.error(`✗ 未定位到${label}`); process.exit(1); }
 }
 
@@ -508,7 +505,6 @@ const sandbox2 = {
   COMPANY_TYPE_ALIASES: COMPANY_TYPE_ALIASES_LIVE,
   syncConfig: { token: 'tok' },
   records: [],
-  jobs: [], // 岗位库（handleJobAction 从这里按 data-job-id 取岗位）
   sampleDataMode: false,
   parseRoute: () => 'overview',
   exampleRecords: () => [{ id: 'demo1', company: '星海科技', position: '产品', stage: '一面' }],
@@ -557,7 +553,7 @@ sandbox2.self = sandbox2; // cryptoId 用 self.crypto 探测
 sandbox2.AJA = AJA_SHARED; // coreBlock 里有 `const companyGroupKey = AJA.companyGroupKey;` 等四个转发别名
 vm.createContext(sandbox2);
 vm.runInContext(
-  [mailPureBlock, coreBlock, v45Section, normalizeRecordSrc.join('\n'), getVisibleRecordsSrc, applyAdvanceSrc, loadRecordsSrc, submitFormSrc, handleJobActionSrc, timelineEditorSrc.join('\n'), insightSection, v44Section].join('\n'),
+  [mailPureBlock, coreBlock, v45Section, normalizeRecordSrc.join('\n'), getVisibleRecordsSrc, applyAdvanceSrc, loadRecordsSrc, submitFormSrc, timelineEditorSrc.join('\n'), insightSection, v44Section].join('\n'),
   sandbox2,
   { filename: 'v44-sections.js' }
 );
@@ -1402,85 +1398,6 @@ check('提示元素自身未被 CSS 设 display，hidden 属性能正常生效�
   }
 });
 
-section('v4.5.0 岗位库「记为已投递」入口（浏览器实证时岗位库为空，改由此覆盖）');
-
-// handleJobAction 只用到 event.target.closest 与 button.dataset，桩一个最小事件即可
-const jobEvent = (jobId, action = 'applied') => ({
-  target: { closest: sel => (sel === 'button[data-job-action]' ? { dataset: { jobAction: action, jobId } } : null) }
-});
-function seedJobs(list) { sandbox2.jobs = list; }
-
-check('同公司不同岗位 → 直接新增，不弹框打断（岗位库路径此前是硬拦截）', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
-  seedJobs([{ id: 'job1', company: '腾讯', position: '产品经理', city: '深圳', category: '腾讯文档', applicationUrl: '' }]);
-  calls.confirm.length = 0; calls.saveRecords.length = 0; calls.openDialog.length = 0;
-  confirmAnswer = true; confirmOutcomeValue = 'ok';
-  await sandbox2.handleJobAction(jobEvent('job1'));
-  assert.strictEqual(sandbox2.records.length, 2, '应新增成功');
-  assert.strictEqual(sandbox2.records[0].position, '产品经理');
-  assert.strictEqual(calls.confirm.length, 0, '无关岗位不该弹框');
-  assert.ok(calls.saveRecords[0].includes('已加入投递记录'), calls.saveRecords[0]);
-  assert.ok(calls.saveRecords[0].includes('名下现在共 2 个岗位'), `同公司提示应并入保存 toast：${calls.saveRecords[0]}`);
-});
-
-check('相近岗位（括号里是不同城市）→ 弹「疑似同岗位不同方向」，选新增则入库', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发工程师（深圳）', stage: '一面', applicationUrl: '', updatedAt: 1 }];
-  seedJobs([{ id: 'job2', company: '腾讯', position: '后端开发工程师（北京）', city: '北京', category: '腾讯文档', applicationUrl: '' }]);
-  calls.confirm.length = 0; calls.saveRecords.length = 0;
-  confirmAnswer = true; confirmOutcomeValue = 'ok';
-  await sandbox2.handleJobAction(jobEvent('job2'));
-  assert.strictEqual(calls.confirm.length, 1, '修复前这里是 return showToast，点了没反应');
-  assert.strictEqual(calls.confirm[0].title, '疑似同岗位不同方向');
-  assert.strictEqual(sandbox2.records.length, 2, '第二个岗位必须能录进去');
-  assert.strictEqual(sandbox2.records[0].position, '后端开发工程师（北京）');
-});
-
-check('真重复 → 弹「疑似重复投递」；选「编辑已有」打开既有记录且不新增', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
-  seedJobs([{ id: 'job3', company: '腾讯', position: '后端开发', city: '深圳', category: '腾讯文档', applicationUrl: '' }]);
-  calls.confirm.length = 0; calls.openDialog.length = 0; calls.saveRecords.length = 0;
-  confirmAnswer = true; confirmOutcomeValue = 'ok';
-  await sandbox2.handleJobAction(jobEvent('job3'));
-  assert.strictEqual(calls.confirm[0].title, '疑似重复投递');
-  assert.strictEqual(sandbox2.records.length, 1, '选编辑不应新增');
-  assert.strictEqual(calls.openDialog.length, 1);
-  assert.strictEqual(calls.openDialog[0].id, 'j1');
-  assert.strictEqual(calls.saveRecords.length, 0);
-});
-
-check('真重复 → 选「仍然新增」则放行（修复前岗位库路径完全没有这个逃生口）', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
-  seedJobs([{ id: 'job4', company: '腾讯', position: '后端开发', city: '深圳', category: '腾讯文档', applicationUrl: '' }]);
-  calls.confirm.length = 0; calls.saveRecords.length = 0;
-  confirmAnswer = false; confirmOutcomeValue = 'cancel';
-  await sandbox2.handleJobAction(jobEvent('job4'));
-  assert.strictEqual(sandbox2.records.length, 2, '必须能坚持新增');
-  assert.strictEqual(calls.saveRecords.length, 1);
-  confirmAnswer = true; confirmOutcomeValue = 'ok';
-});
-
-check('Esc / 点遮罩关掉确认框 → 中止入库，什么都不写', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
-  seedJobs([{ id: 'job5', company: '腾讯', position: '后端开发', city: '深圳', category: '腾讯文档', applicationUrl: '' }]);
-  calls.confirm.length = 0; calls.saveRecords.length = 0; calls.openDialog.length = 0;
-  confirmAnswer = false; confirmOutcomeValue = 'dismiss';
-  await sandbox2.handleJobAction(jobEvent('job5'));
-  assert.strictEqual(sandbox2.records.length, 1, '不得静默新增');
-  assert.strictEqual(calls.saveRecords.length, 0, '不得写盘');
-  assert.strictEqual(calls.openDialog.length, 0, '也不得被当成「编辑已有」');
-  confirmAnswer = true; confirmOutcomeValue = 'ok';
-});
-
-check('非 applied 动作、未知岗位 id、空事件 → 安全空操作', async () => {
-  sandbox2.records = [{ id: 'j1', company: '腾讯', position: '后端开发', stage: '已投递', applicationUrl: '', updatedAt: 1 }];
-  seedJobs([{ id: 'job6', company: '腾讯', position: '前端', city: '', category: '腾讯文档', applicationUrl: '' }]);
-  calls.saveRecords.length = 0;
-  await sandbox2.handleJobAction({ target: { closest: () => null } });
-  await sandbox2.handleJobAction(jobEvent('不存在的id'));
-  await sandbox2.handleJobAction(jobEvent('job6', 'other-action'));
-  assert.strictEqual(sandbox2.records.length, 1, '以上三种情况都不得改动台账');
-  assert.strictEqual(calls.saveRecords.length, 0);
-});
 
 check('详情抽屉「关键信息」包含机构，且批次与渠道两行已随字段删除', () => {
   seedRecords();
@@ -1556,7 +1473,7 @@ check('城市分布：每行挂悬浮明细钩子，未填桶灰显且排最后�
   assert.ok(!h.includes('is-unknown'), '三条都填了城市 → 不出现未填行');
   assert.ok(cityNoteEl().textContent.includes('2 个城市'));
   assert.ok(cityNoteEl().textContent.includes('各计一次'), '必须写明口径，否则各城市之和 > 台账条数会被当成算错');
-  // 有记录没填城市（含岗位库写入的「待确认」）时，未填行出现、灰显并排在最后
+  // 有记录没填城市时，未填行出现、灰显并排在最后
   sandbox2.records[2].city = '待确认';
   sandbox2.renderCityStats();
   const h2 = cityListEl().innerHTML;
@@ -1879,9 +1796,9 @@ for (const [label, src] of [['VIEW_META', VIEW_META_SRC], ['ROUTE_ALIASES', ROUT
   if (!src || src.length < 20) { console.error(`✗ 未定位到路由源码 ${label}`); process.exit(1); }
 }
 const routeCalls = { renderRecordsView: 0, renderMailView: 0, renderToolCards: 0 };
-const viewStubs = ['overview', 'records', 'jobPool', 'resume', 'tools', 'mail']
+const viewStubs = ['overview', 'records', 'resume', 'tools', 'mail']
   .map(v => ({ dataset: { view: v }, hidden: false, offsetWidth: 0, classList: { remove() {}, add() {} } }));
-const navStubs = ['overview', 'records', 'mail', 'resume', 'jobPool', 'tools']
+const navStubs = ['overview', 'records', 'mail', 'resume', 'tools']
   .map(r => {
     const stub = { dataset: { route: r }, active: null, classList: {} };
     stub.classList.toggle = (cls, on) => { stub.active = on; };
@@ -1932,8 +1849,8 @@ check('parseRoute：#/records 解析到 records（旧书签不再被重定向到
   assert.strictEqual(sandbox3.parseRoute(), 'records');
   sandbox3.location.hash = '#/upcoming';
   assert.strictEqual(sandbox3.parseRoute(), 'overview', '未来安排旧书签仍回总览');
-  sandbox3.location.hash = '#/jobPool';
-  assert.strictEqual(sandbox3.parseRoute(), 'jobPool');
+  sandbox3.location.hash = '#/jobPool';   // v4.12.0 岗位库已删：旧书签/历史记录应当回退总览，而不是白屏
+  assert.strictEqual(sandbox3.parseRoute(), 'overview', '已删除的视图路由要回退到总览');
   sandbox3.location.hash = '#/不存在';
   assert.strictEqual(sandbox3.parseRoute(), 'overview', '未知路由回退总览');
 });

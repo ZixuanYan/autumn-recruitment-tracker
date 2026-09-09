@@ -338,14 +338,13 @@
       const VIEW_META = {
         overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、洞察与未来安排——从银十到金九，每一步都在这里' },
         records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
-        jobPool: { kicker: 'JOB POOL', title: '岗位库', subtitle: '从每日更新的招聘文档发现岗位，确认后再加入台账' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
         mail: { kicker: 'INBOX', title: '邮件提醒', subtitle: '招聘邮件解析结果，逐项复核后并入台账' }
       };
       // records 恢复为独立视图（更早版本本就是，v4.4.0 曾并入总览并重定向，v4.8.0 拆回）；
       // upcoming（未来安排）仍留在总览，旧书签重定向兼容。
-      const ROUTE_ALIASES = { overview: 'overview', records: 'records', jobPool: 'jobPool', jobpool: 'jobPool', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
+      const ROUTE_ALIASES = { overview: 'overview', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
 
       // ================= 工具页卡片状态：云同步连接情况与快照数量 =================
       async function renderToolCards() {
@@ -611,140 +610,12 @@
         els.dialog.showModal();
         requestAnimationFrame(() => $('#company').focus());
       }
-
-      // 旧版“一键收录插件”(AUTUMN_JOB_CAPTURE) 才支持“识别投递网址”；新版秋招求职与简历助手不回应 CAPTURE_PING。
-      // 未探测到旧插件时隐藏网址识别入口（记录改用“新增投递 / 截图识别 / 侧边栏一键收录”）。
-      function applyLegacyCaptureUI() {
-        const captureUrlBtn = $('#captureUrlBtn');
-        if (captureUrlBtn) captureUrlBtn.hidden = !hasLegacyCapturePlugin;
-      }
-
-      function openCaptureDialog() {
-        $('#captureForm').reset();
-        const status = $('#captureStatus');
-        status.className = 'capture-status';
-        status.textContent = '正在检查一键收录插件…';
-        bridgeReady = false;
-        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_PING', url: location.href.split('?')[0].split('#')[0] }, '*');
-        clearTimeout(bridgeCheckTimer);
-        bridgeCheckTimer = setTimeout(() => {
-          if (!bridgeReady) {
-            status.className = 'capture-status error';
-            status.textContent = '未连接到一键收录插件。请先安装或更新插件，并开启“允许访问文件网址”。';
-          }
-        }, 900);
-        $('#captureDialog').showModal();
-        requestAnimationFrame(() => $('#captureUrlInput').focus());
-      }
-
-      function openJobSyncDialog() {
-        const status = $('#jobSyncStatus');
-        const steps = document.querySelector('#jobSyncDialog .sync-steps');
-        const fallback = document.querySelector('#jobSyncDialog .sync-fallback');
-        $('#jobPasteInput').value = '';
-        clearTimeout(bridgeCheckTimer);
-
-        // 无旧版同步插件：降级为“粘贴导入”模式（隐藏插件步骤、展开粘贴区、禁用一键同步）
-        if (!hasLegacyCapturePlugin) {
-          bridgeReady = false;
-          if (steps) steps.hidden = true;
-          if (fallback) fallback.open = true;
-          $('#startJobSyncBtn').disabled = true;
-          status.className = 'capture-status';
-          status.textContent = '未检测到同步插件，可直接在下方粘贴腾讯文档的表格内容导入。';
-          $('#jobSyncDialog').showModal();
-          return;
-        }
-
-        // 有旧版插件：维持原有一键同步流程
-        if (steps) steps.hidden = false;
-        if (fallback) fallback.open = false;
-        status.className = 'capture-status';
-        status.textContent = '正在检查一键收录插件…';
-        $('#startJobSyncBtn').disabled = false;
-        bridgeReady = false;
-        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_PING', url: location.href.split('?')[0].split('#')[0] }, '*');
-        bridgeCheckTimer = setTimeout(() => {
-          if (!bridgeReady) {
-            status.className = 'capture-status error';
-            status.textContent = '未连接到新版一键收录插件。请更新插件并刷新本页面，也可以展开下方入口粘贴表格内容。';
-          }
-        }, 1000);
-        $('#jobSyncDialog').showModal();
-      }
-
-      function closeJobSyncDialog() {
-        clearTimeout(bridgeCheckTimer);
-        clearTimeout(jobSyncTimer);
-        if ($('#jobSyncDialog').open) $('#jobSyncDialog').close();
-      }
-
-      function requestJobSync() {
-        const status = $('#jobSyncStatus');
-        if (!bridgeReady) {
-          status.className = 'capture-status error';
-          status.textContent = '插件尚未连接。请先更新插件并允许访问文件网址，或使用粘贴导入。';
-          return;
-        }
-        $('#startJobSyncBtn').disabled = true;
-        status.className = 'capture-status';
-        status.textContent = '正在读取腾讯招聘文档，岗位较多时可能需要半分钟…';
-        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'SYNC_QQ_JOBS', url: QQ_JOB_DOC_URL }, '*');
-        clearTimeout(jobSyncTimer);
-        jobSyncTimer = setTimeout(() => {
-          $('#startJobSyncBtn').disabled = false;
-          status.className = 'capture-status error';
-          status.textContent = '同步等待超时。请确认腾讯文档可以正常打开、已登录，然后重试。';
-        }, 60000);
-      }
-
-      function importPastedJobs() {
-        const parsed = parseJobRows($('#jobPasteInput').value);
-        const status = $('#jobSyncStatus');
-        if (!parsed.length) {
-          status.className = 'capture-status error';
-          status.textContent = '没有识别到完整岗位。请尽量复制包含公司、岗位、城市和链接的多行表格。';
-          return;
-        }
-        saveJobs(parsed, `已导入 ${parsed.length} 条岗位`);
-        closeJobSyncDialog();
-        location.hash = '#/jobPool';
-      }
-
-      function closeCaptureDialog() {
-        clearTimeout(bridgeCheckTimer);
-        clearTimeout(captureTimer);
-        $('#captureDialog').close();
-      }
-
-      function requestUrlCapture(event) {
-        event.preventDefault();
-        const url = $('#captureUrlInput').value.trim();
-        const status = $('#captureStatus');
-        if (!/^https?:\/\//i.test(url)) {
-          status.className = 'capture-status error';
-          status.textContent = '请输入以 http:// 或 https:// 开头的完整网址。';
-          return;
-        }
-        if (!bridgeReady) {
-          status.className = 'capture-status error';
-          status.textContent = '插件尚未连接，请检查插件是否安装并允许访问文件网址。';
-          return;
-        }
-        $('#startCaptureBtn').disabled = true;
-        status.className = 'capture-status';
-        status.textContent = '正在打开详情页并识别，通常需要几秒钟…';
-        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_JOB_URL', url }, '*');
-        clearTimeout(captureTimer);
-        captureTimer = setTimeout(() => {
-          $('#startCaptureBtn').disabled = false;
-          status.className = 'capture-status error';
-          status.textContent = '识别等待超时。请确认网址可以正常打开后重试。';
-        }, 25000);
-      }
-
-      // 桥接消息源：原配“一键收录插件”与本插件（秋招求职与简历助手）共存，两者都认
-      const BRIDGE_SOURCES = ['AUTUMN_JOB_CAPTURE', 'AUTUMN_JOB_ASSISTANT'];
+      // 桥接消息源白名单：只有本插件（秋招求职与简历助手）一个。
+      // 只接受当前插件在用的这一个 source。曾经这里还并列着第三方旧插件的标识
+      // （AUTUMN_JOB_CAPTURE，注意刻意不加引号写——加了就会命中 web-check 里
+      // 「已删协议不得复活」那条反向断言，守卫会被自己的解释性注释绊倒），
+      // 那套握手的另一端早已不存在，留着就是永远等不到回应的死分支。
+      const BRIDGE_SOURCES = ['AUTUMN_JOB_ASSISTANT'];
       async function handleCaptureMessage(event) {
         if (event.source !== window || !BRIDGE_SOURCES.includes(event.data?.source)) return;
         if (event.data.type === 'RESUME_REQUEST') {
@@ -808,407 +679,7 @@
           });
           return;
         }
-        if (event.data.type === 'CAPTURE_READY') {
-          // CAPTURE_READY 仅由旧版 AUTUMN_JOB_CAPTURE 插件回应，据此确认其存在并恢复相关入口
-          if (event.data.source === 'AUTUMN_JOB_CAPTURE') {
-            hasLegacyCapturePlugin = true;
-            applyLegacyCaptureUI();
-          }
-          bridgeReady = true;
-          clearTimeout(bridgeCheckTimer);
-          const status = $('#captureStatus');
-          status.className = 'capture-status success';
-          status.textContent = '插件已连接，可以开始识别。';
-          const jobStatus = $('#jobSyncStatus');
-          if (jobStatus) {
-            jobStatus.className = 'capture-status success';
-            jobStatus.textContent = '新版插件已连接，可以一键同步。';
-          }
-          return;
-        }
-        if (event.data.type === 'SYNC_JOBS_RESULT') {
-          clearTimeout(jobSyncTimer);
-          $('#startJobSyncBtn').disabled = false;
-          const parsed = parseJobRows(event.data.rows || event.data.data || []);
-          if (!parsed.length) {
-            const status = $('#jobSyncStatus');
-            status.className = 'capture-status error';
-            status.textContent = '文档已经打开，但没有识别到岗位。请确认当前账号可以查看该表，或使用粘贴导入。';
-            return;
-          }
-          saveJobs(parsed, `同步完成：识别到 ${parsed.length} 条岗位`);
-          closeJobSyncDialog();
-          location.hash = '#/jobPool';
-          return;
-        }
-        if (event.data.type === 'SYNC_JOBS_ERROR') {
-          clearTimeout(jobSyncTimer);
-          $('#startJobSyncBtn').disabled = false;
-          const status = $('#jobSyncStatus');
-          status.className = 'capture-status error';
-          status.textContent = event.data.message || '同步失败，请确认腾讯文档可以正常打开后重试。';
-          return;
-        }
-        if (event.data.type === 'CAPTURE_RESULT') {
-          clearTimeout(captureTimer);
-          $('#startCaptureBtn').disabled = false;
-          closeCaptureDialog();
-          const captured = event.data.data || {};
-          const seed = normalizeRecord({
-            company: captured.company,
-            position: captured.position,
-            city: captured.city,
-            applicationDate: captured.applicationDate || '',
-            stage: String(captured.stage || '').trim() || '已投递',
-            companyType: captured.companyType, // 识别链路拿不到就留空，由用户在弹窗里选
-            applicationUrl: captured.applicationUrl,
-            nextAction: '关注消息并及时跟进投递进度'
-          });
-          openDialog(null, seed);
-          showToast('识别完成，请检查信息后保存');
-          return;
-        }
-        if (event.data.type === 'CAPTURE_ERROR') {
-          clearTimeout(captureTimer);
-          $('#startCaptureBtn').disabled = false;
-          const status = $('#captureStatus');
-          status.className = 'capture-status error';
-          status.textContent = event.data.message || '识别失败，请检查网址后重试。';
-        }
       }
-
-      function openScreenshotDialog() {
-        resetScreenshotDialog();
-        $('#screenshotDialog').showModal();
-      }
-
-      function resetScreenshotDialog() {
-        ocrPreviewUrls.forEach(url => URL.revokeObjectURL(url));
-        ocrPreviewUrls = [];
-        ocrFiles = [];
-        ocrCandidates = [];
-        $('#ocrFileInput').value = '';
-        $('#ocrPreviewGrid').hidden = true;
-        $('#ocrPreviewGrid').innerHTML = '';
-        $('#ocrResults').hidden = true;
-        $('#ocrResults').innerHTML = '';
-        $('#ocrEmptyState').hidden = false;
-        $('#ocrDropzone').classList.remove('has-image', 'is-dragging');
-        $('#ocrProgress').hidden = true;
-        $('#ocrProgressFill').style.width = '0%';
-        $('#ocrStatus').className = 'capture-status';
-        $('#ocrStatus').textContent = '按 Command + V 粘贴截图，或选择一张或多张图片。';
-        $('#startOcrBtn').textContent = '开始批量识别';
-        $('#startOcrBtn').disabled = true;
-      }
-
-      async function closeScreenshotDialog() {
-        ocrRunning = false;
-        if (ocrWorker) {
-          try { await ocrWorker.terminate(); } catch (_) {}
-          ocrWorker = null;
-        }
-        if ($('#screenshotDialog').open) $('#screenshotDialog').close();
-        resetScreenshotDialog();
-      }
-
-      function selectScreenshots(fileList, append = false) {
-        const status = $('#ocrStatus');
-        const selected = [...(fileList || [])];
-        if (!selected.length) return;
-        const priorCount = append ? ocrFiles.length : 0;
-        const accepted = selected.filter(file => /^image\/(png|jpeg|webp)$/i.test(file.type) && file.size <= 18 * 1024 * 1024);
-        const valid = (append ? [...ocrFiles, ...accepted] : accepted).slice(0, 20);
-        if (!valid.length) {
-          status.className = 'capture-status error';
-          status.textContent = '请选择小于 18 MB 的 PNG、JPG 或 WEBP 图片。';
-          return;
-        }
-        ocrPreviewUrls.forEach(url => URL.revokeObjectURL(url));
-        ocrFiles = valid;
-        ocrCandidates = [];
-        ocrPreviewUrls = valid.map(file => URL.createObjectURL(file));
-        $('#ocrPreviewGrid').innerHTML = valid.map((file, index) => `<div class="ocr-preview-card"><img src="${escapeHtml(ocrPreviewUrls[index])}" alt="第 ${index + 1} 张待识别截图"><div class="ocr-preview-name">${escapeHtml(file.name || `截图 ${index + 1}`)}</div></div>`).join('');
-        $('#ocrPreviewGrid').hidden = false;
-        $('#ocrResults').hidden = true;
-        $('#ocrResults').innerHTML = '';
-        $('#ocrEmptyState').hidden = true;
-        $('#ocrDropzone').classList.add('has-image');
-        $('#ocrProgress').hidden = true;
-        $('#ocrProgressFill').style.width = '0%';
-        status.className = 'capture-status';
-        const skipped = Math.max(0, selected.length - accepted.length) + Math.max(0, priorCount + accepted.length - 20);
-        status.textContent = `已选择 ${valid.length} 张截图${skipped > 0 ? `，另有 ${skipped} 张因格式、大小或数量限制被忽略` : ''}。`;
-        $('#startOcrBtn').textContent = '开始批量识别';
-        $('#startOcrBtn').disabled = false;
-      }
-
-      function renderOcrCandidates() {
-        $('#ocrResults').hidden = false;
-        $('#ocrResults').innerHTML = ocrCandidates.map((job, index) => `<div class="ocr-result-card" data-ocr-index="${index}">
-          <div class="ocr-result-fields">
-            <input class="ocr-result-check" type="checkbox" checked aria-label="选择第 ${index + 1} 条岗位">
-            <input class="control" data-field="company" value="${escapeHtml(job.company)}" placeholder="公司" aria-label="公司">
-            <input class="control" data-field="position" value="${escapeHtml(job.position)}" placeholder="岗位（请重点检查）" aria-label="岗位">
-            <input class="control" data-field="city" value="${escapeHtml(job.city)}" placeholder="城市" aria-label="城市">
-            <input class="control" data-field="applicationDate" type="date" value="${escapeHtml(job.applicationDate || '')}" aria-label="投递日期" title="未识别到时保持空白">
-          </div>
-          <details class="ocr-raw"><summary>查看识别原文</summary><pre>${escapeHtml(job.rawText || '未读取到清晰文字')}</pre></details>
-        </div>`).join('');
-      }
-
-      function importOcrCandidates() {
-        const selected = [...document.querySelectorAll('.ocr-result-card')].filter(card => card.querySelector('.ocr-result-check').checked).map(card => normalizeJob({
-          company: card.querySelector('[data-field="company"]').value,
-          position: card.querySelector('[data-field="position"]').value,
-          city: card.querySelector('[data-field="city"]').value,
-          applicationDate: card.querySelector('[data-field="applicationDate"]').value,
-          category: '截图识别'
-        })).filter(job => job.company && job.position);
-        if (!selected.length) {
-          $('#ocrStatus').className = 'capture-status error';
-          $('#ocrStatus').textContent = '请至少保留一条公司和岗位都已填写的结果。';
-          return;
-        }
-        const before = jobs.length;
-        saveJobs(selected);
-        const added = jobs.length - before;
-        closeScreenshotDialog();
-        location.hash = '#/jobPool';
-        showToast(`已加入岗位库 ${added} 条${selected.length > added ? `，自动合并重复 ${selected.length - added} 条` : ''}`);
-      }
-
-      function openTesseractCache() {
-        return new Promise((resolve, reject) => {
-          const request = indexedDB.open('keyval-store');
-          request.onupgradeneeded = () => {
-            if (!request.result.objectStoreNames.contains('keyval')) request.result.createObjectStore('keyval');
-          };
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error || new Error('无法打开本地识别缓存'));
-        });
-      }
-
-      async function ensureChineseOcrModel() {
-        if (!window.__OCR_CHI_SIM_GZIP_BASE64__) throw new Error('中文识别文件缺失');
-        const db = await openTesseractCache();
-        const key = './chi_sim.traineddata';
-        const exists = await new Promise((resolve, reject) => {
-          const request = db.transaction('keyval', 'readonly').objectStore('keyval').get(key);
-          request.onsuccess = () => resolve(typeof request.result !== 'undefined');
-          request.onerror = () => reject(request.error);
-        });
-        if (!exists) {
-          const raw = atob(window.__OCR_CHI_SIM_GZIP_BASE64__);
-          const bytes = new Uint8Array(raw.length);
-          for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
-          await new Promise((resolve, reject) => {
-            const tx = db.transaction('keyval', 'readwrite');
-            tx.objectStore('keyval').put(bytes, key);
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-            tx.onabort = () => reject(tx.error || new Error('中文识别文件写入失败'));
-          });
-        }
-        db.close();
-      }
-
-      function cleanOcrCandidate(value, maxLength = 80) {
-        return String(value || '')
-          .replace(/^[\s:：|·•\-—]+|[\s:：|·•\-—]+$/g, '')
-          .replace(/\s{2,}/g, ' ')
-          .slice(0, maxLength);
-      }
-
-      function normalizeOcrTitle(value) {
-        let title = cleanOcrCandidate(value, 80)
-          .replace(/[［[]/g, '【').replace(/[］\]]/g, '】')
-          .replace(/【+/g, '【').replace(/】+/g, '】')
-          .replace(/\s*【\s*/g, '【').replace(/\s*】\s*/g, '】')
-          .replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, '$1')
-          .replace(/(\d)\s+(?=[\u3400-\u9fff])/g, '$1');
-        title = title.replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, '$1');
-        return title;
-      }
-
-      function matchOcrLabel(text, labels, maxLength) {
-        const labelGroup = labels.join('|');
-        const match = text.match(new RegExp(`(?:${labelGroup})\\s*[:：]?\\s*([^\\n]{2,${maxLength}})`, 'i'));
-        return cleanOcrCandidate(match?.[1], maxLength);
-      }
-
-      function parseOcrDate(text) {
-        const labelled = text.match(/(?:投递|申请|提交|创建)(?:日期|时间)?\s*[:：]?\s*(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*日?/);
-        const dateBeforeLabel = text.match(/(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*日?\s*(?:投递|申请|提交|创建)/);
-        const genericDates = [...text.matchAll(/(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*日?/g)];
-        const generic = /(?:已投递|投递成功|申请成功|已申请)/.test(text) && genericDates.length === 1 ? genericDates[0] : null;
-        const shortLabelled = text.match(/(?:投递|申请|提交|创建)(?:日期|时间)?\s*[:：]?\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*日?/);
-        const parts = labelled || dateBeforeLabel || generic;
-        if (!parts && !shortLabelled) return '';
-        const year = parts ? parts[1] : String(new Date().getFullYear());
-        const source = parts || shortLabelled;
-        const monthIndex = parts ? 2 : 1;
-        const dayIndex = parts ? 3 : 2;
-        const month = String(Math.min(12, Math.max(1, Number(source[monthIndex])))).padStart(2, '0');
-        const day = String(Math.min(31, Math.max(1, Number(source[dayIndex])))).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      }
-
-      function parseOcrStage(text) {
-        if (/(?:offer|录用|已通过|已录取)/i.test(text)) return 'Offer';
-        if (/(?:已结束|流程结束|不合适|未通过|淘汰|拒绝)/i.test(text)) return '已结束';
-        if (/(?:HR\s*面|人力面|人事面)/i.test(text)) return 'HR面';
-        if (/(?:二面|第二轮面试|复试)/i.test(text)) return '二面';
-        if (/(?:一面|第一轮面试|初面|面试中)/i.test(text)) return '一面';
-        if (/(?:笔试|测评|在线测试)/i.test(text)) return '笔试';
-        if (/(?:已投递|投递成功|申请成功|已申请|简历筛选)/i.test(text)) return '已投递';
-        return '已投递';
-      }
-
-      function parseScreenshotText(rawText) {
-        const text = String(rawText || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
-        const compactText = text.replace(/\s+/g, '');
-        const lines = text.split('\n').map(line => cleanOcrCandidate(line, 120)).filter(line => line.length >= 2);
-        const noise = /^(?:首页|返回|搜索|登录|注册|分享|收藏|消息|全部|筛选|职位详情|岗位详情|招聘详情|申请记录|投递记录|我的申请|工作职责|职位描述|岗位职责|任职要求|职位要求|福利待遇|关于我们)$/i;
-        const positionWords = /(?:工程师|经理|运营|设计师|分析师|顾问|开发|算法|产品|销售|商务|市场|营销|商业化|策略|行业|客户|供应链|财务|人力|法务|测试|数据|项目|采购|管培|校招生|实习生|专员|研究员|策划|编辑|审计|助理|负责人|Job\s*Title|Position)/i;
-        const companyWords = /(?:公司|集团|科技|银行|证券|咨询|智能|互娱|网络|汽车|电子|传媒|研究院|事务所|有限公司|股份|控股|能源|医药|生物|教育|基金|保险|物流|航空|地产)/;
-        let company = matchOcrLabel(text, ['公司(?:名称)?', '企业(?:名称)?', '招聘单位', '应聘公司', 'Company'], 60);
-        let position = matchOcrLabel(text, ['投递岗位', '应聘岗位', '应聘职位', '岗位(?:名称)?', '职位(?:名称)?', 'Job\\s*Title', 'Position'], 80);
-        let city = matchOcrLabel(text, ['工作城市', '工作地点', '投递城市', '城市', '地点', 'Location'], 30);
-        const usable = lines.map((line, index) => ({ line, index })).filter(item => !noise.test(item.line));
-        if (!company) {
-          company = usable.map(item => ({ ...item, score: (companyWords.test(item.line) ? 35 : 0) + (item.index < 10 ? 10 : 0) + (item.line.length <= 36 ? 8 : -15) - (positionWords.test(item.line) ? 10 : 0) }))
-            .filter(item => item.score >= 25).sort((a, b) => b.score - a.score || a.index - b.index)[0]?.line || '';
-        }
-        if (!position) {
-          position = usable.map(item => ({ ...item, score: (positionWords.test(item.line) ? 40 : 0) + (item.index < 14 ? 10 : 0) + (item.line.length >= 3 && item.line.length <= 50 ? 10 : -20) - (companyWords.test(item.line) ? 8 : 0) }))
-            .filter(item => item.score >= 35).sort((a, b) => b.score - a.score || a.index - b.index)[0]?.line || '';
-        }
-        company = String(company).split(/(?:岗位|职位|工作地点|城市|申请|投递)/)[0];
-        position = String(position)
-          .split(/(?:撤\s*回\s*投\s*递|更\s*新\s*简\s*历|重\s*新\s*投\s*递|取\s*消\s*申\s*请|官\s*网\s*主\s*投|初\s*筛\s*中|筛\s*选\s*中|已\s*投\s*递|工作地点|城市|职位类别|岗位类别|申请时间|投递时间|发布日期)/)[0];
-        if (!city) {
-          const knownCities = ['北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '重庆', '武汉', '西安', '天津', '长沙', '厦门', '合肥', '青岛', '宁波', '郑州', '珠海', '佛山', '东莞', '无锡', '济南', '福州', '昆明', '南昌', '大连', '沈阳', '长春', '哈尔滨', '全国', '远程'];
-          city = knownCities.find(name => compactText.includes(name)) || '';
-        }
-        return normalizeRecord({
-          company: cleanOcrCandidate(company, 60),
-          position: normalizeOcrTitle(position),
-          city: cleanOcrCandidate(city, 30),
-          applicationDate: parseOcrDate(text),
-          stage: parseOcrStage(text),
-          nextAction: '检查识别结果，并关注后续通知'
-        });
-      }
-
-      async function prepareOcrImage(file) {
-        if (!window.createImageBitmap) return file;
-        const bitmap = await createImageBitmap(file);
-        const scale = Math.max(1, Math.min(2, 2600 / Math.max(1, bitmap.width)));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(bitmap.width * scale);
-        canvas.height = Math.round(bitmap.height * scale);
-        const context = canvas.getContext('2d', { alpha: false });
-        context.fillStyle = '#fff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.filter = 'grayscale(1) contrast(1.3)';
-        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        bitmap.close?.();
-        return new Promise(resolve => canvas.toBlob(blob => resolve(blob || file), 'image/png'));
-      }
-
-      function describeOcrProgress(message) {
-        const names = {
-          'loading tesseract core': '正在加载本地识别引擎',
-          'initializing tesseract': '正在初始化识别引擎',
-          'loading language traineddata': '正在读取中文识别模型',
-          'initializing api': '正在准备中文识别',
-          'recognizing text': '正在识别截图文字'
-        };
-        const progress = Math.max(0, Math.min(1, Number(message.progress) || 0));
-        $('#ocrProgressFill').style.width = `${Math.round(progress * 100)}%`;
-        $('#ocrStatus').textContent = `${names[message.status] || '正在识别'}… ${Math.round(progress * 100)}%`;
-      }
-
-      async function recognizeScreenshot() {
-        if (ocrCandidates.length && !ocrRunning) return importOcrCandidates();
-        if (!ocrFiles.length || ocrRunning) return;
-        const status = $('#ocrStatus');
-        ocrRunning = true;
-        $('#startOcrBtn').disabled = true;
-        $('#ocrProgress').hidden = false;
-        $('#ocrProgressFill').style.width = '2%';
-        status.className = 'capture-status';
-        status.textContent = '正在准备离线中文识别，首次使用可能需要十几秒…';
-        try {
-          if (!window.Tesseract) throw new Error('本地识别引擎文件缺失');
-          await ensureChineseOcrModel();
-          if (!ocrRunning) return;
-          const ocrRoot = new URL('./ocr/', location.href).href;
-          ocrWorker = await Tesseract.createWorker('chi_sim', 1, {
-            workerPath: `${ocrRoot}worker.min.js`,
-            corePath: `${ocrRoot}core`,
-            langPath: `${ocrRoot}lang`,
-            cacheMethod: 'readOnly',
-            logger: describeOcrProgress
-          });
-          if (!ocrRunning) {
-            await ocrWorker.terminate();
-            ocrWorker = null;
-            return;
-          }
-          const recognized = [];
-          for (let index = 0; index < ocrFiles.length; index += 1) {
-            if (!ocrRunning) break;
-            status.textContent = `正在识别第 ${index + 1}/${ocrFiles.length} 张：${ocrFiles[index].name || '岗位截图'}…`;
-            const preparedImage = await prepareOcrImage(ocrFiles[index]);
-            const enhancedResult = await ocrWorker.recognize(preparedImage);
-            const enhancedText = String(enhancedResult?.data?.text || '').trim();
-            let analysisText = enhancedText;
-            let seed = parseScreenshotText(analysisText);
-            if (!seed.position || !seed.city || (/(?:投递|申请)/.test(enhancedText) && !seed.applicationDate)) {
-              status.textContent = `正在复核第 ${index + 1}/${ocrFiles.length} 张的浅色文字…`;
-              const originalResult = await ocrWorker.recognize(ocrFiles[index]);
-              const originalText = String(originalResult?.data?.text || '').trim();
-              if (originalText && originalText !== enhancedText) analysisText = `${enhancedText}\n${originalText}`;
-              seed = parseScreenshotText(analysisText);
-            }
-            if (seed.company || seed.position || analysisText) recognized.push({ ...normalizeJob({
-              company: seed.company,
-              position: seed.position,
-              city: seed.city,
-              applicationDate: seed.applicationDate,
-              category: '截图识别'
-            }), rawText: analysisText.slice(0, 4000) });
-            $('#ocrProgressFill').style.width = `${Math.round(((index + 1) / ocrFiles.length) * 100)}%`;
-          }
-          await ocrWorker.terminate();
-          ocrWorker = null;
-          ocrRunning = false;
-          ocrCandidates = recognized;
-          if (!recognized.length) {
-            $('#startOcrBtn').disabled = false;
-            status.className = 'capture-status error';
-            status.textContent = '没有读取到清晰文字。建议只截取公司、岗位和投递信息区域后重新粘贴。';
-            return;
-          }
-          renderOcrCandidates();
-          status.className = 'capture-status success';
-          status.textContent = `识别出 ${recognized.length} 条，请检查公司、岗位和城市；取消勾选可跳过。`;
-          $('#startOcrBtn').textContent = `导入岗位库（${recognized.length}）`;
-          $('#startOcrBtn').disabled = false;
-        } catch (error) {
-          ocrRunning = false;
-          if (ocrWorker) {
-            try { await ocrWorker.terminate(); } catch (_) {}
-            ocrWorker = null;
-          }
-          $('#startOcrBtn').disabled = false;
-          status.className = 'capture-status error';
-          status.textContent = `识别没有完成：${error?.message || '请换一张更清晰的截图后重试'}`;
-        }
-      }
-
       function closeDialog() {
         els.dialog.close();
         editingId = null;
@@ -1491,33 +962,6 @@
           window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}), { once: true });
         }
       }
-
-      function consumeQuickCapture() {
-        const encoded = new URLSearchParams(location.search).get('capture');
-        if (!encoded) return;
-        try {
-          const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
-          const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
-          const bytes = Uint8Array.from(atob(padded), char => char.charCodeAt(0));
-          const captured = JSON.parse(new TextDecoder().decode(bytes));
-          const seed = normalizeRecord({
-            company: captured.company,
-            position: captured.position,
-            city: captured.city,
-            applicationDate: captured.applicationDate || '',
-            stage: String(captured.stage || '').trim() || '已投递',
-            companyType: captured.companyType, // 识别链路拿不到就留空，由用户在弹窗里选
-            applicationUrl: captured.applicationUrl,
-            nextAction: '关注消息并及时跟进投递进度'
-          });
-          try { history.replaceState(null, '', location.href.split('?')[0].split('#')[0]); } catch (_) {}
-          openDialog(null, seed);
-          showToast('已从岗位网页识别，请确认后保存');
-        } catch (error) {
-          alert('没有成功读取插件传来的岗位信息，请返回岗位页面重试。');
-        }
-      }
-
       initializeRouter();
       populateSelects();
       render();
@@ -1659,22 +1103,7 @@
       });
 
       $('#addBtn').addEventListener('click', () => openDialog());
-      $('#captureUrlBtn').addEventListener('click', openCaptureDialog);
       $('#installAppBtn').addEventListener('click', requestAppInstall);
-      $('#toolScreenshotBtn').addEventListener('click', openScreenshotDialog);
-      $('#syncJobsBtn').addEventListener('click', openJobSyncDialog);
-      $('#jobSearchInput').addEventListener('input', renderJobPool);
-      $('#jobList').addEventListener('click', handleJobAction);
-      $('#clearJobPoolBtn').addEventListener('click', async () => {
-        if (!jobs.length) return showToast('岗位库目前是空的');
-        if (!await confirmInApp(`确定清空本地岗位库中的 ${jobs.length} 条岗位吗？\n你的正式投递记录不会受到影响。`, { title: '清空岗位库', danger: true, confirmText: '清空' })) return;
-        jobs = [];
-        jobPoolUpdatedAt = '';
-        localStorage.removeItem(JOB_POOL_KEY);
-        localStorage.removeItem(JOB_POOL_META_KEY);
-        renderJobPool();
-        showToast('岗位库已清空，投递记录未改变');
-      });
       $('#toolSafetyBtn').addEventListener('click', openSafetyDialog);
       $('#toolIcsBtn').addEventListener('click', () => exportIcs());
       $('#exportRecordsBtn').addEventListener('click', exportData);
@@ -1923,7 +1352,7 @@
       $('#confirmCancelBtn').addEventListener('click', () => { confirmResult = false; confirmOutcome = 'cancel'; settleConfirm(); $('#confirmDialog').close(); });
       $('#confirmDialog').addEventListener('close', () => { settleConfirm(); });
       // Esc 取消：modal dialog 先派发 cancel 再派发 close，而部分环境只派发其中之一，
-      // 因此两条都监听（与 #screenshotDialog 的做法一致），确保 await 一定能结算。
+      // 因此两条都监听，确保 await 一定能结算。
       // Esc 记为 dismiss 而非 cancel：查重场景要能区分「用户明确选了取消按钮」与「用户什么都没选就关掉」。
       $('#confirmDialog').addEventListener('cancel', () => { confirmResult = false; confirmOutcome = 'dismiss'; settleConfirm(); });
       $('#confirmDialog').addEventListener('click', event => {
@@ -1942,52 +1371,7 @@
       $('#closeAdvanceDialog').addEventListener('click', closeAdvanceDialog);
       $('#cancelAdvanceDialog').addEventListener('click', closeAdvanceDialog);
       $('#advanceDialog').addEventListener('click', event => { if (event.target === $('#advanceDialog')) closeAdvanceDialog(); });
-      $('#closeCaptureDialog').addEventListener('click', closeCaptureDialog);
-      $('#cancelCaptureDialog').addEventListener('click', closeCaptureDialog);
-      $('#captureForm').addEventListener('submit', requestUrlCapture);
-      $('#captureDialog').addEventListener('click', event => { if (event.target === $('#captureDialog')) closeCaptureDialog(); });
-      $('#closeJobSyncDialog').addEventListener('click', closeJobSyncDialog);
-      $('#cancelJobSyncDialog').addEventListener('click', closeJobSyncDialog);
-      $('#startJobSyncBtn').addEventListener('click', requestJobSync);
-      $('#importPastedJobsBtn').addEventListener('click', importPastedJobs);
-      $('#jobSyncDialog').addEventListener('click', event => { if (event.target === $('#jobSyncDialog')) closeJobSyncDialog(); });
-      $('#closeScreenshotDialog').addEventListener('click', closeScreenshotDialog);
-      $('#cancelScreenshotDialog').addEventListener('click', closeScreenshotDialog);
-      $('#startOcrBtn').addEventListener('click', recognizeScreenshot);
-      $('#ocrDropzone').addEventListener('click', () => { if (!ocrRunning) $('#ocrFileInput').click(); });
-      $('#ocrDropzone').addEventListener('keydown', event => {
-        if (!ocrRunning && ['Enter', ' '].includes(event.key)) { event.preventDefault(); $('#ocrFileInput').click(); }
-      });
-      $('#ocrFileInput').addEventListener('change', event => selectScreenshots(event.target.files));
-      window.addEventListener('paste', event => {
-        if (!$('#screenshotDialog').open || ocrRunning) return;
-        const imageFiles = [...(event.clipboardData?.items || [])]
-          .filter(item => item.kind === 'file' && /^image\//i.test(item.type))
-          .map(item => item.getAsFile()).filter(Boolean);
-        if (!imageFiles.length) return;
-        event.preventDefault();
-        selectScreenshots(imageFiles, true);
-        $('#ocrStatus').className = 'capture-status success';
-        $('#ocrStatus').textContent = `已从剪贴板粘贴图片，目前共 ${ocrFiles.length} 张。`;
-      });
-      for (const type of ['dragenter', 'dragover']) {
-        $('#ocrDropzone').addEventListener(type, event => { event.preventDefault(); if (!ocrRunning) $('#ocrDropzone').classList.add('is-dragging'); });
-      }
-      for (const type of ['dragleave', 'drop']) {
-        $('#ocrDropzone').addEventListener(type, event => { event.preventDefault(); $('#ocrDropzone').classList.remove('is-dragging'); });
-      }
-      $('#ocrDropzone').addEventListener('drop', event => { if (!ocrRunning) selectScreenshots(event.dataTransfer?.files); });
-      $('#screenshotDialog').addEventListener('click', event => { if (event.target === $('#screenshotDialog')) closeScreenshotDialog(); });
-      $('#screenshotDialog').addEventListener('cancel', event => { event.preventDefault(); closeScreenshotDialog(); });
       window.addEventListener('message', handleCaptureMessage);
-      window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_REGISTER_TRACKER', url: location.href.split('?')[0].split('#')[0] }, '*');
-      // 探测旧版一键收录插件：先按当前状态设置入口可见性（默认隐藏网址识别），
-      // 若旧插件随后回 CAPTURE_READY（content script 注入有先后），handleCaptureMessage 会重新显示入口。
-      applyLegacyCaptureUI();
-      [300, 1200].forEach(delay => setTimeout(() => {
-        if (hasLegacyCapturePlugin) return;
-        window.postMessage({ source: 'AUTUMN_TRACKER', type: 'CAPTURE_PING', url: location.href.split('?')[0].split('#')[0] }, '*');
-      }, delay));
       $('#closeSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());
       $('#doneSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());
       $('#safetyDialog').addEventListener('click', event => { if (event.target === $('#safetyDialog')) $('#safetyDialog').close(); });
@@ -2034,4 +1418,3 @@
         setTimeout(pushResumeToPlugin, 1000);
         setTimeout(pushResumeToPlugin, 3000);
       }
-      consumeQuickCapture();

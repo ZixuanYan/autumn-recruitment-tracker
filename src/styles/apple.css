@@ -232,10 +232,6 @@
     .capture-note { background: var(--accent-soft); color: var(--accent-ink); border-radius: var(--r-md); }
     .capture-status.success { color: var(--ok); }
     .capture-status.error { color: var(--danger); }
-    .ocr-dropzone { border: 1.5px dashed var(--line-strong); border-radius: var(--r-lg); background: rgba(0, 0, 0, .02); }
-    .ocr-dropzone.is-dragging { border-color: var(--accent); background: var(--accent-soft); }
-    .ocr-result-card { border: 0; box-shadow: none; border-radius: var(--r-md); background: var(--surface-2); }
-    .ocr-result-check { accent-color: var(--accent); }
     .empty, .side-empty, .resume-empty-hint { color: var(--muted); }
     /* 页面切换 400ms + 位移 16px（规范原值；旧版 .45s/12px） */
     .view.is-entering { animation: view-in .4s var(--ease); }
@@ -351,7 +347,7 @@
     /* ===== v4.6.0：洞察明细折叠容器 + 城市分布 + 企业性质 ===== */
     .insight-details { display: grid; gap: 16px; min-width: 0; }
     /* 关键守卫：作者层的 display:grid 会覆盖 UA 的 [hidden]{display:none}。
-       漏了这条，精简模式下明细块仍然占位并吞掉下方台账的点击（.drawer / .insights-body / .ocr-* 踩过同一个坑）。 */
+       漏了这条，精简模式下明细块仍然占位并吞掉下方台账的点击（.view / .drawer / .insights-body 踩过同一个坑）。 */
     .insight-details[hidden] { display: none; }
     .city-list { display: grid; gap: 2px; }
     .city-row { display: grid; grid-template-columns: minmax(52px, auto) minmax(0, 1fr) 26px 62px; align-items: center; gap: 9px; padding: 5px 6px; border-radius: var(--r-sm); font-size: 12.5px; }
