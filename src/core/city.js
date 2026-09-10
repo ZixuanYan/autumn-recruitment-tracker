@@ -130,7 +130,7 @@
           if (!bucket || !bucket.total) return '';
           const title = bucket.city || '没填城市';
           const items = bucket.records.slice(0, TIP_MAX_ROWS).map(record => `
-            <div class="tip-row"><span class="tip-v">${escapeHtml(record.company || '未填公司')} · ${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? `（${escapeHtml(record.orgUnit)}）` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span></div>`).join('');
+            <div class="tip-row"><span class="tip-v">${escapeHtml(record.company || '未填公司')} · ${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit, true))}</span><span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span></div>`).join('');
           const rest = bucket.records.length - TIP_MAX_ROWS;
           return `<div class="tip-head">${escapeHtml(title)} · ${bucket.total} 条投递 · ${bucket.companies} 家公司${bucket.offers ? ` · ${bucket.offers} 个 Offer` : ''}</div>
             <div class="tip-list">${items}${rest > 0 ? `<div class="tip-more">另有 ${rest} 条，去台账按城市搜索查看</div>` : ''}</div>`;

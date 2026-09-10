@@ -607,7 +607,7 @@ check('html() 输出的 id 与 els() 取用的 id 完全一致', () => {
   }
 });
 
-check('下拉选项由常量生成：阶段 14 档、企业性质 3 档 + 未设置', () => {
+check('下拉选项由常量生成：阶段 15 档、企业性质 3 档 + 未设置', () => {
   const stageSel = { innerHTML: '' };
   const typeSel = { innerHTML: '' };
   AJA.CaptureForm.fillOptions(stageSel, typeSel);
@@ -966,10 +966,10 @@ check('同源守卫：extension/shared/*.js 与仓库根 shared/*.js 逐字节�
 });
 
 check('shared 的值本身正确（源头错了三端一起错，所以源头也要有契约）', () => {
-  assert.strictEqual(AJA.STAGE_PRESETS.length, 14, '阶段预设应为 14 档');
+  assert.strictEqual(AJA.STAGE_PRESETS.length, 15, '阶段预设应为 15 档');
   // 跨 vm context 的数组原型不同，deepStrictEqual 会报「结构相同但引用不等」，所以先展开成本地数组
   assert.deepStrictEqual([...AJA.STAGE_PRESETS],
-    ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束']);
+    ['待投递', '已投递', '测评', '笔试', '机试', 'AI面试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束']);
   assert.deepStrictEqual([...AJA.COMPANY_TYPES], ['央国企', '私企', '外企'], '企业性质应为约定的 3 档');
   assert.strictEqual(AJA.COMPANY_TYPE_UNSET, '未设置');
   assert.strictEqual(Object.keys(AJA.DEFAULT_RESUME).length, 6, '默认简历应为 6 段');

@@ -9,7 +9,7 @@
  *   由同源守卫断言与根目录这份逐字节相同）；`common/constants.js` 里 `AJA.STAGES = AJA.STAGE_PRESETS`
  * - mail-sync Action：`services/mail-sync/src/config.js` 用 `require('../../../shared/stages')`
  *
- * 为什么要有这个文件：此前 14 个阶段值散在三处字面量里（index.html / constants.js / config.js），
+ * 为什么要有这个文件：此前 15 个阶段值散在三处字面量里（index.html / constants.js / config.js），
  * 靠注释「两处必须同步修改」和外部仓库的测试断言维持一致。谁改了网页版忘了改 Action，
  * Action 就会把「交叉面」判成非法阶段——而这个失败要等下一次邮件同步才暴露，中间没有任何信号。
  *
@@ -23,8 +23,11 @@
   'use strict';
 
   // 仅用于排序 / 推进建议 / 分布统计 / 配色。实际阶段**可自定义**：
-  // 允许跳过笔试、支持三/四/五面、交叉面等；不在这 14 个里的阶段一律按 stageOrder() 的兜底排序。
-  const STAGE_PRESETS = ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
+  // 允许跳过笔试、支持三/四/五面、交叉面等；不在这 15 个里的阶段一律按 stageOrder() 的兜底排序。
+  // AI面试 排在机试之后、一面之前：它是测评/笔试之后、真人面之前的自动化环节
+  // （牛客/赛码一类 AI 视频面），有些企业会有这一步。加在这里即可全链路生效——
+  // stageOrder 用 indexOf 排序、Action 的 allowedStages 与合法性校验都读这一份。
+  const STAGE_PRESETS = ['待投递', '已投递', '测评', '笔试', '机试', 'AI面试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
 
   return { STAGE_PRESETS };
 });

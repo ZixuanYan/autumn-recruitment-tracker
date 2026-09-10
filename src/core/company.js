@@ -54,3 +54,21 @@
         return COMPANY_PALETTE[h % COMPANY_PALETTE.length];
       }
 
+      // 岗位名 + 机构名拼接；机构名已经写在岗位名里时**不再追加**。
+      // 实证（用户报的）：position = "数字金融岗（成都分行）" + orgUnit = "成都分行"
+      // 渲染成「数字金融岗（成都分行）（成都分行）」，邮件候选下拉里就是这么出现的。
+      // 成因不在录入侧：岗位名里带机构/城市是招聘网站的常态（插件采集回来就带着），
+      // 而 orgUnit 是 v4.11.0 新增的独立字段，拆分建议只改 company 与 orgUnit、不碰 position，
+      // 所以两边都渲染就必然重复。
+      // 为什么收成 helper 而不是各渲染点自己判断：这个拼接形态在 5 处重复出现，
+      // 分散判断迟早漏一处，第 6 处新增时也不必再想一遍。
+      // 分隔符有两种形态：「 · 」用于并列展示，「（）」用于岗位名后缀，第三个参数区分。
+      function positionWithUnit(position, orgUnit, parenthesized) {
+        const pos = String(position || '').trim();
+        const unit = String(orgUnit || '').trim();
+        if (!unit) return pos;
+        if (pos && pos.includes(unit)) return pos;
+        if (!pos) return unit;
+        return parenthesized ? `${pos}（${unit}）` : `${pos} · ${unit}`;
+      }
+

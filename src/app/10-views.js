@@ -19,7 +19,7 @@
           return { action: 'add', target: null, hint: countHint };
         }
         const target = dup.matches[0];
-        const targetLabel = `${target.company} · ${target.position}${target.orgUnit ? `（${target.orgUnit}）` : ''}`;
+        const targetLabel = `${target.company} · ${positionWithUnit(target.position, target.orgUnit, true)}`;
         if (dup.mode === 'variant') {
           // 疑似同一岗位的不同方向 / 城市 / 机构：绝大多数情况确实是两条独立投递，故主按钮是「新增」
           const isSeparate = await confirmInApp(
@@ -57,7 +57,7 @@
         const items = siblings.slice(0, 4).map(record => {
           // 与当前正在填的岗位「宽松相等」→ 标黄，提示保存时会再确认一次是不是同一条
           const similar = loose.length >= 2 && loosePositionSlug(record.position) === loose;
-          return `<span class="same-company-item${similar ? ' is-similar' : ''}">${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? `（${escapeHtml(record.orgUnit)}）` : ''} · ${escapeHtml(record.stage)}</span>`;
+          return `<span class="same-company-item${similar ? ' is-similar' : ''}">${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit, true))} · ${escapeHtml(record.stage)}</span>`;
         }).join('');
         const more = siblings.length > 4 ? `<span class="same-company-more">等 ${siblings.length} 个</span>` : '';
         box.innerHTML = `该公司已有 ${siblings.length} 个岗位：${items}${more}`;
@@ -427,7 +427,7 @@
               </div>
             </div>
             ${others.length ? `<div class="drawer-section"><h3>同公司其它投递（${others.length}）</h3><div class="sibling-list">${others.map(item => `
-              <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(item.position || '未填岗位')}${item.orgUnit ? ` · ${escapeHtml(item.orgUnit)}` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
+              <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(positionWithUnit(item.position || '未填岗位', item.orgUnit))}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
         }
         if (actions) {
           actions.innerHTML = `

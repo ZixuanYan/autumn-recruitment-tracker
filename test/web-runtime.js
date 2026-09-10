@@ -69,7 +69,14 @@ const sandbox = {
 };
 
 sandbox.AJA = AJA_SHARED;   // 邮件段会用到 STAGE_PRESETS 等转发别名
+// v4.15.0 的邮件多选分支需要这两个**真实实现**，刻意不给桩：
+// · companyGroupKey 决定「默认全勾还是全不勾」——用桩就等于没验证那条防误匹配的策略；
+// · positionWithUnit 决定机构名会不会重复渲染。
+// 手写副本会造成第二份实现（本仓有别名守卫专门防这种漂移），所以从真实源码抽取。
+// extractFunction 与 loadSrc 都是模块级、已提升/已 require，可以在这里调用。
+sandbox.companyGroupKey = AJA_SHARED.companyGroupKey;
 vm.createContext(sandbox);
+vm.runInContext(extractFunction(loadSrc.coreSrc, 'positionWithUnit'), sandbox, { filename: 'core-positionWithUnit.js' });
 vm.runInContext(sectionSrc, sandbox, { filename: 'mail-section.js' });
 
 let failed = 0;
@@ -205,11 +212,98 @@ check('1 命中 → single + data-target-id + 应用所选 + 高置信默认勾�
   assert.ok(h.includes('data-mail-field="milestone" checked'));
   assert.ok(!h.includes('low-conf'));
 });
-check('多命中 → 下拉选择 mail-target-select', () => {
-  sandbox.records = [{ id: 'a', company: '腾讯', position: '后端', stage: '一面' }, { id: 'b', company: '腾讯科技', position: '前端', stage: '笔试' }];
-  const h = sandbox.mailCardHtml(baseSug);
-  assert.ok(h.includes('mail-target-select'));
-  assert.ok(h.includes('<option'));
+check('多命中 → 复选框列表可多选；同公司默认全勾，跨公司默认全不勾 + 警告', () => {
+  const BOX_ON = /class="mail-target-check" value="[^"]*" checked/g;
+  const BOX = /class="mail-target-check"/g;
+  // ── 同公司多岗位：一封测评 / AI面通知覆盖该公司所有投递，默认全勾才不用点 7 次 ──
+  sandbox.records = [
+    { id: 'a', company: '招商银行', position: '测试开发岗', orgUnit: '招银网络科技', stage: '测评' },
+    { id: 'b', company: '招商银行', position: '数字金融岗（成都分行）', orgUnit: '成都分行', stage: '已投递' }
+  ];
+  const sug = { ...baseSug, company: '招商银行' };
+  const same = sandbox.mailCardHtml(sug);
+  assert.ok(same.includes('mail-target-list'), '多命中应渲染勾选列表');
+  assert.ok(!same.includes('mail-target-select'), '单选下拉已废，不得复活（复活就意味着又只能选一条）');
+  assert.strictEqual((same.match(BOX) || []).length, 2, '两条候选各一个复选框');
+  assert.strictEqual((same.match(BOX_ON) || []).length, 2, '同公司候选应默认全勾');
+  assert.ok(!same.includes('mail-match-warn'), '同公司不该出现跨公司警告');
+  // 机构名已写在岗位名里 → 不得重复（用户实际看到的「数字金融岗（成都分行）（成都分行）」）
+  assert.ok(same.includes('数字金融岗（成都分行）'), '岗位名应原样保留');
+  assert.ok(!same.includes('（成都分行）（成都分行）'), '机构名重复渲染没修好');
+  assert.ok(same.includes('测试开发岗（招银网络科技）'), '岗位名里没有机构名时应正常追加');
+
+  // ── 跨公司：说明匹配可疑，默认全不勾 + 显式警告，强制逐条确认 ──
+  // 用「同一家银行的不同分行」构造：两者的 companyGroupKey 互不包含 → 判定为跨组。
+  // （京东 / 京东方 不行：companyGroupKey 认为它们同组，走不到这个分支。）
+  // 这一支是纵深防御——pure.js 的首字闸门已经挡掉了绝大多数误匹配，
+  // 但万一漏了一个，它会以"跨公司候选"的形态在这里被拦住，
+  // 而不是被一次点击批量写脏 N 条时间线（时间线是真相源，写脏不好回退）。
+  sandbox.records = [
+    { id: 'a', company: '招商银行杭州分行', position: '后端', stage: '一面' },
+    { id: 'b', company: '招商银行宁波分行', position: '前端', stage: '笔试' }
+  ];
+  const cross = sandbox.mailCardHtml(sug);
+  assert.strictEqual((cross.match(BOX) || []).length, 2, '跨公司候选仍应全部列出（不隐藏，交给人判断）');
+  assert.strictEqual((cross.match(BOX_ON) || []).length, 0, '跨公司候选不得默认勾选');
+  assert.ok(cross.includes('mail-match-warn'), '跨公司候选必须给出显式警告');
+});
+
+check('applyMailSuggestion 多目标：勾选 N 条就写入 N 条，且 saveRecords 只调一次', () => {
+  // 为什么必须有这条：多选把「应用一次」变成「应用 N 次」，最容易错的两处都不会报错——
+  // ① 循环里逐条 saveRecords：N 次 localStorage 写入 + N 次 scheduleSyncPush（云同步推送判定），
+  //    既浪费又可能与自己的上一次推送竞争；② 只写第一条就 return：用户勾了 7 条只更新 1 条，
+  //    界面还会正常提示成功。applyMailSuggestion 此前是零覆盖，改成循环后更不能裸奔。
+  const saves = [], flashed = [], applied = [];
+  let stamped = 0;
+  const orig = {};
+  for (const k of ['saveRecords', 'render', 'flashRow', 'markMailApplied', 'renderMailView', 'updateMailBadge', 'playOfferStamp', 'document']) {
+    orig[k] = sandbox[k];
+  }
+  sandbox.saveRecords = msg => saves.push(msg);
+  sandbox.render = () => {};
+  sandbox.flashRow = id => flashed.push(id);
+  sandbox.markMailApplied = id => applied.push(id);
+  sandbox.renderMailView = () => {};
+  sandbox.updateMailBadge = () => {};
+  sandbox.playOfferStamp = () => { stamped += 1; };
+
+  sandbox.records = [
+    { id: 'a', company: '招商银行', position: '测试开发岗', stage: '测评', timeline: [{ stage: '测评', at: '2026-09-01', note: '' }] },
+    { id: 'b', company: '招商银行', position: '数字金融岗', stage: '已投递', timeline: [{ stage: '已投递', at: '2026-09-01', note: '' }] },
+    { id: 'c', company: '招商银行', position: '信息技术岗', stage: '已投递', timeline: [{ stage: '已投递', at: '2026-09-01', note: '' }] }
+  ];
+  sandbox.mailSuggestions = [{ id: 'uid-1', company: '招商银行', confidence: 0.9,
+    proposed: { milestone: { stage: '二面', at: '2026-09-12', note: '邮件·面试邀请' } } }];
+  // 勾选 a 与 c（b 没勾）；字段只勾 milestone
+  const card = {
+    querySelectorAll: sel => (sel === '.mail-target-check:checked'
+      ? [{ value: 'a' }, { value: 'c' }]
+      : [{ dataset: { mailField: 'milestone' } }]),
+    querySelector: () => null
+  };
+  sandbox.document = { querySelector: () => card };
+  try {
+    sandbox.applyMailSuggestion('uid-1');
+    const byId = id => sandbox.records.find(r => r.id === id);
+    assert.strictEqual(saves.length, 1,
+      `saveRecords 应只调一次，实际 ${saves.length} 次——逐条保存会触发 N 次云同步推送判定，还可能与自己竞争`);
+    assert.ok(/2 条/.test(saves[0] || ''), `提示文案应说明写了几条，实际：${saves[0]}`);
+    assert.strictEqual(byId('a').stage, '二面', '勾选的第一条应被推进');
+    assert.strictEqual(byId('c').stage, '二面', '勾选的第二条也应被推进（只写第一条是这类改动最常见的错）');
+    assert.strictEqual(byId('b').stage, '已投递', '没勾的那条不得被动到');
+    assert.deepStrictEqual(flashed, ['a', 'c'], '两条勾选的都要闪一下，用户才知道改了哪些');
+    assert.deepStrictEqual(applied, ['uid-1'], '邮件只标记一次 applied（标记 N 次没有意义，且会掩盖"部分失败"）');
+    assert.strictEqual(stamped, 0, '非 Offer 阶段不该播盖章动画');
+
+    // 一条都没勾：必须拦下来，不能静默什么都不做还提示成功
+    saves.length = 0; applied.length = 0;
+    card.querySelectorAll = sel => (sel === '.mail-target-check:checked' ? [] : [{ dataset: { mailField: 'milestone' } }]);
+    sandbox.applyMailSuggestion('uid-1');
+    assert.strictEqual(saves.length, 0, '没勾任何目标时不得写入');
+    assert.strictEqual(applied.length, 0, '没勾任何目标时不得把邮件标记成已应用（否则这封邮件就再也找不回来了）');
+  } finally {
+    for (const [k, v] of Object.entries(orig)) sandbox[k] = v;
+  }
 });
 check('0 命中 → none + 新建记录按钮', () => {
   sandbox.records = [{ id: 'z', company: '美团', position: '产品', stage: '一面' }];

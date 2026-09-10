@@ -33,12 +33,34 @@
         }
         return (2 * inter) / ((s1.length - 1) + (s2.length - 1));
       }
-      // 归一化后完全相等→1；互相包含→0.9；否则 Dice
+      // 短中文 slug 判定：首字闸门只对它生效（见 companyMatchScore 的说明）。
+      // 刻意排除拉丁名——Dice 对英文的价值恰恰是容忍拼写错误（tencent / tencnet），
+      // 加首字母闸门会把这类容错一起杀掉。
+      function isShortCjkSlug(s) {
+        return s.length <= 5 && /^[\u4e00-\u9fa5]+$/.test(s);
+      }
+      // 归一化后完全相等→1；互相包含→0.9；否则 Dice（短中文名先过首字闸门）
       function companyMatchScore(a, b) {
         const na = normalizeCompanySlug(a), nb = normalizeCompanySlug(b);
         if (!na || !nb) return 0;
         if (na === nb) return 1;
         if (na.includes(nb) || nb.includes(na)) return 0.9;
+        // ── 首字闸门（只在 Dice 分支，且必须在「相等 / 互相包含」之后）──────────
+        // 中文企业名 = 字号（区分部分，在**首位**）+ 行业通名（在尾部：银行/证券/保险/
+        // 科技/集团…）。4 字名只有 3 个 bigram，共享一个 2 字的通名尾巴就能拿到
+        // 2×2/(3+3) = 0.667，直接越过 0.6 阈值。
+        // 实证（用户报的 bug）：招商银行 vs 徽商银行 的 bigram 是
+        //   {招商,商银,银行} vs {徽商,商银,银行}，共享「商银」+「银行」**两个** → 0.667 命中，
+        //   于是招商银行的邮件候选里混进了徽商银行的台账。
+        // 而兴业/平安/民生/宁波银行只共享「银行」一个 → 0.333，本来就正确排除。
+        // 差别仅仅是招行与徽行的字号都以「商」结尾，多贡献了一个跨字号边界的 bigram。
+        // 结论：Dice 在短中文串上度量的是「行业是否相同」，不是「是否同一家公司」。
+        // 只限定短名（≤5 字）：长名 bigram 多，单一通名不足以主导
+        //   （太平洋保险 vs 平安保险 = 0.286，本来就正确排除）。
+        // 放在包含分支之后是**必须**的：否则「中国招商银行」vs「招商银行」这类真实包含关系
+        //   会被"首字不同"误杀。所有合法变体（后缀差异 / 缩写 / 城市中缀）都在前两个分支
+        //   就返回了，闸门只影响 Dice 兜底分支。
+        if (isShortCjkSlug(na) && isShortCjkSlug(nb) && na[0] !== nb[0]) return 0;
         return diceCoefficient(na, nb);
       }
       // 公司名模糊匹配台账：阈值 ≥0.6，按分数（再按岗位命中）降序；返回 0/1/多 候选

@@ -1,10 +1,22 @@
 name: mail-sync
 
-# 定时（每 12 小时：UTC 00:23 与 12:23）+ 手动触发：IMAP 增量拉取 → 预筛 → AI 判定 → 只 PATCH Gist 的 mail-suggestions.json。
+# 定时（每 3 小时）+ 手动触发：IMAP 增量拉取 → 预筛 → AI 判定 → 只 PATCH Gist 的 mail-suggestions.json。
+#
+# ⚠️ cron 是**触发粒度**，不是拉取频率。真正的频率由 minIntervalHours 决定
+#    （网页端「邮件提醒 → 设置 → 最小间隔（小时）」，写进 Gist 的 mail-config.json）：
+#    距上次运行不足该小时数就跳过，跳过的那次不连 IMAP、不调 AI（0 token）。
+#    v4.15.0 之前这里是每 12 小时，minIntervalHours 只能把频率调得更疏、调不到 12 小时以内；
+#    改成每 3 小时后它才成为真正的旋钮（3 / 6 / 12 / 24 …），默认值仍是 12 小时，
+#    所以未改设置的人行为不变。
+# 代价（私有仓库要算）：npm install 在**每次**触发都会跑，被跳过的运行也照样消耗
+#    Actions 分钟（约 40–60 秒/次）。每 3 小时 = 240 次/月，比每 12 小时的 60 次多约 2.5 小时/月。
+#    公开仓库免费；私有仓库占 2000 分钟/月免费额度的约 7.5%。
+# 精度（平台限制，改 cron 无法解决）：GitHub 的 schedule 在高峰期常延迟 2–4 小时，
+#    所以 minIntervalHours 是「不会比这更密」的下限，不是精确周期。
 # 保活提示：GitHub Actions 对 60 天无活动的仓库会停用定时 workflow，需偶尔手动 dispatch 一次保活。
 on:
   schedule:
-    - cron: '23 */12 * * *'
+    - cron: '23 */3 * * *'
   workflow_dispatch:
     inputs:
       SINCE_DAYS:

@@ -77,7 +77,9 @@ async function run() {
   const cfg = applyMailConfigOverrides(cfg0, mailConfig);
   console.log(`[sync] 配置：enabled=${cfg.enabled} minIntervalHours=${cfg.minIntervalHours} keywords="${cfg.keywords}" minConf=${cfg.minConfidence} sinceDays=${cfg.sinceDays} maxPerRun=${cfg.maxPerRun} enc=${cfg.mailEncKey ? 'on' : 'off'} promptExtra=${cfg.promptExtra ? 'yes' : 'no'} promptOverride=${cfg.promptOverride ? 'yes（已整体替换解析偏好，输出契约仍强制附加）' : 'no（用内置）'}`);
 
-  const skip = gateReason(cfg, prev.meta);
+  // 手动触发（Actions 页面点「Run workflow」）绕过间隔门禁，否则它会被 12 小时默认值挡住，
+  // 用户唯一的即时手段就没了。enabled=false 仍然生效。详见 gateReason 的注释。
+  const skip = gateReason(cfg, prev.meta, { manual: process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' });
   if (skip) { console.log(`[sync] ⏭️ 跳过本次（0 token）：${skip}`); return; }
 
   assertImapSecrets(cfg);

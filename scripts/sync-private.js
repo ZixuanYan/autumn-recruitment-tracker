@@ -6,7 +6,8 @@
  * 与 sync-template.js 的映射与改写完全相同（共用 scripts/lib/sync-core.js），差别只有：
  *   - README 顶部的 banner 文案（说明这是运行实例而非供人 fork 的模板）
  *   - 输出目录 staging-private/
- *   - 本脚本会额外提醒你「这是生产环境」：它每 12 小时跑一次真实邮件同步，
+ *   - 本脚本会额外提醒你「这是生产环境」：它按 cron 每 3 小时触发一次真实邮件同步
+ *     （实际拉取频率由 minIntervalHours 决定，默认 12 小时；见 workflow 顶部注释），
  *     同步后必须手动 dispatch 一次验证，别等下一次定时任务才发现崩了
  *
  * ⚠️ 为什么这个仓库要保持私有（不并进公开的 monorepo 跑）：

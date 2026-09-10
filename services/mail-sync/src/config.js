@@ -131,7 +131,7 @@ function buildConfig() {
     mailEncKey: strEnv('MAIL_ENC_KEY', ''),
     // 以下几项默认值，可被 Gist 里的 mail-config.json 覆盖（见 applyMailConfigOverrides）
     enabled: true,
-    minIntervalHours: 0,
+    minIntervalHours: 0,   // 0 = 用 DEFAULT_MIN_INTERVAL_HOURS（见 gateReason 的说明），不是"每次都跑"
     promptExtra: '',
     // 整体替换内置提示词的「解析偏好」部分（v0.4.0）。留空则用 ai.js 的 DEFAULT_PROMPT_BODY。
     // 注意：无论这里写什么，ai.js 的 OUTPUT_CONTRACT（只返回 JSON、字段清单、枚举、格式）
@@ -166,14 +166,34 @@ function applyMailConfigOverrides(cfg, mailConfig) {
   });
 }
 
-// 运行门禁（纯函数）：返回跳过原因字符串或 null（继续）。跳过发生在 IMAP/AI 之前 → 0 token。
-function gateReason(cfg, prevMeta) {
+// 默认最小间隔（小时）。⚠️ 这不是随手挑的默认值，而是**向后兼容的锚点**：
+// v4.15.0 之前 cron 每 12 小时、且 minIntervalHours=0 意为"每次定时都跑"，合起来就是每 12 小时一次。
+// 本版把 cron 改细到每 3 小时之后，若 0 仍按旧语义解释，所有没显式设置过这一项的部署
+// 会从每 12 小时**静默**变成每 3 小时——AI 调用量 4 倍，而用户什么都没做。
+// 把 0（含未设置）重定义为"用默认 12 小时"，已有部署的行为逐字节不变；想更频繁就显式填 3 / 6。
+const DEFAULT_MIN_INTERVAL_HOURS = 12;
+// 门禁容差。lastRunAt 记的是**上一次运行结束**的时刻（state.js 的 buildMeta 在收尾时写），
+// 而 cron 记的是本次**触发**时刻，两者相差上一轮的实际耗时（连 IMAP + 调 AI，约 1–2 分钟）。
+// 不留容差的话，把 minIntervalHours 设成与 cron 周期相同（都是 3 小时）会得到
+// elapsed = 3h − 2min < 3h → 本次跳过 → 实际变成每 6 小时一次，而且完全静默：
+// 日志里只有一行"距上次运行不足 3 小时"，看起来像是配置没生效。
+// 10 分钟足以覆盖单轮耗时与 GitHub 定时的小幅抖动，又不会把"每 3 小时"实质缩短成"每 2.8 小时"。
+const MIN_INTERVAL_GRACE_MS = 10 * 60e3;
+
+// 运行门禁（纯函数）：返回跳过原因字符串或 null（继续）。跳过发生在 IMAP/AI 之前 → 0 token、0 封邮件读取。
+// opts.manual：workflow_dispatch 手动触发时为 true，绕过**间隔**门禁但不绕过 enabled。
+function gateReason(cfg, prevMeta, opts) {
   if (cfg && cfg.enabled === false) return 'mail-config.json 中 enabled=false（网页端已关闭邮件同步）';
-  const hours = Number(cfg && cfg.minIntervalHours) || 0;
-  if (hours > 0 && prevMeta && prevMeta.lastRunAt) {
+  // 手动触发就是"我现在要拉一次"的逃生口。若它也被间隔门禁挡住，用户点「立即运行」
+  // 只会得到一行"距上次运行不足 12 小时"，看起来像按钮坏了——而这恰恰是最需要它的时候
+  // （比如刚投完一批简历、等不到下个周期）。enabled=false 仍然拦：那是明确的关闭开关，不是频率控制。
+  if (opts && opts.manual) return null;
+  const raw = Number(cfg && cfg.minIntervalHours) || 0;
+  const hours = raw > 0 ? raw : DEFAULT_MIN_INTERVAL_HOURS;
+  if (prevMeta && prevMeta.lastRunAt) {
     const last = Date.parse(prevMeta.lastRunAt);
-    if (Number.isFinite(last) && (Date.now() - last) < hours * 3600e3) {
-      return `距上次运行不足 ${hours} 小时（minIntervalHours=${hours}）`;
+    if (Number.isFinite(last) && (Date.now() - last) < hours * 3600e3 - MIN_INTERVAL_GRACE_MS) {
+      return `距上次运行不足 ${hours} 小时（minIntervalHours=${raw > 0 ? raw : `未设置→默认 ${DEFAULT_MIN_INTERVAL_HOURS}`}）`;
     }
   }
   return null;
@@ -215,6 +235,9 @@ module.exports = {
   buildConfig,
   applyMailConfigOverrides,
   gateReason,
+  // 门禁的两个数值也导出：测试直接读它们，不在测试里抄一遍字面量（抄了就会各自漂移）
+  DEFAULT_MIN_INTERVAL_HOURS,
+  MIN_INTERVAL_GRACE_MS,
   keywordRegex,
   fromNoiseRegex,
   subjectNoiseRegex,

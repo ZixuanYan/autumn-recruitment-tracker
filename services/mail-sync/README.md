@@ -87,7 +87,10 @@ npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ t
 
 下文提到的 `test/run.js`、`test/integration.js`、`test/web-check.js` 一律指**仓库根的 `test/`**（独立仓库里就是 `test/`，monorepo 里是 `../../test/`）。其中 `web-check.js` / `web-runtime.js` 等 7 个文件依赖网页端与插件源码，**只存在于 monorepo**，独立仓库不带它们（带了也跑不起来）。
 
-- **定时**：`mail-sync.yml` 用 `cron: '23 */12 * * *'`（每 12 小时：UTC 00:23 与 12:23）。招聘高峰可改回每小时 `'23 * * * *'`（风控与实时性权衡）。GitHub 的 schedule 在高峰期常延迟 2–4 小时，属平台侧行为，改 cron 无法解决。
+- **定时**：`mail-sync.yml` 用 `cron: '23 */3 * * *'`（每 3 小时触发一次）。**cron 是触发粒度，不是拉取频率**——真正的频率由 `minIntervalHours` 决定（见下），默认 12 小时，所以未改设置的人行为与 v4.15.0 之前一致。招聘高峰可在网页端把它调到 3 或 6。
+  - 代价（私有仓库要算）：`npm install` 在每次触发都会跑，**被跳过的运行也照样消耗 Actions 分钟**（约 40–60 秒/次）。每 3 小时 = 240 次/月，比每 12 小时的 60 次多约 2.5 小时/月，占私有仓 2000 分钟/月免费额度的约 7.5%。公开仓库免费。
+  - 精度：GitHub 的 schedule 在高峰期常延迟 2–4 小时，属平台侧行为，改 cron 无法解决。所以 `minIntervalHours` 是「不会比这更密」的**下限**，不是精确周期。
+  - 手动触发（Actions 页面「Run workflow」）**不受** `minIntervalHours` 限制，但仍受 `enabled` 限制——它是「现在就要拉一次」的逃生口。
 - **手动**：`workflow_dispatch` 可传 `SINCE_DAYS` / `MAX_PER_RUN` / `UID_FROM` 覆盖默认值。
 - **回溯**：填 `UID_FROM`（如 `1877`）会**忽略云端水位**、从该 UID 起重新扫描，用于捞回被误杀、水位已永久越过的邮件；建议同时把 `MAX_PER_RUN` 调大（否则一次只重扫 30 封）。网页端状态栏的丢弃明细里带每封邮件的编号，照着填即可。
 - **保活**：GitHub Actions 对 **60 天无活动**的仓库会**停用定时 workflow**，需偶尔手动 dispatch 一次保活。
@@ -173,7 +176,8 @@ npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ t
 
 - `keywords`（预筛关键词）、`minConfidence`、`sinceDays`、`maxPerRun`
 - `enabled`（false → Action 直接跳过，**0 token**）
-- `minIntervalHours`（距上次运行不足该小时数则跳过，**0 token**）——用它变相控制拉取频率，无需改 cron
+- `minIntervalHours`（**拉取频率的真正旋钮**）：距上次运行不足该小时数则跳过，跳过的那次不连 IMAP、不调 AI（**0 token**）。`0` 或未设置 = 用默认 `12` 小时；填 `3` = 每 3 小时，`6` = 每 6 小时，`24` = 每天。有效下限是 3 小时（cron 的触发粒度），填 1 或 2 不会更快。网页端「邮件提醒 → 设置 → 拉取间隔（小时）」可直接填，写进 Gist 的 `mail-config.json`。
+  - 门禁有 10 分钟容差：`lastRunAt` 记的是上一轮**结束**时刻，与 cron 的触发时刻差一轮耗时（1–2 分钟）。没有容差的话「填 3 + cron 每 3 小时」会每隔一次被跳过，实际变成每 6 小时且完全静默。
 - `promptExtra`（在提示词后**追加**你的要求，如"只关注互联网/国企"）
 - `promptOverride`（v0.4.0，**整体替换**内置的「解析偏好」段；留空=用内置。详见下节）
 

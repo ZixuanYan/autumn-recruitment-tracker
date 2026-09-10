@@ -480,84 +480,6 @@
       --paper: #f5f5f7; --surface-soft: #f5f5f7; --shadow-1: var(--sh-ambient); --shadow-2: var(--sh-pop); --radius-sm: 10px;
     }
 
-    /* ══════════════════════════════════════════════════════════════════
-       深色模式（v4.13.0）。跟随系统 prefers-color-scheme，与插件端一致——
-       插件的 Side Panel 是浏览器 UI 的一部分，早已跟随系统深浅；网页版此前永远白着，
-       同一台机器上两端气质割裂。
-
-       取值来源不是新发明的：结构层直接复用插件端 common/tokens.js 的 dark palette
-       （那边每个值都注明了出自设计资源，且已经在用户眼前跑了一段时间），
-       画布三级是 Apple 暗色 systemBackground 阶（#000 → #1c1c1e → #2c2c2e → #3a3a3c），
-       强调色 #2997ff 是设计资源明确写的「暗背景上的链接与高亮」
-       （#0071e3 在 #1c1c1e 上只有约 3.4:1，不达标）。
-
-       ⚠️ 阶段色阶的暗色版本是**按规则推导的临时方案，待人眼定夺**：
-       浅色下用「亮度递减」编码进度（一面 45% → 五面 26%，同色相同饱和度），
-       暗底上必须反过来用「亮度递增」，否则靠后的阶段压在暗色轨道上几乎同色、
-       阶段分布条直接看不见。规则是把浅色的亮度区间线性反转映射到 [56%, 80%]，
-       保色相、保递进顺序，再逐档用对比度求解器把不达 4.5:1 的提亮。
-       test/web-check.js 有守卫盯着每一档的对比度，所以改色相审美不会把可读性改坏。
-       ══════════════════════════════════════════════════════════════════ */
-    @media (prefers-color-scheme: dark) {
-      :root {
-        color-scheme: dark;
-        --bg: #000000; --surface: #1c1c1e; --surface-2: #2c2c2e; --surface-3: #3a3a3c;
-        --ink: #f5f5f7; --ink-2: rgba(255, 255, 255, .85); --muted: rgba(255, 255, 255, .70);
-        --ink-soft: rgba(255, 255, 255, .60); --faint: #8e8e93;
-        /* 发丝线翻成白：黑底上 rgba(0,0,0,.08) 等于没有线 */
-        --line: rgba(255, 255, 255, .10); --line-strong: #48484a; --line-hover: #636366;
-        --accent: #2997ff; --accent-ink: #4dabff; --accent-soft: rgba(41, 151, 255, .18);
-        --accent-soft-hover: rgba(41, 151, 255, .28); --accent-border: rgba(41, 151, 255, .40);
-        --primary: #2997ff; --primary-dark: #4dabff; --primary-soft: rgba(41, 151, 255, .18);
-        /* 语义色在暗底要提亮（Apple 暗色系统色），soft 档改成低 alpha 而不是浅色实底 */
-        --ok: #30d158; --ok-soft: rgba(48, 209, 88, .16); --ok-bright: #30d158;
-        --warn: #ff9f0a; --warn-soft: rgba(255, 159, 10, .16); --warn-bright: #ff9f0a;
-        --danger: #ff453a; --danger-soft: rgba(255, 69, 58, .16); --danger-soft-hover: rgba(255, 69, 58, .28);
-        --danger-bright: #ff453a;
-        --green: #30d158; --green-soft: rgba(48, 209, 88, .16);
-        --amber: #ff9f0a; --amber-soft: rgba(255, 159, 10, .16);
-        --red: #ff453a; --red-soft: rgba(255, 69, 58, .16);
-        --offer-gold: #30d158; --offer-gold-soft: rgba(48, 209, 88, .16);
-        --seal: #ff453a; --seal-soft: rgba(255, 69, 58, .16);
-        --silver: #8e8e93; --silver-soft: #2c2c2e;
-        /* 兼容别名里的颜色档也要翻（base.css 的 tbody tr:hover、.sidebar-footer 在用）；
-           --shadow/--shadow-1/--shadow-2/--ring 的值是 var(...)，会自动跟随，不必重复。 */
-        --paper: #f5f5f7; --surface-soft: #2c2c2e;
-        /* 柔底翻成白：黑底上 rgba(0,0,0,.04) 等于什么都没叠，hover/按下/激活态会静默哑掉 */
-        --wash-1: rgba(255, 255, 255, .04); --wash-2: rgba(255, 255, 255, .06);
-        --wash-3: rgba(255, 255, 255, .08); --wash-4: rgba(255, 255, 255, .12); --wash-5: #3a3a3c;
-        /* 投影在暗底要更深才看得出来；遮罩同理 */
-        --sh-card: 0 1px 2px rgba(0, 0, 0, .50);
-        --sh-ambient: var(--sh-card), 0 8px 24px rgba(0, 0, 0, .45);
-        --sh-pop: 0 12px 40px rgba(0, 0, 0, .60);
-        --scrim: rgba(0, 0, 0, .55);
-        /* 玻璃「深色区反色」（设计资源原话）；滑块翻成白否则在黑底上消失 */
-        --glass: rgba(28, 28, 30, .72); --toast-bg: rgba(44, 44, 46, .92);
-        --toast-glass: rgba(28, 28, 30, .72); --tip-bg: rgba(44, 44, 46, .90);
-        --thumb: rgba(255, 255, 255, .22); --thumb-hover: rgba(255, 255, 255, .36);
-        --selection: rgba(41, 151, 255, .30);
-        /* 企业性质四色：暗底提亮，soft 改低 alpha（与插件端 dark 的 accentSoft 同款做法） */
-        --ct-soe: #ff7a5c; --ct-soe-soft: rgba(255, 122, 92, .18);
-        --ct-private: #2997ff; --ct-private-soft: rgba(41, 151, 255, .18);
-        --ct-foreign: #64d2ff; --ct-foreign-soft: rgba(100, 210, 255, .18);
-        --ct-none: #8e8e93; --ct-none-soft: rgba(142, 142, 147, .18);
-      }
-      /* 阶段色阶的暗色版：选择器与浅色那份逐字相同，只是值换成推导结果 */
-    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"], .step[data-stage="待投递"] { --stage-color: #a9a9ac; --stage-soft: rgba(169, 169, 172, .18); --stage-border: rgba(169, 169, 172, .40); }
-    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"], .step[data-stage="已投递"] { --stage-color: #97a3b4; --stage-soft: rgba(151, 163, 180, .18); --stage-border: rgba(151, 163, 180, .40); }
-    .stage-cell[data-stage="测评"], .badge[data-stage="测评"], .step[data-stage="测评"] { --stage-color: #879ebd; --stage-soft: rgba(135, 158, 189, .18); --stage-border: rgba(135, 158, 189, .40); }
-    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"], .step[data-stage="笔试"] { --stage-color: #819dc9; --stage-soft: rgba(129, 157, 201, .18); --stage-border: rgba(129, 157, 201, .40); }
-    .stage-cell[data-stage="机试"], .badge[data-stage="机试"], .step[data-stage="机试"] { --stage-color: #759fd7; --stage-soft: rgba(117, 159, 215, .18); --stage-border: rgba(117, 159, 215, .40); }
-    .stage-cell[data-stage="一面"], .badge[data-stage="一面"], .step[data-stage="一面"] { --stage-color: #55aaff; --stage-soft: rgba(85, 170, 255, .18); --stage-border: rgba(85, 170, 255, .40); }
-    .stage-cell[data-stage="二面"], .badge[data-stage="二面"], .step[data-stage="二面"] { --stage-color: #66b2ff; --stage-soft: rgba(102, 178, 255, .18); --stage-border: rgba(102, 178, 255, .40); }
-    .stage-cell[data-stage="三面"], .badge[data-stage="三面"], .step[data-stage="三面"] { --stage-color: #7bbdff; --stage-soft: rgba(123, 189, 255, .18); --stage-border: rgba(123, 189, 255, .40); }
-    .stage-cell[data-stage="四面"], .badge[data-stage="四面"], .step[data-stage="四面"] { --stage-color: #89c4ff; --stage-soft: rgba(137, 196, 255, .18); --stage-border: rgba(137, 196, 255, .40); }
-    .stage-cell[data-stage="五面"], .badge[data-stage="五面"], .step[data-stage="五面"] { --stage-color: #99ccff; --stage-soft: rgba(153, 204, 255, .18); --stage-border: rgba(153, 204, 255, .40); }
-    .stage-cell[data-stage="交叉面"], .badge[data-stage="交叉面"], .step[data-stage="交叉面"] { --stage-color: #9694e5; --stage-soft: rgba(150, 148, 229, .18); --stage-border: rgba(150, 148, 229, .40); }
-    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"], .step[data-stage="HR面"] { --stage-color: #ac8ee0; --stage-soft: rgba(172, 142, 224, .18); --stage-border: rgba(172, 142, 224, .40); }
-    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"], .step[data-stage="Offer"] { --stage-color: #a3e8b4; --stage-soft: rgba(163, 232, 180, .18); --stage-border: rgba(163, 232, 180, .40); }
-    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"], .step[data-stage="已结束"] { --stage-color: #9c9ca0; --stage-soft: rgba(156, 156, 160, .18); --stage-border: rgba(156, 156, 160, .40); }
-    }
     /* body：删掉旧的钴蓝 radial-gradient 铺底（Apple 禁忌「蓝色铺底 / 多彩渐变」，且那是旧主色的残留）。
        排印三件套来自设计资源 body 的原值：line-height 1.55（Body 档）、letter-spacing -.005em、
        font-feature-settings 开 SF Pro 的替代字形 cv02/cv03/cv04/cv11（数字与字母的苹果排印细节）。
@@ -657,11 +579,11 @@
        刻意覆盖，删掉即回归旧模板外观，一律保留。 */
     .badge { border: 0; border-radius: var(--r-pill); background: var(--stage-soft, var(--surface-2)); color: var(--stage-color, var(--ink-2)); padding: 3px 10px 3px 8px; font-size: 12px; font-weight: 500; letter-spacing: 0; transform: none; font-family: var(--font-sans); box-shadow: none; }
     .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--stage-color, var(--faint)); }
-    /* ===== 阶段色阶：唯一权威定义（14 预设有序递进）=====
+    /* ===== 阶段色阶：唯一权威定义（15 预设有序递进）=====
        中性灰(未开始) → 蓝灰(已投递/测评/笔试/机试) → Apple 蓝(面试轮次逐轮加深至藏蓝)
        → iOS 靛 / Apple 紫(交叉面 / HR面) → Apple 绿(Offer) → 淡灰(已结束)。
        文本档全部 ≥4.5:1（已结束除外，刻意 ×.62 淡化，与旧版一致）。
-       色阶值与 shared/stages.js 的 14 个阶段名一一对应，改名要同步改这里。
+       色阶值与 shared/stages.js 的 15 个阶段名一一对应，改名要同步改这里。
        自定义阶段（不在预设内）自动回退 .badge/.stage-cell 的 --accent 兜底色。
        选择器同时覆盖 .step（抽屉时间线）：CSS 自定义属性会向下继承，故 .step-dot 等子孙能直接拿到同一套色值。 */
     .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"], .step[data-stage="待投递"] { --stage-color: #6e6e73; --stage-soft: transparent; --stage-border: #d2d2d7; }
@@ -670,6 +592,12 @@
     .stage-cell[data-stage="测评"], .badge[data-stage="测评"], .step[data-stage="测评"] { --stage-color: #5876a0; --stage-soft: #eef1f6; --stage-border: #cdd6e2; }
     .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"], .step[data-stage="笔试"] { --stage-color: #4a71ad; --stage-soft: #edf1f7; --stage-border: #c9d4e6; }
     .stage-cell[data-stage="机试"], .badge[data-stage="机试"], .step[data-stage="机试"] { --stage-color: #356db8; --stage-soft: #ebf0f8; --stage-border: #c2d3ea; }
+    /* AI面试：延续蓝灰系的饱和度递增（已投递16% → 测评29% → 笔试40% → 机试55% → AI面试68%），
+       刻意**不进**一面→五面那组 S=100% 的纯蓝——那五档是用「同色相、亮度递减」专门编码
+       **真人面试轮次**的，混进一个自动化环节会破坏这个语义。
+       与一面的区分靠饱和度（68% 柔和 vs 100% 鲜亮），两者亮度同为 45%。
+       soft/border 按机试那一档的比例推（soft S≈0.87×color S / L 94.7%，border S≈0.88× / L 83.9%）。 */
+    .stage-cell[data-stage="AI面试"], .badge[data-stage="AI面试"], .step[data-stage="AI面试"] { --stage-color: #256bc1; --stage-soft: #e9f1f9; --stage-border: #bdd3ef; }
     .stage-cell[data-stage="一面"], .badge[data-stage="一面"], .step[data-stage="一面"] { --stage-color: #0071e3; --stage-soft: #e6f1fc; --stage-border: #b2d4f7; }
     .stage-cell[data-stage="二面"], .badge[data-stage="二面"], .step[data-stage="二面"] { --stage-color: #0066cc; --stage-soft: #e6f0fa; --stage-border: #b2d1f0; }
     .stage-cell[data-stage="三面"], .badge[data-stage="三面"], .step[data-stage="三面"] { --stage-color: #0058b0; --stage-soft: #e6eef7; --stage-border: #b2cde7; }
@@ -1187,8 +1115,22 @@
     .mail-match { margin-top: 10px; padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
     .mail-match.single { box-shadow: inset 3px 0 0 var(--ok-bright); }
     .mail-match.none { box-shadow: inset 3px 0 0 var(--warn-bright); color: var(--warn); }
-    .mail-match label { display: block; }
-    .mail-match select { width: 100%; margin-top: 6px; }
+    /* 多目标勾选列表（v4.15.0）。底色 / 边框 / hover 柔底一律走令牌，深色模式自动跟随；
+       列表限高滚动：同公司多岗位实测能到 7 条，不限高会把邮件卡片撑得比正文还长。 */
+    .mail-match-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    .mail-target-list { display: grid; gap: 3px; margin-top: 8px; max-height: 196px; overflow-y: auto; }
+    .mail-target-item { display: flex; align-items: flex-start; gap: 8px; min-height: 32px; padding: 5px 8px; border-radius: var(--r-md); cursor: pointer; transition: background .18s var(--ease); }
+    .mail-target-item:hover { background: var(--wash-3); }
+    /* accent-color 让原生复选框跟随强调色（浅色 #0071e3 / 深色 #2997ff），
+       否则它在深色下仍是浏览器默认的蓝，与整套令牌脱节。 */
+    .mail-target-item input { flex: 0 0 auto; margin-top: 3px; accent-color: var(--accent); }
+    .mail-match-warn { margin-top: 8px; color: var(--warn); font-size: 12px; }
+    /* 这两条随单选下拉一起删（v4.15.0 改成复选框列表）：
+       · `.mail-match select` 已无对应元素，是死规则；
+       · `.mail-match label { display: block }` 更危险——它的特异性 (0,1,1) 高于
+         `.mail-target-item { display: flex }` 的 (0,1,0)，留着会把勾选行的 flex 布局
+         整条压回 block，图标与文字挤成一行且不换行。删而不是改特异性，
+         是因为现在 label 只有 .mail-target-item 这一种形态，不需要通用兜底。 */
     .mail-fields { display: grid; gap: 6px; margin-top: 10px; }
     .mail-field { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer; }
     .mail-field input { margin-top: 2px; accent-color: var(--accent); }
@@ -1196,6 +1138,96 @@
     .mail-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
     .mail-key-row { display: flex; gap: 8px; align-items: center; }
     .mail-key-row .control { flex: 1 1 auto; min-width: 0; }
+
+    /* ══════════════════════════════════════════════════════════════════
+       ⚠️ 本块必须留在 apple.css 的**最末尾**，不能往上挪。
+       原因：暗色覆盖靠的是「同特异性 + 位置在后」，而不是更高的特异性。
+       浅色阶段色阶写在 .stage-cell[data-stage=…] / .badge[…] / .step[…] 上，
+       暗色那份选择器逐字相同；一旦本块排在浅色色阶之前，浅色就会把它整条压回去——
+       v4.14.0 就是这样发布过一次：结构性令牌（:root）生效了，但阶段色阶一直是浅色值，
+       深色模式下徽章是「浅蓝底 + 深蓝字」的小药丸，能读，却不是设计的那套。
+       而且它**不会报错**：对比度守卫只验暗色值本身，验不出"谁生效"。
+       现在 test/web-check.js 有一条顺序守卫专门钉住这件事。
+       ══════════════════════════════════════════════════════════════════ */
+    /* ══════════════════════════════════════════════════════════════════
+       深色模式（v4.13.0）。跟随系统 prefers-color-scheme，与插件端一致——
+       插件的 Side Panel 是浏览器 UI 的一部分，早已跟随系统深浅；网页版此前永远白着，
+       同一台机器上两端气质割裂。
+
+       取值来源不是新发明的：结构层直接复用插件端 common/tokens.js 的 dark palette
+       （那边每个值都注明了出自设计资源，且已经在用户眼前跑了一段时间），
+       画布三级是 Apple 暗色 systemBackground 阶（#000 → #1c1c1e → #2c2c2e → #3a3a3c），
+       强调色 #2997ff 是设计资源明确写的「暗背景上的链接与高亮」
+       （#0071e3 在 #1c1c1e 上只有约 3.4:1，不达标）。
+
+       ⚠️ 阶段色阶的暗色版本是**按规则推导的临时方案，待人眼定夺**：
+       浅色下用「亮度递减」编码进度（一面 45% → 五面 26%，同色相同饱和度），
+       暗底上必须反过来用「亮度递增」，否则靠后的阶段压在暗色轨道上几乎同色、
+       阶段分布条直接看不见。规则是把浅色的亮度区间线性反转映射到 [56%, 80%]，
+       保色相、保递进顺序，再逐档用对比度求解器把不达 4.5:1 的提亮。
+       test/web-check.js 有守卫盯着每一档的对比度，所以改色相审美不会把可读性改坏。
+       ══════════════════════════════════════════════════════════════════ */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #000000; --surface: #1c1c1e; --surface-2: #2c2c2e; --surface-3: #3a3a3c;
+        --ink: #f5f5f7; --ink-2: rgba(255, 255, 255, .85); --muted: rgba(255, 255, 255, .70);
+        --ink-soft: rgba(255, 255, 255, .60); --faint: #8e8e93;
+        /* 发丝线翻成白：黑底上 rgba(0,0,0,.08) 等于没有线 */
+        --line: rgba(255, 255, 255, .10); --line-strong: #48484a; --line-hover: #636366;
+        --accent: #2997ff; --accent-ink: #4dabff; --accent-soft: rgba(41, 151, 255, .18);
+        --accent-soft-hover: rgba(41, 151, 255, .28); --accent-border: rgba(41, 151, 255, .40);
+        --primary: #2997ff; --primary-dark: #4dabff; --primary-soft: rgba(41, 151, 255, .18);
+        /* 语义色在暗底要提亮（Apple 暗色系统色），soft 档改成低 alpha 而不是浅色实底 */
+        --ok: #30d158; --ok-soft: rgba(48, 209, 88, .16); --ok-bright: #30d158;
+        --warn: #ff9f0a; --warn-soft: rgba(255, 159, 10, .16); --warn-bright: #ff9f0a;
+        --danger: #ff453a; --danger-soft: rgba(255, 69, 58, .16); --danger-soft-hover: rgba(255, 69, 58, .28);
+        --danger-bright: #ff453a;
+        --green: #30d158; --green-soft: rgba(48, 209, 88, .16);
+        --amber: #ff9f0a; --amber-soft: rgba(255, 159, 10, .16);
+        --red: #ff453a; --red-soft: rgba(255, 69, 58, .16);
+        --offer-gold: #30d158; --offer-gold-soft: rgba(48, 209, 88, .16);
+        --seal: #ff453a; --seal-soft: rgba(255, 69, 58, .16);
+        --silver: #8e8e93; --silver-soft: #2c2c2e;
+        /* 兼容别名里的颜色档也要翻（base.css 的 tbody tr:hover、.sidebar-footer 在用）；
+           --shadow/--shadow-1/--shadow-2/--ring 的值是 var(...)，会自动跟随，不必重复。 */
+        --paper: #f5f5f7; --surface-soft: #2c2c2e;
+        /* 柔底翻成白：黑底上 rgba(0,0,0,.04) 等于什么都没叠，hover/按下/激活态会静默哑掉 */
+        --wash-1: rgba(255, 255, 255, .04); --wash-2: rgba(255, 255, 255, .06);
+        --wash-3: rgba(255, 255, 255, .08); --wash-4: rgba(255, 255, 255, .12); --wash-5: #3a3a3c;
+        /* 投影在暗底要更深才看得出来；遮罩同理 */
+        --sh-card: 0 1px 2px rgba(0, 0, 0, .50);
+        --sh-ambient: var(--sh-card), 0 8px 24px rgba(0, 0, 0, .45);
+        --sh-pop: 0 12px 40px rgba(0, 0, 0, .60);
+        --scrim: rgba(0, 0, 0, .55);
+        /* 玻璃「深色区反色」（设计资源原话）；滑块翻成白否则在黑底上消失 */
+        --glass: rgba(28, 28, 30, .72); --toast-bg: rgba(44, 44, 46, .92);
+        --toast-glass: rgba(28, 28, 30, .72); --tip-bg: rgba(44, 44, 46, .90);
+        --thumb: rgba(255, 255, 255, .22); --thumb-hover: rgba(255, 255, 255, .36);
+        --selection: rgba(41, 151, 255, .30);
+        /* 企业性质四色：暗底提亮，soft 改低 alpha（与插件端 dark 的 accentSoft 同款做法） */
+        --ct-soe: #ff7a5c; --ct-soe-soft: rgba(255, 122, 92, .18);
+        --ct-private: #2997ff; --ct-private-soft: rgba(41, 151, 255, .18);
+        --ct-foreign: #64d2ff; --ct-foreign-soft: rgba(100, 210, 255, .18);
+        --ct-none: #8e8e93; --ct-none-soft: rgba(142, 142, 147, .18);
+      }
+      /* 阶段色阶的暗色版：选择器与浅色那份逐字相同，只是值换成推导结果 */
+    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"], .step[data-stage="待投递"] { --stage-color: #a9a9ac; --stage-soft: rgba(169, 169, 172, .18); --stage-border: rgba(169, 169, 172, .40); }
+    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"], .step[data-stage="已投递"] { --stage-color: #97a3b4; --stage-soft: rgba(151, 163, 180, .18); --stage-border: rgba(151, 163, 180, .40); }
+    .stage-cell[data-stage="测评"], .badge[data-stage="测评"], .step[data-stage="测评"] { --stage-color: #879ebd; --stage-soft: rgba(135, 158, 189, .18); --stage-border: rgba(135, 158, 189, .40); }
+    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"], .step[data-stage="笔试"] { --stage-color: #819dc9; --stage-soft: rgba(129, 157, 201, .18); --stage-border: rgba(129, 157, 201, .40); }
+    .stage-cell[data-stage="机试"], .badge[data-stage="机试"], .step[data-stage="机试"] { --stage-color: #759fd7; --stage-soft: rgba(117, 159, 215, .18); --stage-border: rgba(117, 159, 215, .40); }
+    .stage-cell[data-stage="AI面试"], .badge[data-stage="AI面试"], .step[data-stage="AI面试"] { --stage-color: #6ea3e3; --stage-soft: rgba(110, 163, 227, .18); --stage-border: rgba(110, 163, 227, .40); }
+    .stage-cell[data-stage="一面"], .badge[data-stage="一面"], .step[data-stage="一面"] { --stage-color: #55aaff; --stage-soft: rgba(85, 170, 255, .18); --stage-border: rgba(85, 170, 255, .40); }
+    .stage-cell[data-stage="二面"], .badge[data-stage="二面"], .step[data-stage="二面"] { --stage-color: #66b2ff; --stage-soft: rgba(102, 178, 255, .18); --stage-border: rgba(102, 178, 255, .40); }
+    .stage-cell[data-stage="三面"], .badge[data-stage="三面"], .step[data-stage="三面"] { --stage-color: #7bbdff; --stage-soft: rgba(123, 189, 255, .18); --stage-border: rgba(123, 189, 255, .40); }
+    .stage-cell[data-stage="四面"], .badge[data-stage="四面"], .step[data-stage="四面"] { --stage-color: #89c4ff; --stage-soft: rgba(137, 196, 255, .18); --stage-border: rgba(137, 196, 255, .40); }
+    .stage-cell[data-stage="五面"], .badge[data-stage="五面"], .step[data-stage="五面"] { --stage-color: #99ccff; --stage-soft: rgba(153, 204, 255, .18); --stage-border: rgba(153, 204, 255, .40); }
+    .stage-cell[data-stage="交叉面"], .badge[data-stage="交叉面"], .step[data-stage="交叉面"] { --stage-color: #9694e5; --stage-soft: rgba(150, 148, 229, .18); --stage-border: rgba(150, 148, 229, .40); }
+    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"], .step[data-stage="HR面"] { --stage-color: #ac8ee0; --stage-soft: rgba(172, 142, 224, .18); --stage-border: rgba(172, 142, 224, .40); }
+    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"], .step[data-stage="Offer"] { --stage-color: #a3e8b4; --stage-soft: rgba(163, 232, 180, .18); --stage-border: rgba(163, 232, 180, .40); }
+    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"], .step[data-stage="已结束"] { --stage-color: #9c9ca0; --stage-soft: rgba(156, 156, 160, .18); --stage-border: rgba(156, 156, 160, .40); }
+    }
   </style>
 </head>
 <body>
@@ -1657,7 +1689,7 @@
         <div class="field"><label for="mailCfgMinConf">置信度阈值</label><input class="control" id="mailCfgMinConf" type="number" step="0.05" min="0" max="1"><div class="hint">低于此值的建议丢弃（0~1）</div></div>
         <div class="field"><label for="mailCfgSinceDays">回看天数</label><input class="control" id="mailCfgSinceDays" type="number" min="1" max="365"><div class="hint">首次/重置时按此天数全量扫</div></div>
         <div class="field"><label for="mailCfgMaxPerRun">单次上限</label><input class="control" id="mailCfgMaxPerRun" type="number" min="1" max="200"><div class="hint">单次最多处理多少封</div></div>
-        <div class="field"><label for="mailCfgInterval">最小间隔（小时）</label><input class="control" id="mailCfgInterval" type="number" min="0" max="168"><div class="hint">0=每次定时都跑；&gt;0 则距上次不足该小时数时跳过（0 token）</div></div>
+        <div class="field"><label for="mailCfgInterval">拉取间隔（小时）</label><input class="control" id="mailCfgInterval" type="number" min="0" max="168" step="1"><div class="hint">定时任务每 3 小时触发一次，本项决定<strong>至少间隔多久才真正拉一次</strong>：填 3 = 每 3 小时，6 = 每 6 小时，12 = 默认，24 = 每天。填 0 等于用默认 12。<br>被跳过的那次<strong>不连邮箱、不调 AI（0 token）</strong>。<br>注意这是<strong>下限不是精确周期</strong>：GitHub 的定时在高峰期常延迟 2–4 小时，属平台侧行为；填 1 或 2 也不会快过 3 小时（触发粒度就是 3 小时）。想立刻拉一次请用 Actions 页面的「Run workflow」（手动触发不受本项限制）。</div></div>
         <div class="field full"><label class="mail-field" for="mailCfgEnabled"><input type="checkbox" id="mailCfgEnabled"><span>启用邮件同步（关闭后 Action 直接跳过，0 token）</span></label></div>
         <div class="field full"><label for="mailCfgPrompt">AI 附加指令（可选）</label><textarea class="control" id="mailCfgPrompt" maxlength="2000" rows="3" placeholder="例如：只关注互联网/国企岗位；忽略培训机构"></textarea><div class="hint">在提示词后<strong>追加</strong>你的个性化要求，内置规则保持不变。不要要求改变输出格式（输出契约无法被覆盖）。</div></div>
         <div class="field full">
@@ -1781,7 +1813,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.14.0';
+      const APP_VERSION = '4.15.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1795,7 +1827,7 @@
       const UI_STORAGE_KEY = 'autumnRecruitmentTracker.ui.v1';
       // 网页写、Action 读的配置文件（明文，不含任何密钥）；默认值与 Action src/config.js 保持一致
       const MAIL_CONFIG_FILENAME = 'mail-config.json';
-      const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 0, promptExtra: '', promptOverride: '' };
+      const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 12, promptExtra: '', promptOverride: '' };
       const TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
       const $ = (selector) => document.querySelector(selector);
       const els = {
@@ -3467,7 +3499,7 @@
           return `<div class="multi-company" style="--company-color:${companyColor(group.key)}">
             <div class="multi-company-head"><strong>${escapeHtml(group.label)}</strong><span class="multi-company-count">${group.records.length} 个岗位</span></div>
             <div class="multi-company-items">${items.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" data-tip-kind="record" data-tip-key="${escapeHtml(record.id)}" aria-label="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}，悬浮看详情，点击打开抽屉">
-              <span class="multi-company-pos">${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? ` · ${escapeHtml(record.orgUnit)}` : ''}</span>
+              <span class="multi-company-pos">${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit))}</span>
               <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
             </button>`).join('')}</div>
           </div>`;
@@ -3536,7 +3568,7 @@
         const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
         const siblings = (companyIndex && companyIndex.get(key)) || [];
         const chipHtml = siblings.length > 1
-          ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${item.position || '未填岗位'}${item.orgUnit ? `（${item.orgUnit}）` : ''} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
+          ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${positionWithUnit(item.position || '未填岗位', item.orgUnit, true)} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
           : '';
         return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}" data-company="${escapeHtml(key)}">
           <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>
@@ -3848,6 +3880,24 @@
         let h = 0;
         for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
         return COMPANY_PALETTE[h % COMPANY_PALETTE.length];
+      }
+
+      // 岗位名 + 机构名拼接；机构名已经写在岗位名里时**不再追加**。
+      // 实证（用户报的）：position = "数字金融岗（成都分行）" + orgUnit = "成都分行"
+      // 渲染成「数字金融岗（成都分行）（成都分行）」，邮件候选下拉里就是这么出现的。
+      // 成因不在录入侧：岗位名里带机构/城市是招聘网站的常态（插件采集回来就带着），
+      // 而 orgUnit 是 v4.11.0 新增的独立字段，拆分建议只改 company 与 orgUnit、不碰 position，
+      // 所以两边都渲染就必然重复。
+      // 为什么收成 helper 而不是各渲染点自己判断：这个拼接形态在 5 处重复出现，
+      // 分散判断迟早漏一处，第 6 处新增时也不必再想一遍。
+      // 分隔符有两种形态：「 · 」用于并列展示，「（）」用于岗位名后缀，第三个参数区分。
+      function positionWithUnit(position, orgUnit, parenthesized) {
+        const pos = String(position || '').trim();
+        const unit = String(orgUnit || '').trim();
+        if (!unit) return pos;
+        if (pos && pos.includes(unit)) return pos;
+        if (!pos) return unit;
+        return parenthesized ? `${pos}（${unit}）` : `${pos} · ${unit}`;
       }
 
       // ----- 漏斗转化率 -----
@@ -4173,7 +4223,7 @@
           if (!bucket || !bucket.total) return '';
           const title = bucket.city || '没填城市';
           const items = bucket.records.slice(0, TIP_MAX_ROWS).map(record => `
-            <div class="tip-row"><span class="tip-v">${escapeHtml(record.company || '未填公司')} · ${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? `（${escapeHtml(record.orgUnit)}）` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span></div>`).join('');
+            <div class="tip-row"><span class="tip-v">${escapeHtml(record.company || '未填公司')} · ${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit, true))}</span><span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span></div>`).join('');
           const rest = bucket.records.length - TIP_MAX_ROWS;
           return `<div class="tip-head">${escapeHtml(title)} · ${bucket.total} 条投递 · ${bucket.companies} 家公司${bucket.offers ? ` · ${bucket.offers} 个 Offer` : ''}</div>
             <div class="tip-list">${items}${rest > 0 ? `<div class="tip-more">另有 ${rest} 条，去台账按城市搜索查看</div>` : ''}</div>`;
@@ -4215,7 +4265,7 @@
           return { action: 'add', target: null, hint: countHint };
         }
         const target = dup.matches[0];
-        const targetLabel = `${target.company} · ${target.position}${target.orgUnit ? `（${target.orgUnit}）` : ''}`;
+        const targetLabel = `${target.company} · ${positionWithUnit(target.position, target.orgUnit, true)}`;
         if (dup.mode === 'variant') {
           // 疑似同一岗位的不同方向 / 城市 / 机构：绝大多数情况确实是两条独立投递，故主按钮是「新增」
           const isSeparate = await confirmInApp(
@@ -4253,7 +4303,7 @@
         const items = siblings.slice(0, 4).map(record => {
           // 与当前正在填的岗位「宽松相等」→ 标黄，提示保存时会再确认一次是不是同一条
           const similar = loose.length >= 2 && loosePositionSlug(record.position) === loose;
-          return `<span class="same-company-item${similar ? ' is-similar' : ''}">${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? `（${escapeHtml(record.orgUnit)}）` : ''} · ${escapeHtml(record.stage)}</span>`;
+          return `<span class="same-company-item${similar ? ' is-similar' : ''}">${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit, true))} · ${escapeHtml(record.stage)}</span>`;
         }).join('');
         const more = siblings.length > 4 ? `<span class="same-company-more">等 ${siblings.length} 个</span>` : '';
         box.innerHTML = `该公司已有 ${siblings.length} 个岗位：${items}${more}`;
@@ -4623,7 +4673,7 @@
               </div>
             </div>
             ${others.length ? `<div class="drawer-section"><h3>同公司其它投递（${others.length}）</h3><div class="sibling-list">${others.map(item => `
-              <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(item.position || '未填岗位')}${item.orgUnit ? ` · ${escapeHtml(item.orgUnit)}` : ''}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
+              <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(positionWithUnit(item.position || '未填岗位', item.orgUnit))}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
         }
         if (actions) {
           actions.innerHTML = `
@@ -4859,12 +4909,34 @@
         }
         return (2 * inter) / ((s1.length - 1) + (s2.length - 1));
       }
-      // 归一化后完全相等→1；互相包含→0.9；否则 Dice
+      // 短中文 slug 判定：首字闸门只对它生效（见 companyMatchScore 的说明）。
+      // 刻意排除拉丁名——Dice 对英文的价值恰恰是容忍拼写错误（tencent / tencnet），
+      // 加首字母闸门会把这类容错一起杀掉。
+      function isShortCjkSlug(s) {
+        return s.length <= 5 && /^[\u4e00-\u9fa5]+$/.test(s);
+      }
+      // 归一化后完全相等→1；互相包含→0.9；否则 Dice（短中文名先过首字闸门）
       function companyMatchScore(a, b) {
         const na = normalizeCompanySlug(a), nb = normalizeCompanySlug(b);
         if (!na || !nb) return 0;
         if (na === nb) return 1;
         if (na.includes(nb) || nb.includes(na)) return 0.9;
+        // ── 首字闸门（只在 Dice 分支，且必须在「相等 / 互相包含」之后）──────────
+        // 中文企业名 = 字号（区分部分，在**首位**）+ 行业通名（在尾部：银行/证券/保险/
+        // 科技/集团…）。4 字名只有 3 个 bigram，共享一个 2 字的通名尾巴就能拿到
+        // 2×2/(3+3) = 0.667，直接越过 0.6 阈值。
+        // 实证（用户报的 bug）：招商银行 vs 徽商银行 的 bigram 是
+        //   {招商,商银,银行} vs {徽商,商银,银行}，共享「商银」+「银行」**两个** → 0.667 命中，
+        //   于是招商银行的邮件候选里混进了徽商银行的台账。
+        // 而兴业/平安/民生/宁波银行只共享「银行」一个 → 0.333，本来就正确排除。
+        // 差别仅仅是招行与徽行的字号都以「商」结尾，多贡献了一个跨字号边界的 bigram。
+        // 结论：Dice 在短中文串上度量的是「行业是否相同」，不是「是否同一家公司」。
+        // 只限定短名（≤5 字）：长名 bigram 多，单一通名不足以主导
+        //   （太平洋保险 vs 平安保险 = 0.286，本来就正确排除）。
+        // 放在包含分支之后是**必须**的：否则「中国招商银行」vs「招商银行」这类真实包含关系
+        //   会被"首字不同"误杀。所有合法变体（后缀差异 / 缩写 / 城市中缀）都在前两个分支
+        //   就返回了，闸门只影响 Dice 兜底分支。
+        if (isShortCjkSlug(na) && isShortCjkSlug(nb) && na[0] !== nb[0]) return 0;
         return diceCoefficient(na, nb);
       }
       // 公司名模糊匹配台账：阈值 ≥0.6，按分数（再按岗位命中）降序；返回 0/1/多 候选
@@ -5005,7 +5077,17 @@
           const r = matches[0];
           matchHtml = `<div class="mail-match single" data-target-id="${escapeHtml(r.id)}">匹配到台账：<strong>${escapeHtml(r.company)}</strong> · ${escapeHtml(r.position)}（当前阶段：${escapeHtml(r.stage)}）</div>`;
         } else if (matches.length > 1) {
-          matchHtml = `<div class="mail-match multi"><label>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），请选择目标：<select class="control mail-target-select">${orderedMatches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}${r.orgUnit ? `（${escapeHtml(r.orgUnit)}）` : ''} · ${escapeHtml(r.stage)}</option>`).join('')}</select></label></div>`;
+          // 多选（v4.15.0）：一封邮件常常覆盖同公司的**多个**岗位——比如一次测评 / AI面通知
+          // 是发给该公司所有投递的，之后的流程才各自独立、各自有邮件。旧版是单选下拉：
+          // 7 个岗位要点 7 次，而第一次应用后这封邮件就被 markMailApplied 标记、卡片消失，
+          // 剩下 6 个岗位再也关联不上（UID 水位已推过去，「重新读取」也找不回来）。
+          // 默认勾选策略：候选全部同属一个 companyGroupKey（确实是同公司多岗位）→ 全勾；
+          // 跨公司（说明匹配可疑）→ 全不勾 + 显式警告，强制逐条确认。
+          // 这条策略把匹配可靠性编码进交互：pure.js 的首字闸门万一漏掉一个误匹配，
+          // 它会以"跨公司候选"的形态在这里被拦下来，而不是被一键批量写进 N 条时间线。
+          const sameGroup = orderedMatches.every(r => companyGroupKey(r) === companyGroupKey(orderedMatches[0]));
+          const boxOn = sameGroup ? ' checked' : '';
+          matchHtml = `<div class="mail-match multi"><div class="mail-match-head"><span>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），<strong>可多选</strong>：</span><button class="text-button" type="button" data-mail-action="toggle-all" data-mail-id="${escapeHtml(s.id)}">全选 / 全不选</button></div><div class="mail-target-list">${orderedMatches.map(r => `<label class="mail-target-item"><input type="checkbox" class="mail-target-check" value="${escapeHtml(r.id)}"${boxOn}><span>${escapeHtml(r.company)} · ${escapeHtml(positionWithUnit(r.position, r.orgUnit, true))} · ${escapeHtml(r.stage)}</span></label>`).join('')}</div>${sameGroup ? '' : '<div class="mail-match-warn">候选跨了不同公司，已默认全不勾——请逐条确认再应用。</div>'}</div>`;
         } else {
           matchHtml = '<div class="mail-match none">未匹配到台账记录——可「新建记录」并预填邮件信息（走人工补全），或忽略。</div>';
         }
@@ -5128,12 +5210,14 @@
         if (!s) return;
         const card = document.querySelector(`.mail-card[data-mail-id="${CSS.escape(String(id))}"]`);
         if (!card) return;
-        let targetId = '';
-        const sel = card.querySelector('.mail-target-select');
-        if (sel) targetId = sel.value;
-        else { const single = card.querySelector('.mail-match.single'); if (single) targetId = single.dataset.targetId || ''; }
-        const rec = records.find(r => r.id === targetId);
-        if (!rec) { showToast('未找到目标记录，请重新选择或改用「新建记录」'); return; }
+        // 目标可以是多条（多选）。单命中那一支仍走 .mail-match.single 的 data-target-id。
+        const targetIds = [...card.querySelectorAll('.mail-target-check:checked')].map(i => i.value);
+        if (!targetIds.length) {
+          const single = card.querySelector('.mail-match.single');
+          if (single && single.dataset.targetId) targetIds.push(single.dataset.targetId);
+        }
+        const targets = targetIds.map(tid => records.find(r => r.id === tid)).filter(Boolean);
+        if (!targets.length) { showToast('请先勾选至少一条目标台账，或改用「新建记录」'); return; }
 
         const checked = new Set([...card.querySelectorAll('input[data-mail-field]:checked')].map(i => i.dataset.mailField));
         if (!checked.size) { showToast('请至少勾选一个要应用的字段'); return; }
@@ -5141,22 +5225,30 @@
         const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
         const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
         let milestoneApplied = false;
-        if (checked.has('milestone') && mile.stage) {
-          setTimeline(rec, [...(rec.timeline || []), { stage: mile.stage, at: mile.at || localDateInput(new Date()), note: mile.note || '邮件' }]);
-          milestoneApplied = true;
+        let offerHit = false;
+        for (const rec of targets) {
+          if (checked.has('milestone') && mile.stage) {
+            setTimeline(rec, [...(rec.timeline || []), { stage: mile.stage, at: mile.at || localDateInput(new Date()), note: mile.note || '邮件' }]);
+            milestoneApplied = true;
+          }
+          if (checked.has('scheduleAt') && p.scheduleAt) rec.scheduleAt = p.scheduleAt;
+          if (checked.has('recentSchedule') && p.recentSchedule) rec.recentSchedule = p.recentSchedule;
+          if (checked.has('nextAction') && p.nextAction) rec.nextAction = p.nextAction;
+          rec.updatedAt = Date.now();
+          if (mile.stage === 'Offer' || rec.stage === 'Offer') offerHit = true;
         }
-        if (checked.has('scheduleAt') && p.scheduleAt) rec.scheduleAt = p.scheduleAt;
-        if (checked.has('recentSchedule') && p.recentSchedule) rec.recentSchedule = p.recentSchedule;
-        if (checked.has('nextAction') && p.nextAction) rec.nextAction = p.nextAction;
-        rec.updatedAt = Date.now();
 
-        saveRecords(`已按邮件更新：${rec.company}`);
+        // 只存一次：循环里逐条 saveRecords 会触发 N 次 localStorage 写入 + N 次
+        // scheduleSyncPush（云同步推送判定），既浪费又可能与自己的上一次推送竞争。
+        saveRecords(targets.length > 1
+          ? `已按邮件更新 ${targets.length} 条台账：${targets[0].company}`
+          : `已按邮件更新：${targets[0].company}`);
         markMailApplied(id);
         render();
-        flashRow(rec.id);
+        for (const rec of targets) flashRow(rec.id);
         renderMailView();
         updateMailBadge();
-        if (milestoneApplied && (mile.stage === 'Offer' || rec.stage === 'Offer')) playOfferStamp();
+        if (milestoneApplied && offerHit) playOfferStamp();
       }
 
       function dismissMailSuggestion(id) {
@@ -6374,6 +6466,14 @@
         if (action === 'apply') applyMailSuggestion(id);
         else if (action === 'new') openMailSeedDialog(id);
         else if (action === 'dismiss') dismissMailSuggestion(id);
+        else if (action === 'toggle-all') {
+          // 全选 / 全不选二态切换：已全勾就全取消，否则全勾。
+          // 不额外维护状态，直接读 DOM——候选列表每次渲染都会重建，存状态反而会与实际不符。
+          const host = btn.closest('.mail-card');
+          const boxes = host ? [...host.querySelectorAll('.mail-target-check')] : [];
+          const allOn = boxes.length > 0 && boxes.every(b => b.checked);
+          for (const b of boxes) b.checked = !allOn;
+        }
       });
       $('#mailRefreshBtn').addEventListener('click', () => {
         if (!syncConfig.token) { openSyncDialog(); return; }

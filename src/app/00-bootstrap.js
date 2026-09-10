@@ -60,7 +60,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.14.0';
+      const APP_VERSION = '4.15.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -74,7 +74,7 @@
       const UI_STORAGE_KEY = 'autumnRecruitmentTracker.ui.v1';
       // 网页写、Action 读的配置文件（明文，不含任何密钥）；默认值与 Action src/config.js 保持一致
       const MAIL_CONFIG_FILENAME = 'mail-config.json';
-      const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 0, promptExtra: '', promptOverride: '' };
+      const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 12, promptExtra: '', promptOverride: '' };
       const TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
       const $ = (selector) => document.querySelector(selector);
       const els = {
@@ -1746,7 +1746,7 @@
           return `<div class="multi-company" style="--company-color:${companyColor(group.key)}">
             <div class="multi-company-head"><strong>${escapeHtml(group.label)}</strong><span class="multi-company-count">${group.records.length} 个岗位</span></div>
             <div class="multi-company-items">${items.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" data-tip-kind="record" data-tip-key="${escapeHtml(record.id)}" aria-label="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}，悬浮看详情，点击打开抽屉">
-              <span class="multi-company-pos">${escapeHtml(record.position || '未填岗位')}${record.orgUnit ? ` · ${escapeHtml(record.orgUnit)}` : ''}</span>
+              <span class="multi-company-pos">${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit))}</span>
               <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
             </button>`).join('')}</div>
           </div>`;
@@ -1815,7 +1815,7 @@
         const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
         const siblings = (companyIndex && companyIndex.get(key)) || [];
         const chipHtml = siblings.length > 1
-          ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${item.position || '未填岗位'}${item.orgUnit ? `（${item.orgUnit}）` : ''} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
+          ? `<span class="company-chip" style="--company-color:${companyColor(key)}" title="${escapeHtml(siblings.map(item => `${positionWithUnit(item.position || '未填岗位', item.orgUnit, true)} · ${item.stage}`).join('\n'))}">+${siblings.length - 1} 岗位</span>`
           : '';
         return `<tr data-id="${escapeHtml(record.id)}" data-is-offer="${record.stage === 'Offer'}" data-company="${escapeHtml(key)}">
           <td data-label="编号"><span class="record-no">#${recordNo.get(record.id) || '0000'}</span></td>

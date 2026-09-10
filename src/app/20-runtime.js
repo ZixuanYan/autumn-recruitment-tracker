@@ -39,7 +39,17 @@
           const r = matches[0];
           matchHtml = `<div class="mail-match single" data-target-id="${escapeHtml(r.id)}">匹配到台账：<strong>${escapeHtml(r.company)}</strong> · ${escapeHtml(r.position)}（当前阶段：${escapeHtml(r.stage)}）</div>`;
         } else if (matches.length > 1) {
-          matchHtml = `<div class="mail-match multi"><label>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），请选择目标：<select class="control mail-target-select">${orderedMatches.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.company)} · ${escapeHtml(r.position)}${r.orgUnit ? `（${escapeHtml(r.orgUnit)}）` : ''} · ${escapeHtml(r.stage)}</option>`).join('')}</select></label></div>`;
+          // 多选（v4.15.0）：一封邮件常常覆盖同公司的**多个**岗位——比如一次测评 / AI面通知
+          // 是发给该公司所有投递的，之后的流程才各自独立、各自有邮件。旧版是单选下拉：
+          // 7 个岗位要点 7 次，而第一次应用后这封邮件就被 markMailApplied 标记、卡片消失，
+          // 剩下 6 个岗位再也关联不上（UID 水位已推过去，「重新读取」也找不回来）。
+          // 默认勾选策略：候选全部同属一个 companyGroupKey（确实是同公司多岗位）→ 全勾；
+          // 跨公司（说明匹配可疑）→ 全不勾 + 显式警告，强制逐条确认。
+          // 这条策略把匹配可靠性编码进交互：pure.js 的首字闸门万一漏掉一个误匹配，
+          // 它会以"跨公司候选"的形态在这里被拦下来，而不是被一键批量写进 N 条时间线。
+          const sameGroup = orderedMatches.every(r => companyGroupKey(r) === companyGroupKey(orderedMatches[0]));
+          const boxOn = sameGroup ? ' checked' : '';
+          matchHtml = `<div class="mail-match multi"><div class="mail-match-head"><span>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），<strong>可多选</strong>：</span><button class="text-button" type="button" data-mail-action="toggle-all" data-mail-id="${escapeHtml(s.id)}">全选 / 全不选</button></div><div class="mail-target-list">${orderedMatches.map(r => `<label class="mail-target-item"><input type="checkbox" class="mail-target-check" value="${escapeHtml(r.id)}"${boxOn}><span>${escapeHtml(r.company)} · ${escapeHtml(positionWithUnit(r.position, r.orgUnit, true))} · ${escapeHtml(r.stage)}</span></label>`).join('')}</div>${sameGroup ? '' : '<div class="mail-match-warn">候选跨了不同公司，已默认全不勾——请逐条确认再应用。</div>'}</div>`;
         } else {
           matchHtml = '<div class="mail-match none">未匹配到台账记录——可「新建记录」并预填邮件信息（走人工补全），或忽略。</div>';
         }
@@ -162,12 +172,14 @@
         if (!s) return;
         const card = document.querySelector(`.mail-card[data-mail-id="${CSS.escape(String(id))}"]`);
         if (!card) return;
-        let targetId = '';
-        const sel = card.querySelector('.mail-target-select');
-        if (sel) targetId = sel.value;
-        else { const single = card.querySelector('.mail-match.single'); if (single) targetId = single.dataset.targetId || ''; }
-        const rec = records.find(r => r.id === targetId);
-        if (!rec) { showToast('未找到目标记录，请重新选择或改用「新建记录」'); return; }
+        // 目标可以是多条（多选）。单命中那一支仍走 .mail-match.single 的 data-target-id。
+        const targetIds = [...card.querySelectorAll('.mail-target-check:checked')].map(i => i.value);
+        if (!targetIds.length) {
+          const single = card.querySelector('.mail-match.single');
+          if (single && single.dataset.targetId) targetIds.push(single.dataset.targetId);
+        }
+        const targets = targetIds.map(tid => records.find(r => r.id === tid)).filter(Boolean);
+        if (!targets.length) { showToast('请先勾选至少一条目标台账，或改用「新建记录」'); return; }
 
         const checked = new Set([...card.querySelectorAll('input[data-mail-field]:checked')].map(i => i.dataset.mailField));
         if (!checked.size) { showToast('请至少勾选一个要应用的字段'); return; }
@@ -175,22 +187,30 @@
         const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
         const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
         let milestoneApplied = false;
-        if (checked.has('milestone') && mile.stage) {
-          setTimeline(rec, [...(rec.timeline || []), { stage: mile.stage, at: mile.at || localDateInput(new Date()), note: mile.note || '邮件' }]);
-          milestoneApplied = true;
+        let offerHit = false;
+        for (const rec of targets) {
+          if (checked.has('milestone') && mile.stage) {
+            setTimeline(rec, [...(rec.timeline || []), { stage: mile.stage, at: mile.at || localDateInput(new Date()), note: mile.note || '邮件' }]);
+            milestoneApplied = true;
+          }
+          if (checked.has('scheduleAt') && p.scheduleAt) rec.scheduleAt = p.scheduleAt;
+          if (checked.has('recentSchedule') && p.recentSchedule) rec.recentSchedule = p.recentSchedule;
+          if (checked.has('nextAction') && p.nextAction) rec.nextAction = p.nextAction;
+          rec.updatedAt = Date.now();
+          if (mile.stage === 'Offer' || rec.stage === 'Offer') offerHit = true;
         }
-        if (checked.has('scheduleAt') && p.scheduleAt) rec.scheduleAt = p.scheduleAt;
-        if (checked.has('recentSchedule') && p.recentSchedule) rec.recentSchedule = p.recentSchedule;
-        if (checked.has('nextAction') && p.nextAction) rec.nextAction = p.nextAction;
-        rec.updatedAt = Date.now();
 
-        saveRecords(`已按邮件更新：${rec.company}`);
+        // 只存一次：循环里逐条 saveRecords 会触发 N 次 localStorage 写入 + N 次
+        // scheduleSyncPush（云同步推送判定），既浪费又可能与自己的上一次推送竞争。
+        saveRecords(targets.length > 1
+          ? `已按邮件更新 ${targets.length} 条台账：${targets[0].company}`
+          : `已按邮件更新：${targets[0].company}`);
         markMailApplied(id);
         render();
-        flashRow(rec.id);
+        for (const rec of targets) flashRow(rec.id);
         renderMailView();
         updateMailBadge();
-        if (milestoneApplied && (mile.stage === 'Offer' || rec.stage === 'Offer')) playOfferStamp();
+        if (milestoneApplied && offerHit) playOfferStamp();
       }
 
       function dismissMailSuggestion(id) {
@@ -1408,6 +1428,14 @@
         if (action === 'apply') applyMailSuggestion(id);
         else if (action === 'new') openMailSeedDialog(id);
         else if (action === 'dismiss') dismissMailSuggestion(id);
+        else if (action === 'toggle-all') {
+          // 全选 / 全不选二态切换：已全勾就全取消，否则全勾。
+          // 不额外维护状态，直接读 DOM——候选列表每次渲染都会重建，存状态反而会与实际不符。
+          const host = btn.closest('.mail-card');
+          const boxes = host ? [...host.querySelectorAll('.mail-target-check')] : [];
+          const allOn = boxes.length > 0 && boxes.every(b => b.checked);
+          for (const b of boxes) b.checked = !allOn;
+        }
       });
       $('#mailRefreshBtn').addEventListener('click', () => {
         if (!syncConfig.token) { openSyncDialog(); return; }

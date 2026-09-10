@@ -99,7 +99,10 @@ const webAlias = aliasBox.__out;
 // extractFunction 的花括号配平算法没变，但搜索范围从 6892 行产物缩到 531 行，
 // 同名函数误匹配的面降了一个量级（那套算法踩过默认参数 options = {} 的坑）。
 // resolveDuplicate 仍在 app/ 的 DOM 层（要调 confirmInApp、刷新视图），本轮没拆，继续从产物抽。
-const CORE_FNS = ['groupRecordsByCompany', 'companyGroupIndex', 'findDuplicateRecord'];
+// positionWithUnit 是 resolveDuplicate 拼 targetLabel 时的依赖（v4.15.0 起岗位名与机构名
+// 统一走它，避免「数字金融岗（成都分行）（成都分行）」这类重复）。这个清单是**具名抽取**，
+// 新增依赖不加进来就是 ReferenceError —— 好处是它当场就红，不会静默跳过。
+const CORE_FNS = ['groupRecordsByCompany', 'companyGroupIndex', 'findDuplicateRecord', 'positionWithUnit'];
 const DOM_FNS = ['resolveDuplicate'];
 const WEB_FNS = [...CORE_FNS, ...DOM_FNS];
 const webSrc = [

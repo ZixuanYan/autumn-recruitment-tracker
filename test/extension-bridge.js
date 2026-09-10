@@ -199,9 +199,10 @@ check('契约：阶段枚举只有一份（在 shared/stages.js），两端都�
   assert.ok(!/const STAGE_PRESETS = \[/.test(htmlSrc2), 'index.html 又出现了阶段字面量数组');
   assert.ok(!/AJA\.STAGES = \[/.test(constantsSrc2),
     'constants.js 又出现了阶段字面量数组：它在 shared 之后加载，会把单一事实源覆盖回去');
-  // ② 源头值契约：AI 只能从这 14 个里选 stage，少一个就会让该类邮件的阶段静默置空
+  // ② 源头值契约：AI 只能从这 15 个里选 stage，少一个就会让该类邮件的阶段静默置空
+  //    （v4.15.0 加了「AI面试」，排在机试之后、一面之前——测评/笔试之后、真人面之前的自动化环节）
   assert.deepStrictEqual([...requireShared('stages.js').STAGE_PRESETS],
-    ['待投递', '已投递', '测评', '笔试', '机试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'],
+    ['待投递', '已投递', '测评', '笔试', '机试', 'AI面试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'],
     '源头值被改动：Action 的 stage 严格校验会把它判为非法并置空，网页端则当自定义阶段处理（stageOrder 返回 9000，排序与漏斗分组都会错）');
 });
 

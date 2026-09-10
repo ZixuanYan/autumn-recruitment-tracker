@@ -418,7 +418,7 @@ const core = new Function(
    ${coreSrc}
    return {
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
-     companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, computeFunnel, computeStageDwell,
+     companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
@@ -1879,7 +1879,13 @@ function parseRoot(block) {
   for (const m of block.matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) out[m[1]] = m[2].trim();
   return out;
 }
-const CSS_NOCOMMENT = html.replace(/\/\*[\s\S]*?\*\//g, '');
+// 两种注释都要剥：CSS 的 /* */ 与 HTML 的 <!-- -->。
+// 后者是实打实踩过才加的——template.html 里解释 color-scheme 的那段注释，正文写着
+// "@media (prefers-color-scheme: dark)"，只剥 /* */ 时它会被 indexOf 当成真正的暗色块，
+// 于是"暗色块必须在浅色色阶之后"这条守卫读到偏移 238（文档开头）而误判。
+// 这是本仓第 4 次踩同一形状的坑（前几次是 CSS 块注释与 JS 行注释）：
+// 凡是用文本搜索做断言，解释性文字就会替被检查的代码"顶罪"或"冒充"。
+const CSS_NOCOMMENT = html.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
 const LIGHT_ROOT = parseRoot((/:root \{([\s\S]*?)\n    \}/.exec(CSS_NOCOMMENT) || [, ''])[1]);
 const DARK_BLOCK = /@media \(prefers-color-scheme: dark\) \{([\s\S]*?)\n    \}/.exec(CSS_NOCOMMENT);
 const DARK_ROOT = parseRoot((/@media \(prefers-color-scheme: dark\) \{\s*:root \{([\s\S]*?)\n      \}/.exec(CSS_NOCOMMENT) || [, ''])[1]);
@@ -1919,7 +1925,49 @@ check('深色模式：柔底 / 滑块 / 玻璃在暗色下必须翻成白基（�
     `暗色遮罩 alpha（${scrimDark}）必须比浅色（${scrimLight}）更大，否则弹窗在暗底上浮不出来`);
 });
 
-check('深色模式：阶段色阶 14 档的对比度逐档复算，chip 内 ≥4.5:1、对 surface ≥4.5:1', () => {
+check('暗色块必须排在浅色阶段色阶之后（同特异性下位置决定谁生效）', () => {
+  // v4.14.0 真的发布过这个 bug：暗色块紧跟 :root 放在文件前部，而浅色阶段色阶在 200 行之后，
+  // 两者选择器逐字相同、特异性相同 → 浅色胜出。结构性令牌（:root）照常生效，
+  // 所以整体看着"深色模式能用"，只有阶段徽章仍是「浅蓝底 + 深蓝字」的小药丸。
+  // 对比度守卫验的是暗色值本身，验不出"谁生效"——顺序必须单独钉住。
+  // 这类失效在本仓反复出现（view-in 重复定义、base.css 的旧钴蓝焦点环都是同一形状）：
+  // 同特异性 + 靠文件顺序决胜 + 零报错。
+  // 用 CSS_NOCOMMENT 而不是 html：template.html 的解释性注释里就写着这个 @media 字样，
+  // 直接搜 html 会命中注释（偏移 238），把顺序判断整个带偏。
+  const darkAt = CSS_NOCOMMENT.indexOf('@media (prefers-color-scheme: dark)');
+  const rampAt = CSS_NOCOMMENT.indexOf('.badge[data-stage="一面"], .step[data-stage="一面"] { --stage-color: #0071e3');
+  assert.ok(darkAt > 0, '产物里找不到暗色块');
+  assert.ok(rampAt > 0, '产物里找不到浅色阶段色阶的定位锚（一面那一档）');
+  assert.ok(darkAt > rampAt,
+    `暗色块（偏移 ${darkAt}）必须排在浅色阶段色阶（偏移 ${rampAt}）之后；` +
+    '反过来的话深色模式下阶段色阶会被浅色整条压回去，且不报错');
+});
+
+check('阶段色阶必须与 STAGE_PRESETS 一一对应（浅色 + 暗色两套都要齐全）', () => {
+  // 这条守卫的价值：新增阶段时只改 shared/stages.js 就会**功能全通但没配色**——
+  // 徽章落回中性灰、分布条落回 --accent 蓝，不报错也不难看，于是很容易就这么发出去。
+  // 这里按名字逐一对账，缺哪一档直接点名。浅色与暗色各查一遍（暗色是 v4.14.0 才有的第二套）。
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  const presets = [...require(path.resolve(__dirname, '../shared/stages.js')).STAGE_PRESETS];
+  const darkM = /@media \(prefers-color-scheme: dark\) \{([\s\S]*?)\n    \}/.exec(css);
+  assert.ok(darkM, '产物里找不到 @media (prefers-color-scheme: dark) 块');
+  const darkCss = darkM[1];
+  // 浅色部分 = 全文**挖掉**暗色块，而不是"取暗色块之前的部分"：
+  // 暗色块现在排在 apple.css 末尾（见下面的顺序守卫），按位置切会把整个浅色色阶切没。
+  const lightCss = css.replace(darkM[0], '');
+  const namesIn = src => [...new Set([...src.matchAll(/\.badge\[data-stage="([^"]+)"\]/g)].map(m => m[1]))];
+  const lightNames = namesIn(lightCss), darkNames = namesIn(darkCss);
+  const missLight = presets.filter(s => !lightNames.includes(s));
+  const missDark = presets.filter(s => !darkNames.includes(s));
+  assert.deepStrictEqual(missLight, [], `浅色色阶缺这些阶段的配色：${missLight.join(', ')}（徽章会落回中性灰、分布条落回 --accent）`);
+  assert.deepStrictEqual(missDark, [], `暗色色阶缺这些阶段的配色：${missDark.join(', ')}（深色模式下会沿用浅色值，在暗底上不可读）`);
+  const extraLight = lightNames.filter(s => !presets.includes(s));
+  const extraDark = darkNames.filter(s => !presets.includes(s));
+  assert.deepStrictEqual(extraLight, [], `浅色色阶里有预设之外的阶段名（改名后留下的孤儿）：${extraLight.join(', ')}`);
+  assert.deepStrictEqual(extraDark, [], `暗色色阶里有预设之外的阶段名：${extraDark.join(', ')}`);
+});
+
+check('深色模式：阶段色阶 15 档的对比度逐档复算，chip 内 ≥4.5:1、对 surface ≥4.5:1', () => {
   // 这条守卫是"色阶可以按审美改、但改不坏可读性"的保证：
   // 暗色阶段的取值是按规则推导的临时方案（亮度区间反转映射 + 对比度求解），
   // 色相审美留给人定夺，但只要动过就重新复算，不达 WCAG AA 直接红。
@@ -1930,7 +1978,7 @@ check('深色模式：阶段色阶 14 档的对比度逐档复算，chip 内 ≥
   const surface = hex2rgb(DARK_ROOT['surface'].trim());
   const darkCss = DARK_BLOCK[1];
   const rows = [...darkCss.matchAll(/\.badge\[data-stage="([^"]+)"\][^{]*\{ --stage-color: (#[0-9a-f]{6}); --stage-soft: rgba\((\d+), (\d+), (\d+), (\.?\d+)\)/g)];
-  assert.strictEqual(rows.length, 14, `暗色阶段色阶应恰好 14 档，实际解析到 ${rows.length} 档`);
+  assert.strictEqual(rows.length, 15, `暗色阶段色阶应恰好 15 档，实际解析到 ${rows.length} 档`);
   const bad = [];
   for (const [, stage, hex, r, g, b, a] of rows) {
     const fg = hex2rgb(hex);
@@ -2004,6 +2052,87 @@ check('深色模式的入口声明齐全：color-scheme 与两条 theme-color �
   const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../manifest.webmanifest'), 'utf8'));
   assert.strictEqual(manifest.background_color, '#f5f5f7',
     'manifest 的 background_color 应保持浅色（规范不支持 media 变体，改暗会让浅色用户启动时闪黑屏）');
+});
+
+// ─────────────────────────────────────────────
+// 公司名模糊匹配：真实公司对回归表 + 机构名不重复渲染
+// ─────────────────────────────────────────────
+check('公司名模糊匹配：真实公司对回归表（首字闸门修的就是这类静默误匹配）', () => {
+  const { companyMatchScore } = helpers;
+  // 必不命中：不同公司。第一行是用户实际遇到的 bug——修复前 score=0.667 命中，
+  // 于是招商银行的邮件候选里混进了徽商银行的台账（7 条候选里 6 对 1 错）。
+  // 根因：4 字中文名只有 3 个 bigram，招行与徽行共享「商银」+「银行」两个 → 2×2/(3+3)=0.667。
+  // 兴业/平安/民生/宁波银行只共享「银行」一个 → 0.333 本来就正确排除，列进来是防阈值被放松。
+  const MUST_NOT = [
+    ['招商银行', '徽商银行'], ['招商银行', '兴业银行'], ['招商银行', '平安银行'],
+    ['招商银行', '民生银行'], ['宁波银行', '徽商银行'], ['上海银行', '北京银行'],
+    ['建设银行', '交通银行'], ['中信银行', '中信证券'],   // 同字号不同行业，靠 Dice=0.333 排除
+    ['太平洋保险', '平安保险'], ['特斯拉', '美团']
+  ];
+  // 必命中：同一家公司的不同写法。这一组防"修过头"——首字闸门只该拦不同字号，
+  // 不能把真实的后缀差异 / 缩写 / 城市中缀误杀（这些全部在相等或包含分支就返回了，
+  // 根本走不到闸门；列出来是为了以后有人调整分支顺序时立刻红）。
+  const MUST = [
+    ['腾讯科技（深圳）有限公司', '腾讯'], ['华为', '华为技术'], ['字节跳动', '字节跳动科技'],
+    ['北京字节跳动科技有限公司', '字节跳动'], ['蚂蚁集团', '蚂蚁'], ['美团', '美团点评'],
+    ['顺丰', '顺丰科技'], ['招商银行', '招商银行杭州分行'], ['中国招商银行', '招商银行'],
+    // 这一对专门用来钉住「闸门必须在包含分支之后」：两个 slug 都 ≤5 字（闸门会生效）、
+    // 首字不同（甄 vs 东）、且互相包含（正确答案是 0.9）。闸门若被挪到包含之前就会返回 0。
+    // 注意 ['中国招商银行','招商银行'] 触发不了这个顺序问题——归一化后 6 字，超出闸门的 ≤5 字限定。
+    ['东方甄选', '甄选']
+  ];
+  const wrongHits = MUST_NOT.filter(([a, b]) => companyMatchScore(a, b) >= 0.6)
+    .map(([a, b]) => `${a}↔${b}=${companyMatchScore(a, b).toFixed(3)}`);
+  assert.deepStrictEqual(wrongHits, [],
+    `这些不同公司被判为匹配（会把错误台账混进邮件候选，人工复核时极易顺手选错）：${wrongHits.join('；')}`);
+  const missed = MUST.filter(([a, b]) => companyMatchScore(a, b) < 0.6)
+    .map(([a, b]) => `${a}↔${b}=${companyMatchScore(a, b).toFixed(3)}`);
+  assert.deepStrictEqual(missed, [],
+    `这些同一公司的不同写法没匹配上（漏召回比误命中更难发现，用户只会觉得"邮件没关联上"）：${missed.join('；')}`);
+  // 闸门必须只在 Dice 兜底分支、且只对短中文名生效：拉丁名的拼写容错靠的就是 Dice，
+  // 若把闸门加在相等/包含之前或扩到拉丁名，这类容错会一起被杀掉。
+  // 断言方式是「companyMatchScore 与裸 diceCoefficient 等值」而不是「≥0.6」——
+  // tencent/tencnet 的 Dice 本来就只有 0.5（不到阈值），要证明的是**闸门没把它归零**。
+  const { diceCoefficient } = helpers;
+  const latin = diceCoefficient('tencent', 'tencnet');
+  assert.ok(latin > 0, '拉丁名的 Dice 应仍产生非零相似度');
+  assert.strictEqual(companyMatchScore('Tencent', 'tencnet'), latin,
+    '拉丁名不应经过首字闸门：companyMatchScore 应等于裸 diceCoefficient');
+  // 对照组：同样"首字不同 + 尾部相同"的短中文名必须被闸门归零（这正是招行/徽行那一类）
+  assert.strictEqual(companyMatchScore('招商银行', '徽商银行'), 0, '短中文名首字不同应被闸门归零');
+  // 结构性断言：闸门那一行必须出现在「互相包含」分支**之后**。
+  // 上面的 ['东方甄选','甄选'] 已经从行为上钉住了这一点，这里再钉一次源码顺序，
+  // 是因为行为断言依赖"恰好有这么一对公司名"，而顺序才是真正要保住的不变量。
+  const pureSrc = fs.readFileSync(path.resolve(__dirname, '../src/mail/pure.js'), 'utf8');
+  const atContain = pureSrc.indexOf('if (na.includes(nb) || nb.includes(na)) return 0.9;');
+  const atGate = pureSrc.indexOf('if (isShortCjkSlug(na) && isShortCjkSlug(nb) && na[0] !== nb[0]) return 0;');
+  assert.ok(atContain > 0 && atGate > 0, 'companyMatchScore 的包含分支或首字闸门找不到了');
+  assert.ok(atGate > atContain,
+    '首字闸门必须写在「互相包含」分支之后：挪到前面会把 短名⊂长名 的真实缩写关系（如 甄选⊂东方甄选）误杀成 0');
+});
+
+check('机构名已写在岗位名里时不得重复渲染（实证：数字金融岗（成都分行）（成都分行））', () => {
+  const { positionWithUnit } = core;
+  assert.strictEqual(typeof positionWithUnit, 'function', 'core/company.js 应导出 positionWithUnit');
+  // 重复的那一种：岗位名里已经带了机构名
+  assert.strictEqual(positionWithUnit('数字金融岗（成都分行）', '成都分行', true), '数字金融岗（成都分行）');
+  assert.strictEqual(positionWithUnit('数字金融岗（成都分行）', '成都分行'), '数字金融岗（成都分行）');
+  assert.strictEqual(positionWithUnit('信息技术岗 西安分行', '西安分行'), '信息技术岗 西安分行');
+  // 正常的那一种：岗位名里没有机构名，两种分隔符形态都要对
+  assert.strictEqual(positionWithUnit('测试开发岗', '招银网络科技', true), '测试开发岗（招银网络科技）');
+  assert.strictEqual(positionWithUnit('测试开发岗', '招银网络科技'), '测试开发岗 · 招银网络科技');
+  // 边界：没有机构名 / 没有岗位名
+  assert.strictEqual(positionWithUnit('测试开发岗', ''), '测试开发岗');
+  assert.strictEqual(positionWithUnit('测试开发岗', null, true), '测试开发岗');
+  assert.strictEqual(positionWithUnit('', '成都分行', true), '成都分行');
+  assert.strictEqual(positionWithUnit(undefined, undefined), '');
+  // 渲染点必须走 helper：内联拼接的两种形态都不得复活（分散判断迟早漏一处）
+  const inlineEscaped = /escapeHtml\((?:record|item|target)\.position[^)]*\)\}\$\{(?:record|item|target)\.orgUnit \?/;
+  const inlineRaw = /\$\{(?:record|item|target)\.position \|\| '未填岗位'\}\$\{(?:record|item|target)\.orgUnit \?/;
+  assert.ok(!inlineEscaped.test(html), '有渲染点退回内联拼接 position + orgUnit（会重复渲染机构名）');
+  assert.ok(!inlineRaw.test(html), '有渲染点退回内联拼接 position + orgUnit（未转义那一支）');
+  assert.ok((html.match(/positionWithUnit\(/g) || []).length >= 7,
+    'positionWithUnit 的调用点应 ≥7（1 处定义 + 6 处渲染点；邮件候选那一处随多选改造再 +1）');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
