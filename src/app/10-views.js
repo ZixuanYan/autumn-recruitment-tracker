@@ -202,26 +202,47 @@
       }
 
       // 看板列 = 当前可见记录里出现过的阶段（按 stageOrder 排序）+ 末尾固定 Offer / 已结束（便于拖入）
+      // 只生成「当前有记录的进行中阶段」。Offer 与已结束不再常驻成列——它们是**终态**
+      // 而不是流水线环节，v4.17.0 起由 #boardRowOffer / #boardRowClosed 两条横带承载。
+      // ⚠️ 必须显式 delete 这两个阶段：present 是从记录里收集的，只要有一条记录的 stage
+      // 是 Offer，它就会同时出现在列与横带里 → 同一条记录被渲染两次（两个 DOM 节点、
+      // 两个可拖拽卡片，拖其中一个另一个不动，看起来像"看板坏了"）。
       function boardColumns(visible) {
         const present = new Set(visible.map(r => String(r.stage || '待投递')));
-        present.add('Offer');
-        present.add('已结束');
+        present.delete('Offer');
+        present.delete('已结束');
         return [...present].sort((a, b) => stageOrder(a) - stageOrder(b) || String(a).localeCompare(String(b), 'zh-CN'));
+      }
+
+      // 终态横带（Offer / 已结束）。与阶段列的差别只有排布方向：列是纵向堆叠 + 横向滚动，
+      // 横带是整宽 + 卡片横向 flex-wrap 铺开。Offer 通常只有 1–3 个，横排正好便于对比。
+      // data-stage 挂在容器上（template 里写死），所以 handleBoardDrop 的
+      // closest('.board-col, .board-row') 能直接复用同一套推进逻辑，
+      // 包括「拖到已结束要先问结束原因」那个特殊分支。
+      function boardRowHtml(stage, items, groupKeyById, stalledById) {
+        return `<div class="board-row-head" data-stage="${escapeHtml(stage)}" role="button" tabindex="0" title="点击在表格视图查看「${escapeHtml(stage)}」阶段的全部明细"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span><span class="board-col-count">${items.length}</span>${items.length ? '' : '<span class="board-row-hint">拖到这里</span>'}</div><div class="board-row-body">${items.map(item => boardCardHtml(item, groupKeyById, stalledById.get(item.id))).join('')}</div>`;
       }
 
       function boardCardHtml(record, groupKeyById, stalledDays) {
         const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
         const dl = deadlineInfo(record.deadline);
-        const dlClosed = ['Offer', '已结束'].includes(record.stage);
+        // 终态（Offer / 已结束）：截止日期、最近安排、停滞提醒都不再有意义——
+        // 事情已经结束了，继续催跟进只是噪声。
+        const terminal = ['Offer', '已结束'].includes(record.stage);
         const schedule = parseLocal(record.scheduleAt);
         const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
         const chips = [];
         // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
         // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
-        if (dl && !dlClosed) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
-        if (schedule && !dlClosed) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
-        if (stalled) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
-        const dots = intentDotsHtml(record.intent);
+        if (dl && !terminal) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
+        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
+        // 停滞提醒只对进行中的阶段有意义。findStalled 本身就用 isActive 排除了
+        // 待投递/Offer/已结束，所以这里是**第二道防线**：万一将来 isActive 放宽，
+        // 终态卡片也不会长出"停滞 N 天"（已结束还催你跟进是荒谬的）。
+        if (stalled && !terminal) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
+        // 意向度点**只在 Offer 上显示**：那是你自己打的排序信号，比较 Offer 时才有决策价值；
+        // 在「已投递 / 测评」这些列上它不指向任何下一步动作，只是每卡多一个元素。
+        const dots = record.stage === 'Offer' ? intentDotsHtml(record.intent) : '';
         return `<button class="board-card${stalled ? ' is-stalled' : ''}" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
           <div class="board-card-company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="board-card-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}</div>
           <div class="board-card-position">${escapeHtml(record.position || '—')}</div>
@@ -245,20 +266,34 @@
             <div class="board-col-body">${items.length ? items.map(item => boardCardHtml(item, groupKeyById, stalledById.get(item.id))).join('') : '<div class="board-empty">拖到这里</div>'}</div>
           </section>`;
         }).join('');
+        // 两条终态横带。刻意复用同一份 visible / groupKeyById / stalledById：
+        // 各自重算一次的话，两处口径迟早分叉（比如公司色或停滞天数算法改了只改一处）。
+        // 注意 boardColumns 已经把这两个阶段从列里 delete 掉了，所以不会重复渲染。
+        for (const [sel, stage] of [['#boardRowOffer', 'Offer'], ['#boardRowClosed', '已结束']]) {
+          const row = $(sel);
+          if (row) row.innerHTML = boardRowHtml(stage, visible.filter(r => String(r.stage || '') === stage), groupKeyById, stalledById);
+        }
       }
 
       // 看板拖拽：dragover 时高亮当前列并清除其它列（dragleave 在子元素间频繁触发，不用它做状态管理）
+      // 投放区有自己的 dragover/drop 监听（绑在 #boardDropZone 元素上）。委托上移到 #boardView
+      // 之后它会同时收到冒泡上来的同一事件，所以这里显式让开，避免两个处理器都跑一遍。
+      const BOARD_DROP_TARGETS = '.board-col, .board-row';
+      function isInDropZone(event) { return !!(event.target.closest && event.target.closest('#boardDropZone')); }
+
       function handleBoardDragOver(event) {
-        const col = event.target.closest('.board-col');
+        if (isInDropZone(event)) return;
+        const col = event.target.closest(BOARD_DROP_TARGETS);
         if (!col || !draggingRecordId) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
-        document.querySelectorAll('.board-col.is-drop').forEach(node => { if (node !== col) node.classList.remove('is-drop'); });
+        document.querySelectorAll('.board-col.is-drop, .board-row.is-drop').forEach(node => { if (node !== col) node.classList.remove('is-drop'); });
         col.classList.add('is-drop');
       }
       async function handleBoardDrop(event) {
-        const col = event.target.closest('.board-col');
-        document.querySelectorAll('.board-col.is-drop').forEach(node => node.classList.remove('is-drop'));
+        if (isInDropZone(event)) return;
+        const col = event.target.closest(BOARD_DROP_TARGETS);
+        document.querySelectorAll('.board-col.is-drop, .board-row.is-drop').forEach(node => node.classList.remove('is-drop'));
         clearBoardDropZone();
         if (!col) return;
         event.preventDefault();

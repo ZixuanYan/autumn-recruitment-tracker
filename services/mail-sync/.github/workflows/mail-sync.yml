@@ -57,6 +57,13 @@ jobs:
 
       - name: Run mail sync
         env:
+          # 凭据双读：新名字 MAIL_USER / MAIL_PASS 优先，回落到旧的 QQ_EMAIL / QQ_AUTHCODE。
+          # 这样已经配好 QQ 的部署**一个 Secret 都不用改**就能继续跑；换 163 等其它邮箱时
+          # 只需新增 MAIL_USER / MAIL_PASS 两个 Secret（旧的可以留着，也可以删）。
+          # 刻意不直接重命名旧 Secret：那会让所有既有部署在下一次定时任务时静默登录失败，
+          # 而症状只是"邮件没更新"，极难归因。
+          MAIL_USER: ${{ secrets.MAIL_USER || secrets.QQ_EMAIL }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS || secrets.QQ_AUTHCODE }}
           QQ_EMAIL: ${{ secrets.QQ_EMAIL }}
           QQ_AUTHCODE: ${{ secrets.QQ_AUTHCODE }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
@@ -65,8 +72,17 @@ jobs:
           GIST_ID: ${{ secrets.GIST_ID }}
           GIST_PAT: ${{ secrets.GIST_PAT }}
           MAIL_ENC_KEY: ${{ secrets.MAIL_ENC_KEY }}
-          IMAP_HOST: imap.qq.com
-          IMAP_PORT: '993'
+          # IMAP 主机与端口走仓库 **Variables**（Settings → Secrets and variables → Actions → Variables），
+          # 不是 Secrets：主机名与端口不是敏感信息，用 Variables 设置更轻、也能在仓库页面直接看到当前值。
+          # 未设置时回落到 QQ，所以既有部署行为逐字节不变。
+          #   163 邮箱：IMAP_HOST = imap.163.com    IMAP_PORT = 993
+          #   126 邮箱：IMAP_HOST = imap.126.com    IMAP_PORT = 993
+          #   QQ/foxmail：留空即可（就是默认值）
+          # ⚠️ 不要再把主机名写死成字面量：v4.17.0 之前这里就是 `imap.qq.com`，
+          # 于是 config.js 里明明已经支持 IMAP_HOST 环境变量，却永远读不到别的值
+          # ——能力在代码里，被部署配置堵死了。test/run.js 有守卫盯着这一点。
+          IMAP_HOST: ${{ vars.IMAP_HOST || 'imap.qq.com' }}
+          IMAP_PORT: ${{ vars.IMAP_PORT || '993' }}
           SINCE_DAYS: ${{ github.event.inputs.SINCE_DAYS || '30' }}
           MAX_PER_RUN: ${{ github.event.inputs.MAX_PER_RUN || '30' }}
           # 留空 = 正常按云端水位增量；填 UID 则忽略水位从该处重扫（回溯被误杀的邮件）
@@ -83,5 +99,5 @@ jobs:
           GIST_ID: ${{ secrets.GIST_ID }}
           GIST_PAT: ${{ secrets.GIST_PAT }}
           MAIL_ENC_KEY: ${{ secrets.MAIL_ENC_KEY }}
-          MAIL_SYNC_ERROR: '邮件同步失败，请查看本次 Action 日志（常见原因：QQ 授权码失效 / AI 超额 / IMAP 被风控）'
+          MAIL_SYNC_ERROR: '邮件同步失败，请查看本次 Action 日志（常见原因：邮箱授权码失效或过期 / IMAP 主机配错 / AI 超额 / 服务商风控）'
         run: node index.js --report-error

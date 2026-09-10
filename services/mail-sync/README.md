@@ -2,7 +2,7 @@
 
 把 QQ 邮箱里的招聘邮件（面试 / 笔试 / 测评 / Offer / 拒信）自动解析成**结构化建议**，写进你自己的私有 Gist 文件 `mail-suggestions.json`。网页端 **[秋招投递管理](https://github.com/ZixuanYan/autumn-recruitment-tracker)** 在云同步时顺带读取它，在新增的「邮件提醒」视图里**逐字段人工复核**后并入投递台账。
 
-> 本仓库必须建成 **私有仓库**：QQ 授权码、AI Key、Gist PAT 都放在这里的 Secrets，**永不进浏览器、永不进网页 localStorage、永不进 vault**。
+> 本仓库必须建成 **私有仓库**：邮箱授权码、AI Key、Gist PAT 都放在这里的 Secrets，**永不进浏览器、永不进网页 localStorage、永不进 vault**。
 
 ## 架构（A2）
 
@@ -19,7 +19,7 @@
   → setTimeline / saveRecords 落库（触发快照 + 云同步）
 ```
 
-**不变量**：① 一切更新经人工复核，无免复核自动写入；② AI 不编造，阶段仅限 14 个 `STAGE_PRESETS`；③ 密钥只在私有仓库 Secrets；④ Action 与网页按文件分别 PATCH 同一 Gist，互不覆盖；⑤ 授权码失效等失败写进 `meta.lastError` 并在网页上屏提示。
+**不变量**：① 一切更新经人工复核，无免复核自动写入；② AI 不编造，阶段仅限 15 个 `STAGE_PRESETS`；③ 密钥只在私有仓库 Secrets；④ Action 与网页按文件分别 PATCH 同一 Gist，互不覆盖；⑤ 授权码失效等失败写进 `meta.lastError` 并在网页上屏提示。
 
 ## 你需要做的 M0 步骤（人工闸门，Agent 无法代做）
 
@@ -41,14 +41,49 @@ M0 目的：在投入真实联调前，验证最脆弱的假设——**QQ 授权
 
    | Secret | 说明 | 示例 |
    |---|---|---|
-   | `QQ_EMAIL` | QQ 邮箱地址 | `123456789@qq.com` |
-   | `QQ_AUTHCODE` | 16 位 IMAP 授权码 | `abcdefghijklmnop` |
+   | `MAIL_USER` | 邮箱地址（任意 IMAP 邮箱） | `123456789@qq.com` / `xxx@163.com` |
+   | `MAIL_PASS` | **客户端授权码**（不是登录密码） | `abcdefghijklmnop` |
    | `AI_BASE_URL` | OpenAI 兼容基址 | `https://api.deepseek.com` |
    | `AI_API_KEY` | AI 密钥 | `sk-…` |
    | `AI_MODEL` | 模型名 | `deepseek-chat`（百炼填 `qwen-plus`） |
    | `GIST_ID` | 现有同步 Gist 的 ID | `a1b2c3…` |
    | `GIST_PAT` | 有 gist 权限的 PAT | `ghp_…` |
    | `MAIL_ENC_KEY` | （可选）加密 `mail-suggestions.json` 的密钥；网页端「设置」填**完全相同**的密钥才能解密。留空=明文 | 随机长串（网页可「生成」）|
+
+   **旧名字仍然可用**：代码按 `MAIL_USER → QQ_EMAIL`、`MAIL_PASS → QQ_AUTHCODE` 的顺序双读，
+   所以已经配好 `QQ_EMAIL` / `QQ_AUTHCODE` 的部署**一个 Secret 都不用改**。
+   刻意不强制改名——那会让所有既有部署在下一次定时任务时静默登录失败，而症状只是"邮件没更新"。
+
+   **再配 Variables**（同一个页面的 *Variables* 标签页，不是 Secrets——主机名与端口不是敏感信息，
+   用 Variables 能在仓库页面直接看到当前值）：
+
+   | Variable | 说明 | QQ（默认可不设） | 163 | 126 |
+   |---|---|---|---|---|
+   | `IMAP_HOST` | IMAP 服务器 | `imap.qq.com` | `imap.163.com` | `imap.126.com` |
+   | `IMAP_PORT` | 端口（IMAP over TLS） | `993` | `993` | `993` |
+
+   两个都不设时回落到 QQ，所以既有部署行为逐字节不变。
+
+   ### 换用 163 / 126 邮箱
+
+   1. 网页版邮箱设置里开启 **IMAP/SMTP 服务**，生成**客户端授权密码**（163 会要求先绑手机）。
+      这个授权密码就是 `MAIL_PASS`，**不是你的登录密码**。
+   2. 本仓库 Secrets 加 `MAIL_USER`（邮箱地址）与 `MAIL_PASS`（授权密码）；旧的 `QQ_*` 可以留着不管。
+   3. 本仓库 Variables 加 `IMAP_HOST=imap.163.com`（126 则是 `imap.126.com`）；`IMAP_PORT` 留空即 993。
+   4. **先手动跑一次 `connectivity-test`**（Actions → 该 workflow → Run workflow）。它只登录不拉邮件，
+      30 秒内就能区分"凭据/主机配错了"与"服务商风控"——直接等定时任务的话，你只会看到邮件不更新。
+   5. 通了再等定时任务，或手动跑一次 `mail-sync`。
+
+   > **不需要为 163 改任何代码**：`src/config.js` 的 `clientInfo` 会让 imapflow 在连接时发送
+   > RFC2971 `ID` 命令，而 163/126 与 QQ 一样要求这个命令（不发就返回
+   > `Unsafe Login. Please contact kefu@188.com for help`）。这行当初是为 QQ 写的，但它是通用能力。
+   >
+   > **改不了的风险**：GitHub-hosted runner 在海外，网易与 QQ 都可能把境外 IMAP 登录判为风控。
+   > 这是服务商侧行为，代码层面无解，只能靠 `connectivity-test` 先验一次。
+   >
+   > **不支持 Outlook / Office365**：微软已关闭 IMAP 的 basic auth，必须走 OAuth2（XOAUTH2），
+   > 那需要注册 Azure 应用 + 刷新并保管 refresh token，与本项目"零后端、Gist 当唯一存储"的架构冲突。
+   > Gmail 可用，但需要 App Password（账号须先开两步验证），普通密码不行。
 
    > 换百炼：`AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`、`AI_MODEL=qwen-plus`。
    > 不配 `AI_API_KEY` 也能跑（M1 占位启发式：粗提取公司、不判阶段、confidence=0），配了才启用 M2 真实 AI 分析。
@@ -70,7 +105,7 @@ M0 目的：在投入真实联调前，验证最脆弱的假设——**QQ 授权
 
 ```bash
 npm install                 # 安装 imapflow + mailparser
-node src/connectivity-test.js   # M0 连通性（需 QQ_EMAIL/QQ_AUTHCODE）
+node src/connectivity-test.js   # M0 连通性（需 MAIL_USER/MAIL_PASS，或旧的 QQ_EMAIL/QQ_AUTHCODE）
 node index.js               # 跑一轮同步（需全部 Secrets）
 node index.js --report-error    # 兜底：把 meta 标记为 error（workflow failure() 调用）
 npm run check               # node --check 全部脚本
@@ -181,7 +216,7 @@ npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ t
 - `promptExtra`（在提示词后**追加**你的要求，如"只关注互联网/国企"）
 - `promptOverride`（v0.4.0，**整体替换**内置的「解析偏好」段；留空=用内置。详见下节）
 
-优先级：`mail-config.json` > 环境变量/Secret（如 `KEYWORDS`）> 代码默认值。密钥类（QQ/AI/PAT/MAIL_ENC_KEY）**不在**此文件，只能在 Secrets。
+优先级：`mail-config.json` > 环境变量/Secret（如 `KEYWORDS`）> 代码默认值。密钥类（邮箱授权码/AI/PAT/MAIL_ENC_KEY）**不在**此文件，只能在 Secrets。
 
 两端字段清单由 `test/web-check.js` 的一条契约断言钉死：网页端 `MAIL_CFG_DEFAULTS` 的键必须与 `applyMailConfigOverrides` 覆盖的键完全一致。任一侧加了字段而另一侧没跟上，失效是**静默**的（网页保存成功、Action 也照跑，只是那个字段永远不起作用）。
 

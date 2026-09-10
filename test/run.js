@@ -766,6 +766,39 @@ test('applyMailConfigOverrides 数值范围夹取，且与网页端 clampNum 的
   // minConfidence 是浮点，不能被取整（0.3 不能变 0）
   assert.strictEqual(config.applyMailConfigOverrides(base, { minConfidence: 0.35 }).minConfidence, 0.35);
 });
+test('IMAP 凭据双读：MAIL_USER/MAIL_PASS 优先，回落到 QQ_EMAIL/QQ_AUTHCODE', () => {
+  // 为什么要双读而不是直接改名：改名会让所有已配好 QQ 的部署在下一次定时任务时
+  // **静默登录失败**，而症状只是"邮件没更新"——没有报错、没有红线，极难归因。
+  const KEYS = ['MAIL_USER', 'MAIL_PASS', 'QQ_EMAIL', 'QQ_AUTHCODE'];
+  const saved = KEYS.map(k => [k, process.env[k]]);
+  const setEnv = obj => { for (const k of KEYS) { if (obj[k] === undefined) delete process.env[k]; else process.env[k] = obj[k]; } };
+  try {
+    setEnv({ MAIL_USER: 'new@163.com', MAIL_PASS: 'new-pass', QQ_EMAIL: 'old@qq.com', QQ_AUTHCODE: 'old-pass' });
+    let c = config.buildConfig();
+    assert.strictEqual(c.imap.user, 'new@163.com', '新名字优先');
+    assert.strictEqual(c.imap.pass, 'new-pass');
+    setEnv({ QQ_EMAIL: 'old@qq.com', QQ_AUTHCODE: 'old-pass' });
+    c = config.buildConfig();
+    assert.strictEqual(c.imap.user, 'old@qq.com', '只有旧名字时回落（既有部署零改动）');
+    assert.strictEqual(c.imap.pass, 'old-pass');
+    setEnv({ MAIL_USER: 'x@163.com' });
+    c = config.buildConfig();
+    assert.strictEqual(c.imap.user, 'x@163.com', '只设了新账号也能用（pass 为空会被 assertImapSecrets 拦下）');
+    // host/port 仍由环境变量决定，默认回落 QQ —— 能力一直在 config 里，
+    // v4.17.0 之前是 workflow 把它写死成 imap.qq.com 才堵住的。
+    setEnv({});
+    assert.strictEqual(config.buildConfig().imap.host, 'imap.qq.com', '未设 IMAP_HOST 时回落 QQ');
+    process.env.IMAP_HOST = 'imap.163.com';
+    assert.strictEqual(config.buildConfig().imap.host, 'imap.163.com', '设了就用别的邮箱');
+    delete process.env.IMAP_HOST;
+    // clientInfo 必须始终存在：163/126 与 QQ 一样要求 IMAP ID 命令，
+    // 不发就返回 "Unsafe Login"，症状是登录失败而不是提示不清。
+    assert.ok(config.buildConfig().imap.clientInfo, 'clientInfo（RFC2971 ID）不得被去掉');
+  } finally {
+    for (const [k, v] of saved) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
+
 test('gateReason：禁用→跳过（手动触发也拦）；enabled 是关闭开关不是频率控制', () => {
   const base = config.buildConfig();
   const disabled = config.applyMailConfigOverrides(base, { enabled: false });

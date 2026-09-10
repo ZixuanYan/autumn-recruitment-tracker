@@ -30,8 +30,13 @@ jobs:
 
       - name: Run IMAP connectivity test (M0 gate)
         env:
+          MAIL_USER: ${{ secrets.MAIL_USER || secrets.QQ_EMAIL }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS || secrets.QQ_AUTHCODE }}
           QQ_EMAIL: ${{ secrets.QQ_EMAIL }}
           QQ_AUTHCODE: ${{ secrets.QQ_AUTHCODE }}
-          IMAP_HOST: imap.qq.com
-          IMAP_PORT: '993'
+          # 与 mail-sync.yml 同源：走仓库 Variables，未设置回落 QQ。
+          # 换邮箱后**先跑这个连通性闸门**再等定时任务——它只登录不拉邮件，
+          # 能在 30 秒内区分"凭据/主机错了"与"服务商风控"，否则你只会看到邮件不更新。
+          IMAP_HOST: ${{ vars.IMAP_HOST || 'imap.qq.com' }}
+          IMAP_PORT: ${{ vars.IMAP_PORT || '993' }}
         run: node src/connectivity-test.js

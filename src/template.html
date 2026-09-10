@@ -194,11 +194,20 @@
         </table>
       </div>
       <div class="board" id="boardView" hidden>
+        <!-- 看板顺序（v4.17.0）：Offer 横条 → 自由选阶段投放区 → 进行中阶段列 → 已结束横条。
+             Offer 与已结束此前是**常驻列**（boardColumns 里 present.add 硬加），0 条也各占一列：
+             实测 5 列里 2 列是空的，白占 40% 横向宽度，而 .board-cols 是 minmax(232px,1fr)
+             横向滚动，阶段一多就得左右拖。它们是**终态**而不是流水线环节，所以改成上下横带。
+             投放区放在 Offer 下面：Offer 是"要去的地方"该一眼看到，投放区是工具（选当前没有列的
+             阶段），次要。三个容器都在 #boardView 内，所以拖拽/点击委托统一绑在 #boardView 上
+             ——绑在 #boardCols 上的话，移出它的两条横带会完全收不到事件。 -->
+        <section class="board-row" id="boardRowOffer" data-stage="Offer" aria-label="Offer 行"></section>
         <div class="board-drop-zone" id="boardDropZone" title="拖到阶段列直接推进（追加里程碑，向后拖二次确认）；拖到这里可自由选择阶段，含当前没有列的阶段 · 点卡片看详情，聚焦卡片按 A 键推进">
           <span class="drop-icon" aria-hidden="true">⤵</span>
           <span class="drop-text" id="boardDropText">拖到这里，自由选择阶段（含没有列的阶段）</span>
         </div>
         <div class="board-cols" id="boardCols"></div>
+        <section class="board-row" id="boardRowClosed" data-stage="已结束" aria-label="已结束 行"></section>
       </div>
       <div class="empty" id="emptyState" hidden></div>
     </section>
@@ -475,7 +484,10 @@
   <dialog id="mailSettingsDialog">
     <div class="modal-head"><h2>邮件提醒设置</h2><button class="close-btn" id="closeMailSettingsDialog" type="button" aria-label="关闭">×</button></div>
     <div class="form-body">
-      <p class="capture-note">这些设置保存在你自己的私有 Gist（<code>mail-config.json</code>），随云同步跨设备生效，autumn-mail-sync 的 Action 下次运行时读取。密钥类（QQ 授权码 / AI Key / GIST_PAT）不在此上传；「邮件解密密钥」也只存本机。</p>
+      <!-- 刻意在这里讲清"行为参数 vs 连接参数"的边界：换邮箱的人第一反应会到这个弹窗里找
+       邮箱设置，找不到就会以为不支持。授权码不进 Gist 是安全决定，不是没做完——
+       Gist 凭 URL 可被明文读取（本项目既有教训），把邮箱钥匙挂在那里风险面大一个量级。 -->
+      <p class="capture-note">这些设置保存在你自己的私有 Gist（<code>mail-config.json</code>），随云同步跨设备生效，autumn-mail-sync 的 Action 下次运行时读取。<strong>这里配的是「行为」，不是「连哪个邮箱」</strong>：邮箱地址、授权码、IMAP 主机与端口都在 Action 仓库的 Secrets / Variables 里（QQ / 163 / 126 均可，换邮箱的步骤见该仓库 README），刻意不放到网页端——授权码进 Gist 等于把邮箱钥匙挂在一个凭 URL 就能读到的地方。<br>密钥类（邮箱授权码 / AI Key / GIST_PAT）不在此上传；「邮件解密密钥」也只存本机。</p>
       <div class="form-grid">
         <div class="field full"><label for="mailCfgKeywords">预筛关键词（用 | 分隔）</label><input class="control" id="mailCfgKeywords" type="text" maxlength="2000" placeholder="面试|笔试|校招|录用…"><div class="hint">只有命中关键词且非噪声（退订/营销等）的邮件才会发给 AI，收紧可省 token。</div></div>
         <div class="field"><label for="mailCfgMinConf">置信度阈值</label><input class="control" id="mailCfgMinConf" type="number" step="0.05" min="0" max="1"><div class="hint">低于此值的建议丢弃（0~1）</div></div>

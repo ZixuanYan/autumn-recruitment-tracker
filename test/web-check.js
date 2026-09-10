@@ -2252,5 +2252,99 @@ check('邮件字段的控件必须显式 width:auto（base.css 的全局 .contro
     `.mail-ed-wide 的 flex-basis 应 ≥240px（实际 ${basis ? basis[1] : '?'}px），太窄会让短文本也显示不全`);
 });
 
+// ─────────────────────────────────────────────
+// v4.17.0 看板：终态横带（Offer 上 / 已结束 下）+ 卡片瘦身
+// ─────────────────────────────────────────────
+check('看板结构：Offer 横带 → 投放区 → 阶段列 → 已结束横带（顺序即语义）', () => {
+  const t = html.replace(/<!--[\s\S]*?-->/g, '');   // 解释性注释里也写着这些 id，必须先剥
+  const at = id => t.indexOf(`id="${id}"`);
+  const offer = at('boardRowOffer'), zone = at('boardDropZone'), cols = at('boardCols'), closed = at('boardRowClosed');
+  for (const [name, pos] of [['boardRowOffer', offer], ['boardDropZone', zone], ['boardCols', cols], ['boardRowClosed', closed]]) {
+    assert.ok(pos > 0, `template 里找不到 #${name}`);
+  }
+  assert.ok(offer < zone, 'Offer 横带必须在投放区**上方**（Offer 是"要去的地方"，该一眼看到；投放区是工具，次要）');
+  assert.ok(zone < cols, '投放区必须在阶段列之前');
+  assert.ok(cols < closed, '已结束横带必须在阶段列**下方**');
+  // 两条横带必须带 data-stage：handleBoardDrop 靠 closest 拿到它才知道推进到哪个阶段，
+  // 少了这个属性，拖进去会静默无反应（col 为 null → 直接 return）。
+  for (const [id, stage] of [['boardRowOffer', 'Offer'], ['boardRowClosed', '已结束']]) {
+    const m = new RegExp(`id="${id}"[^>]*data-stage="${stage}"|data-stage="${stage}"[^>]*id="${id}"`).test(t);
+    assert.ok(m, `#${id} 必须带 data-stage="${stage}"，否则拖进去拿不到目标阶段`);
+  }
+});
+
+check('boardColumns 必须显式排除 Offer / 已结束（否则同一条记录在列与横带各渲染一次）', () => {
+  // present 是从记录里收集阶段名的：只要有一条记录 stage='Offer'，不 delete 它就会同时
+  // 出现在列与横带里 → 两个 DOM 节点、两个可拖拽卡片，拖其中一个另一个不动，看起来像"看板坏了"。
+  const src = extractFunction(html, 'boardColumns').replace(/\/\/[^\n]*/g, '');
+  assert.ok(src.length > 40, '产物里找不到 boardColumns');
+  assert.ok(/present\.delete\('Offer'\)/.test(src), "boardColumns 必须 delete('Offer')");
+  assert.ok(/present\.delete\('已结束'\)/.test(src), "boardColumns 必须 delete('已结束')");
+  assert.ok(!/present\.add\('Offer'\)/.test(src), '不得再常驻添加 Offer 列（它已由横带承载）');
+  assert.ok(!/present\.add\('已结束'\)/.test(src), '不得再常驻添加 已结束 列');
+});
+
+check('看板事件委托必须绑在 #boardView 上，且投放目标包含横带', () => {
+  // 两条横带在 #boardCols **外面**。委托若仍绑在 #boardCols 上，横带里的卡片既拖不动、
+  // 头部也点不了——而且完全不报错，只是"没反应"。
+  assert.ok(/const boardView = \$\('#boardView'\)/.test(html), '应取 #boardView 作为委托根');
+  for (const ev of ['dragstart', 'dragend', 'dragover', 'drop', 'click', 'keydown']) {
+    assert.ok(html.includes(`boardView.addEventListener('${ev}'`), `${ev} 委托应绑在 boardView 上`);
+    assert.ok(!html.includes(`boardCols.addEventListener('${ev}'`),
+      `${ev} 仍绑在 boardCols 上：横带移出 #boardCols 后会收不到这个事件`);
+  }
+  // 投放目标与高亮清理都要覆盖横带
+  assert.ok(/BOARD_DROP_TARGETS = '\.board-col, \.board-row'/.test(html),
+    '投放目标选择器应同时包含 .board-col 与 .board-row');
+  assert.ok(html.includes(".board-col.is-drop, .board-row.is-drop"),
+    'is-drop 高亮的清理范围要含 .board-row，否则拖完横带会留着一圈蓝框');
+  assert.ok(html.includes(".board-col-head[data-stage], .board-row-head[data-stage]"),
+    '点击/键盘筛选要同时认列头与横带头');
+  // dragend 的清理范围要按 boardView 查（横带里的卡片同样需要复位 is-dragging）
+  assert.ok(/boardView\.querySelectorAll\('\.board-card\.is-dragging'\)/.test(html),
+    'dragend 应在 boardView 范围内清理 is-dragging');
+});
+
+check('看板卡片瘦身：意向度只在 Offer、终态不催跟进，但进行中阶段的停滞提醒必须保留', () => {
+  const src = extractFunction(html, 'boardCardHtml').replace(/\/\/[^\n]*/g, '');
+  assert.ok(src.length > 200, '产物里找不到 boardCardHtml');
+  assert.ok(/record\.stage === 'Offer' \? intentDotsHtml/.test(src),
+    '意向度点应只在 Offer 卡片上渲染（比较 Offer 时才有决策价值）');
+  assert.ok(/if \(stalled && !terminal\)/.test(src),
+    '停滞提醒必须排除终态：已结束还催你跟进是荒谬的');
+  // 反向钉住：不能把停滞提醒整个砍掉——它是"该跟进谁"的唯一线索
+  assert.ok(/chips\.push\(`<span class="board-chip stalled">停滞/.test(src),
+    '进行中阶段的「停滞 N 天」chip 不得被顺手删掉');
+});
+
+check('IMAP 主机与凭据不得在 workflow 里写死（能力在 config.js，曾被部署配置堵死）', () => {
+  // v4.17.0 之前 config.js 早就写了 `host: strEnv('IMAP_HOST', 'imap.qq.com')`——能力一直在，
+  // 但两个 workflow 的 env 里硬写着 `IMAP_HOST: imap.qq.com`，于是环境变量永远读不到别的值。
+  // 这是"代码可配置 / 部署写死"的经典组合：看代码以为支持多邮箱，实际只能 QQ，且没有任何报错。
+  // 本守卫只存在于 monorepo（web-check.js 不在同步进部署仓的 TEST_FILES 里），
+  // 因为部署仓的 workflow 被提升了一级目录，路径与这里不同。
+  const WF_DIR = path.resolve(__dirname, '../services/mail-sync/.github/workflows');
+  for (const f of ['mail-sync.yml', 'connectivity-test.yml']) {
+    const y = fs.readFileSync(path.join(WF_DIR, f), 'utf8');
+    // 写死形态：IMAP_HOST: 后面直接跟主机名。注释里的示例用的是 `IMAP_HOST = imap.163.com`
+    // （等号），不会被这条误伤。
+    assert.ok(!/^\s*IMAP_HOST:\s*imap\./m.test(y), `${f} 又把 IMAP_HOST 写死成字面量了`);
+    assert.ok(/IMAP_HOST:\s*\$\{\{\s*vars\.IMAP_HOST\s*\|\|\s*'imap\.qq\.com'\s*\}\}/.test(y),
+      `${f} 的 IMAP_HOST 应走仓库 Variables 并回落 QQ（既有部署零改动）`);
+    assert.ok(/IMAP_PORT:\s*\$\{\{\s*vars\.IMAP_PORT\s*\|\|\s*'993'\s*\}\}/.test(y),
+      `${f} 的 IMAP_PORT 同样应走 Variables`);
+    assert.ok(/MAIL_USER:\s*\$\{\{\s*secrets\.MAIL_USER\s*\|\|\s*secrets\.QQ_EMAIL\s*\}\}/.test(y),
+      `${f} 应双读凭据：MAIL_USER 优先、回落 QQ_EMAIL`);
+    assert.ok(/MAIL_PASS:\s*\$\{\{\s*secrets\.MAIL_PASS\s*\|\|\s*secrets\.QQ_AUTHCODE\s*\}\}/.test(y),
+      `${f} 应双读授权码：MAIL_PASS 优先、回落 QQ_AUTHCODE`);
+    // 旧 Secret 仍要透传：只留新名字的话，尚未设置 MAIL_USER 的既有部署会拿到空值
+    assert.ok(/QQ_EMAIL:\s*\$\{\{\s*secrets\.QQ_EMAIL\s*\}\}/.test(y),
+      `${f} 仍需透传 QQ_EMAIL，否则未迁移的部署会静默拿到空账号`);
+  }
+  // 面向用户的错误提示不该再假定是 QQ
+  const y = fs.readFileSync(path.join(WF_DIR, 'mail-sync.yml'), 'utf8');
+  assert.ok(!/MAIL_SYNC_ERROR:.*QQ 授权码/.test(y), 'MAIL_SYNC_ERROR 文案不该再写死"QQ 授权码"');
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;

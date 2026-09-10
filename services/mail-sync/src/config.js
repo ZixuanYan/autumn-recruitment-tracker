@@ -102,9 +102,15 @@ function buildConfig() {
     imap: Object.freeze({
       host: strEnv('IMAP_HOST', 'imap.qq.com'),
       port: intEnv('IMAP_PORT', 993),
-      user: strEnv('QQ_EMAIL', ''),
-      pass: strEnv('QQ_AUTHCODE', ''),
-      // clientInfo 触发 imapflow 在 connect() 时发送 RFC2971 ID 命令，破 QQ 'Unsafe Login'
+      // 凭据双读：MAIL_USER / MAIL_PASS 优先，回落到 QQ_EMAIL / QQ_AUTHCODE。
+      // 旧名字是 QQ 专属的，但改名的代价是"所有既有部署下一次定时任务静默登录失败"，
+      // 而症状只是邮件不更新、极难归因，所以两个都读、新的优先。
+      user: strEnv('MAIL_USER', '') || strEnv('QQ_EMAIL', ''),
+      pass: strEnv('MAIL_PASS', '') || strEnv('QQ_AUTHCODE', ''),
+      // clientInfo 触发 imapflow 在 connect() 时发送 RFC2971 ID 命令。
+      // 注释此前写的是"破 QQ 'Unsafe Login'"，但这**不是 QQ 专属**：网易 163/126 有完全相同的
+      // 要求（不发 ID 就返回 "Unsafe Login. Please contact kefu@188.com for help"）。
+      // 所以接入 163 不需要额外写代码——这一行本来就是通用能力，只是当初按 QQ 的场景记的。
       clientInfo: Object.freeze({ name: 'autumn-mail-sync', version: '0.1.0', vendor: 'personal' })
     }),
     sinceDays: intEnv('SINCE_DAYS', 30),

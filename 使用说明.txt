@@ -17,5 +17,5 @@ https://zixuanyan.github.io/autumn-recruitment-tracker/
 docs/安装与使用教程.md
 docs/数据保存与迁移.md
 
-版本：网页 v4.16.2｜插件 v5.5.0
+版本：网页 v4.17.0｜插件 v5.5.0
 数据存储标识：autumnRecruitmentTracker.records.v1

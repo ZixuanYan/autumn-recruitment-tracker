@@ -1283,8 +1283,11 @@
         updateSameCompanyHint();   // 公司名变了，「该公司已有 N 个岗位」提示要跟着刷新
         showToast('已拆成企业与机构，两个都还能改');
       });
-      const boardCols = $('#boardCols');
-      boardCols.addEventListener('dragstart', event => {
+      // 看板的拖拽与点击委托统一绑在 #boardView（而不是 #boardCols）：
+      // v4.17.0 起 Offer 与已结束改成了 #boardCols **外面**的两条横带，
+      // 绑在 #boardCols 上的话它们的卡片既拖不动、列头也点不了，而且不报错。
+      const boardView = $('#boardView');
+      boardView.addEventListener('dragstart', event => {
         const card = event.target.closest('.board-card[data-id]');
         if (!card) return;
         draggingRecordId = card.dataset.id;
@@ -1295,24 +1298,26 @@
           event.dataTransfer.setData('text/plain', card.dataset.id);
         }
       });
-      boardCols.addEventListener('dragend', () => {
+      boardView.addEventListener('dragend', () => {
         draggingRecordId = null;
-        boardCols.querySelectorAll('.board-card.is-dragging').forEach(node => node.classList.remove('is-dragging'));
-        boardCols.querySelectorAll('.board-col.is-drop').forEach(node => node.classList.remove('is-drop'));
+        // 清理范围也要跟着放宽：横带里的卡片与 .board-row.is-drop 高亮同样需要复位，
+        // 只清 .board-col 的话拖完 Offer 横带会留着一圈蓝框。
+        boardView.querySelectorAll('.board-card.is-dragging').forEach(node => node.classList.remove('is-dragging'));
+        boardView.querySelectorAll('.board-col.is-drop, .board-row.is-drop').forEach(node => node.classList.remove('is-drop'));
         clearBoardDropZone();
       });
-      boardCols.addEventListener('dragover', handleBoardDragOver);
-      boardCols.addEventListener('drop', handleBoardDrop);
-      boardCols.addEventListener('click', event => {
-        // 列头点击 → 切到表格视图并按该阶段筛选（查看该阶段全部明细）；优先级高于卡片
-        const head = event.target.closest('.board-col-head[data-stage]');
+      boardView.addEventListener('dragover', handleBoardDragOver);
+      boardView.addEventListener('drop', handleBoardDrop);
+      boardView.addEventListener('click', event => {
+        // 列头 / 横带头点击 → 切到表格视图并按该阶段筛选（查看该阶段全部明细）；优先级高于卡片
+        const head = event.target.closest('.board-col-head[data-stage], .board-row-head[data-stage]');
         if (head) { applyBoardColFilter(head.dataset.stage); return; }
         const card = event.target.closest('.board-card[data-id]');
         if (card) openRecordFocus(card.dataset.id);
       });
-      boardCols.addEventListener('keydown', event => {
+      boardView.addEventListener('keydown', event => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
-        const head = event.target.closest('.board-col-head[data-stage]');
+        const head = event.target.closest('.board-col-head[data-stage], .board-row-head[data-stage]');
         if (head) { event.preventDefault(); applyBoardColFilter(head.dataset.stage); return; }
         const card = event.target.closest('.board-card[data-id]');
         if (!card) return;

@@ -779,41 +779,67 @@ function seedRecords() {
   ];
 }
 
-check('boardColumns = 出现过的阶段（按预设序）+ 末尾固定 Offer / 已结束', () => {
+check('boardColumns = 只含出现过记录的**进行中**阶段（Offer / 已结束 交给横带）', () => {
   seedRecords();
   const cols = sandbox2.boardColumns(sandbox2.getVisibleRecords());
   // 沙箱内数组属于另一个 realm，deepStrictEqual 会因原型不同失败 → 按内容比较
-  assert.strictEqual(cols.join('|'), '已投递|一面|Offer|已结束');
-  // 没有任何记录时也应给出 Offer / 已结束 两列，便于直接拖入
-  assert.strictEqual(sandbox2.boardColumns([]).join('|'), 'Offer|已结束');
+  assert.strictEqual(cols.join('|'), '已投递|一面',
+    'r3 是 Offer，必须由 #boardRowOffer 横带承载，不能再出现在列里（否则同一条记录渲染两次）');
+  // 没有任何记录时不生成列；两条横带由 template 常驻，始终可拖入
+  assert.strictEqual(sandbox2.boardColumns([]).join('|'), '');
+  // 关键回归：present 是从记录里收集的，不显式 delete 终态就会同时出现在列与横带里
+  const onlyTerminal = [{ id: 'x', stage: 'Offer' }, { id: 'y', stage: '已结束' }];
+  assert.strictEqual(sandbox2.boardColumns(onlyTerminal).join('|'), '',
+    'Offer / 已结束 必须被显式排除，否则同一条记录会在列与横带各渲染一次');
 });
 
-check('renderBoard 渲染列与卡片，同公司卡片共用 companyColor', () => {
+check('renderBoard 渲染列与两条终态横带，同公司卡片共用 companyColor', () => {
   seedRecords();
   sandbox2.renderBoard();
   const h = boardColsEl().innerHTML;
+  const offerRow = els2['#boardRowOffer'].innerHTML;
+  const closedRow = els2['#boardRowClosed'].innerHTML;
   assert.ok(h.includes('board-col'), '应有列');
-  assert.ok(h.includes('data-id="r1"') && h.includes('data-id="r3"'));
-  assert.ok(h.includes('拖到这里'), '空列有占位');
-  const colorOf = id => {
-    const seg = h.slice(h.indexOf(`data-id="${id}"`));
+  assert.ok(h.includes('data-id="r1"') && h.includes('data-id="r2"'), '进行中阶段的卡片在列里');
+  assert.ok(!h.includes('data-id="r3"'), 'Offer 记录不得再出现在列里（否则与横带重复渲染）');
+  assert.ok(offerRow.includes('data-id="r3"'), 'Offer 记录应落在 Offer 横带');
+  assert.ok(offerRow.includes('board-row-head'), '横带要有可点头部（点击跳表格视图看该阶段明细）');
+  // 已结束横带为空 → 只剩一根细条 + 拖放提示，不留一块空白区
+  assert.ok(!closedRow.includes('board-card'), '没有已结束记录时横带里不该有卡片');
+  assert.ok(closedRow.includes('拖到这里'), '空横带仍要给出拖放提示（它始终是投放目标）');
+  const colorOf = (html, id) => {
+    const seg = html.slice(html.indexOf(`data-id="${id}"`));
     return /--company-color:(#[0-9a-f]{6})/i.exec(seg.slice(0, 200))[1];
   };
-  assert.strictEqual(colorOf('r1'), colorOf('r2'), '「腾讯」与「腾讯科技有限公司」应同色（同一家）');
-  assert.notStrictEqual(colorOf('r1'), colorOf('r3'));
+  assert.strictEqual(colorOf(h, 'r1'), colorOf(h, 'r2'), '「腾讯」与「腾讯科技有限公司」应同色（同一家）');
+  assert.notStrictEqual(colorOf(h, 'r1'), colorOf(offerRow, 'r3'), '列与横带应共用同一份 companyGroupIndex 口径');
 });
 
-check('boardCardHtml 带机构与意向度点（批次 chip 已随字段删除）', () => {
+check('boardCardHtml 带机构；意向度点只在 Offer 卡片上，终态不再催跟进', () => {
   seedRecords();
   const h = sandbox2.boardCardHtml(sandbox2.records[0]);
   // 机构跟在卡片的公司名后面（.board-card-unit），刻意不做成 chip：
   // 公司名 + 机构 + chip 会让同一信息在一张 232px 的卡上出现两次。
   assert.ok(h.includes('board-card-unit'), '有机构容器');
   assert.ok(h.includes('云计算事业部'), '且显示实际机构值');
-  assert.ok(h.includes('intent-dots'), '意向度点');
+  assert.ok(!h.includes('intent-dots'),
+    '进行中阶段（r1=一面）不显示意向度点：那是比较 Offer 时的排序信号，在「一面」列上不指向任何下一步动作');
   assert.ok(h.includes('draggable="true"'));
-  const noUnit = sandbox2.boardCardHtml(sandbox2.records[2]);
+  const noUnit = sandbox2.boardCardHtml(sandbox2.records[2]);   // r3 = Offer
   assert.ok(!noUnit.includes('board-card-unit'), '没填机构时不渲染空容器');
+  assert.ok(noUnit.includes('intent-dots'), 'Offer 卡片必须显示意向度点（横带瘦身只砍终态的噪声，不砍这个）');
+  // 终态卡片不该再催跟进：停滞提醒即使算出来了也不渲染。
+  // findStalled 本身用 isActive 排除了终态，所以这里显式传 stalledDays=20 才能真正验到
+  // boardCardHtml 自己的那道防线（否则恒为 0，断言是空的）。
+  const closed = sandbox2.boardCardHtml(
+    { id: 'z', company: 'X', position: 'p', stage: '已结束', intent: 3, deadline: '2026-09-30', scheduleAt: '2026-09-20T10:00' },
+    null, 20);
+  assert.ok(!closed.includes('停滞'), '已结束卡片不得出现「停滞 N 天」');
+  assert.ok(!closed.includes('board-chip'), '已结束卡片不该有任何截止/安排/停滞 chip');
+  assert.ok(!closed.includes('intent-dots'), '已结束也不显示意向度点（只有 Offer 显示）');
+  // 对照组：进行中的阶段同样 stalled=20 时**必须**给出提醒，别把两道防线一起砍了
+  const live = sandbox2.boardCardHtml({ id: 'w', company: 'Y', position: 'q', stage: '一面' }, null, 20);
+  assert.ok(live.includes('停滞 20 天'), '进行中的阶段仍要有停滞提醒（这是"该跟进谁"的唯一线索）');
 });
 
 check('setRecordsView 切换容器可见性 / 按钮态，并把偏好写进 localStorage', () => {
@@ -1909,7 +1935,10 @@ check('投放区 dragover 在无拖拽时不放行；dragend/drop 之外不误�
 check('handleBoardDrop：普通列走 advanceRecordTo（既有路径不回归），「已结束」列改为打开弹窗预填结束原因', async () => {
   seedRecords();
   calls.openAdvance.length = 0;
-  const colEvent = (stage, id) => ({ target: { closest: sel => (sel === '.board-col' ? { dataset: { stage } } : null) }, preventDefault() {}, dataTransfer: { getData: () => id } });
+  // 生产代码用的是 BOARD_DROP_TARGETS = '.board-col, .board-row'（横带也是投放目标）。
+  // 桩按"包含 .board-col"匹配而不是全等，这样将来再放宽选择器不会又一次静默失效——
+  // 全等匹配时 closest 返回 null、处理器早退，症状是"拖拽没反应"而测试报的是阶段没推进。
+  const colEvent = (stage, id) => ({ target: { closest: sel => (String(sel).includes('.board-col') ? { dataset: { stage } } : null) }, preventDefault() {}, dataTransfer: { getData: () => id } });
   vm.runInContext('draggingRecordId = "r1"', sandbox2);
   await sandbox2.handleBoardDrop(colEvent('二面', 'r1'));
   assert.strictEqual(sandbox2.records[0].stage, '二面', '拖到普通列直接推进');

@@ -510,6 +510,34 @@
     .board-drop-zone .drop-icon { font-size: 17px; line-height: 1; }
     .board-drop-zone.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
     .board-drop-zone.is-drop { border-style: solid; border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 2px var(--accent); }
+    /* ── 终态横带（Offer 在上、已结束 在下，v4.17.0）──────────────────────
+       此前 Offer 与已结束是 .board-cols 里的**常驻列**：0 条也各占一列（实测 5 列里 2 列是空的，
+       白占 40% 横向宽度），而 .board-cols 是 minmax(232px,1fr) 横向滚动，阶段一多就得左右拖。
+       它们是终态而不是流水线环节，所以改成整宽横带：列继续横向滚，横带固定不滚，互不挤压。
+       视觉沿用 .board-col 那一套（surface-2 底 + 圆角 + 可点头部），免得看起来像外挂上去的。
+       间距用显式 margin 而不是把 .board 改成 flex column + gap：flex 子项的 min-width:auto
+       会解析成 min-content，正是 base.css 里记过的"看板四列把整列撑宽、overflow-x 失效"那个坑。 */
+    .board-row { margin-bottom: 12px; border-radius: var(--r-lg); background: var(--surface-2); }
+    .board-row.is-drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+    /* Offer 行左侧一道 Apple 绿：与台账表格里 tbody tr[data-is-offer="true"] 的语义色一致，
+       让"这是终点"在扫视时可辨，不必先读标题。已结束不给色条——它是中性收尾，不该抢眼。 */
+    .board-row[data-stage="Offer"] { box-shadow: inset 3px 0 0 var(--ok-bright); }
+    .board-row[data-stage="Offer"].is-drop { box-shadow: inset 3px 0 0 var(--ok-bright), inset 0 0 0 2px var(--accent); }
+    /* 紧跟在列后面的那条（已结束）：.board-cols 自带 padding-bottom:6px，再补 6px 凑成 12px 节奏 */
+    .board-cols + .board-row { margin-top: 6px; margin-bottom: 0; }
+    .board-row-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: var(--r-lg) var(--r-lg) 0 0; transition: background .16s var(--ease); }
+    /* hover 中性化、focus-visible 给可见 outline —— 与 .board-col-head 完全同款，
+       div 型可交互元素不在全局 focus-visible 规则覆盖范围内，不给就是键盘用户看不见焦点。 */
+    .board-row-head:hover { background: var(--wash-2); }
+    .board-row-head:focus-visible { background: var(--wash-2); outline: 2px solid var(--accent); outline-offset: -2px; }
+    .board-row-head .badge { flex: 0 0 auto; }
+    .board-row-hint { color: var(--muted); font-size: 12px; }
+    /* 卡片横向铺开。给基准宽 + 下限，否则公司名长短不一时会排得参差不齐；
+       用 flex 而不是 grid-auto-flow:column，因为横带里的卡片数量少且不需要等宽对齐。 */
+    .board-row-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 10px; }
+    .board-row-body .board-card { flex: 0 1 260px; min-width: 190px; }
+    /* 空的时候整条收成一根细条（提示文字在头部），不留一块 46px 的空白区 */
+    .board-row-body:empty { display: none; }
     .board-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(232px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
     .board-col { min-width: 0; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: none; }
     .board-col.is-drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }

@@ -902,6 +902,34 @@
     .board-drop-zone .drop-icon { font-size: 17px; line-height: 1; }
     .board-drop-zone.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
     .board-drop-zone.is-drop { border-style: solid; border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 2px var(--accent); }
+    /* ── 终态横带（Offer 在上、已结束 在下，v4.17.0）──────────────────────
+       此前 Offer 与已结束是 .board-cols 里的**常驻列**：0 条也各占一列（实测 5 列里 2 列是空的，
+       白占 40% 横向宽度），而 .board-cols 是 minmax(232px,1fr) 横向滚动，阶段一多就得左右拖。
+       它们是终态而不是流水线环节，所以改成整宽横带：列继续横向滚，横带固定不滚，互不挤压。
+       视觉沿用 .board-col 那一套（surface-2 底 + 圆角 + 可点头部），免得看起来像外挂上去的。
+       间距用显式 margin 而不是把 .board 改成 flex column + gap：flex 子项的 min-width:auto
+       会解析成 min-content，正是 base.css 里记过的"看板四列把整列撑宽、overflow-x 失效"那个坑。 */
+    .board-row { margin-bottom: 12px; border-radius: var(--r-lg); background: var(--surface-2); }
+    .board-row.is-drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+    /* Offer 行左侧一道 Apple 绿：与台账表格里 tbody tr[data-is-offer="true"] 的语义色一致，
+       让"这是终点"在扫视时可辨，不必先读标题。已结束不给色条——它是中性收尾，不该抢眼。 */
+    .board-row[data-stage="Offer"] { box-shadow: inset 3px 0 0 var(--ok-bright); }
+    .board-row[data-stage="Offer"].is-drop { box-shadow: inset 3px 0 0 var(--ok-bright), inset 0 0 0 2px var(--accent); }
+    /* 紧跟在列后面的那条（已结束）：.board-cols 自带 padding-bottom:6px，再补 6px 凑成 12px 节奏 */
+    .board-cols + .board-row { margin-top: 6px; margin-bottom: 0; }
+    .board-row-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: var(--r-lg) var(--r-lg) 0 0; transition: background .16s var(--ease); }
+    /* hover 中性化、focus-visible 给可见 outline —— 与 .board-col-head 完全同款，
+       div 型可交互元素不在全局 focus-visible 规则覆盖范围内，不给就是键盘用户看不见焦点。 */
+    .board-row-head:hover { background: var(--wash-2); }
+    .board-row-head:focus-visible { background: var(--wash-2); outline: 2px solid var(--accent); outline-offset: -2px; }
+    .board-row-head .badge { flex: 0 0 auto; }
+    .board-row-hint { color: var(--muted); font-size: 12px; }
+    /* 卡片横向铺开。给基准宽 + 下限，否则公司名长短不一时会排得参差不齐；
+       用 flex 而不是 grid-auto-flow:column，因为横带里的卡片数量少且不需要等宽对齐。 */
+    .board-row-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 10px; }
+    .board-row-body .board-card { flex: 0 1 260px; min-width: 190px; }
+    /* 空的时候整条收成一根细条（提示文字在头部），不留一块 46px 的空白区 */
+    .board-row-body:empty { display: none; }
     .board-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(232px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
     .board-col { min-width: 0; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: none; }
     .board-col.is-drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
@@ -1440,11 +1468,20 @@
         </table>
       </div>
       <div class="board" id="boardView" hidden>
+        <!-- 看板顺序（v4.17.0）：Offer 横条 → 自由选阶段投放区 → 进行中阶段列 → 已结束横条。
+             Offer 与已结束此前是**常驻列**（boardColumns 里 present.add 硬加），0 条也各占一列：
+             实测 5 列里 2 列是空的，白占 40% 横向宽度，而 .board-cols 是 minmax(232px,1fr)
+             横向滚动，阶段一多就得左右拖。它们是**终态**而不是流水线环节，所以改成上下横带。
+             投放区放在 Offer 下面：Offer 是"要去的地方"该一眼看到，投放区是工具（选当前没有列的
+             阶段），次要。三个容器都在 #boardView 内，所以拖拽/点击委托统一绑在 #boardView 上
+             ——绑在 #boardCols 上的话，移出它的两条横带会完全收不到事件。 -->
+        <section class="board-row" id="boardRowOffer" data-stage="Offer" aria-label="Offer 行"></section>
         <div class="board-drop-zone" id="boardDropZone" title="拖到阶段列直接推进（追加里程碑，向后拖二次确认）；拖到这里可自由选择阶段，含当前没有列的阶段 · 点卡片看详情，聚焦卡片按 A 键推进">
           <span class="drop-icon" aria-hidden="true">⤵</span>
           <span class="drop-text" id="boardDropText">拖到这里，自由选择阶段（含没有列的阶段）</span>
         </div>
         <div class="board-cols" id="boardCols"></div>
+        <section class="board-row" id="boardRowClosed" data-stage="已结束" aria-label="已结束 行"></section>
       </div>
       <div class="empty" id="emptyState" hidden></div>
     </section>
@@ -1721,7 +1758,10 @@
   <dialog id="mailSettingsDialog">
     <div class="modal-head"><h2>邮件提醒设置</h2><button class="close-btn" id="closeMailSettingsDialog" type="button" aria-label="关闭">×</button></div>
     <div class="form-body">
-      <p class="capture-note">这些设置保存在你自己的私有 Gist（<code>mail-config.json</code>），随云同步跨设备生效，autumn-mail-sync 的 Action 下次运行时读取。密钥类（QQ 授权码 / AI Key / GIST_PAT）不在此上传；「邮件解密密钥」也只存本机。</p>
+      <!-- 刻意在这里讲清"行为参数 vs 连接参数"的边界：换邮箱的人第一反应会到这个弹窗里找
+       邮箱设置，找不到就会以为不支持。授权码不进 Gist 是安全决定，不是没做完——
+       Gist 凭 URL 可被明文读取（本项目既有教训），把邮箱钥匙挂在那里风险面大一个量级。 -->
+      <p class="capture-note">这些设置保存在你自己的私有 Gist（<code>mail-config.json</code>），随云同步跨设备生效，autumn-mail-sync 的 Action 下次运行时读取。<strong>这里配的是「行为」，不是「连哪个邮箱」</strong>：邮箱地址、授权码、IMAP 主机与端口都在 Action 仓库的 Secrets / Variables 里（QQ / 163 / 126 均可，换邮箱的步骤见该仓库 README），刻意不放到网页端——授权码进 Gist 等于把邮箱钥匙挂在一个凭 URL 就能读到的地方。<br>密钥类（邮箱授权码 / AI Key / GIST_PAT）不在此上传；「邮件解密密钥」也只存本机。</p>
       <div class="form-grid">
         <div class="field full"><label for="mailCfgKeywords">预筛关键词（用 | 分隔）</label><input class="control" id="mailCfgKeywords" type="text" maxlength="2000" placeholder="面试|笔试|校招|录用…"><div class="hint">只有命中关键词且非噪声（退订/营销等）的邮件才会发给 AI，收紧可省 token。</div></div>
         <div class="field"><label for="mailCfgMinConf">置信度阈值</label><input class="control" id="mailCfgMinConf" type="number" step="0.05" min="0" max="1"><div class="hint">低于此值的建议丢弃（0~1）</div></div>
@@ -1851,7 +1891,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.16.2';
+      const APP_VERSION = '4.17.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -4486,26 +4526,47 @@
       }
 
       // 看板列 = 当前可见记录里出现过的阶段（按 stageOrder 排序）+ 末尾固定 Offer / 已结束（便于拖入）
+      // 只生成「当前有记录的进行中阶段」。Offer 与已结束不再常驻成列——它们是**终态**
+      // 而不是流水线环节，v4.17.0 起由 #boardRowOffer / #boardRowClosed 两条横带承载。
+      // ⚠️ 必须显式 delete 这两个阶段：present 是从记录里收集的，只要有一条记录的 stage
+      // 是 Offer，它就会同时出现在列与横带里 → 同一条记录被渲染两次（两个 DOM 节点、
+      // 两个可拖拽卡片，拖其中一个另一个不动，看起来像"看板坏了"）。
       function boardColumns(visible) {
         const present = new Set(visible.map(r => String(r.stage || '待投递')));
-        present.add('Offer');
-        present.add('已结束');
+        present.delete('Offer');
+        present.delete('已结束');
         return [...present].sort((a, b) => stageOrder(a) - stageOrder(b) || String(a).localeCompare(String(b), 'zh-CN'));
+      }
+
+      // 终态横带（Offer / 已结束）。与阶段列的差别只有排布方向：列是纵向堆叠 + 横向滚动，
+      // 横带是整宽 + 卡片横向 flex-wrap 铺开。Offer 通常只有 1–3 个，横排正好便于对比。
+      // data-stage 挂在容器上（template 里写死），所以 handleBoardDrop 的
+      // closest('.board-col, .board-row') 能直接复用同一套推进逻辑，
+      // 包括「拖到已结束要先问结束原因」那个特殊分支。
+      function boardRowHtml(stage, items, groupKeyById, stalledById) {
+        return `<div class="board-row-head" data-stage="${escapeHtml(stage)}" role="button" tabindex="0" title="点击在表格视图查看「${escapeHtml(stage)}」阶段的全部明细"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span><span class="board-col-count">${items.length}</span>${items.length ? '' : '<span class="board-row-hint">拖到这里</span>'}</div><div class="board-row-body">${items.map(item => boardCardHtml(item, groupKeyById, stalledById.get(item.id))).join('')}</div>`;
       }
 
       function boardCardHtml(record, groupKeyById, stalledDays) {
         const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
         const dl = deadlineInfo(record.deadline);
-        const dlClosed = ['Offer', '已结束'].includes(record.stage);
+        // 终态（Offer / 已结束）：截止日期、最近安排、停滞提醒都不再有意义——
+        // 事情已经结束了，继续催跟进只是噪声。
+        const terminal = ['Offer', '已结束'].includes(record.stage);
         const schedule = parseLocal(record.scheduleAt);
         const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
         const chips = [];
         // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
         // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
-        if (dl && !dlClosed) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
-        if (schedule && !dlClosed) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
-        if (stalled) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
-        const dots = intentDotsHtml(record.intent);
+        if (dl && !terminal) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
+        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
+        // 停滞提醒只对进行中的阶段有意义。findStalled 本身就用 isActive 排除了
+        // 待投递/Offer/已结束，所以这里是**第二道防线**：万一将来 isActive 放宽，
+        // 终态卡片也不会长出"停滞 N 天"（已结束还催你跟进是荒谬的）。
+        if (stalled && !terminal) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
+        // 意向度点**只在 Offer 上显示**：那是你自己打的排序信号，比较 Offer 时才有决策价值；
+        // 在「已投递 / 测评」这些列上它不指向任何下一步动作，只是每卡多一个元素。
+        const dots = record.stage === 'Offer' ? intentDotsHtml(record.intent) : '';
         return `<button class="board-card${stalled ? ' is-stalled' : ''}" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
           <div class="board-card-company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="board-card-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}</div>
           <div class="board-card-position">${escapeHtml(record.position || '—')}</div>
@@ -4529,20 +4590,34 @@
             <div class="board-col-body">${items.length ? items.map(item => boardCardHtml(item, groupKeyById, stalledById.get(item.id))).join('') : '<div class="board-empty">拖到这里</div>'}</div>
           </section>`;
         }).join('');
+        // 两条终态横带。刻意复用同一份 visible / groupKeyById / stalledById：
+        // 各自重算一次的话，两处口径迟早分叉（比如公司色或停滞天数算法改了只改一处）。
+        // 注意 boardColumns 已经把这两个阶段从列里 delete 掉了，所以不会重复渲染。
+        for (const [sel, stage] of [['#boardRowOffer', 'Offer'], ['#boardRowClosed', '已结束']]) {
+          const row = $(sel);
+          if (row) row.innerHTML = boardRowHtml(stage, visible.filter(r => String(r.stage || '') === stage), groupKeyById, stalledById);
+        }
       }
 
       // 看板拖拽：dragover 时高亮当前列并清除其它列（dragleave 在子元素间频繁触发，不用它做状态管理）
+      // 投放区有自己的 dragover/drop 监听（绑在 #boardDropZone 元素上）。委托上移到 #boardView
+      // 之后它会同时收到冒泡上来的同一事件，所以这里显式让开，避免两个处理器都跑一遍。
+      const BOARD_DROP_TARGETS = '.board-col, .board-row';
+      function isInDropZone(event) { return !!(event.target.closest && event.target.closest('#boardDropZone')); }
+
       function handleBoardDragOver(event) {
-        const col = event.target.closest('.board-col');
+        if (isInDropZone(event)) return;
+        const col = event.target.closest(BOARD_DROP_TARGETS);
         if (!col || !draggingRecordId) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
-        document.querySelectorAll('.board-col.is-drop').forEach(node => { if (node !== col) node.classList.remove('is-drop'); });
+        document.querySelectorAll('.board-col.is-drop, .board-row.is-drop').forEach(node => { if (node !== col) node.classList.remove('is-drop'); });
         col.classList.add('is-drop');
       }
       async function handleBoardDrop(event) {
-        const col = event.target.closest('.board-col');
-        document.querySelectorAll('.board-col.is-drop').forEach(node => node.classList.remove('is-drop'));
+        if (isInDropZone(event)) return;
+        const col = event.target.closest(BOARD_DROP_TARGETS);
+        document.querySelectorAll('.board-col.is-drop, .board-row.is-drop').forEach(node => node.classList.remove('is-drop'));
         clearBoardDropZone();
         if (!col) return;
         event.preventDefault();
@@ -6359,8 +6434,11 @@
         updateSameCompanyHint();   // 公司名变了，「该公司已有 N 个岗位」提示要跟着刷新
         showToast('已拆成企业与机构，两个都还能改');
       });
-      const boardCols = $('#boardCols');
-      boardCols.addEventListener('dragstart', event => {
+      // 看板的拖拽与点击委托统一绑在 #boardView（而不是 #boardCols）：
+      // v4.17.0 起 Offer 与已结束改成了 #boardCols **外面**的两条横带，
+      // 绑在 #boardCols 上的话它们的卡片既拖不动、列头也点不了，而且不报错。
+      const boardView = $('#boardView');
+      boardView.addEventListener('dragstart', event => {
         const card = event.target.closest('.board-card[data-id]');
         if (!card) return;
         draggingRecordId = card.dataset.id;
@@ -6371,24 +6449,26 @@
           event.dataTransfer.setData('text/plain', card.dataset.id);
         }
       });
-      boardCols.addEventListener('dragend', () => {
+      boardView.addEventListener('dragend', () => {
         draggingRecordId = null;
-        boardCols.querySelectorAll('.board-card.is-dragging').forEach(node => node.classList.remove('is-dragging'));
-        boardCols.querySelectorAll('.board-col.is-drop').forEach(node => node.classList.remove('is-drop'));
+        // 清理范围也要跟着放宽：横带里的卡片与 .board-row.is-drop 高亮同样需要复位，
+        // 只清 .board-col 的话拖完 Offer 横带会留着一圈蓝框。
+        boardView.querySelectorAll('.board-card.is-dragging').forEach(node => node.classList.remove('is-dragging'));
+        boardView.querySelectorAll('.board-col.is-drop, .board-row.is-drop').forEach(node => node.classList.remove('is-drop'));
         clearBoardDropZone();
       });
-      boardCols.addEventListener('dragover', handleBoardDragOver);
-      boardCols.addEventListener('drop', handleBoardDrop);
-      boardCols.addEventListener('click', event => {
-        // 列头点击 → 切到表格视图并按该阶段筛选（查看该阶段全部明细）；优先级高于卡片
-        const head = event.target.closest('.board-col-head[data-stage]');
+      boardView.addEventListener('dragover', handleBoardDragOver);
+      boardView.addEventListener('drop', handleBoardDrop);
+      boardView.addEventListener('click', event => {
+        // 列头 / 横带头点击 → 切到表格视图并按该阶段筛选（查看该阶段全部明细）；优先级高于卡片
+        const head = event.target.closest('.board-col-head[data-stage], .board-row-head[data-stage]');
         if (head) { applyBoardColFilter(head.dataset.stage); return; }
         const card = event.target.closest('.board-card[data-id]');
         if (card) openRecordFocus(card.dataset.id);
       });
-      boardCols.addEventListener('keydown', event => {
+      boardView.addEventListener('keydown', event => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
-        const head = event.target.closest('.board-col-head[data-stage]');
+        const head = event.target.closest('.board-col-head[data-stage], .board-row-head[data-stage]');
         if (head) { event.preventDefault(); applyBoardColFilter(head.dataset.stage); return; }
         const card = event.target.closest('.board-card[data-id]');
         if (!card) return;
