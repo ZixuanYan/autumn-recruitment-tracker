@@ -386,8 +386,13 @@
         return ROUTE_ALIASES[raw] || 'overview';
       }
 
+      // is-entering 的摘除定时器。声明在 switchView 外面：连续快速切视图时
+      // 必须先 clearTimeout 上一次的，否则旧定时器会在新视图入场途中把类摘掉、动画被截断。
+      let enteringTimer = 0;
+
       function switchView(name) {
         const route = VIEW_META[name] ? name : 'overview';
+        clearTimeout(enteringTimer);
         document.querySelectorAll('.view[data-view]').forEach(view => {
           const active = view.dataset.view === route;
           view.hidden = !active;
@@ -397,6 +402,14 @@
             view.classList.add('is-entering');
           }
         });
+        // is-entering 是**瞬时**状态，入场动画放完就摘掉（此前加上就永不摘，名不副实）。
+        // 摘掉之后，后续的数据重渲染（新建记录、云同步刷新统计卡与看板列）不会再触发一次入场——
+        // 否则每改一条记录，整个统计区/看板/简历区块都要重新淡入一遍，比没有动画更吵。
+        // 1000ms = 视图自身 .4s + 最末一个错峰元素 8×60ms 起步 + 自身 .4s，留足余量。
+        // 摘类不会造成视觉跳变：fade-up / view-in 都是 both 填充，终态与自然态一致。
+        enteringTimer = setTimeout(() => {
+          document.querySelectorAll('.view.is-entering').forEach(view => view.classList.remove('is-entering'));
+        }, 1000);
         document.querySelectorAll('.nav-item[data-route]').forEach(item => {
           item.classList.toggle('is-active', item.dataset.route === route);
         });

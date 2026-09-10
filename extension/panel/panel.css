@@ -4,9 +4,16 @@
  * 三条硬规则（test/extension-ui.js 的静态守卫会逐项断言）：
  * 1. 颜色与圆角一律走 var(--aja-*)，令牌由 panel.js 从 common/tokens.js 注入并跟随系统深浅主题；
  *    本文件里唯一允许的字面色是 #fff（强调色按钮上的文字，深浅主题下都需要白字）。
- * 2. 零渐变、零毛玻璃、零 emoji、零阴影。Side Panel 是浏览器 UI 的一部分，
+ * 2. 零渐变、零 emoji、零阴影。Side Panel 是浏览器 UI 的一部分，
  *    靠 1px 边框分层就够；阴影只会让它看起来像"贴在浏览器上的第三方浮层"。
- * 3. 动效不超过 150ms，且 hover/active 一律不改盒模型（padding/margin/transform/width/height），
+ *    毛玻璃有且只有一处例外：顶栏 .p-header —— 它是本面板唯一的 sticky chrome，
+ *    内容从它下面滚过时磨砂才有意义（规范把 glass-nav 给顶栏也是这个理由）。
+ *    该例外必须带 @supports 降级，见下方 .p-header 的注释。
+ * 3. 动效上限读 AJA.MOTION_MAX_MS（当前 320ms，定义在 common/tokens.js，
+ *    test/extension-ui.js 直接读它做断言，所以改令牌即改上限，不用改守卫）。
+ *    本文件实际只用到 fast 120ms（hover 底色）与 base 180ms（Apple 的 hover 档），
+ *    slow 320ms 留给抽屉/toast 一类位移较大的过渡。
+ *    且 hover/active 一律不改盒模型（padding/margin/transform/width/height），
  *    否则鼠标划过时元素会"跳"。
  *
  * 收录表单的样式不在此文件：它与表单模板同源，见 common/capture-form.js 的 css()，
@@ -31,6 +38,16 @@ body {
 }
 
 .aja-ico { flex: 0 0 auto; display: block; }
+
+/* 数据位统一等宽数字。规范：「数字全局使用 tabular-nums，让表格与仪表数据稳如实体表盘」。
+   面板里会变的数字有：待处理项的采集日期（.p-pend-meta）、区块计数徽章（.p-badge）、
+   简历字段值（.p-chip-val，含毕业时间/经历时间一类日期）、状态条与 toast 里的条数。
+   不加的后果是「共 9 条」变「共 10 条」时整行宽度跳一下——面板只有 ~360px，跳得很明显。
+   .p-ver 刻意不在此列：它是版本号 v5.x.x，属于代码/元数据档，本身就用等宽字体，
+   与网页端 .field-library-type 的处理一致。 */
+.p-pend-meta, .p-badge, .p-chip-val, .p-status, .p-toast {
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---------------- 顶栏 ---------------- */
 .p-header {
@@ -462,3 +479,19 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* 前庭敏感用户的动效总开关。
+   本面板有 p-fade-in 与十几处 transition，没有这个块就一个都关不掉——
+   网页端 base.css 早有同款，插件端一直缺（三个 CSS 来源里零处 prefers-reduced-motion）。
+   用通配符 + !important 而不是逐个选择器列举：逐个列举的清单一定会漏，
+   且新增动效时不会有人记得回来补。
+   capture-form.js 的 css() 始终与本文件一起注入面板文档，所以它被这里覆盖，不必再写一份。 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

@@ -1110,4 +1110,57 @@ check('panel.html 的区块 id 齐全（顺序断言与桩初始化都按 id 定
   }
 });
 
+check('面板的数据位统一 tabular-nums（面板只有 ~360px，数字变一位整行就跳）', () => {
+  // 剥注释再断言：本规则的说明注释里逐个列出了这些选择器名，
+  // 不剥的话注释会替被删的声明"顶罪"。
+  const css = SRC.panelCss.replace(/\/\*[\s\S]*?\*\//g, '');
+  const DATA = ['.p-pend-meta', '.p-badge', '.p-chip-val', '.p-status', '.p-toast'];
+  const missing = DATA.filter(sel => {
+    const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // 允许写在合并选择器里（.a, .b, .c { … }），所以按"包含该类名的规则块"找
+    const blocks = [...css.matchAll(new RegExp('([^{}]*' + esc + '[^{}]*)\\{[^{}]*\\}', 'g'))].map(m => m[0]);
+    return !blocks.some(b => b.includes('tabular-nums'));
+  });
+  assert.deepStrictEqual(missing, [], `这些数据位缺 font-variant-numeric: tabular-nums：${missing.join(', ')}`);
+  // .p-ver 是版本号（v5.x.x），属代码/元数据档，刻意排除在等宽数字之外——它本身就用等宽字体
+  const ver = /\.p-ver\s*\{[^{}]*\}/.exec(css);
+  assert.ok(ver, 'panel.css 里找不到 .p-ver');
+  assert.ok(/ui-monospace|monospace/.test(ver[0]), '.p-ver 应继续用等宽字体（版本号是元数据，不是业务数字）');
+});
+
+check('panel.css 头部硬规则里写的动效上限与 AJA.MOTION_MAX_MS 一致（注释说谎比没注释更糟）', () => {
+  // 这条守卫本可以自动抓到 v5.2.0 遗留的那句"动效不超过 150ms"：
+  // tokens.js 早已把上限提到 320 并让守卫直接读它，注释却还写着 150，
+  // 于是下一个人照注释写 150ms 会被守卫判违规、照守卫写 320ms 会以为自己在破规矩。
+  const m = /动效上限读 AJA\.MOTION_MAX_MS（当前 (\d+)ms/.exec(SRC.panelCss);
+  assert.ok(m, 'panel.css 头部硬规则应写明动效上限读自 AJA.MOTION_MAX_MS，而不是硬写一个数字');
+  assert.strictEqual(Number(m[1]), AJA.MOTION_MAX_MS,
+    `注释里写的上限 ${m[1]}ms 与 AJA.MOTION_MAX_MS 的 ${AJA.MOTION_MAX_MS}ms 不一致——注释已过时`);
+  // 硬规则里不许再出现"零毛玻璃"这类与代码矛盾的绝对表述（.p-header 就是有玻璃）
+  assert.ok(!/零毛玻璃/.test(SRC.panelCss),
+    'panel.css 的硬规则不应再声称"零毛玻璃"：.p-header 有且只有一处 glass，注释要如实写出这个例外');
+  const glass = (SRC.panelCss.match(/backdrop-filter:/g) || []).length;
+  assert.ok(glass >= 2, `.p-header 的磨砂需要 backdrop-filter 与 -webkit- 前缀两条，实际 ${glass} 条`);
+});
+
+check('插件端两个样式上下文都有 prefers-reduced-motion 总开关（面板文档 + shadow root）', () => {
+  // 面板文档由 panel.css 覆盖；迷你卡片与侧栏活在 Shadow DOM 里，文档级媒体查询进不来，
+  // 必须由 01-core.js 的 COMPONENT_CSS 自带一份。capture-form.js 的 css() 在这两个上下文里
+  // 都拼在上述两份之后，因此不需要第三份——但这个前提要钉住，删掉任一份都会静默失效
+  //（动效照常播放，控制台零报错，只有前庭敏感用户会不舒服）。
+  // 通配符 + !important 是重点：逐个选择器列举的清单一定会漏，且新增动效时没人记得回来补。
+  const RX = (prop) => new RegExp(
+    '@media \\(prefers-reduced-motion: reduce\\)\\s*\\{[\\s\\S]{0,300}?\\*\\s*,\\s*\\*::before\\s*,\\s*\\*::after\\s*\\{[\\s\\S]{0,300}?'
+    + prop + ':\\s*\\.01ms\\s*!important');
+  for (const [name, src] of [['panel.css', SRC.panelCss], ['01-core.js 的 COMPONENT_CSS', SRC.core]]) {
+    assert.ok(RX('animation-duration').test(src),
+      `${name} 缺 prefers-reduced-motion 的 animation 降级（要求通配符 + .01ms !important）`);
+    assert.ok(RX('transition-duration').test(src),
+      `${name} 缺 prefers-reduced-motion 的 transition 降级——只压 animation 的话 hover 过渡照旧`);
+  }
+  // 面板确实有动效可关，否则这条守卫是在保护空气
+  assert.ok(/@keyframes p-fade-in/.test(SRC.panelCss), 'panel.css 应有 p-fade-in（toast 入场）');
+  assert.ok(/@keyframes aja-fade-in/.test(SRC.core), '01-core.js 应有 aja-fade-in（迷你卡片 toast 入场）');
+});
+
 runAll();

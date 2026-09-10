@@ -22,7 +22,7 @@
 
 | 内容 | 适用场景 | 下载 |
 | --- | --- | --- |
-| 秋招求职与简历助手 插件 v5.3.1 | 电脑 Chrome/Edge 网申填表 + 一键收录 + 暂存箱 | [前往插件目录](https://github.com/ZixuanYan/autumn-recruitment-tracker/tree/main/extension) |
+| 秋招求职与简历助手 插件 v5.4.0 | 电脑 Chrome/Edge 网申填表 + 一键收录 + 暂存箱 | [前往插件目录](https://github.com/ZixuanYan/autumn-recruitment-tracker/tree/main/extension) |
 
 > 手机端不能安装 Chrome 扩展程序。手机可以使用网页本身（含看板、洞察与云同步）。
 
@@ -59,8 +59,8 @@
 
 ## 版本
 
-- 网页：v4.12.0
-- 浏览器插件：v5.3.1
+- 网页：v4.13.0
+- 浏览器插件：v5.4.0
 - 数据存储标识：`autumnRecruitmentTracker.records.v1`
 
 更新功能时必须保留数据存储标识，并兼容旧字段，避免用户升级后找不到原有记录。

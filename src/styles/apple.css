@@ -28,18 +28,43 @@
       --primary: #0071e3; --primary-dark: #0066cc; --primary-soft: #e6f1fc;
       --seal: #d70015; --seal-soft: #ffebea; --silver: #6e6e73; --silver-soft: #f5f5f7;
       --green: #1f7a35; --green-soft: #e3f7e8; --amber: #a05a00; --amber-soft: #fff3e2; --red: #d70015; --red-soft: #ffebea;
+      /* 危险色的 hover 档。必须有独立的一档：.kv-del-btn 一类控件的**常态**底色就是
+         --danger-soft(#ffebea)，若 hover 也用同一个值，鼠标划上去就完全没有反馈
+         （静默失效、零报错）。#ffe0de 此前是 .btn-danger:hover 里的字面色，现在收进令牌。 */
+      --danger-soft-hover: #ffe0de;
       --r-xl: 24px; --r-lg: 18px; --r-md: 12px; --r-sm: 10px; --r-pill: 999px;
       /* 机加工三件套废弃，改为「发丝线 + 近不可见承托影」。
          ⚠️ --hi 必须置**语法合法的零值**，禁止写 none：基础层有
          `box-shadow: var(--hi), var(--ring), var(--sh-ambient)`，任一项为 none 会让整条声明失效，
          大量元素瞬间失去全部阴影（且不报错）。--ring 退化为发丝内描边，仅作基础层旧引用兜底。 */
       --ring: 0 0 0 1px var(--line); --hi: inset 0 0 0 rgba(255, 255, 255, 0);
-      --sh-ambient: 0 1px 2px rgba(0, 0, 0, .04), 0 8px 24px rgba(0, 0, 0, .06);
+      --sh-ambient: var(--sh-card), 0 8px 24px rgba(0, 0, 0, .06);
       --sh-pop: 0 12px 40px rgba(0, 0, 0, .12);
+      /* 「轻微加深」的四档柔底 + 一档卡片承托影。
+         为什么必须收进令牌而不是就地写 rgba(0,0,0,.xx)：在**黑底**上 rgba(0,0,0,.04) 是
+         不可见的（黑上加黑），于是 hover / 按下 / 激活 / 选中态会静默失去全部视觉反馈——
+         控制台零报错、元素也都在，只是"点了没反应"。收进令牌之后深色模式只要翻这五个值，
+         不必去追那 12 个分散的使用点（漏一个就是一处哑掉的交互）。
+         四档按"多弱"排而不是按用途排，这样新增交互时不必再 invent 新值。 */
+      --wash-1: rgba(0, 0, 0, .02);   /* 最弱：看板拖放占位区 */
+      --wash-2: rgba(0, 0, 0, .03);   /* 弱：侧栏页脚静态柔底、看板列头 hover / focus */
+      --wash-3: rgba(0, 0, 0, .04);   /* 标准：导航项与文字按钮 hover、页面眉标底 */
+      --wash-4: rgba(0, 0, 0, .06);   /* 稍强：进度条轨道（要比 hover 更实，否则看不出是槽） */
+      --sh-card: 0 1px 2px rgba(0, 0, 0, .04);   /* 卡片承托影：规范说的"接近不可见，只做承托" */
       --ease: cubic-bezier(.28, .11, .32, 1);
       --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      /* 三档字体分工（设计资源的原意，v4.13.0 才真正落实）：
+         · --font-display —— 只给 ≥20px 的大数字与标题（统计卡数值、漏斗值、洞察指标值）。
+           SF Pro Display 是为大字号设计的，用在小字上字形细节会糊。
+         · --font-sans    —— 正文，以及**所有小字号数据**（序号、日期、计数、百分比、眉标）。
+           数据靠 font-variant-numeric: tabular-nums 拿等宽对齐，不靠等宽字体。
+         · --font-mono    —— 只给真正的代码与键盘符号：kbd、行内 code、提示词快照正文、
+           字段库的类型令牌（text/textarea/date）。
+         曾经 28 处业务数字全用 --font-mono，对齐是齐的，但气质是"终端/开发者工具"；
+         规范里同样的数据（2,458.90 / 128GB / 表格价格列）一律是 display 或正文 + tabular。
+         字重同步从 700 收到 600：规范写明「Bold 700 · 谨慎使用」，semibold 是 Apple 数据字的档。 */
       --shadow: var(--sh-ambient); --radius: var(--r-lg);
       /* 兼容别名：供仍引用旧变量名的基础层规则使用（--paper 同时是 .brand-mark 的文字色，必须是浅色） */
       --paper: #f5f5f7; --surface-soft: #f5f5f7; --shadow-1: var(--sh-ambient); --shadow-2: var(--sh-pop); --radius-sm: 10px;
@@ -60,7 +85,7 @@
     button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     /* M1a 白卡类：废弃机加工三件套（内高光 + ring + 环境影），改为「1px 发丝线 + 近不可见承托影」。
        规范依据：发丝分割线替代大部分投影。dialog 用 24px 圆角与 lift 阴影（浮层档）。 */
-    .panel, .stat-card, .tool-card, .resume-section-block, .distribution { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    .panel, .stat-card, .tool-card, .resume-section-block, .distribution { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-card); }
     dialog { background: var(--surface); border: 0; border-radius: var(--r-xl); box-shadow: var(--sh-pop); }
     dialog::backdrop { background: rgba(0, 0, 0, .3); backdrop-filter: blur(6px); }
     /* 侧栏是全站唯一的 sticky chrome，所以磨砂玻璃用在这里、而不是设计资源规范的顶栏
@@ -75,19 +100,23 @@
     /* 导航项用圆角矩形（Apple 系统设置侧栏的做法）而不是胶囊——胶囊是**按钮**的语言。
        is-active 必须显式 box-shadow:none，压掉基础层那条 inset 3px 蓝条。 */
     .nav-item { border-radius: var(--r-md); min-height: 40px; color: var(--muted); font-weight: 500; transition: background .18s var(--ease), color .18s var(--ease); }
-    .nav-item:hover { background: rgba(0, 0, 0, .04); color: var(--ink); }
+    .nav-item:hover { background: var(--wash-3); color: var(--ink); }
     .nav-item.is-active { background: var(--surface-2); color: var(--ink); font-weight: 600; box-shadow: none; }
     .nav-icon { font-size: 15px; }
     .nav-icon svg { width: 17px; height: 17px; }
-    .sidebar-footer { background: rgba(0, 0, 0, .03); border: 0; box-shadow: none; color: var(--muted); border-radius: var(--r-md); }
+    .sidebar-footer { background: var(--wash-2); border: 0; box-shadow: none; color: var(--muted); border-radius: var(--r-md); }
     .topbar { min-height: 60px; }
     h1 { font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: -.025em; line-height: 1.15; }
-    .page-kicker { display: inline-block; margin-bottom: 4px; padding: 3px 10px; border-radius: var(--r-pill); background: rgba(0, 0, 0, .04); color: var(--muted); font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
+    .page-kicker { display: inline-block; margin-bottom: 4px; padding: 3px 10px; border-radius: var(--r-pill); background: var(--wash-3); color: var(--muted); font-family: var(--font-sans); font-size: 10px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
     .subtitle { color: #86868b; font-size: 13px; line-height: 1.4; }
     .brand-mark { border-radius: 12px; background: var(--accent); color: #fff; box-shadow: none; }
     /* Apple 按钮：hover **只变暗不位移**（废弃 translateY 抬升与彩色投影）；:active 按压态用
        --surface-3（= base-300 #ededf2，设计资源 secondary button hover 同值）。 */
-    .btn { border: 1px solid var(--line-strong); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); min-height: 38px; padding: 0 16px; font-weight: 500; font-size: 14px; box-shadow: none; transition: background .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease); }
+    /* 按钮三档尺寸严格落在规范的 32 / 44 / 52 上（此前 .btn 是 38px，档位外的野值）：
+       .btn-small = 32（padding-x 16、12.5px 字），.btn = 44（padding-x 24、14px 字）。
+       44 同时是 Apple 的最小触控目标，所以这一档在手机上也站得住。
+       代价是工具栏会长 6px——这是刻意用一点密度换秩序感。 */
+    .btn { border: 1px solid var(--line-strong); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); min-height: 44px; padding: 0 24px; font-weight: 500; font-size: 14px; box-shadow: none; transition: background .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease); }
     .btn:hover { transform: none; background: var(--surface-2); border-color: #c7c7cc; box-shadow: none; }
     .btn:active { transform: scale(.97); background: var(--surface-3); }
     .btn-primary { background: var(--accent); border-color: transparent; color: #fff; box-shadow: none; }
@@ -98,10 +127,10 @@
     .btn-soft { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; box-shadow: none; }
     .btn-soft:hover { background: #d6e8fb; }
     .btn-danger { background: var(--danger-soft); color: var(--danger); border-color: transparent; box-shadow: none; }
-    .btn-danger:hover { background: #ffe0de; }
-    .btn-small { min-height: 32px; padding: 0 12px; font-size: 12.5px; font-weight: 500; }
+    .btn-danger:hover { background: var(--danger-soft-hover); }
+    .btn-small { min-height: 32px; padding: 0 16px; font-size: 12.5px; font-weight: 500; }
     .text-button { border-radius: var(--r-pill); color: var(--muted); }
-    .text-button:hover { background: rgba(0, 0, 0, .04); color: var(--ink); }
+    .text-button:hover { background: var(--wash-3); color: var(--ink); }
     .text-button.danger:hover { background: var(--danger-soft); color: var(--danger); }
     /* 表单：44px 胶囊 + 1px #d2d2d7 描边，focus 只把边框变蓝、**无光晕**（Apple 规范）。
        ⚠️ .control:focus 的 outline:none 特异性高于全局元素级 focus-visible 规则，所以必须补
@@ -118,19 +147,19 @@
        基础层是 700 且继承 ink，在小尺寸密集表单里过重。
        .exp-fields-grid label 与 .safety-label 特异性更高，不受本条影响。 */
     label { color: #86868b; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
-    .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+    .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
     .stat-card { padding: 14px 16px; }
     .stat-card:first-child { grid-column: span 2; }
     .stat-top { color: var(--muted); font-size: 12px; font-weight: 500; }
     .stat-icon { width: 26px; height: 26px; border-radius: 8px; background: var(--surface-2); box-shadow: none; display: grid; place-items: center; color: var(--accent); }
     .stat-icon svg { width: 15px; height: 15px; }
     .stat-card[data-metric="offer"] .stat-icon { background: var(--offer-gold-soft); color: var(--offer-gold); box-shadow: none; }
-    .stat-number { font-family: var(--font-mono); font-size: 28px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); margin-top: 8px; }
+    .stat-number { font-family: var(--font-display); font-size: 28px; font-weight: 600; letter-spacing: -.02em; color: var(--ink); margin-top: 8px; font-variant-numeric: tabular-nums; }
     .stage-grid { gap: 8px; }
     /* 内描边环 → 真边框（阶段色阶的 --stage-border 本来就是为此准备的） */
     .stage-cell { border: 1px solid var(--stage-border, var(--line)); border-radius: var(--r-md); box-shadow: none; background: var(--stage-soft, var(--surface-2)); padding: 9px 10px; }
     .stage-meta { color: var(--stage-color, var(--muted)); font-size: 11.5px; font-weight: 600; }
-    .bar { height: 5px; background: rgba(0, 0, 0, .06); }
+    .bar { height: 5px; background: var(--wash-4); }
     /* 进度条填充要有宽度过渡（设计资源 progress fill = duration-500）；旧版无过渡，
        切换视图时条是瞬间跳变的。 */
     .bar-fill { background: var(--stage-color, var(--accent)); transition: width .5s var(--ease); }
@@ -173,7 +202,7 @@
     /* Offer 行左条改**装饰亮档** --ok-bright(#34c759)：3px 色条不承载文字，用亮色更醒目；
        文本与实底一律走 --ok(#1f7a35)，亮绿白字只有 2.22:1，严禁用于文字。 */
     tbody tr[data-is-offer="true"] { box-shadow: inset 3px 0 0 var(--ok-bright); }
-    .record-no { color: var(--muted); font-family: var(--font-mono); }
+    .record-no { color: var(--muted); font-family: var(--font-sans); }
     .company { font-weight: 650; }
     .company-link:hover { color: var(--accent-ink); }
     .overdue { color: var(--danger); }
@@ -236,6 +265,29 @@
     /* 页面切换 400ms + 位移 16px（规范原值；旧版 .45s/12px） */
     .view.is-entering { animation: view-in .4s var(--ease); }
     @keyframes view-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    /* ── 入场错峰 stagger ──────────────────────────────────────────────
+       规范：stagger 60ms · 同组元素错峰进入；进入动画只做 fade + translateY(16px)，
+       不做弹跳/旋转/粒子。四个天然组：总览统计卡、洞察区块、看板列、简历区块。
+       · 挂在 .view.is-entering 下 → 只在**切换视图**时播一次；is-entering 由 switchView
+         在 1s 后摘掉，此后的数据重渲染不会再触发（见 20-runtime.js 的说明）。
+       · 用 :is() + :nth-child 而不是给每个元素写 style="--stagger-i:N"：纯 CSS、零渲染改动，
+         不会因为某个渲染函数忘了写内联变量而静默失去错峰。
+       · 时长取 .4s（与视图切换同档）而不是规范的 720ms：720ms 是「section 进入视口」的档，
+         营销页滚动触发、一生只播一次；工具页每次切视图都播，720ms 会显得拖沓。
+       · 错峰封顶第 8 个（480ms 起）：一组里第 20 个元素等 1.2 秒才出现是灾难。
+       · 命令面板的结果列表刻意**不**错峰——它每敲一个字就重渲染，错峰会变成闪烁干扰。
+       · 关闭入口是 base.css 的 @media (prefers-reduced-motion)（通配符 + !important），
+         它压得住这里的 animation-delay，前庭敏感用户看到的是直接呈现。 */
+    @keyframes fade-up { from { opacity: 0; transform: translate3d(0, 16px, 0); } to { opacity: 1; transform: none; } }
+    .view.is-entering :is(.stats, .insight-grid, .board-cols, .resume-layout) > * { animation: fade-up .4s var(--ease) both; animation-delay: calc(var(--stagger-i, 0) * 60ms); }
+    .view.is-entering :is(.stats, .insight-grid, .board-cols, .resume-layout) > :nth-child(2) { --stagger-i: 1; }
+    .view.is-entering :is(.stats, .insight-grid, .board-cols, .resume-layout) > :nth-child(3) { --stagger-i: 2; }
+    .view.is-entering :is(.stats, .insight-grid, .board-cols, .resume-layout) > :nth-child(4) { --stagger-i: 3; }
+    .view.is-entering :is(.stats, .insight-grid, .board-cols, .resume-layout) > :nth-child(5) { --stagger-i: 4; }
+    .view.is-entering :is(.stats, .insight-grid, .board-cols, .resume-layout) > :nth-child(6) { --stagger-i: 5; }
+    .view.is-entering :is(.stats, .insight-grid, .board-cols, .resume-layout) > :nth-child(7) { --stagger-i: 6; }
+    .view.is-entering :is(.stats, .insight-grid, .board-cols, .resume-layout) > :nth-child(8) { --stagger-i: 7; }
+    .view.is-entering :is(.stats, .insight-grid, .board-cols, .resume-layout) > :nth-child(n+9) { --stagger-i: 8; }
     @media (max-width: 1100px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stat-card:first-child { grid-column: span 1; } }
     @media (max-width: 780px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
@@ -282,23 +334,23 @@
     .funnel-row { display: flex; align-items: stretch; gap: 6px; flex-wrap: wrap; }
     .funnel-step { flex: 1 1 120px; min-width: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
     .funnel-label { color: var(--muted); font-size: 11.5px; font-weight: 600; }
-    .funnel-value { display: flex; align-items: baseline; gap: 7px; margin: 3px 0 7px; font-family: var(--font-mono); font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+    .funnel-value { display: flex; align-items: baseline; gap: 7px; margin: 3px 0 7px; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
     .funnel-rate { color: var(--accent-ink); font-family: var(--font-sans); font-size: 11.5px; font-weight: 650; }
     .funnel-bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
     .funnel-bar-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width .5s var(--ease); }
     .funnel-arrow { flex: 0 0 auto; align-self: center; color: var(--faint); font-size: 14px; }
-    .insight-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; }
+    .insight-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 24px; }
     .spark { display: block; width: 100%; height: 46px; }
-    .spark-axis { display: flex; justify-content: space-between; margin-top: 2px; color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+    .spark-axis { display: flex; justify-content: space-between; margin-top: 2px; color: var(--muted); font-family: var(--font-sans); font-size: 11px; font-variant-numeric: tabular-nums; }
     .dwell-list { display: grid; gap: 2px; }
     .dwell-row { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 12.5px; }
     .dwell-row:last-child { border-bottom: 0; }
-    .dwell-days { margin-left: auto; font-family: var(--font-mono); font-weight: 700; }
+    .dwell-days { margin-left: auto; font-family: var(--font-sans); font-weight: 600; font-variant-numeric: tabular-nums; }
     .dwell-count { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; }
     .insight-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
     .insight-metric { padding: 11px 13px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
     .insight-metric-label { color: var(--muted); font-size: 11.5px; font-weight: 600; }
-    .insight-metric-value { margin-top: 2px; font-family: var(--font-mono); font-size: 21px; font-weight: 700; letter-spacing: -.02em; }
+    .insight-metric-value { margin-top: 2px; font-family: var(--font-display); font-size: 21px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
     .insight-metric-sub { margin-top: 1px; color: var(--muted); font-size: 11.5px; }
     .alert-list { display: grid; gap: 6px; }
     /* 规范 alert：base-200 底 + 左 3px **真边框**语义条（不是 inset shadow）。
@@ -326,7 +378,7 @@
     .multi-company::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--company-color, var(--accent)); }
     .multi-company-head { display: flex; align-items: baseline; gap: 9px; }
     .multi-company-head strong { font-size: 13.5px; }
-    .multi-company-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; }
+    .multi-company-count { margin-left: auto; color: var(--muted); font-family: var(--font-sans); font-size: 11.5px; font-variant-numeric: tabular-nums; }
     .multi-company-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .multi-company-item { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); box-shadow: none; font-size: 12px; color: var(--ink-2); }
     .multi-company-item:hover { background: var(--accent-soft); color: var(--accent-ink); }
@@ -359,7 +411,7 @@
     /* 双层条：底色 = 该城市投递量占最大城市的比例，实色 = 其中拿到 Offer 的部分 */
     .city-bar-total { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--accent); opacity: .26; transition: width .5s var(--ease); }
     .city-bar-offer { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--ok-bright); transition: width .5s var(--ease); }
-    .city-num { text-align: right; font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .city-num { text-align: right; font-family: var(--font-sans); font-weight: 600; font-variant-numeric: tabular-nums; }
     .city-offer { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
     .city-offer.has { color: var(--ok); font-weight: 700; }
     .city-row.is-unknown { color: var(--muted); }
@@ -378,7 +430,7 @@
     .ctype-legend-row[data-ct="私企"] .ctype-dot { background: var(--ct-private); }
     .ctype-legend-row[data-ct="外企"] .ctype-dot { background: var(--ct-foreign); }
     .ctype-label { overflow: hidden; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
-    .ctype-num { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .ctype-num { font-family: var(--font-sans); font-weight: 600; font-variant-numeric: tabular-nums; }
     .ctype-offer { color: var(--muted); font-size: 11.5px; text-align: right; white-space: nowrap; }
     .ctype-offer.has { color: var(--ok); font-weight: 700; }
 
@@ -425,11 +477,11 @@
     .view-switch { display: inline-flex; flex: 0 0 auto; padding: 3px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; }
     .view-switch-btn { border: 0; border-radius: var(--r-pill); background: transparent; color: var(--muted); padding: 0 14px; min-height: 28px; font-size: 12.5px; font-weight: 500; transition: background .18s var(--ease), color .18s var(--ease); }
     .view-switch-btn:hover { color: var(--ink); }
-    .view-switch-btn.is-active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    .view-switch-btn.is-active { background: var(--surface); color: var(--ink); box-shadow: var(--sh-card); }
     .board { padding: 12px 16px 18px; }
     /* 看板顶部整宽推进投放区（v4.8.0）：常驻可见、不参与 .board-cols 的横向滚动，阶段列再多也始终可拖。
        它自身设了 display:flex，但从不被 hidden 切换（父级 #boardView 隐藏时整体随之隐藏），故无需 [hidden] 守卫。 */
-    .board-drop-zone { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 54px; margin-bottom: 12px; padding: 12px 16px; border: 1.5px dashed var(--line-strong); border-radius: var(--r-lg); background: rgba(0, 0, 0, .02); color: var(--muted); font-size: 12.5px; text-align: center; transition: border-color .18s var(--ease), background .18s var(--ease), color .18s var(--ease), box-shadow .18s var(--ease); }
+    .board-drop-zone { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 54px; margin-bottom: 12px; padding: 12px 16px; border: 1.5px dashed var(--line-strong); border-radius: var(--r-lg); background: var(--wash-1); color: var(--muted); font-size: 12.5px; text-align: center; transition: border-color .18s var(--ease), background .18s var(--ease), color .18s var(--ease), box-shadow .18s var(--ease); }
     .board-drop-zone .drop-icon { font-size: 17px; line-height: 1; }
     .board-drop-zone.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
     .board-drop-zone.is-drop { border-style: solid; border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 2px var(--accent); }
@@ -439,10 +491,10 @@
     .board-col-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: var(--r-lg) var(--r-lg) 0 0; transition: background .16s var(--ease); }
     /* hover 中性化（accent-soft 太响）；focus-visible 必须给可见 outline——div/button 型可交互元素
        不在全局 focus-visible 规则覆盖范围内，不给就是键盘用户看不见焦点（§2.18）。 */
-    .board-col-head:hover { background: rgba(0, 0, 0, .03); }
-    .board-col-head:focus-visible { background: rgba(0, 0, 0, .03); outline: 2px solid var(--accent); outline-offset: -2px; }
+    .board-col-head:hover { background: var(--wash-2); }
+    .board-col-head:focus-visible { background: var(--wash-2); outline: 2px solid var(--accent); outline-offset: -2px; }
     .board-col-head .badge { flex: 0 0 auto; }
-    .board-col-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .board-col-count { margin-left: auto; color: var(--muted); font-family: var(--font-sans); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .board-col-body { display: grid; gap: 8px; padding: 10px; min-height: 62px; }
     .board-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 12px 4px; }
     .board-card { position: relative; padding: 10px 12px 10px 14px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line); box-shadow: none; cursor: grab; text-align: left; width: 100%; transition: transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease); }
@@ -490,7 +542,7 @@
     .step:not(:last-child) .step-rail::after { content: ""; position: absolute; top: 14px; bottom: -4px; left: 50%; width: 1.5px; transform: translateX(-50%); background: var(--line-strong); }
     .step-main { min-width: 0; }
     .step-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .step-date { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+    .step-date { color: var(--muted); font-family: var(--font-sans); font-size: 12px; font-variant-numeric: tabular-nums; }
     .step-gap { margin-left: auto; color: var(--muted); font-size: 11.5px; }
     .step-note { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
     .note-list { display: grid; gap: 8px; }
@@ -546,10 +598,10 @@
     .group-toggle:hover { background: var(--accent-soft); color: var(--accent-ink); }
     .group-caret { color: var(--muted); font-size: 11px; }
     .group-label { border-left: 3px solid var(--company-color, var(--accent)); padding-left: 8px; }
-    .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; }
+    .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-sans); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
     /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽 */
     .group-switch { justify-self: start; align-self: center; }
-    .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--sh-card); }
     /* 机构名在公司名 / 看板卡里都是次要信息：降一档字号与颜色，不与主体争视觉重量 */
     .company-unit, .board-card-unit { color: var(--muted); font-size: 12px; font-weight: 500; }
     /* 公司名 → 企业 + 机构 的拆分**建议**（不是自动执行）：拆错了用户未必发现，机构层会静默错位 */
@@ -564,7 +616,7 @@
     .guide-note strong { display: block; margin-bottom: 2px; font-size: 13.5px; }
     .guide-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
     .guide-step { display: flex; gap: 11px; align-items: flex-start; padding: 12px 13px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
-    .guide-no { flex: 0 0 auto; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .guide-no { flex: 0 0 auto; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-family: var(--font-sans); font-size: 12px; font-weight: 600; }
     .guide-text { min-width: 0; display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
     .guide-text strong { color: var(--ink); font-size: 13.5px; }
     .guide-text kbd { padding: 0 5px; border-radius: 5px; background: var(--surface); border: 1px solid var(--line); box-shadow: none; color: var(--ink-2); font-family: var(--font-mono); font-size: 11px; }
@@ -609,12 +661,12 @@
        刻意不给 .mail-help 本身设 display，避免覆盖 details 的原生行为。 */
     .drop-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .drop-counts span { padding: 2px 9px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); box-shadow: none; font-size: 11.5px; }
-    .drop-counts b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .drop-counts b { font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
     .drop-list { margin: 9px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
     .drop-list li { padding: 6px 9px; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--line); box-shadow: none; }
     .drop-mail { font-size: 12px; line-height: 1.5; word-break: break-all; }
     .drop-mail b { display: block; color: var(--ink); font-weight: 680; }
-    .drop-meta { margin-top: 2px; color: var(--muted); font-size: 11px; font-family: var(--font-mono); }
+    .drop-meta { margin-top: 2px; color: var(--muted); font-size: 11px; font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
     .drop-note { margin-top: 9px; color: var(--muted); font-size: 11.5px; line-height: 1.65; }
     .drop-note code { padding: 0 4px; border-radius: 4px; background: var(--surface-2); box-shadow: none; font-family: var(--font-mono); font-size: 11px; }
     /* ===== v4.7.0：AI 提示词快照（只读展示 Action 实际生效的那一份）=====
@@ -628,9 +680,9 @@
     .prompt-snapshot .hint { padding: 8px 13px 10px; border-top: 1px solid var(--line); }
     .mail-list { display: grid; gap: 12px; }
     .mail-empty { padding: 30px 16px; text-align: center; color: var(--muted); }
-    .mail-card { padding: 14px 16px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    .mail-card { padding: 14px 16px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--sh-card); }
     /* 低置信描边：ring → 真边框，用**亮档** warn-bright（描边是装饰，不承载文字） */
-    .mail-card.low-conf { border: 1px solid var(--warn-bright); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+    .mail-card.low-conf { border: 1px solid var(--warn-bright); box-shadow: var(--sh-card); }
     .mail-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .mail-type { padding: 2px 10px; border-radius: var(--r-pill); font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--ink-2); box-shadow: none; border: 0; }
     .mail-type[data-type="Offer"] { background: var(--ok); color: #fff; box-shadow: none; }

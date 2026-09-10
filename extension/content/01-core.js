@@ -351,6 +351,18 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       from { opacity: 0; }
       to { opacity: 1; }
     }
+    /* 前庭敏感用户的动效总开关（shadow root 版本）。
+       迷你卡片与侧栏的样式活在 Shadow DOM 里，外面的文档级媒体查询进不来，
+       所以必须在这段 COMPONENT_CSS 里自带一份。媒体查询在 shadow root 内照常生效。
+       capture-form.js 的 css() 拼在本段之后，一并被覆盖。 */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
   `;
 
   // 主题跟随：系统深浅色切换时只重建令牌段，组件样式全走 var(--aja-*)，因此无需改动。

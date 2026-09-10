@@ -10,10 +10,10 @@
     }
     button, input, select, textarea { font: inherit; }
     button { cursor: pointer; }
-    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-      outline: 2px solid rgba(39, 73, 214, .4);
-      outline-offset: 2px;
-    }
+    /* 全局 focus-visible 只在 apple.css 定义一份（outline: 2px solid var(--accent)）。
+       这里曾有一份 rgba(39,73,214,.4) 的旧钴蓝焦点环——那是 Apple 化之前的主色，
+       选择器列表与 apple.css 完全相同、apple.css 在后，所以它整条被压死。
+       留着既是一个过时的颜色，也会让下一个在这里改焦点样式的人白改。 */
 
     .app-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
     .app-sidebar {
@@ -37,7 +37,7 @@
     .nav-icon { display: grid; place-items: center; width: 22px; color: currentColor; font-size: 16px; flex: 0 0 auto; }
     .sidebar-footer { margin-top: auto; padding: 13px 12px; border-radius: 10px; background: var(--silver-soft); color: var(--silver); font-size: 12px; border: 1px solid var(--line); }
     .sidebar-footer strong { display: block; margin-bottom: 2px; font-size: 13px; }
-    .shell { min-width: 0; width: 100%; max-width: 1540px; margin: 0 auto; padding: 20px 24px 36px; }
+    .shell { min-width: 0; width: 100%; max-width: 1540px; margin: 0 auto; padding: 24px 32px 48px; }
     .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; min-height: 56px; }
     .brand { display: flex; align-items: center; gap: 12px; }
     .brand-mark {
@@ -46,7 +46,7 @@
       font-size: 19px;
     }
     h1 { margin: 0; font-size: 21px; letter-spacing: -.01em; font-family: var(--font-display); font-weight: 700; }
-    .page-kicker { margin-bottom: 2px; color: var(--accent); font-size: 10.5px; font-weight: 700; letter-spacing: .16em; font-family: var(--font-mono); }
+    .page-kicker { margin-bottom: 2px; color: var(--accent); font-size: 10.5px; font-weight: 600; letter-spacing: .16em; font-family: var(--font-sans); }
     .subtitle { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
     .top-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .btn {
@@ -62,11 +62,12 @@
     .btn-small { min-height: 30px; padding: 0 10px; border-radius: 7px; font-size: 12.5px; }
     .icon { margin-right: 6px; }
 
-    .stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+    /* 只留 apple.css 不管的 display 与 margin-bottom；列数（那边是 repeat(6,...)）与 gap 都被覆盖。 */
+    .stats { display: grid; margin-bottom: 16px; }
     .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
     .stat-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; letter-spacing: .02em; }
     .stat-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; background: var(--surface-soft); color: var(--muted); font-size: 13px; }
-    .stat-number { font-size: 26px; font-weight: 700; margin-top: 6px; letter-spacing: -.02em; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+    .stat-number { font-size: 26px; font-weight: 600; margin-top: 6px; letter-spacing: -.02em; font-family: var(--font-display); font-variant-numeric: tabular-nums; color: var(--ink); }
 
     .dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
     .main-column { min-width: 0; }
@@ -74,7 +75,8 @@
     /* 工具页卡片 */
     .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; padding: 20px 22px 22px; }
     .tool-card { display: flex; flex-direction: column; gap: 11px; min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: .18s ease; }
-    .tool-card:hover { transform: translateY(-1px); border-color: var(--line-strong); box-shadow: 0 8px 20px rgba(16, 24, 40, .07); }
+    /* .tool-card:hover 只在 apple.css 定义（transform:none + var(--sh-ambient)）。
+       这里曾是 translateY(-1px) + 藏青色投影 rgba(16,24,40,.07)，三个声明全被覆盖。 */
     .tool-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .tool-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink); font-size: 19px; }
     .tool-card h3 { margin: 0; font-size: 16px; font-family: var(--font-display); }
@@ -100,7 +102,7 @@
     /* 第 4 列是「同企业收纳」开关（v4.11.0）：auto 让它按文字宽度取值，不挤占搜索框。
        窄屏的两处覆盖（1fr 1fr / 1fr）不需要跟着改——4 个项在 2 列下正好两行、1 列下四行。 */
     .filters { display: grid; grid-template-columns: minmax(180px, 1fr) 140px 170px auto; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-    .control { width: 100%; min-height: 36px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; color: var(--ink); background: #fff; font-size: 13.5px; }
+    .control { width: 100%; min-height: 36px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; color: var(--ink); background: var(--surface); font-size: 13.5px; }
     .search-wrap { position: relative; }
     .search-wrap .control { padding-left: 36px; }
     .search-glyph { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
@@ -112,12 +114,12 @@
     tbody tr { transition: background .15s ease; }
     tbody tr:hover { background: var(--surface-soft); }
     /* Offer 行左侧色条只在下方视觉层定义一处（绿色），避免两份冲突规则 */
-    .record-no { color: var(--muted); font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+    .record-no { color: var(--muted); font-family: var(--font-sans); font-size: 12.5px; font-variant-numeric: tabular-nums; }
     .company { font-weight: 720; }
     .company-link { color: inherit; text-decoration: none; }
     .company-link:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
     .position { color: var(--muted); font-size: 13px; margin-top: 2px; }
-    td[data-label="投递日期"] { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+    td[data-label="投递日期"] { font-family: var(--font-sans); font-size: 13px; font-variant-numeric: tabular-nums; }
     .schedule { max-width: 190px; }
     .schedule-time { font-weight: 650; }
     .schedule-text, .next-action { color: var(--muted); font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
@@ -140,7 +142,7 @@
     .tl-row .tl-note { flex: 2 1 120px; }
     .tl-row .control { min-height: 34px; }
     .tl-del { flex: 0 0 30px; width: 30px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; line-height: 1; font-size: 13px; }
-    .tl-del:hover { color: var(--red); border-color: var(--red); background: #fdecea; }
+    .tl-del:hover { color: var(--red); border-color: var(--red); background: var(--red-soft); }
     .advance-stage-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
     .row-actions { display: flex; gap: 7px; white-space: nowrap; }
     .text-button { min-height: 30px; padding: 3px 6px; background: transparent; border: 0; color: var(--muted); font-size: 13px; border-radius: 7px; }
@@ -161,8 +163,11 @@
     .side-time { margin-top: 5px; color: var(--primary); font-size: 12px; font-weight: 650; }
     .side-empty { padding: 46px 15px; text-align: center; color: var(--muted); font-size: 14px; }
 
-    dialog { width: min(680px, calc(100% - 28px)); padding: 0; border: 0; border-radius: 20px; color: var(--ink); box-shadow: 0 24px 70px rgba(20, 29, 54, .24); }
-    dialog::backdrop { background: rgba(24, 31, 49, .48); backdrop-filter: blur(2px); }
+    /* 只留 apple.css 不管的部分（宽度 / 内边距 / 字色）。
+       border、border-radius:20px、box-shadow 与整条 dialog::backdrop 都被 apple.css 覆盖
+       （那边是 var(--r-xl)=24px、var(--sh-pop)、rgba(0,0,0,.3)+blur(6px)），
+       这里的藏青色 rgba(20,29,54,.24) 与 rgba(24,31,49,.48) 是 Apple 化之前的旧投影色。 */
+    dialog { width: min(680px, calc(100% - 28px)); padding: 0; color: var(--ink); }
     .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 21px 24px; border-bottom: 1px solid var(--line); }
     .modal-head h2 { margin: 0; font-size: 20px; }
     .close-btn { width: 36px; height: 36px; border: 0; border-radius: 10px; background: var(--surface-soft); color: var(--muted); font-size: 20px; }
@@ -194,7 +199,7 @@
     .sync-fallback textarea { margin-top: 11px; min-height: 112px; }
     .sync-help-list { margin: 11px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.6; display: grid; gap: 5px; }
 
-    .toast { position: fixed; z-index: 20; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; background: #ffffff; color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px 16px; box-shadow: var(--sh-ambient); transition: .32s var(--ease); font-size: 14px; font-weight: 500; }
+    .toast { position: fixed; z-index: 20; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px 16px; box-shadow: var(--sh-ambient); transition: .32s var(--ease); font-size: 14px; font-weight: 500; }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
     .toast.has-action { pointer-events: auto; }
     /* action 是纯文字链接（设计资源的做法），不是带边框的胶囊按钮 */
@@ -202,8 +207,9 @@
     .toast-action:hover { background: transparent; text-decoration: underline; }
     tbody tr.row-flash { animation: row-flash 1s ease-out; }
     @keyframes row-flash { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
-    .btn.danger { background: var(--seal); border-color: var(--seal); color: #fff; }
-    .btn.danger:hover { background: #b23a1f; border-color: #b23a1f; }
+    /* .btn.danger 已删：DOM 里从来没有元素同时带 btn 与 danger 两个类。
+       实际在用的是 .btn-danger（连字符，apple.css 定义）与 .text-button.danger（本文件 L148）。
+       #b23a1f 那个棕红色也是旧调色盘的残留。 */
     #confirmMessage { white-space: pre-line; }
     .install-guide { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
     .install-guide li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; padding: 12px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
@@ -216,17 +222,19 @@
        .panel 作为 grid item 的 min-width:auto 会解析成 min-content——台账表格（min-width:780px）
        与看板四列（min-content 964px）会把整列撑宽，导致 .table-scroll / .board-cols 的
        overflow-x:auto 永远拿不到"被压缩"的宽度而失效，退化成整页横向滚动（窄屏实测 +342px）。 */
-    .view { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; }
+    .view { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-content: start; }
     .view[hidden] { display: none; } /* 关键：作者样式的 display 会覆盖 [hidden] 的 UA display:none，必须显式补回，否则四视图会同时堆叠 */
-    .view.is-entering { animation: view-in .18s ease-out; }
-    @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    /* .view.is-entering 与 @keyframes view-in 只在 apple.css 定义一份（.4s / translateY(16px)）。
+       这里曾经有一份 .18s / 6px 的旧定义，同特异性且 apple.css 在后，被整条压死——
+       改它不会有任何效果，也不报错。删掉，避免下一次有人在这里白改。
+       关闭动画请走本文件下方的 @media (prefers-reduced-motion) 块（通配符 + !important，压得住任何文件）。 */
 
     /* ================= 简历编辑器增强 ================= */
     .resume-layout { padding: 20px 22px 22px; display: grid; gap: 16px; }
     .resume-progress { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
     .resume-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
     .resume-progress-title { font-weight: 720; font-size: 14px; }
-    .resume-progress-value { font-family: var(--font-mono); font-size: 13px; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+    .resume-progress-value { font-family: var(--font-sans); font-size: 13px; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
     .resume-progress-bar { height: 7px; border-radius: 999px; background: var(--surface-soft); overflow: hidden; }
     .resume-progress-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s ease; }
     .resume-progress-hint { color: var(--muted); font-size: 12px; }
@@ -237,13 +245,13 @@
     .resume-block-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
     .resume-block-head h3 { margin: 0; font-size: 15px; font-family: var(--font-display); letter-spacing: .03em; }
     .resume-block-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
-    .resume-block-count { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .resume-block-count { font-family: var(--font-sans); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .resume-block-head .btn-small { min-height: 29px; font-size: 12px; }
     .resume-block-body { padding: 13px 15px; display: grid; gap: 10px; }
     .kv-row { display: grid; grid-template-columns: minmax(120px, 200px) minmax(0, 1fr) 34px; gap: 9px; align-items: center; }
     .kv-row .control { min-height: 38px; }
     .kv-del-btn { width: 34px; min-height: 38px; border: 0; border-radius: 8px; background: var(--seal-soft); color: var(--seal); font-size: 13px; cursor: pointer; }
-    .kv-del-btn:hover { background: #f6ded4; }
+    .kv-del-btn:hover { background: var(--danger-soft-hover); }
     .exp-item-card { border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); padding: 12px 14px; }
     .exp-item-card.is-collapsed .exp-fields-grid, .exp-item-card.is-collapsed .exp-card-footer { display: none; }
     .exp-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
@@ -330,7 +338,7 @@
       .brand-mark { width: 43px; height: 43px; }
       h1 { font-size: 21px; }
       .subtitle { display: none; }
-      .stats { gap: 10px; }
+      .stats { gap: 12px; }   /* 规范的组件内档是 8/12/16，10px 是档位外的野值 */
       .stat-card { padding: 15px; }
       .stat-number { font-size: 27px; }
       .stats .stat-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
@@ -352,12 +360,12 @@
       table { min-width: 0; }
       thead { display: none; }
       tbody { display: grid; gap: 12px; padding: 12px; }
-      tbody tr { display: block; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 5px 16px rgba(33, 45, 75, .05); }
+      tbody tr { display: block; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--sh-ambient); }
       tbody td { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 13px; border-top: 1px solid var(--line); font-size: 13px; }
       tbody td:first-child { display: block; padding: 14px 13px; border-top: 0; background: var(--surface-soft); }
       tbody td::before { content: attr(data-label); color: var(--muted); font-size: 11px; font-weight: 700; }
       tbody td:first-child::before { display: none; }
       .schedule { max-width: none; }
       .row-actions { flex-wrap: wrap; }
-      .row-actions .btn, .row-actions .text-button { flex: 1; min-height: 38px; }
+      .row-actions .btn, .row-actions .text-button { flex: 1; min-height: 44px; }
     }

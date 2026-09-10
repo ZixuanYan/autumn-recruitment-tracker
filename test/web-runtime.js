@@ -1796,16 +1796,30 @@ for (const [label, src] of [['VIEW_META', VIEW_META_SRC], ['ROUTE_ALIASES', ROUT
   if (!src || src.length < 20) { console.error(`✗ 未定位到路由源码 ${label}`); process.exit(1); }
 }
 const routeCalls = { renderRecordsView: 0, renderMailView: 0, renderToolCards: 0 };
+// classList 用真实的集合语义而不是空函数：v4.13.0 起 is-entering 是**瞬时**态，
+// 要断言「切视图时加上 → 定时器到点摘掉」这条链，空函数什么也验证不了。
 const viewStubs = ['overview', 'records', 'resume', 'tools', 'mail']
-  .map(v => ({ dataset: { view: v }, hidden: false, offsetWidth: 0, classList: { remove() {}, add() {} } }));
+  .map(v => {
+    const set = new Set();
+    return {
+      dataset: { view: v }, hidden: false, offsetWidth: 0,
+      classList: { add: c => set.add(c), remove: c => set.delete(c), contains: c => set.has(c) }
+    };
+  });
 const navStubs = ['overview', 'records', 'mail', 'resume', 'tools']
   .map(r => {
     const stub = { dataset: { route: r }, active: null, classList: {} };
     stub.classList.toggle = (cls, on) => { stub.active = on; };
     return stub;
   });
+// 定时器不立即执行回调：本文件另一个沙箱写的是 `setTimeout: fn => { fn(); return 0 }`，
+// 那种写法会把"1s 后摘掉 is-entering"变成同步执行，于是这个行为永远测不到。
+// 这里把回调攒进 pendingTimers，由测试显式触发，才能验证时序本身。
+const pendingTimers = [];
 const sandbox3 = {
   console,
+  setTimeout: (fn, ms) => { pendingTimers.push({ fn, ms, cancelled: false }); return pendingTimers.length; },
+  clearTimeout: id => { if (pendingTimers[id - 1]) pendingTimers[id - 1].cancelled = true; },
   $: sel => (els3[sel] || (els3[sel] = makeEl(sel))),
   document: { title: '', querySelectorAll: sel => (String(sel).includes('.view') ? viewStubs : navStubs) },
   location: { hash: '#/overview' },
@@ -1817,7 +1831,9 @@ const sandbox3 = {
 };
 sandbox3.AJA = AJA_SHARED;
 vm.createContext(sandbox3);
-vm.runInContext([VIEW_META_SRC, ROUTE_ALIASES_SRC, parseRouteSrc, switchViewSrc].join('\n'), sandbox3, { filename: 'router-section.js' });
+// enteringTimer 是声明在 switchView **外面**的模块级变量，extractFunction 只取函数体，
+// 所以这里补一行声明——不补就是 ReferenceError（clearTimeout(enteringTimer) 当场炸）。
+vm.runInContext(['let enteringTimer = 0;', VIEW_META_SRC, ROUTE_ALIASES_SRC, parseRouteSrc, switchViewSrc].join('\n'), sandbox3, { filename: 'router-section.js' });
 
 section('\nv4.8.0 视图路由（投递记录独立视图）');
 check('switchView("records") 只显示记录视图、触发 renderRecordsView 并更新标题', () => {
@@ -1842,6 +1858,34 @@ check('switchView("overview") 不触发 renderRecordsView（台账已不在总�
   assert.strictEqual(viewStubs.find(v => v.dataset.view === 'overview').hidden, false);
   assert.strictEqual(viewStubs.find(v => v.dataset.view === 'records').hidden, true);
   assert.strictEqual(els3['#viewTitle'].textContent, '投递总览');
+});
+
+check('is-entering 是瞬时态：切视图时加上、定时器到点摘掉、连切时旧定时器被取消（v4.13.0）', () => {
+  // 为什么值得单开一条：is-entering 此前加上就**永不摘**（名不副实），
+  // 于是任何挂在它下面的入场动画都会在每次数据重渲染时重播——新建一条记录，
+  // 整个统计区/看板列/简历区块就重新淡入一遍，比没有动画更吵。
+  pendingTimers.length = 0;
+  sandbox3.switchView('records');
+  const rec = viewStubs.find(v => v.dataset.view === 'records');
+  const oth = viewStubs.find(v => v.dataset.view === 'overview');
+  assert.strictEqual(rec.classList.contains('is-entering'), true, '目标视图应带上 is-entering 以触发入场动画');
+  assert.strictEqual(oth.classList.contains('is-entering'), false, '非目标视图不该有 is-entering');
+  assert.strictEqual(pendingTimers.length, 1, 'switchView 应安排一个摘类定时器');
+  assert.ok(pendingTimers[0].ms >= 900,
+    `摘类延时 ${pendingTimers[0].ms}ms 太短：视图自身 .4s + 最末错峰元素 8×60ms 起步 + 自身 .4s ≈ 880ms，提前摘会截断动画`);
+  pendingTimers[0].fn();
+  assert.strictEqual(rec.classList.contains('is-entering'), false,
+    '定时器到点必须摘掉 is-entering，否则后续每次数据重渲染都会重播整组入场动画');
+
+  // 连续快速切视图：上一次的定时器必须被 clearTimeout，
+  // 否则它会在新视图入场途中摘掉类，把动画截断在半路。
+  pendingTimers.length = 0;
+  sandbox3.switchView('overview');
+  sandbox3.switchView('records');
+  assert.strictEqual(pendingTimers.length, 2, '两次切换应各安排一个定时器');
+  assert.strictEqual(pendingTimers[0].cancelled, true, '第一次的定时器必须被取消');
+  assert.strictEqual(pendingTimers[1].cancelled, false, '当前这次的定时器不该被取消');
+  pendingTimers[1].fn();
 });
 
 check('parseRoute：#/records 解析到 records（旧书签不再被重定向到 overview），#/upcoming 仍回总览', () => {

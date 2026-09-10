@@ -1626,5 +1626,243 @@ check('岗位库与截图识别已整体删除，不得半截复活（v4.12.0）
   assert.strictEqual((html.match(/<div class="view" data-view=/g) || []).length, 5, '应有 5 个视图容器');
 });
 
+// ─────────────────────────────────────────────
+// v4.13.0 视觉打磨：字体三档分工 / toast 磨砂 / 入场动画单一定义
+// ─────────────────────────────────────────────
+check('等宽字体只给代码与元数据位，业务数字一律 display/正文 + tabular-nums（v4.13.0）', () => {
+  // 先剥 CSS 块注释：--font-mono 的定义处挂着一段说明分工的注释，里面就写着
+  // "--font-mono" 与 "28 处业务数字全用 --font-mono" 这些字面量。不剥的话，
+  // 解释性注释会替已经改对的代码"顶罪"（这个坑在本仓踩过三次）。
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  const MONO_ALLOWED = ['.cmd-kbd', '.guide-text kbd', '.drop-note code', '.prompt-snapshot-body', '.field-library-type'];
+  const usesMono = css.split('var(--font-mono)').length - 1;
+  assert.strictEqual(usesMono, MONO_ALLOWED.length,
+    `var(--font-mono) 应恰好 ${MONO_ALLOWED.length} 处（键盘键 ×2、行内 code、提示词快照正文、字段类型令牌），实际 ${usesMono} 处。` +
+    '等宽字体只留给代码与元数据；业务数字用等宽字体读起来是"终端/开发者工具"，不是 Apple 产品。');
+  for (const sel of MONO_ALLOWED) {
+    const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.ok(new RegExp(esc + '\\s*\\{[^{}]*var\\(--font-mono\\)').test(css),
+      `白名单里的 ${sel} 反而没在用等宽字体——说明白名单已过时，请核对后同步更新`);
+  }
+  // 数据位反向断言：这些选择器一旦出现等宽字体就是回归
+  const NUMERIC = ['.stat-number', '.record-no', '.funnel-value', '.insight-metric-value', '.city-num',
+    '.ctype-num', '.board-col-count', '.group-count', '.step-date', '.multi-company-count',
+    '.dwell-days', '.spark-axis', '.drop-meta', '.drop-counts b', '.page-kicker', '.guide-no'];
+  const bad = NUMERIC.filter(sel => {
+    const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return [...css.matchAll(new RegExp(esc + '\\s*\\{[^{}]*\\}', 'g'))].some(m => m[0].includes('var(--font-mono)'));
+  });
+  assert.deepStrictEqual(bad, [], `这些数据位在用等宽字体：${bad.join(', ')}。应改 var(--font-display)（≥20px）或 var(--font-sans)（小字号）`);
+});
+
+check('会变动的数字都启用 tabular-nums（否则值一变整行宽度就跳）', () => {
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  // 规范：「数字全局使用 tabular-nums，让表格与仪表数据稳如实体表盘」。
+  // 这里只钉**会变**的那些：计数、日期、百分比、统计值。静态标签不需要。
+  const NUMERIC = ['.stat-number', '.record-no', '.funnel-value', '.insight-metric-value', '.city-num',
+    '.ctype-num', '.board-col-count', '.group-count', '.step-date', '.multi-company-count',
+    '.dwell-days', '.spark-axis', '.drop-meta', '.drop-counts b', '.resume-progress-value', '.resume-block-count'];
+  const missing = NUMERIC.filter(sel => {
+    const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const blocks = [...css.matchAll(new RegExp(esc + '\\s*\\{[^{}]*\\}', 'g'))].map(m => m[0]);
+    return !blocks.some(b => b.includes('tabular-nums'));
+  });
+  assert.deepStrictEqual(missing, [], `这些数字位没有 font-variant-numeric: tabular-nums：${missing.join(', ')}`);
+  // 日期列是属性选择器，单独钉一次（它的选择器形态与上面不同）
+  assert.ok(/td\[data-label="投递日期"\]\s*\{[^{}]*tabular-nums/.test(css), '台账日期列必须 tabular-nums');
+});
+
+check('toast 是磨砂玻璃而不是纯半透明，且 .72 玻璃规则确实包在 @supports 里', () => {
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  // 规范的 toast 配方 = 磨砂玻璃 + 降级。这里要钉**两条**规则，缺一不可：
+  //   · @supports 外：.88 半透明白底（不支持 backdrop-filter 的浏览器靠它保证可读）
+  //   · @supports 内：.72 白底 + saturate(180%) blur(20px)（与侧栏、插件顶栏同源的玻璃配方）
+  // 只留 .88 就退回"半透明"而不是"磨砂"；只留 .72 且不包在 @supports 里，
+  // 则不支持的浏览器上既没磨砂又更透 → 文字直接糊在底下内容上。
+  const glass = /\.toast\s*\{[^{}]*rgba\(255, 255, 255, \.72\)[^{}]*\}/.exec(css);
+  assert.ok(glass, 'toast 缺磨砂玻璃规则：应有 rgba(255,255,255,.72) 白底 + backdrop-filter');
+  assert.ok(/backdrop-filter:\s*saturate\(180%\) blur\(20px\)/.test(glass[0]),
+    'toast 的磨砂配方应与侧栏/插件顶栏同源：saturate(180%) blur(20px)');
+  assert.ok(/-webkit-backdrop-filter/.test(glass[0]), 'toast 的玻璃规则缺 -webkit- 前缀，Safari 上拿不到磨砂');
+  assert.ok(/\.toast\s*\{[^{}]*background:\s*rgba\(255, 255, 255, \.88\)/.test(css),
+    'toast 必须在 @supports 之外保留 .88 半透明白底作为降级');
+  // 玻璃规则必须真的在 @supports 里（{0,120} 限定跨度，避免匹配到远处的另一个块）
+  assert.ok(/@supports \(backdrop-filter[\s\S]{0,120}?\{\s*\.toast\s*\{[^{}]*rgba\(255, 255, 255, \.72\)/.test(css),
+    'toast 的 .72 玻璃规则必须包在 @supports (backdrop-filter) 块里，否则不支持的浏览器上会失去降级');
+});
+
+check('@keyframes view-in 只定义一份，且入场位移与时长符合规范', () => {
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  // 曾经 base.css 与 apple.css 各定义一份（6px/.18s 与 16px/.4s），同特异性、
+  // apple.css 在后 → base 那份被整条压死。改它没有任何效果，也不报错。
+  const defs = css.split('@keyframes view-in').length - 1;
+  assert.strictEqual(defs, 1, `@keyframes view-in 被定义了 ${defs} 次；重复定义不报错，只会让改错文件的人白改`);
+  assert.ok(/@keyframes view-in \{[^}]*translateY\(16px\)/.test(css),
+    'view-in 的入场位移应是 translateY(16px)（规范：进入动画只做 fade + translateY(16px)）');
+  const rules = [...css.matchAll(/\.view\.is-entering \{ animation: view-in ([^;]+);/g)].map(m => m[1]);
+  assert.deepStrictEqual(rules, ['.4s var(--ease)'],
+    `视图入场应是 .4s + ease-apple（规范的"页面切换 400ms"档），实际：${rules.join(' | ') || '（没有）'}`);
+  // 关闭动画的唯一入口是 reduced-motion 块（通配符 + !important，压得住任何文件顺序）
+  assert.ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation-duration: \.01ms !important/.test(css),
+    'prefers-reduced-motion 的全局降级丢了：所有动画对前庭敏感用户都关不掉');
+});
+
+check('入场错峰 stagger：四个组、60ms 一档、封顶第 8 个，且不碰命令面板（v4.13.0）', () => {
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.strictEqual(css.split('@keyframes fade-up').length - 1, 1, '@keyframes fade-up 应只定义一份');
+  assert.ok(/@keyframes fade-up \{[^}]*translate3d\(0, 16px, 0\)/.test(css),
+    'fade-up 的位移应是 translate3d(0, 16px, 0)（规范：进入动画只做 fade + translateY(16px)，不做弹跳/旋转）');
+  const GROUP = ':is(.stats, .insight-grid, .board-cols, .resume-layout)';
+  const esc = GROUP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // 必须挂在 .view.is-entering 下：无条件挂上去的话，每次数据重渲染都会重播整组入场动画
+  const main = new RegExp('\\.view\\.is-entering ' + esc + ' > \\* \\{[^{}]*animation: fade-up \\.4s var\\(--ease\\) both[^{}]*animation-delay: calc\\(var\\(--stagger-i, 0\\) \\* 60ms\\)[^{}]*\\}').exec(css);
+  assert.ok(main, '错峰主规则丢了或改了形态：应是 .view.is-entering ' + GROUP + ' > * { animation: fade-up .4s var(--ease) both; animation-delay: calc(var(--stagger-i, 0) * 60ms); }');
+  // 档位：第 2..8 个依次 1..7（60ms 一档），第 9 个起封顶 8
+  for (let i = 2; i <= 8; i++) {
+    assert.ok(new RegExp('\\.view\\.is-entering ' + esc + ' > :nth-child\\(' + i + '\\) \\{ --stagger-i: ' + (i - 1) + '; \\}').test(css),
+      `第 ${i} 个元素的 --stagger-i 应是 ${i - 1}（规范 stagger 60ms 一档）`);
+  }
+  assert.ok(new RegExp('\\.view\\.is-entering ' + esc + ' > :nth-child\\(n\\+9\\) \\{ --stagger-i: 8; \\}').test(css),
+    '错峰必须封顶：第 9 个及以后统一 --stagger-i: 8，否则一组 20 个元素里最后一个要等 1.2 秒才出现');
+  // 命令面板刻意排除：它的结果列表每敲一个字就重渲染，错峰会变成闪烁干扰
+  assert.ok(!GROUP.includes('cmd'), '错峰组里不应出现命令面板');
+  assert.ok(!/\.cmd-results[^{}]*\{[^{}]*fade-up/.test(css), '命令面板的结果列表不应参与错峰');
+});
+
+check('is-entering 是瞬时态：入场动画放完必须摘掉，否则数据重渲染会重播整组动画', () => {
+  // 先取函数体再剥行注释（顺序反过来会误伤别处字符串里的 //，例如 https://）
+  const raw = /function switchView\(name\) \{[\s\S]*?\n      \}/.exec(html);
+  assert.ok(raw, '产物里找不到 switchView');
+  const fn = raw[0].replace(/\/\/[^\n]*/g, '');
+  assert.ok(/clearTimeout\(enteringTimer\)/.test(fn),
+    'switchView 必须先 clearTimeout(enteringTimer)：连续快速切视图时，上一次的定时器会在新视图入场途中摘掉类、把动画截断');
+  const at = fn.indexOf('enteringTimer = setTimeout(');
+  assert.ok(at > 0, 'switchView 必须安排一个摘掉 is-entering 的定时器——加了就永不摘的话，这个类名是假的瞬时态');
+  const after = fn.slice(at);
+  assert.ok(/classList\.remove\('is-entering'\)/.test(after), '定时器的回调必须真的摘掉 is-entering');
+  const ms = /setTimeout\([\s\S]*?,\s*(\d+)\)/.exec(after);
+  assert.ok(ms, 'is-entering 的摘除定时器应写明延时');
+  assert.ok(Number(ms[1]) >= 900,
+    `摘除延时 ${ms[1]}ms 太短：视图自身 .4s + 最末错峰元素 8×60ms 起步 + 自身 .4s ≈ 880ms，提前摘会截断动画`);
+});
+
+// ─────────────────────────────────────────────
+// v4.13.0 视觉打磨：旧调色盘清零 / 按钮档位 / 模块间距
+// ─────────────────────────────────────────────
+check('Apple 化之前的旧调色盘零残留（钴蓝焦点环、藏青投影、盘外红）', () => {
+  // 剥注释是必须的：本批清理写的说明注释里逐个点名了这些旧色值来解释"为什么删"，
+  // 不剥的话注释会替已经删掉的声明顶罪，守卫永远绿。
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  const LEGACY = [
+    'rgba(39, 73, 214',   // 旧钴蓝主色的焦点环（现主色是 #0071e3）
+    'rgba(16, 24, 40',    // 藏青投影
+    'rgba(20, 29, 54',    // 藏青投影（dialog）
+    'rgba(24, 31, 49',    // 藏青 backdrop
+    'rgba(33, 45, 75',    // 藏青投影（移动端卡片行）
+    '#b23a1f', '#fdecea', '#f6ded4'   // 调色盘外的棕红 / 粉 / 桃
+  ];
+  const alive = LEGACY.filter(c => css.includes(c));
+  assert.deepStrictEqual(alive, [],
+    `这些 Apple 化之前的旧色又出现在产物里：${alive.join(', ')}。` +
+    '它们要么是被 apple.css 整条压死的死规则（改了没反应），要么是绕开令牌的盘外色（深色模式下无法翻转）。');
+  // 危险色的 hover 必须是一个**独立**令牌值：.kv-del-btn 的常态底色就是 --danger-soft，
+  // 若 hover 也指向同一个值，鼠标划上去毫无反馈——静默失效、零报错。
+  const soft = /--danger-soft:\s*(#[0-9a-f]{6})/i.exec(css);
+  const hover = /--danger-soft-hover:\s*(#[0-9a-f]{6})/i.exec(css);
+  assert.ok(soft && hover, '--danger-soft 与 --danger-soft-hover 都必须在 :root 里定义');
+  assert.notStrictEqual(soft[1].toLowerCase(), hover[1].toLowerCase(),
+    `--danger-soft-hover(${hover[1]}) 与 --danger-soft(${soft[1]}) 同值：` +
+    '.kv-del-btn 的常态底色就是 --danger-soft，同值等于 hover 完全没有视觉反馈');
+  assert.ok(/\.kv-del-btn:hover \{ background: var\(--danger-soft-hover\); \}/.test(css),
+    '.kv-del-btn:hover 必须用 --danger-soft-hover');
+});
+
+check('.btn.danger 这类"看着像在用其实匹配不到元素"的死规则不得复活', () => {
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  // .btn.danger 要求元素同时带 btn 与 danger 两个类；DOM 里实际用的是
+  // .btn-danger（连字符）与 .text-button danger，两者都不是 .btn.danger。
+  assert.ok(!/\.btn\.danger\b/.test(css), '.btn.danger 是死规则（没有元素同时带这两个类），不得复活');
+  // 真正在用的两个必须都在，否则删错了
+  assert.ok(/\.btn-danger \{/.test(css), '.btn-danger（连字符）必须存在，template.html 有两处在用');
+  assert.ok(/\.text-button\.danger:hover \{/.test(css), '.text-button.danger:hover 必须存在，四处删除按钮靠它上色');
+  // DOM 侧对账：不许出现 class="btn danger" 这种会被误认为有样式的组合
+  assert.ok(!/class="btn danger"/.test(html), 'DOM 里不该有 class="btn danger"（那会指向已删除的死规则）');
+});
+
+check('按钮与输入框的高度严格落在规范的 32 / 44 / 52 三档上', () => {
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  // 规范的三档：32（小）/ 44（标准，同时是 Apple 的最小触控目标）/ 52（大）。
+  // 此前 .btn 是 38px —— 一个档位外的野值，看起来"差不多"，实则每个工具栏都比规范矮 6px。
+  // 只钉**全局**三档；上下文里的紧凑覆盖（.kv-row .control 38px、.exp-card-tools .text-button 27px 等）
+  // 是刻意的密度让步，不在此列。
+  const TIERS = [
+    ['.btn', 44], ['.btn-small', 32], ['.control', 44]
+  ];
+  for (const [sel, px] of TIERS) {
+    // 选择器必须**恰好**是这个类（行首起、紧跟 {）：这样 .mail-head-actions .btn、
+    // .cmd-input-row .control、textarea.control 一类上下文覆盖不会被算进来。
+    // 取**最后一条**匹配：base.css 与 apple.css 的同名规则特异性相同，bundle 里 apple.css
+    // 在后 → 它才是生效的那条。base.css 至今仍留着 min-height:36px 之类被压死的旧声明，
+    // 若按"第一条匹配"断言就会读到死值，守卫反而会误判。
+    const re = new RegExp('(?:^|\\n)\\s*' + sel.replace('.', '\\.') + '\\s*\\{[^{}]*\\}', 'g');
+    const all = [...css.matchAll(re)].map(m => m[0]);
+    assert.ok(all.length >= 1, `找不到 ${sel} 的全局规则`);
+    const m = /min-height: (\d+)px/.exec(all[all.length - 1]);
+    assert.ok(m, `${sel} 的生效规则里没有 min-height`);
+    assert.strictEqual(Number(m[1]), px, `${sel} 的 min-height 应是 ${px}px（规范档位 32/44/52），实际 ${m[1]}px`);
+  }
+  assert.ok(/\.btn \{[^{}]*padding: 0 24px/.test(css), '.btn（44 档）的 padding-x 应是规范的 24px');
+  assert.ok(/\.btn-small \{[^{}]*padding: 0 16px/.test(css), '.btn-small（32 档）的 padding-x 应是规范的 16px');
+});
+
+check('模块间距落在规范的 24/32/40 档上（此前普遍 18-20，低于规范下限）', () => {
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  // 规范的间距节奏：组件内 8/12/16，模块间 24/32/40，分区间 96/128。
+  // 这里是工具页，刻意**不**采用分区间那一档（营销页尺度），但模块间不得低于 24。
+  // 三处都用「同时含标识性声明」的方式锁定桌面档那一条规则：bundle 里 base.css 在前，
+  // 它的窄屏媒体查询（如 .stats{gap:12px}）会先被 .exec() 匹配到，读到的是收紧后的值，
+  // 直接取第一条会误判桌面档不达标。
+  const m = /\.view \{[^{}]*display: grid[^{}]*gap: (\d+)px/.exec(css);
+  assert.ok(m, '找不到 .view 的桌面档规则');
+  assert.ok(Number(m[1]) >= 24, `.view 的模块间距 ${m[1]}px 低于规范的模块间下限 24px`);
+  // .shell 在 bundle 里有三条：桌面档 + 两个窄屏档（媒体查询里刻意收紧）。
+  // 取**第一条**即桌面档——档位要求只针对桌面，窄屏收紧是合理的密度让步。
+  const shell = /(^|\n)\s*\.shell \{[^{}]*padding: (\d+)px (\d+)px (\d+)px/.exec(css);
+  assert.ok(shell, '找不到 .shell 的 padding');
+  assert.ok(Number(shell[2]) >= 24 && Number(shell[3]) >= 32,
+    `.shell 内边距 ${shell[2]}/${shell[3]}px 偏紧，规范要求模块间 24/32 起`);
+  const stats = /\.stats \{[^{}]*repeat\(6[^{}]*gap: (\d+)px/.exec(css);
+  assert.ok(stats && Number(stats[1]) >= 16, `.stats 桌面档（6 列）卡间距应 ≥16px，实际 ${stats ? stats[1] : '?'}px`);
+  const ig = /\.insight-grid \{[^{}]*display: grid[^{}]*gap: (\d+)px/.exec(css);
+  assert.ok(ig && Number(ig[1]) >= 24, `.insight-grid 间距应 ≥24px，实际 ${ig ? ig[1] : '?'}px`);
+  // 窄屏收紧是允许的，但也得落在规范的间距档上，不许留 10px 这类档位外的野值
+  for (const mm of css.matchAll(/\.stats \{\s*gap: (\d+)px/g)) {
+    assert.ok([8, 12, 16, 24, 32, 40].includes(Number(mm[1])),
+      `.stats 有一处 gap: ${mm[1]}px 不在规范的间距档（8/12/16/24/32/40）上`);
+  }
+});
+
+check('柔底与卡片承托影全部走令牌（深色模式的前置：黑底上 rgba(0,0,0,.04) 是不可见的）', () => {
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  // 失效模式：黑底上叠 rgba(0,0,0,.04) 等于什么都没叠，于是 hover / 按下 / 激活 / 选中
+  // 全部静默失去反馈——控制台零报错、元素都在，用户只会觉得"点了没反应"。
+  const stray = [...css.matchAll(/background:\s*rgba\(0, 0, 0, \.0\d\)/g)].map(m => m[0]);
+  assert.deepStrictEqual(stray, [],
+    `还有 ${stray.length} 处柔底没走 --wash-* 令牌：${stray.join(' | ')}`);
+  const WASH = [['--wash-1', 'rgba(0, 0, 0, .02)'], ['--wash-2', 'rgba(0, 0, 0, .03)'],
+                ['--wash-3', 'rgba(0, 0, 0, .04)'], ['--wash-4', 'rgba(0, 0, 0, .06)']];
+  for (const [name, val] of WASH) {
+    const defined = new RegExp(name.replace(/-/g, '\\-') + ':\\s*' + val.replace(/[.()]/g, '\\$&'));
+    assert.ok(defined.test(css), `${name} 应定义为 ${val}（等值收令牌，不许顺手改值）`);
+    assert.ok(css.includes(`var(${name})`), `${name} 定义了却没有任何使用点——令牌层与使用层脱节了`);
+  }
+  assert.ok(/--sh-card: 0 1px 2px rgba\(0, 0, 0, \.04\)/.test(css),
+    '--sh-card 应定义为 0 1px 2px rgba(0,0,0,.04)');
+  assert.strictEqual(css.split('0 1px 2px rgba(0, 0, 0, .04)').length - 1, 1,
+    '卡片承托影的字面值应只剩 --sh-card 定义处一份，其余 5 个使用点全部走 var(--sh-card)');
+  assert.ok(/--sh-ambient: var\(--sh-card\),/.test(css),
+    '--sh-ambient 的第一层应复用 var(--sh-card)，两处各写一遍就会各自漂移');
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;
