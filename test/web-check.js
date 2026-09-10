@@ -2346,5 +2346,47 @@ check('IMAP 主机与凭据不得在 workflow 里写死（能力在 config.js，
   assert.ok(!/MAIL_SYNC_ERROR:.*QQ 授权码/.test(y), 'MAIL_SYNC_ERROR 文案不该再写死"QQ 授权码"');
 });
 
+check('用户文档与当前行为一致（看板横带 / 邮箱多服务商 / 邮件多选与就地编辑）', () => {
+  // 为什么要这条：文档漂移不会让任何测试变红，也不会报错，用户照着做却会撞墙。
+  // 本次就抓到三处——安装教程仍写着「看板列只生成 当前有记录的阶段 + Offer / 已结束」
+  // （v4.17.0 已改成横带）、Secrets 仍只列 QQ_EMAIL/QQ_AUTHCODE、拉取频率仍写「默认每 12 小时一次」
+  // （v4.15.0 起 cron 是每 3 小时触发、实际间隔由 minIntervalHours 决定）。
+  // 只断言"必须出现的新口径"，不做长黑名单：黑名单会随文案改写而失效，正向断言更耐改。
+  const read = f => fs.readFileSync(path.resolve(__dirname, '..', f), 'utf8');
+  const tut = read('docs/安装与使用教程.md');
+  const qs = read('docs/快速上手指南.md');
+  const dl = read('download.html');
+  const rootReadme = read('README.md');
+
+  // ① 看板：不得再声称 Offer / 已结束 是列，且要说明横带
+  for (const [name, doc] of [['安装教程', tut], ['快速上手', qs], ['download', dl], ['README', rootReadme]]) {
+    // 正则必须锚住旧口径的 `阶段 + Offer / 已结束` 这个**加号形态**，不能只写
+    // `看板列只生成[^。]*Offer / 已结束`：改正后的句子是「只生成"当前有记录的阶段"
+    // （v4.17.0 起 Offer / 已结束 已移出列、改由横带承载）」，[^。]* 会跨过括号一路
+    // 匹配到解释文字里的 Offer / 已结束 → 守卫被自己的更正说明绊倒（本仓第 6 次踩这个形状）。
+    assert.ok(!/看板列只生成[^。]*阶段\s*\+\s*Offer\s*\/\s*已结束/.test(doc),
+      `${name} 仍声称看板列包含 Offer / 已结束（v4.17.0 起它们是横带，列只留有记录的阶段）`);
+  }
+  assert.ok(tut.includes('Offer 横带') && tut.includes('已结束横带'), '安装教程应说明两条终态横带');
+  assert.ok(/Offer 横带 → 推进投放区 → 进行中阶段列 → 已结束横带/.test(tut),
+    '安装教程应给出看板的从上到下顺序（投放区在 Offer 横带下方，这是刻意排的）');
+  assert.ok(qs.includes('Offer 横带'), '快速上手指南也应提到横带，否则两份文档口径不一致');
+
+  // ② 邮箱：部署步骤以 MAIL_USER/MAIL_PASS 为主，并给出 163 的接法
+  assert.ok(/Secrets 配置 `MAIL_USER`\/`MAIL_PASS`/.test(tut),
+    '安装教程的 Secrets 应以 MAIL_USER / MAIL_PASS 为主（QQ_* 只是兼容回落）');
+  assert.ok(tut.includes('IMAP_HOST=imap.163.com'), '安装教程应给出 163 的 IMAP_HOST 取值');
+  assert.ok(/QQ_EMAIL[^。]*仍然可用|旧名字 `QQ_EMAIL`/.test(tut),
+    '应说明旧 Secret 名仍可用，否则已部署的人会以为自己配错了');
+  assert.ok(!/默认每 12 小时一次/.test(tut),
+    '拉取频率口径已过时：cron 每 3 小时触发，实际间隔由 minIntervalHours 决定（默认 12）');
+
+  // ③ 邮件复核：多选、就地编辑、来源标注
+  assert.ok(tut.includes('可勾选多条一起应用'), '安装教程应说明候选可多选（v4.15.0，此前是单选下拉）');
+  assert.ok(tut.includes('就地改了再应用'), '安装教程应说明字段可就地编辑（v4.16.0）');
+  assert.ok(tut.includes('收信日兜底'),
+    '安装教程应解释来源标注的三种颜色，否则用户看不懂那枚橙色标签、也不知道它是编造值');
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;
