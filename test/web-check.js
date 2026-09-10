@@ -2135,5 +2135,87 @@ check('机构名已写在岗位名里时不得重复渲染（实证：数字金�
     'positionWithUnit 的调用点应 ≥7（1 处定义 + 6 处渲染点；邮件候选那一处随多选改造再 +1）');
 });
 
+// ─────────────────────────────────────────────
+// v4.16.0 邮件字段就地编辑：不嵌 label / 日期不静默兜底 / 草稿不被重渲染冲掉 / deadline 贯通
+// ─────────────────────────────────────────────
+check('邮件字段的输入框不得嵌在 <label> 里（否则点日期框会连带切换勾选）', () => {
+  // label 的默认行为是把点击转发给它内部的表单控件。把 date/text/select 放进包着 checkbox 的
+  // label 里，用户点日期框就会连带勾选/取消勾选那个字段——不报错、看起来"点一下跳两下"，
+  // 是内联编辑改造最容易踩的坑。所以每行必须是 label（只包 checkbox）与编辑器容器**并列**。
+  // ⚠️ 必须先剥 JS 行注释再扫标签：本函数里解释这个坑的注释，正文就写着
+  // 「<label>」「<label class="mail-field-check">」这些字样。不剥的话正则会从注释里的
+  // <label 一路匹配到真正的 </label>，把中间的编辑器全吞进去 → 守卫报"有 1 个 label 包着
+  // 输入框"，而代码其实是对的。这是本仓第 5 次踩"解释性文字替代码顶罪/冒充代码"这一形状
+  // （前四次：CSS 块注释 ×2、JS 行注释、template.html 的 HTML 注释）。
+  const src = extractFunction(html, 'mailCardHtml').replace(/\/\/[^\n]*/g, '');
+  assert.ok(src.length > 200, '产物里找不到 mailCardHtml');
+  const labels = [...src.matchAll(/<label[^>]*>[\s\S]*?<\/label>/g)].map(m => m[0]);
+  assert.ok(labels.length >= 2, 'mailCardHtml 里应至少有勾选框与多目标两类 <label>');
+  const bad = labels.filter(l => l.includes('data-mail-edit'));
+  assert.deepStrictEqual(bad.map(b => b.slice(0, 80)), [],
+    `有 ${bad.length} 个 <label> 内部包着 data-mail-edit 输入框：点击会被转发到 checkbox，导致改值同时改勾选状态`);
+  assert.ok(/<label class="mail-field-check">/.test(src), '勾选框应单独包在 .mail-field-check 里');
+  // 结构顺序：</label> 必须紧接在 <div class="mail-field-edit"> 之前（并列，不是嵌套）。
+  // ⚠️ 这条静态断言**只能查书写顺序**，查不到真正的嵌套关系——编辑器 HTML 是 ${f.editor}
+  // 插值进来的，源码文本里看不到 data-mail-edit 字样，把 </label> 挪到编辑器之后它照样绿。
+  // 真正判定嵌套的是 web-runtime.js 里对**渲染产物**的同名断言（那条能抓到）。
+  // 两条都留：这条盯书写形态、那条盯实际输出，任一被改坏都会红。
+  assert.ok(src.includes('</label><div class="mail-field-edit">'),
+    '字段行必须是 </label> 紧接 <div class="mail-field-edit">（并列，不是嵌套）');
+  // 勾选框的样式选择器也不得写成 `.mail-field input`：那会连带命中新加的日期/文本/下拉框
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!/\.mail-field input \{/.test(css),
+    '勾选框样式应写 .mail-field-check input；写 .mail-field input 会连带命中编辑器里的输入框');
+});
+
+check('里程碑日期不得再静默兜底成「今天」，且校验必须拦在写入循环之前', () => {
+  // 此前 applyMailSuggestion 里是 `mile.at || localDateInput(new Date())`，与 Action 侧的
+  // `n.scheduleDate || receivedDate(mail)` 构成两处静默兜底：AI 按契约正确留空，
+  // 代码却编一个日期出来，显示得像从邮件里读到的，勾选后**永久写进时间线**。
+  const src = extractFunction(html, 'applyMailSuggestion').replace(/\/\/[^\n]*/g, '');
+  assert.ok(src.length > 200, '产物里找不到 applyMailSuggestion');
+  assert.ok(!/localDateInput\(new Date\(\)\)/.test(src),
+    'applyMailSuggestion 里不该有任何"用今天顶替"的写法——那是把猜测写进永久时间线');
+  assert.ok(/里程碑需要一个日期/.test(src), '缺日期时应给出可操作的提示，而不是静默跳过或猜一个');
+  const atCheck = src.indexOf('里程碑需要一个日期');
+  const loop = src.indexOf('for (const rec of targets)');
+  assert.ok(atCheck > 0 && loop > 0, '定位失败：找不到日期校验或写入循环');
+  assert.ok(atCheck < loop,
+    '日期校验必须拦在写入循环**之前**：否则多选时会前几条已写入、后面才发现不合法（部分写入最难回退）');
+  // 值必须以输入框为准（就地编辑的全部意义），不能直接读 s.proposed
+  assert.ok(/readEd\('milestone\.at'\)/.test(src), '里程碑日期应读输入框当前值，而不是 AI 原值');
+});
+
+check('就地编辑的草稿必须在重渲染后保住（云同步与「重新读取」都会触发 renderMailView）', () => {
+  // 失效模式：你正在改日期，一次云同步把整张卡片重画、输入框回到 AI 原值，
+  // 没有任何提示 —— 改动静默丢失是最让人不信任的那类 bug。
+  const cardSrc = extractFunction(html, 'mailCardHtml').replace(/\/\/[^\n]*/g, '');   // 同样先剥行注释
+  assert.ok(/mailDrafts\.get\(/.test(cardSrc),
+    'mailCardHtml 必须优先用草稿值回填，否则重渲染会冲掉用户的改动');
+  assert.ok(/mailDrafts\.set\(/.test(html), '应有 input 事件委托把改动写进 mailDrafts');
+  const apply = extractFunction(html, 'applyMailSuggestion');
+  const dismiss = extractFunction(html, 'dismissMailSuggestion');
+  assert.ok(/mailDrafts\.delete\(/.test(apply), 'apply 后必须清掉草稿（否则这封邮件再出现会带着旧改动）');
+  assert.ok(/mailDrafts\.delete\(/.test(dismiss), 'dismiss 后必须清掉草稿');
+  assert.ok(/data-mail-action="reset-fields"/.test(html), '应提供「还原 AI 原值」入口：改错了不该只能凭记忆重填');
+  // 刻意不持久化：会话级才符合"这次改的"这个心智模型，重载后留着旧草稿更容易 confusing
+  assert.ok(!/localStorage[^\n]*mailDraft/i.test(html), 'mailDrafts 不该被持久化到 localStorage');
+});
+
+check('deadline 贯通网页端：卡片有编辑器、apply 会写进台账', () => {
+  // 台账一直有 deadline 字段（「签约截止」列 + deadlineInfo 倒计时 + 按截止日排序），
+  // 但 v4.16.0 之前邮件链路从来不喂它 —— 而笔试/测评邮件里最有用的时间恰恰是截止时间。
+  const cardSrc = extractFunction(html, 'mailCardHtml').replace(/\/\/[^\n]*/g, '');   // 同样先剥行注释
+  assert.ok(/data-mail-edit="deadline"/.test(cardSrc), '邮件卡片应有 deadline 的编辑器');
+  const apply = extractFunction(html, 'applyMailSuggestion').replace(/\/\/[^\n]*/g, '');
+  assert.ok(/rec\.deadline = readEd\('deadline'\)/.test(apply),
+    'apply 必须把 deadline 写进台账，否则 AI 侧接住了也白接');
+  // 来源三态都要有对应的视觉标记：兜底值必须显眼，否则用户会以为它是邮件里读出来的
+  for (const cls of ['is-fallback', 'is-email', 'is-unknown']) {
+    assert.ok(cardSrc.includes(cls), `mailCardHtml 缺 atSource 的 ${cls} 分支`);
+    assert.ok(html.includes(`.mail-ed-src.${cls} {`), `样式里缺 .mail-ed-src.${cls}（只有类名没有样式等于没标）`);
+  }
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;

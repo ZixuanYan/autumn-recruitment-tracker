@@ -416,12 +416,74 @@ test('milestoneNote：emailType 为「其它」时用 AI 的 summary，其余保
   const long = ai.milestoneNote({ emailType: '其它', summary: 'a'.repeat(120) });
   assert.ok(long.length <= 48, `应截到 48 字以内，实际 ${long.length}`);
 });
+test('时间来源必须自报身份：邮件没给时间时 atSource=received 且备注带标注', () => {
+  const mail = { receivedAt: '2026-09-10T09:40:00Z' };
+  // 邮件给了明确时间 → atSource=email，备注干净
+  const withTime = ai.normalizeAiResult(
+    { isRecruitment: true, emailType: '面试邀请', stage: '一面', scheduleAt: '2026-09-12T14:00', confidence: 0.9 }, mail);
+  assert.strictEqual(withTime.proposed.milestone.atSource, 'email');
+  assert.strictEqual(withTime.proposed.milestone.at, '2026-09-12');
+  assert.ok(!withTime.proposed.milestone.note.includes('收信日'), '来自邮件的时间不该被标注成兜底');
+
+  // 邮件没给时间 → 仍用收信日（时间线是按日期排序的真相源，不能留空），但必须自报身份。
+  // 此前这里是静默兜底：AI 按契约第 5/7 条正确留空，后处理却把收信日填进去，
+  // 网页端显示成「笔试（2026-09-10）」，看起来完全像是从邮件里读出来的。
+  const noTime = ai.normalizeAiResult(
+    { isRecruitment: true, emailType: '笔试', stage: '笔试', scheduleAt: '', confidence: 0.9 }, mail);
+  assert.strictEqual(noTime.proposed.milestone.atSource, 'received');
+  assert.strictEqual(noTime.proposed.milestone.at, '2026-09-10', '仍按收信日兜底（时间线需要日期）');
+  assert.ok(noTime.proposed.milestone.note.includes('未给时间'), '备注必须标明这是兜底日期');
+  assert.ok(noTime.proposed.milestone.note.length <= 48, `备注仍须 ≤48 字，实际 ${noTime.proposed.milestone.note.length}`);
+
+  // 标注不能被 48 字上限截掉：emailType「其它」会带最长 60 字的 summary，
+  // 若写成 (head + suffix).slice(0, 48)，最需要留下的标注反而第一个被切掉。
+  const long = ai.normalizeAiResult(
+    { isRecruitment: true, emailType: '其它', stage: '', scheduleAt: '', summary: '简'.repeat(60), confidence: 0.7 }, mail);
+  assert.ok(long.proposed.milestone.note.endsWith('（未给时间·按收信日）'),
+    `长 summary 时标注必须留在末尾，实际：${long.proposed.milestone.note}`);
+  assert.ok(long.proposed.milestone.note.length <= 48, '总长仍须 ≤48');
+});
+
+test('deadline 贯通：截止/失效时间要能被接住，而不是被整条链路丢弃', () => {
+  // 实证形状：宁波银行那封笔试邮件只写了"考试链接 2026-09-13 09:39:53 失效"，
+  // 没有笔试开始时间。台账一直有 deadline 字段（「签约截止」列 + 倒计时 + 按截止日排序），
+  // 但 v4.16.0 之前 AI 契约与 proposed 里都没有它，于是这个最有用的时间被丢掉，
+  // 位置还被兜底的收信日占着。
+  const mail = { receivedAt: '2026-09-10T09:40:00Z' };
+  const n = ai.normalizeAiResult({
+    isRecruitment: true, emailType: '笔试', company: '宁波银行', stage: '笔试',
+    scheduleAt: '', deadline: '2026-09-13 09:39:53', round: '在线笔试', confidence: 0.98
+  }, mail);
+  assert.strictEqual(n.proposed.deadline, '2026-09-13', '带时刻的截止时间应归一到 YYYY-MM-DD（台账 deadline 的格式）');
+  assert.strictEqual(n.proposed.milestone.atSource, 'received', '开始时间没给 → 里程碑日期仍是收信日兜底，但已标注');
+  // 两个时间字段互不顶替：给了开始时间就都用邮件的
+  const both = ai.normalizeAiResult({
+    isRecruitment: true, emailType: '笔试', stage: '笔试',
+    scheduleAt: '2026-09-12T14:00', deadline: '2026-09-13', confidence: 0.9
+  }, mail);
+  assert.strictEqual(both.proposed.scheduleAt, '2026-09-12T14:00');
+  assert.strictEqual(both.proposed.deadline, '2026-09-13');
+  assert.strictEqual(both.proposed.milestone.atSource, 'email');
+  // 老 payload / AI 没返回该字段 → 必须是空串而不是 undefined（网页端要拿它判存在性）
+  const legacy = ai.normalizeAiResult({ isRecruitment: true, emailType: '面试邀请', stage: '一面', scheduleAt: '2026-09-15T10:00', confidence: 0.9 }, mail);
+  assert.strictEqual(legacy.proposed.deadline, '');
+  // 提示词契约里必须真的有这个字段，否则 AI 永远不会返回它
+  // buildSystemPrompt(promptExtra, promptOverride) 是两个位置参数（不是选项对象）；
+  // 传空即得到「内置解析偏好 + 输出契约」的默认提示词。
+  const prompt = ai.buildSystemPrompt('', '');
+  assert.ok(prompt.includes('deadline(string)'), '输出契约的字段清单里必须有 deadline(string)');
+  assert.ok(/完成期限|截止时间/.test(prompt), '契约必须讲清 deadline 是"完成期限"而不是"开始时间"，否则 AI 会把失效时间塞进 scheduleAt');
+});
+
 test('buildProposed 的 milestone.note 走 milestoneNote（两处逻辑不得分叉）', () => {
   const n = ai.normalizeAiResult(
     { isRecruitment: true, emailType: '其它', company: '滴滴', summary: '简历成功投递滴滴校招', confidence: 0.95 },
     { receivedAt: '2026-09-06T10:00:00Z' }
   );
-  assert.strictEqual(n.proposed.milestone.note, ai.milestoneNote(n));
+  // milestoneNote 现在收第二个参数 atSource（兜底标注），所以要比就带上它——
+  // 这条断言的原意是「note 必须由 milestoneNote 产出、不许在 buildProposed 里另拼一份」，
+  // 直接写成 milestoneNote(n) 会因为少传参数而恒不相等，反而把这条守卫变成噪音。
+  assert.strictEqual(n.proposed.milestone.note, ai.milestoneNote(n, n.proposed.milestone.atSource));
   assert.ok(n.proposed.milestone.note.includes('简历成功投递滴滴校招'), 'proposed 里应是 summary 而非「其它」');
   // nextAction 仍按类型映射，不受 note 改动影响
   assert.strictEqual(n.proposed.nextAction, '查看邮件原文并按需跟进');

@@ -75,6 +75,9 @@ sandbox.AJA = AJA_SHARED;   // 邮件段会用到 STAGE_PRESETS 等转发别名
 // 手写副本会造成第二份实现（本仓有别名守卫专门防这种漂移），所以从真实源码抽取。
 // extractFunction 与 loadSrc 都是模块级、已提升/已 require，可以在这里调用。
 sandbox.companyGroupKey = AJA_SHARED.companyGroupKey;
+// mailStageOptions（v4.16.0 就地编辑的阶段下拉）要用 STAGE_PRESETS，而它在产物里是
+// **块外**的转发别名（const STAGE_PRESETS = AJA.STAGE_PRESETS;），不在被抽取的邮件段内。
+sandbox.STAGE_PRESETS = AJA_SHARED.STAGE_PRESETS;
 vm.createContext(sandbox);
 vm.runInContext(extractFunction(loadSrc.coreSrc, 'positionWithUnit'), sandbox, { filename: 'core-positionWithUnit.js' });
 vm.runInContext(sectionSrc, sandbox, { filename: 'mail-section.js' });
@@ -274,12 +277,23 @@ check('applyMailSuggestion 多目标：勾选 N 条就写入 N 条，且 saveRec
   ];
   sandbox.mailSuggestions = [{ id: 'uid-1', company: '招商银行', confidence: 0.9,
     proposed: { milestone: { stage: '二面', at: '2026-09-12', note: '邮件·面试邀请' } } }];
-  // 勾选 a 与 c（b 没勾）；字段只勾 milestone
+  // 勾选 a 与 c（b 没勾）；字段只勾 milestone。
+  // v4.16.0 起 apply 一律以**输入框当前值**为准（用户可能已就地改过），
+  // 所以桩必须提供 data-mail-edit 的编辑器；这里刻意让日期与 AI 原值不同，
+  // 用来证明"写进去的是你改过的值，不是 AI 的原值"——这正是就地编辑的全部意义。
+  const edits = {
+    'milestone.stage': '二面',
+    'milestone.at': '2026-09-20',          // AI 原值是 2026-09-12，故意改掉
+    'milestone.note': '邮件·面试邀请（改过）'
+  };
   const card = {
     querySelectorAll: sel => (sel === '.mail-target-check:checked'
       ? [{ value: 'a' }, { value: 'c' }]
       : [{ dataset: { mailField: 'milestone' } }]),
-    querySelector: () => null
+    querySelector: sel => {
+      const m = /^\[data-mail-edit="([^"]+)"\]$/.exec(sel);
+      return m && Object.prototype.hasOwnProperty.call(edits, m[1]) ? { value: edits[m[1]] } : null;
+    }
   };
   sandbox.document = { querySelector: () => card };
   try {
@@ -291,6 +305,10 @@ check('applyMailSuggestion 多目标：勾选 N 条就写入 N 条，且 saveRec
     assert.strictEqual(byId('a').stage, '二面', '勾选的第一条应被推进');
     assert.strictEqual(byId('c').stage, '二面', '勾选的第二条也应被推进（只写第一条是这类改动最常见的错）');
     assert.strictEqual(byId('b').stage, '已投递', '没勾的那条不得被动到');
+    // 写进去的必须是**编辑后的值**，不是 s.proposed 里的 AI 原值
+    const lastA = byId('a').timeline[byId('a').timeline.length - 1];
+    assert.strictEqual(lastA.at, '2026-09-20', '应写入就地编辑后的日期，而不是 AI 原值 2026-09-12');
+    assert.strictEqual(lastA.note, '邮件·面试邀请（改过）', '应写入就地编辑后的备注');
     assert.deepStrictEqual(flashed, ['a', 'c'], '两条勾选的都要闪一下，用户才知道改了哪些');
     assert.deepStrictEqual(applied, ['uid-1'], '邮件只标记一次 applied（标记 N 次没有意义，且会掩盖"部分失败"）');
     assert.strictEqual(stamped, 0, '非 Offer 阶段不该播盖章动画');
@@ -301,6 +319,16 @@ check('applyMailSuggestion 多目标：勾选 N 条就写入 N 条，且 saveRec
     sandbox.applyMailSuggestion('uid-1');
     assert.strictEqual(saves.length, 0, '没勾任何目标时不得写入');
     assert.strictEqual(applied.length, 0, '没勾任何目标时不得把邮件标记成已应用（否则这封邮件就再也找不回来了）');
+
+    // 勾了里程碑但日期被清空：必须拦下来，不许退回"用今天顶替"。
+    // 这正是 v4.16.0 删掉的那两处静默兜底之一（另一处在 Action 侧的 receivedDate）。
+    card.querySelectorAll = sel => (sel === '.mail-target-check:checked'
+      ? [{ value: 'a' }] : [{ dataset: { mailField: 'milestone' } }]);
+    edits['milestone.at'] = '';
+    saves.length = 0; applied.length = 0;
+    sandbox.applyMailSuggestion('uid-1');
+    assert.strictEqual(saves.length, 0, '里程碑缺日期时不得写入（时间线是按日期排序的真相源，空日期会打乱它）');
+    assert.strictEqual(byId('a').timeline.length, 2, '缺日期时不得往时间线里追加半成品里程碑');
   } finally {
     for (const [k, v] of Object.entries(orig)) sandbox[k] = v;
   }
@@ -407,6 +435,33 @@ check('renderPromptSnapshot：有快照则展示 Action 实际生效的全文，
   sandbox.renderPromptSnapshot();
   assert.strictEqual(wrap.hidden, true);
 });
+check('渲染产物里 <label> 内部不得含 data-mail-edit 输入框（点日期框会连带切换勾选）', () => {
+  // 为什么必须查**渲染产物**而不是源码：编辑器 HTML 是 ${f.editor} 插值进来的，
+  // 源码文本里看不到 data-mail-edit，静态扫描抓不到"把 </label> 挪到编辑器之后"这种改动
+  //（negative test 实测过：改了源码顺序，静态守卫照样绿）。
+  // label 的默认行为是把点击转发给内部表单控件，所以嵌进去的后果是：
+  // 用户点日期框想改日期，却同时把那个字段勾选/取消勾选了 —— 不报错，只是"点一下跳两下"。
+  sandbox.records = [{ id: 'r1', company: '招商银行', position: '后端', stage: '一面' }];
+  const h = sandbox.mailCardHtml({
+    ...baseSug, company: '招商银行',
+    proposed: {
+      milestone: { stage: '一面', at: '2026-09-12', atSource: 'email', note: '邮件·面试邀请' },
+      scheduleAt: '2026-09-12T14:00', deadline: '2026-09-13',
+      recentSchedule: '一面 · 线上', nextAction: '准备项目'
+    }
+  });
+  const labels = [...h.matchAll(/<label[^>]*>[\s\S]*?<\/label>/g)].map(m => m[0]);
+  assert.ok(labels.length >= 1, '渲染产物里应至少有勾选框那个 <label>');
+  const bad = labels.filter(l => l.includes('data-mail-edit'));
+  assert.deepStrictEqual(bad.map(b => b.slice(0, 90)), [],
+    `渲染出的 <label> 内部包着编辑器：${bad.length} 处`);
+  // 五个字段的编辑器都得真的渲染出来（否则"就地编辑"是空的）
+  for (const key of ['milestone.stage', 'milestone.at', 'milestone.note', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction']) {
+    assert.ok(h.includes(`data-mail-edit="${key}"`), `缺 ${key} 的编辑器`);
+  }
+  assert.ok(h.includes('data-mail-action="reset-fields"'), '应有「还原 AI 原值」入口');
+});
+
 check('mailCardHtml：历史数据的「邮件·其它」改用 summary 展示（不必重扫就变好）', () => {
   sandbox.records = [{ id: 'r1', company: '滴滴', position: '后端', stage: '已投递' }];
   const legacy = {
@@ -417,16 +472,45 @@ check('mailCardHtml：历史数据的「邮件·其它」改用 summary 展示�
     proposed: { milestone: { stage: '已投递', at: '2026-09-06', note: '邮件·其它' }, scheduleAt: '', recentSchedule: '', nextAction: '查看邮件原文并按需跟进' }
   };
   const h = sandbox.mailCardHtml(legacy);
-  // 精确断言里程碑那一段：卡片本身另有摘要行会显示 summary，不能用「整个 HTML 含/不含」来判断
-  assert.ok(h.includes('推进里程碑：已投递（2026-09-06） · 邮件·简历成功投递滴滴校招'), '里程碑备注应是 summary');
+  // v4.16.0 起字段值在**内联输入框**里而不是标签文本里，所以断言改成读取对应编辑器的值。
+  // 意图不变：历史数据的「邮件·其它」要换成 summary、类型明确的保留类型名、用户手写备注不得被改写。
+  const edVal = (html, key) => {
+    const m = new RegExp(`data-mail-edit="${key.replace(/\./g, '\\.')}" value="([^"]*)"`).exec(html);
+    assert.ok(m, `找不到 ${key} 的编辑器`);
+    return m[1];
+  };
+  const selectedStage = html => {
+    const m = /data-mail-edit="milestone\.stage">([\s\S]*?)<\/select>/.exec(html);
+    assert.ok(m, '找不到阶段下拉');
+    return (/value="([^"]*)" selected/.exec(m[1]) || [, ''])[1];
+  };
+  assert.strictEqual(edVal(h, 'milestone.note'), '邮件·简历成功投递滴滴校招，等待后续流程推进。', '里程碑备注应是 summary');
+  assert.strictEqual(edVal(h, 'milestone.at'), '2026-09-06', '日期应回填进 date 输入框');
+  assert.strictEqual(selectedStage(h), '已投递', '阶段下拉应选中 AI 给的那一档');
   assert.ok(!h.includes('邮件·其它'), '不该再出现零信息量的分类术语');
+  // 老 payload 没有 atSource（v4.16.0 之前的 Gist 数据）→ 必须是中性的「来源未知」，
+  // 不能猜成 received：那个日期可能本来就是邮件里的真时间，猜错会让人去改一个对的值。
+  assert.ok(h.includes('mail-ed-src is-unknown'), '老 payload 应标成「来源未知」');
+  assert.ok(!h.includes('is-fallback'), '老 payload 不该被误标成收信日兜底');
+
   // 有明确类型的历史数据保持原样（更短、易扫读）
   const typed = { ...legacy, emailType: '测评', summary: '通知参加素质测评', proposed: { milestone: { stage: '测评', at: '2026-09-04', note: '邮件·测评' } } };
   const h2 = sandbox.mailCardHtml(typed);
-  assert.ok(h2.includes('推进里程碑：测评（2026-09-04） · 邮件·测评'), '类型明确的保留类型名，不换成 summary');
+  assert.strictEqual(edVal(h2, 'milestone.note'), '邮件·测评', '类型明确的保留类型名，不换成 summary');
+  assert.strictEqual(selectedStage(h2), '测评');
   // 用户手写的备注绝不能被改写
   const manual = { ...legacy, summary: 'x', proposed: { milestone: { stage: '一面', at: '2026-09-10', note: '电话面试，面试官是张工' } } };
-  assert.ok(sandbox.mailCardHtml(manual).includes('推进里程碑：一面（2026-09-10） · 电话面试，面试官是张工'));
+  assert.strictEqual(edVal(sandbox.mailCardHtml(manual), 'milestone.note'), '电话面试，面试官是张工',
+    '用户手写的备注不得被 mileNoteText 改写');
+
+  // atSource='received' 时必须显眼标出兜底（这正是原来那个 bug 的界面侧修复）
+  const fb = { ...legacy, proposed: { milestone: { stage: '笔试', at: '2026-09-10', atSource: 'received', note: '邮件·笔试（未给时间·按收信日）' } } };
+  const hf = sandbox.mailCardHtml(fb);
+  assert.ok(hf.includes('mail-ed-src is-fallback'), '收信日兜底必须带警示样式');
+  assert.ok(hf.includes('收信日兜底'), '并且要有文字说明，不能只靠颜色');
+  // atSource='email' 时给正向确认
+  const em = { ...legacy, proposed: { milestone: { stage: '一面', at: '2026-09-12', atSource: 'email', note: '邮件·面试邀请' } } };
+  assert.ok(sandbox.mailCardHtml(em).includes('mail-ed-src is-email'), '来自邮件的时间应标成正向来源');
 });
 
 // ============================================================================

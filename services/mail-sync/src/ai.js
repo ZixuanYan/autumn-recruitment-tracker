@@ -28,6 +28,9 @@ const DEFAULT_PROMPT_BODY = [
   '解析偏好：',
   '- company/position/location/round：邮件里明确出现才填，否则留空；round 如「一面」「技术面」「HR 面」等原文轮次描述。',
   '- summary：≤60 字的中文要点，概括这封邮件说了什么（如「通知 9 月 12 日 14:00 线上二面」）。',
+  '- scheduleAt 与 deadline 是**两件不同的事**，别混：面试/笔试/测评的**开始时间**填 scheduleAt；'
+    + '**完成期限**（"请在 X 日前完成"、"考试链接 X 日失效"、"X 日前回复确认"）填 deadline。'
+    + '两者都出现就都填；都没有就都留空——尤其不要拿收信日期去填任何一个。',
   '- 拒信（含「遗憾」「未通过」「进入人才库」等）→ emailType「拒信」、stage 可填「已结束」、confidence 偏低。'
 ].join('\n');
 
@@ -35,10 +38,10 @@ const DEFAULT_PROMPT_BODY = [
 const OUTPUT_CONTRACT = [
   '【输出契约 · 不可覆盖】以下要求优先于上面的任何自定义说明，必须严格遵守：',
   '1. 严格只返回一个 JSON 对象，不要 markdown、不要 ```代码围栏```、不要任何解释文字。',
-  '2. JSON 必须且只能包含这些字段：isRecruitment(bool), emailType(string), company(string), position(string), stage(string), scheduleAt(string), location(string), round(string), summary(string), confidence(number 0~1)。',
+  '2. JSON 必须且只能包含这些字段：isRecruitment(bool), emailType(string), company(string), position(string), stage(string), scheduleAt(string), deadline(string), location(string), round(string), summary(string), confidence(number 0~1)。',
   `3. emailType 只能是这些之一：${EMAIL_TYPES.join(' | ')}。非招聘邮件填「其它」且 isRecruitment=false。`,
   '4. stage 只能从用户提供的 allowedStages 数组里原样选取；无法确定就留空字符串 ""，绝不臆造或改写阶段名。',
-  '5. scheduleAt：面试/笔试/测评的时间，格式必须为 "YYYY-MM-DDTHH:mm"（24 小时制，本地时间）；邮件未给出明确时间就留空 ""，不要猜测。',
+  '5. scheduleAt：面试/笔试/测评的**开始时间**，格式必须为 "YYYY-MM-DDTHH:mm"（24 小时制，本地时间）。deadline：**完成期限**（在线笔试/测评的截止时间、考试链接失效时间、Offer 回复期限、网申截止），格式 "YYYY-MM-DD"（只有日期没给时刻也照填）。两者都必须在邮件里明确出现才填，未给出就留空 ""，不要猜测，也不要用收信日期顶替。',
   '6. confidence：这封邮件「是招聘相关邮件、且你的字段解析正确」的置信度（0~1）。注意：这不是"你对自己判断有多确定"。若判定为非招聘邮件（营销/账单/订阅/系统通知/理财推销/课程促销），必须给 <= 0.1，即使你非常确定它不是招聘邮件。',
   '7. 严禁编造任何未在邮件中出现的信息；无法确定的字段一律留空字符串。'
 ].join('\n');
@@ -132,6 +135,12 @@ const NEXT_ACTION_BY_TYPE = {
 
 // 由归一结果生成 proposed（网页端逐字段勾选应用的来源）
 function buildProposed(n, mail) {
+  // 时间线是按日期排序的真相源，所以里程碑**必须**有个日期：邮件没给时间时仍用收信日兜底。
+  // 但兜底值必须自报身份（atSource + 备注里的标注），不能像以前那样静默顶替。
+  // 实证：宁波银行那封笔试邮件只写了"考试链接 2026-09-13 09:39:53 失效"、没有笔试开始时间，
+  // AI 按契约第 5/7 条正确地留空，旧代码却把收信日 2026-09-10 填进去，
+  // 网页端显示成「笔试（2026-09-10）」，看起来完全像是从邮件里读出来的。
+  const atSource = n.scheduleDate ? 'email' : 'received';
   const at = n.scheduleDate || receivedDate(mail);
   const timePart = n.scheduleAt ? n.scheduleAt.replace('T', ' ') : (n.scheduleDate || '');
   const recentSchedule = [n.round, timePart, n.location].filter(Boolean).join(' · ').slice(0, 100);
@@ -141,19 +150,31 @@ function buildProposed(n, mail) {
     // 等一大类邮件，显示成「邮件·其它」等于什么都没说，而同一封邮件的 summary 是
     // 「简历成功投递滴滴校招，等待后续流程推进」这种三个月后回看仍有用的内容。
     // 其余类型（测评/笔试/面试邀请/Offer/拒信）本身已足够明确且更短，保留类型名便于扫读。
-    milestone: { stage: n.stage, at, note: milestoneNote(n) },
+    milestone: { stage: n.stage, at, atSource, note: milestoneNote(n, atSource) },
     scheduleAt: n.scheduleAt,
+    // 截止时间。台账一直有 deadline 字段（还有「签约截止」列、deadlineInfo 倒计时、按截止日排序），
+    // 但 v4.15.0 之前 AI 契约里没有它、proposed 里也没有 —— 而笔试/测评类邮件里最常见、
+    // 最有用的时间恰恰就是这个（"链接 X 日失效"、"请在 X 日前完成"），于是它被整条链路丢弃，
+    // 位置还被上面那个兜底的收信日占着。
+    deadline: n.deadline,
     recentSchedule,
     nextAction: NEXT_ACTION_BY_TYPE[n.emailType] || '查看邮件原文并按需跟进'
   };
 }
 
 // 里程碑备注文本（纯函数，便于单测）。「邮件·」前缀 + 类型名或 summary，整体截到 48 字。
-function milestoneNote(n) {
+function milestoneNote(n, atSource) {
   const type = String((n && n.emailType) || '其它');
   const summary = String((n && n.summary) || '').trim();
   const body = (type === '其它' && summary) ? summary : type;
-  return `邮件·${body}`.slice(0, 48);
+  // 兜底日期必须**自报身份**。这条备注会被勾选后永久写进台账时间线，
+  // 三个月后回看只见「邮件·笔试」+ 一个日期，无从分辨那是邮件里写的还是收信日。
+  const suffix = atSource === 'received' ? '（未给时间·按收信日）' : '';
+  const head = `邮件·${body}`;
+  // 先给 suffix 留出额度再截断 head：整串上限 48 与 Action 侧既有约定一致，
+  // 若直接 (head + suffix).slice(0, 48)，emailType「其它」那种带 60 字 summary 的
+  // 会把标注整个截掉 —— 而那恰恰是最需要留下的部分。
+  return head.slice(0, Math.max(6, 48 - suffix.length)) + suffix;
 }
 
 // 校验/钳制 AI 原始输出 → 最终结果对象（纯函数，可单测）
@@ -173,6 +194,10 @@ function normalizeAiResult(raw, mail) {
     stage: normalizeStage(r.stage),
     scheduleAt: sched.scheduleAt,
     scheduleDate: sched.scheduleDate,
+    // deadline 复用同一个归一器：它的 scheduleDate 分量就是 YYYY-MM-DD，与台账 deadline
+    // 字段的格式一致。"2026-09-13 09:39:53" 会归到 2026-09-13，时分秒被丢掉——
+    // 台账的截止日倒计时本来就按天算（deadlineInfo），保留时刻没有落点。
+    deadline: normalizeScheduleAt(r.deadline).scheduleDate,
     location: cleanStr(r.location, 60),
     round: cleanStr(r.round, 20),
     summary: cleanStr(r.summary, 60),

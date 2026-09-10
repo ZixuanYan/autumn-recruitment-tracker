@@ -370,16 +370,29 @@ test('AI 归为「其它」时，写进建议的 milestone.note 用 summary 而�
     ],
     prevGist: gistWith([]),
     // 第一封归「其它」（投递确认类），第二封归「测评」
+    // 招商银行这条刻意**只给 deadline、不给 scheduleAt**：素质测评类邮件的典型形状就是
+    // "请在 X 日前完成"而没有开始时间。用来端到端验证 v4.16.0 新接的 deadline 字段
+    // 真的能从 AI 输出走到落盘的 mail-suggestions.json。
     ai: (text) => (text.includes('素质测评')
-      ? { isRecruitment: true, emailType: '测评', company: '招商银行', summary: '通知参加素质测评，截止9月20日12:00', confidence: 0.98, stage: '测评' }
+      ? { isRecruitment: true, emailType: '测评', company: '招商银行', summary: '通知参加素质测评，截止9月20日12:00', confidence: 0.98, stage: '测评', deadline: '2026-09-20' }
       : { isRecruitment: true, emailType: '其它', company: '滴滴', summary: '简历成功投递滴滴校招，等待后续流程推进', confidence: 0.95, stage: '已投递' })
   });
   const written = JSON.parse(r.patch.files['mail-suggestions.json'].content);
   const didi = written.suggestions.find(s => s.sourceUid === 4001);
   const cmb = written.suggestions.find(s => s.sourceUid === 4002);
-  assert.strictEqual(didi.proposed.milestone.note, '邮件·简历成功投递滴滴校招，等待后续流程推进',
-    '「其它」类必须用 summary —— 这条会被永久写进台账时间线');
-  assert.strictEqual(cmb.proposed.milestone.note, '邮件·测评', '有明确类型的保留简短类型名，便于扫读');
+  // 两条都没有 scheduleAt → milestone.at 是收信日兜底，备注必须**自报身份**。
+  // 此前这里是静默兜底：显示成「测评（2026-09-06）」，看起来像从邮件里读出来的，
+  // 勾选后永久写进时间线，三个月后无从分辨。
+  assert.ok(didi.proposed.milestone.note.startsWith('邮件·简历成功投递滴滴校招，等待后续流程推进'),
+    `「其它」类必须用 summary —— 这条会被永久写进台账时间线，实际：${didi.proposed.milestone.note}`);
+  assert.ok(didi.proposed.milestone.note.includes('未给时间'), '兜底日期必须在备注里标注出来');
+  assert.strictEqual(didi.proposed.milestone.atSource, 'received');
+  assert.strictEqual(cmb.proposed.milestone.note, '邮件·测评（未给时间·按收信日）',
+    '有明确类型的保留简短类型名便于扫读，兜底标注照加');
+  // deadline 端到端：AI 输出 → normalizeAiResult → proposed → 落盘的 suggestions
+  assert.strictEqual(cmb.proposed.deadline, '2026-09-20',
+    '截止时间必须一路带到落盘的建议里（台账有 deadline 字段与「签约截止」列，此前整条链路丢弃它）');
+  assert.strictEqual(didi.proposed.deadline, '', 'AI 没给 deadline 时必须是空串而不是 undefined');
   // isRecruitment 落盘备查（v4.6.1 加的字段）
   assert.strictEqual(didi.isRecruitment, true);
 });

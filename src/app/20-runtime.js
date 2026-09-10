@@ -24,6 +24,22 @@
         else { badge.textContent = ''; badge.hidden = true; }
       }
 
+      // 就地编辑的草稿：会话级 Map（mailId → { 字段路径: 值 }）。
+      // 为什么必须有它：refilterMail() 会调 renderMailView()，而它的上游 applyMailPayload()
+      // 由**云端同步**与「重新读取」触发 —— 也就是说你正在改日期时，一次云同步就会把整张卡片
+      // 重画、输入框全部回到 AI 原值，而且没有任何提示（改动静默丢失是最让人不信任的那类 bug）。
+      // 刻意**不**持久化到 localStorage：重载后还留着上次的草稿更容易 confusing，
+      // 而"这次会话里改的"才是用户的心智模型。apply / dismiss 后清掉对应条目。
+      const mailDrafts = new Map();
+
+      // 阶段下拉的选项：预设 + 当前值。自定义阶段不在 STAGE_PRESETS 里也必须保留，
+      // 否则一编辑就被冲成预设里的某一项（静默改数据）。
+      function mailStageOptions(current) {
+        const cur = String(current || '');
+        const list = (!cur || STAGE_PRESETS.includes(cur)) ? STAGE_PRESETS : [cur, ...STAGE_PRESETS];
+        return list.map(x => `<option value="${escapeHtml(x)}"${x === cur ? ' selected' : ''}>${escapeHtml(x)}</option>`).join('');
+      }
+
       function mailCardHtml(s) {
         const conf = Number(s.confidence) || 0;
         const lowConf = conf < 0.6;
@@ -54,17 +70,39 @@
           matchHtml = '<div class="mail-match none">未匹配到台账记录——可「新建记录」并预填邮件信息（走人工补全），或忽略。</div>';
         }
 
+        // 字段值可**就地编辑**（v4.16.0）。此前只有「要 / 不要」两个选择，
+        // 想改一个日期必须先应用、再去台账里找到那条记录手动改一遍——而应用会把值
+        // 永久写进时间线，等于"先写错再回去修"。
+        // 结构上刻意**不把输入框嵌进 <label>**：嵌进去的话点击日期框会连带切换勾选状态
+        //（label 的默认行为就是把点击转发给它内部的表单控件），这是这类改造最容易踩的坑。
+        // 所以每行是 .mail-field 容器 → 里面并列一个 <label class="mail-field-check">（只包 checkbox）
+        // 与一个 .mail-field-edit（只包输入框）。
+        const draft = mailDrafts.get(String(s.id)) || {};
+        const ed = (key, ai) => String(draft[key] != null ? draft[key] : (ai == null ? '' : ai));
         const fields = [];
         // note 走 mileNoteText 兜底：历史数据里的「邮件·其它」改用同一条建议的 summary 展示
         if (mile.stage) {
+          // atSource 三态。'received' = 邮件没给时间、Action 用收信日兜底（必须显眼标出来）；
+          // 'email' = 来自邮件原文；'' = v4.16.0 之前的老 payload，**无从判断**。
+          // 老数据刻意不猜成 received：它可能本来就是邮件里的真时间，猜错会让人去改一个对的值；
+          // 但也不装作知道，所以给中性的「来源未知」并提示核对。
+          const src = mile.atSource === 'received'
+            ? { cls: 'is-fallback', text: '收信日兜底', tip: '邮件里没有明确时间，这个日期是收信日兜底值——请按实际情况改掉（它会永久写进时间线）' }
+            : mile.atSource === 'email'
+              ? { cls: 'is-email', text: '来自邮件', tip: '这个时间是从邮件原文里读出来的' }
+              : { cls: 'is-unknown', text: '来源未知', tip: '这条建议产生于 v4.16.0 之前，没有记录日期来源，请核对后再应用' };
           const noteText = mileNoteText(mile.note, s.summary);
-          fields.push({ key: 'milestone', label: `推进里程碑：${mile.stage}${mile.at ? `（${mile.at}）` : ''}${noteText ? ` · ${noteText}` : ''}` });
+          fields.push({ key: 'milestone', label: '推进里程碑', editor: `<select class="control mail-ed" data-mail-edit="milestone.stage">${mailStageOptions(ed('milestone.stage', mile.stage))}</select><input class="control mail-ed" type="date" data-mail-edit="milestone.at" value="${escapeHtml(ed('milestone.at', mile.at))}"><span class="mail-ed-src ${src.cls}" title="${escapeHtml(src.tip)}">${src.text}</span><input class="control mail-ed mail-ed-wide" type="text" maxlength="48" data-mail-edit="milestone.note" value="${escapeHtml(ed('milestone.note', noteText))}" placeholder="里程碑备注（永久写进时间线）">` });
         }
-        if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: `安排时间：${formatDateTime(p.scheduleAt)}` });
-        if (p.recentSchedule) fields.push({ key: 'recentSchedule', label: `最近安排：${p.recentSchedule}` });
-        if (p.nextAction) fields.push({ key: 'nextAction', label: `下一步行动：${p.nextAction}` });
+        if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: '安排时间', editor: `<input class="control mail-ed" type="datetime-local" data-mail-edit="scheduleAt" value="${escapeHtml(ed('scheduleAt', p.scheduleAt))}">` });
+        // 截止时间：台账一直有 deadline 字段（「签约截止」列 + deadlineInfo 倒计时 + 按截止日排序），
+        // 但 v4.16.0 之前 AI 契约与 proposed 里都没有它，所以笔试/测评邮件里最有用的那个时间
+        // （"链接 X 日失效"、"请在 X 日前完成"）被整条链路丢弃。
+        if (p.deadline) fields.push({ key: 'deadline', label: '截止时间', editor: `<input class="control mail-ed" type="date" data-mail-edit="deadline" value="${escapeHtml(ed('deadline', p.deadline))}"><span class="mail-ed-hint">写入台账「签约截止」，参与倒计时与排序</span>` });
+        if (p.recentSchedule) fields.push({ key: 'recentSchedule', label: '最近安排', editor: `<input class="control mail-ed mail-ed-wide" type="text" maxlength="100" data-mail-edit="recentSchedule" value="${escapeHtml(ed('recentSchedule', p.recentSchedule))}">` });
+        if (p.nextAction) fields.push({ key: 'nextAction', label: '下一步行动', editor: `<input class="control mail-ed mail-ed-wide" type="text" maxlength="100" data-mail-edit="nextAction" value="${escapeHtml(ed('nextAction', p.nextAction))}">` });
         const fieldsHtml = fields.length
-          ? `<div class="mail-fields">${fields.map(f => `<label class="mail-field"><input type="checkbox" data-mail-field="${f.key}" ${checked ? 'checked' : ''}><span>${escapeHtml(f.label)}</span></label>`).join('')}</div>`
+          ? `<div class="mail-fields">${fields.map(f => `<div class="mail-field" data-field="${f.key}"><label class="mail-field-check"><input type="checkbox" data-mail-field="${f.key}" ${checked ? 'checked' : ''}><span>${escapeHtml(f.label)}</span></label><div class="mail-field-edit">${f.editor}</div></div>`).join('')}<div class="mail-fields-foot"><span class="mail-fields-note">改动会写入<strong>已勾选的全部目标台账</strong>；只在本次会话内保留。</span><button class="text-button" type="button" data-mail-action="reset-fields" data-mail-id="${escapeHtml(s.id)}">还原 AI 原值</button></div></div>`
           : '<div class="mail-fields mail-fields-empty">这封邮件没有可直接应用的字段。</div>';
 
         const primaryBtn = matches.length === 0
@@ -186,18 +224,37 @@
 
         const p = s.proposed && typeof s.proposed === 'object' ? s.proposed : {};
         const mile = p.milestone && typeof p.milestone === 'object' ? p.milestone : {};
+        // 一律以**输入框当前值**为准（用户可能已经就地改过），不再直接读 s.proposed。
+        const readEd = key => {
+          const el = card.querySelector(`[data-mail-edit="${key}"]`);
+          return el ? String(el.value || '').trim() : '';
+        };
+        const edStage = checked.has('milestone') ? (readEd('milestone.stage') || mile.stage) : '';
+        const edAt = checked.has('milestone') ? readEd('milestone.at') : '';
+        // 写前校验：里程碑进了时间线就是永久的，而时间线是按日期排序的真相源，
+        // 空日期会打乱排序、空阶段会让这条里程碑被 sanitizeTimeline 直接丢掉。
+        // 拦在循环之前，避免"改了一半才发现不合法"（前几条已写入、后面没写）。
+        if (checked.has('milestone')) {
+          if (!edStage) { showToast('里程碑需要选一个阶段'); return; }
+          if (!edAt) { showToast('里程碑需要一个日期——邮件没给时间时这里是收信日兜底值，请按实际情况填'); return; }
+        }
         let milestoneApplied = false;
         let offerHit = false;
         for (const rec of targets) {
-          if (checked.has('milestone') && mile.stage) {
-            setTimeline(rec, [...(rec.timeline || []), { stage: mile.stage, at: mile.at || localDateInput(new Date()), note: mile.note || '邮件' }]);
+          if (checked.has('milestone') && edStage) {
+            // 此前这里是 `mile.at || localDateInput(new Date())` —— 与 Action 侧的
+            // `n.scheduleDate || receivedDate(mail)` 构成**两处**静默兜底，
+            // 只修 Action 那一处的话，网页端会继续用"今天"顶替。现在不猜：
+            // 缺日期已被上面的校验拦下。
+            setTimeline(rec, [...(rec.timeline || []), { stage: edStage, at: edAt, note: readEd('milestone.note') || mile.note || '邮件' }]);
             milestoneApplied = true;
           }
-          if (checked.has('scheduleAt') && p.scheduleAt) rec.scheduleAt = p.scheduleAt;
-          if (checked.has('recentSchedule') && p.recentSchedule) rec.recentSchedule = p.recentSchedule;
-          if (checked.has('nextAction') && p.nextAction) rec.nextAction = p.nextAction;
+          if (checked.has('scheduleAt') && readEd('scheduleAt')) rec.scheduleAt = readEd('scheduleAt');
+          if (checked.has('deadline') && readEd('deadline')) rec.deadline = readEd('deadline');
+          if (checked.has('recentSchedule') && readEd('recentSchedule')) rec.recentSchedule = readEd('recentSchedule');
+          if (checked.has('nextAction') && readEd('nextAction')) rec.nextAction = readEd('nextAction');
           rec.updatedAt = Date.now();
-          if (mile.stage === 'Offer' || rec.stage === 'Offer') offerHit = true;
+          if (edStage === 'Offer' || rec.stage === 'Offer') offerHit = true;
         }
 
         // 只存一次：循环里逐条 saveRecords 会触发 N 次 localStorage 写入 + N 次
@@ -206,6 +263,7 @@
           ? `已按邮件更新 ${targets.length} 条台账：${targets[0].company}`
           : `已按邮件更新：${targets[0].company}`);
         markMailApplied(id);
+        mailDrafts.delete(String(id));   // 已应用，草稿作废（否则下次这封邮件再出现会带着旧改动）
         render();
         for (const rec of targets) flashRow(rec.id);
         renderMailView();
@@ -215,6 +273,7 @@
 
       function dismissMailSuggestion(id) {
         markMailDismissed(id);
+        mailDrafts.delete(String(id));
         renderMailView();
         updateMailBadge();
         showToast('已忽略这封邮件建议（仅本机不再显示）');
@@ -1428,6 +1487,11 @@
         if (action === 'apply') applyMailSuggestion(id);
         else if (action === 'new') openMailSeedDialog(id);
         else if (action === 'dismiss') dismissMailSuggestion(id);
+        else if (action === 'reset-fields') {
+          // 还原 AI 原值：删掉这封邮件的草稿再重画。改错了想回去，此前只能凭记忆重填。
+          mailDrafts.delete(String(id));
+          renderMailView();
+        }
         else if (action === 'toggle-all') {
           // 全选 / 全不选二态切换：已全勾就全取消，否则全勾。
           // 不额外维护状态，直接读 DOM——候选列表每次渲染都会重建，存状态反而会与实际不符。
@@ -1436,6 +1500,20 @@
           const allOn = boxes.length > 0 && boxes.every(b => b.checked);
           for (const b of boxes) b.checked = !allOn;
         }
+      });
+      // 就地编辑的草稿写入。用 input 事件（而不是 change）：日期/文本框每次改动都记，
+      // 否则用户改完直接点「应用所选」而没触发 blur/change 时，草稿是空的——
+      // 不过 apply 直接读 DOM，所以草稿只影响"重渲染后能不能保住改动"。
+      $('#mailList').addEventListener('input', event => {
+        const el = event.target.closest('[data-mail-edit]');
+        if (!el) return;
+        const card = el.closest('.mail-card');
+        if (!card) return;
+        const key = String(card.dataset.mailId || '');
+        if (!key) return;
+        const d = mailDrafts.get(key) || {};
+        d[el.dataset.mailEdit] = el.value;
+        mailDrafts.set(key, d);
       });
       $('#mailRefreshBtn').addEventListener('click', () => {
         if (!syncConfig.token) { openSyncDialog(); return; }
