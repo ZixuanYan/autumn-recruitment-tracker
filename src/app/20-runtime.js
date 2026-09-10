@@ -82,15 +82,38 @@
         const fields = [];
         // note 走 mileNoteText 兜底：历史数据里的「邮件·其它」改用同一条建议的 summary 展示
         if (mile.stage) {
-          // atSource 三态。'received' = 邮件没给时间、Action 用收信日兜底（必须显眼标出来）；
-          // 'email' = 来自邮件原文；'' = v4.16.0 之前的老 payload，**无从判断**。
-          // 老数据刻意不猜成 received：它可能本来就是邮件里的真时间，猜错会让人去改一个对的值；
-          // 但也不装作知道，所以给中性的「来源未知」并提示核对。
-          const src = mile.atSource === 'received'
-            ? { cls: 'is-fallback', text: '收信日兜底', tip: '邮件里没有明确时间，这个日期是收信日兜底值——请按实际情况改掉（它会永久写进时间线）' }
-            : mile.atSource === 'email'
-              ? { cls: 'is-email', text: '来自邮件', tip: '这个时间是从邮件原文里读出来的' }
-              : { cls: 'is-unknown', text: '来源未知', tip: '这条建议产生于 v4.16.0 之前，没有记录日期来源，请核对后再应用' };
+          // 日期来源标注。atSource 是 v4.16.0 才有的字段，Gist 里的历史建议都没有——
+          // 最初我给它们一律显示「来源未知」，但那是个**没有信息量的第三态**：
+          // 18 条历史建议会齐刷刷挂着一个说不清道不明的灰标签，用户只会问"这是什么"。
+          // 实际上老数据是**可以推断**的，因为旧代码只有两个来源：
+          //     const at = n.scheduleDate || receivedDate(mail);
+          // 于是：at ≠ 收信日 → 必然来自邮件（**确定**，不是猜）；
+          //       at = 收信日 → 可能是兜底、也可能邮件真写了当天，两者无法区分 → 倾向警示。
+          // 取收信日的方式必须与 Action 侧 receivedDate() 逐字一致（取 ISO 串的日期段，
+          // 即 UTC 日期而非本地日期），否则差一个时区就会把"来自邮件"误判成"疑似收信日"。
+          const recvDate = (String(s.receivedAt || '').match(/(\d{4}-\d{2}-\d{2})/) || [, ''])[1];
+          const legacy = !mile.atSource;
+          let src;
+          if (mile.atSource === 'received' || (legacy && recvDate && mile.at === recvDate)) {
+            src = {
+              cls: 'is-fallback',
+              text: mile.atSource === 'received' ? '收信日兜底' : '疑似收信日',
+              tip: mile.atSource === 'received'
+                ? '邮件里没有明确时间，这个日期是收信日兜底值——请按实际情况改掉（它会永久写进时间线）'
+                : '这条建议产生于 v4.16.0 之前、没有记录来源。日期恰好等于收信日，可能是当时代码用收信日顶替的结果，请核对后再应用'
+            };
+          } else if (mile.atSource === 'email' || (legacy && recvDate && mile.at && mile.at !== recvDate)) {
+            src = {
+              cls: 'is-email',
+              text: '来自邮件',
+              tip: legacy
+                ? '这条建议产生于 v4.16.0 之前、没有记录来源，但日期不等于收信日，可确定来自邮件原文'
+                : '这个时间是从邮件原文里读出来的'
+            };
+          } else {
+            // 只剩一种情况：连收信日都拿不到（老 payload 缺 receivedAt），无从推断
+            src = { cls: 'is-unknown', text: '来源未知', tip: '这条建议没有来源信息，也拿不到收信日用来推断，请核对后再应用' };
+          }
           const noteText = mileNoteText(mile.note, s.summary);
           fields.push({ key: 'milestone', label: '推进里程碑', editor: `<select class="control mail-ed" data-mail-edit="milestone.stage">${mailStageOptions(ed('milestone.stage', mile.stage))}</select><input class="control mail-ed" type="date" data-mail-edit="milestone.at" value="${escapeHtml(ed('milestone.at', mile.at))}"><span class="mail-ed-src ${src.cls}" title="${escapeHtml(src.tip)}">${src.text}</span><input class="control mail-ed mail-ed-wide" type="text" maxlength="48" data-mail-edit="milestone.note" value="${escapeHtml(ed('milestone.note', noteText))}" placeholder="里程碑备注（永久写进时间线）">` });
         }

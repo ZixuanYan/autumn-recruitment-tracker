@@ -488,10 +488,32 @@ check('mailCardHtml：历史数据的「邮件·其它」改用 summary 展示�
   assert.strictEqual(edVal(h, 'milestone.at'), '2026-09-06', '日期应回填进 date 输入框');
   assert.strictEqual(selectedStage(h), '已投递', '阶段下拉应选中 AI 给的那一档');
   assert.ok(!h.includes('邮件·其它'), '不该再出现零信息量的分类术语');
-  // 老 payload 没有 atSource（v4.16.0 之前的 Gist 数据）→ 必须是中性的「来源未知」，
-  // 不能猜成 received：那个日期可能本来就是邮件里的真时间，猜错会让人去改一个对的值。
-  assert.ok(h.includes('mail-ed-src is-unknown'), '老 payload 应标成「来源未知」');
-  assert.ok(!h.includes('is-fallback'), '老 payload 不该被误标成收信日兜底');
+  // 老 payload（v4.16.0 之前的 Gist 数据）没有 atSource，但**可以推断**：
+  // 旧代码只有 `n.scheduleDate || receivedDate(mail)` 两个来源，所以
+  //   at ≠ 收信日 → 必然来自邮件（确定）；at = 收信日 → 无法区分，倾向警示。
+  // 最初版本一律显示「来源未知」，那是个没有信息量的第三态：Gist 里 18 条历史建议
+  // 会齐刷刷挂着一个说不清的灰标签。
+  // 本例 receivedAt=2026-09-06、at=2026-09-06 → 相等 → 疑似收信日
+  assert.ok(h.includes('mail-ed-src is-fallback'), '日期等于收信日的老 payload 应标成警示态');
+  assert.ok(h.includes('疑似收信日'), '文案应是「疑似收信日」而不是斩钉截铁的「收信日兜底」（它确实可能是邮件真写了当天）');
+
+  // at ≠ 收信日 → 可确定来自邮件
+  const legacyEmail = { ...legacy, proposed: { milestone: { stage: '一面', at: '2026-09-12', note: '邮件·面试邀请' } } };
+  const hLegacyEmail = sandbox.mailCardHtml(legacyEmail);
+  assert.ok(hLegacyEmail.includes('mail-ed-src is-email'), '日期不等于收信日的老 payload 可确定来自邮件');
+  assert.ok(hLegacyEmail.includes('来自邮件'));
+  assert.ok(!hLegacyEmail.includes('疑似收信日'), '不该误标成兜底');
+
+  // 连 receivedAt 都没有 → 真的无从推断，才用中性态
+  const noRecv = { ...legacy, receivedAt: '', proposed: { milestone: { stage: '一面', at: '2026-09-12', note: 'x' } } };
+  assert.ok(sandbox.mailCardHtml(noRecv).includes('mail-ed-src is-unknown'),
+    '拿不到收信日时才该显示「来源未知」');
+
+  // 显式 atSource 优先于推断（新数据不该被推断逻辑覆盖）
+  const explicit = { ...legacy, receivedAt: '2026-09-06T10:00:00Z',
+    proposed: { milestone: { stage: '笔试', at: '2026-09-06', atSource: 'received', note: '邮件·笔试（未给时间·按收信日）' } } };
+  assert.ok(sandbox.mailCardHtml(explicit).includes('收信日兜底'),
+    '新数据带 atSource=received 时应显示确定的「收信日兜底」，而不是「疑似」');
 
   // 有明确类型的历史数据保持原样（更短、易扫读）
   const typed = { ...legacy, emailType: '测评', summary: '通知参加素质测评', proposed: { milestone: { stage: '测评', at: '2026-09-04', note: '邮件·测评' } } };

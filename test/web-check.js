@@ -2217,5 +2217,27 @@ check('deadline 贯通网页端：卡片有编辑器、apply 会写进台账', (
   }
 });
 
+check('邮件字段的控件必须显式 width:auto（base.css 的全局 .control 是 width:100%）', () => {
+  // 失效链条：base.css 的 `.control { width: 100%; … }` 是全局规则，apple.css 的 `.control`
+  // 覆盖块里**没有** width 这一项，所以 100% 一路存活到邮件编辑器里。在 flex-wrap 容器中
+  // 每个控件都 100% 宽 = 各占一行，于是「阶段 / 日期 / 备注」被拆成三行（实测用户反馈）。
+  // 只给 .mail-ed-wide 设 flex 是治不好的：flex-basis 只在它自己身上压过 width，
+  // 没设 flex 的下拉框与日期框仍按 width:100% 撑满。
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
+  const mailControl = /\.mail-field-edit \.control \{[^{}]*\}/.exec(css);
+  assert.ok(mailControl, '找不到 .mail-field-edit .control 规则');
+  assert.ok(/width: auto/.test(mailControl[0]),
+    '必须显式 width:auto 抵消基础层 .control 的 width:100%，否则每个控件各占一行');
+  assert.ok(/flex: 0 0 auto/.test(mailControl[0]),
+    '必须 flex:0 0 auto：下拉框与日期框应按内容自适应，不参与伸展');
+  // .mail-ed-wide 的选择器必须带 .mail-field-edit 前缀：
+  // 裸 .mail-ed-wide 特异性 (0,1,0)，会被上面那条 (0,2,0) 的 flex:0 0 auto 压住，
+  // 于是备注框永远宽不起来——又是一处"写了没生效也不报错"。
+  assert.ok(/\.mail-field-edit \.mail-ed-wide \{[^{}]*flex: 1 1/.test(css),
+    '.mail-ed-wide 必须写成 .mail-field-edit .mail-ed-wide（同特异性且在后才压得住）');
+  assert.ok(/\.mail-field-edit \.mail-ed-wide \{[^{}]*max-width/.test(css),
+    '.mail-ed-wide 应有 max-width：很宽的卡片上让备注框拉到七八百像素不是"能填更多"，只是稀疏');
+});
+
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
 if (failed) process.exitCode = 1;

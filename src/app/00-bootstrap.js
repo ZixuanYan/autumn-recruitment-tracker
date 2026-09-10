@@ -60,7 +60,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.16.0';
+      const APP_VERSION = '4.16.1';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
