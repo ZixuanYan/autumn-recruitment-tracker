@@ -749,7 +749,11 @@
     /* 勾选框的样式只给勾选框：原来写的是 `.mail-field input`，会连带命中新加的
        日期/文本/下拉框——给它们加 margin-top:2px（无害但没必要）与 accent-color（空操作）。 */
     .mail-field-check input { flex: 0 0 auto; accent-color: var(--accent); }
-    .mail-field-edit { flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+    /* flex: 1 1 auto 而不是 0 1 auto：容器必须吃掉整行剩余宽度，文本框才有地方伸展。
+       v4.16.1 一度改成 0 1 auto（按内容收缩），配合下面的 max-width 把备注/下一步行动
+       压到只剩一百多像素，AI 写的「按时参加笔试，提前调试环境」直接显示不全——
+       用户实测反馈。教训：紧凑不能以"内容看不见"为代价，看得见比不稀疏优先。 */
+    .mail-field-edit { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
     /* 紧凑档 28px：全局 .control 是 44px（Apple 最小触控目标），但邮件列表一屏常有 3–5 张卡、
        每张最多 5 个字段，44px 会把列表撑到没法扫读。走上下文覆盖（本仓已有先例：
        .kv-row .control 38px、.exp-card-tools .text-button 27px）；全局档位守卫只钉 .control
@@ -762,9 +766,11 @@
     .mail-field-edit .control { width: auto; flex: 0 0 auto; min-height: 28px; padding: 1px 9px; font-size: 12.5px; border-radius: var(--r-md); }
     /* 只有文本类（备注 / 最近安排 / 下一步行动）吃剩余宽度；下拉与日期框按内容自适应。
        选择器要带 .mail-field-edit 前缀：否则特异性 (0,1,0) 会被上面那条 (0,2,0) 的
-       flex:0 0 auto 压住，wide 就永远宽不起来。max-width 是为了在很宽的卡片上
-       不让一个备注框拉到七八百像素——那不是"能填更多"，只是稀疏。 */
-    .mail-field-edit .mail-ed-wide { flex: 1 1 150px; min-width: 0; max-width: 320px; }
+       flex:0 0 auto 压住，wide 就永远宽不起来。
+       **刻意不设 max-width**：里程碑备注 maxlength=48，48 个中文字在 12.5px 下约 600px，
+       任何小于它的上限都必然截断；最近安排/下一步行动 maxlength=100 更是装不下。
+       用户已明确"整行展示可以接受"，所以让它按 flex 自然伸展，窄屏时整行换行铺满。 */
+    .mail-field-edit .mail-ed-wide { flex: 1 1 260px; min-width: 0; }
     /* 日期来源标注。兜底值必须显眼——此前的 bug 恰恰是"收信日兜底"被显示得和
        "从邮件里读出来的时间"一模一样，用户无从分辨，勾选后还永久写进时间线。 */
     .mail-ed-src { flex: 0 0 auto; padding: 1px 7px; border-radius: var(--r-pill); font-size: 11px; font-weight: 600; }

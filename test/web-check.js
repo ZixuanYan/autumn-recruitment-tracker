@@ -2235,8 +2235,21 @@ check('邮件字段的控件必须显式 width:auto（base.css 的全局 .contro
   // 于是备注框永远宽不起来——又是一处"写了没生效也不报错"。
   assert.ok(/\.mail-field-edit \.mail-ed-wide \{[^{}]*flex: 1 1/.test(css),
     '.mail-ed-wide 必须写成 .mail-field-edit .mail-ed-wide（同特异性且在后才压得住）');
-  assert.ok(/\.mail-field-edit \.mail-ed-wide \{[^{}]*max-width/.test(css),
-    '.mail-ed-wide 应有 max-width：很宽的卡片上让备注框拉到七八百像素不是"能填更多"，只是稀疏');
+  // 编辑器容器必须吃满整行剩余宽度。v4.16.1 一度写成 flex:0 1 auto（按内容收缩），
+  // 配合 max-width 把备注/下一步行动压到一百多像素，AI 写的内容直接显示不全（用户实测反馈）。
+  const editBox = /\.mail-field-edit \{[^{}]*\}/.exec(css);
+  assert.ok(editBox, '找不到 .mail-field-edit 规则');
+  assert.ok(/flex: 1 1 auto/.test(editBox[0]),
+    '.mail-field-edit 必须是 flex:1 1 auto（吃满整行剩余宽度）；写成 0 1 auto 会按内容收缩、文本框被压窄');
+  // 文本框刻意**不设** max-width：里程碑备注 maxlength=48，48 个中文字在 12.5px 下约 600px，
+  // 任何小于它的上限都必然截断；最近安排/下一步行动 maxlength=100 更装不下。
+  const wide = /\.mail-field-edit \.mail-ed-wide \{[^{}]*\}/.exec(css);
+  assert.ok(wide, '找不到 .mail-field-edit .mail-ed-wide 规则');
+  assert.ok(!/max-width/.test(wide[0]),
+    '.mail-ed-wide 不该有 max-width：备注 maxlength=48（约 600px 宽），设上限就等于保证截断');
+  const basis = /flex: 1 1 (\d+)px/.exec(wide[0]);
+  assert.ok(basis && Number(basis[1]) >= 240,
+    `.mail-ed-wide 的 flex-basis 应 ≥240px（实际 ${basis ? basis[1] : '?'}px），太窄会让短文本也显示不全`);
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);
