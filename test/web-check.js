@@ -1672,23 +1672,29 @@ check('会变动的数字都启用 tabular-nums（否则值一变整行宽度就
   assert.ok(/td\[data-label="投递日期"\]\s*\{[^{}]*tabular-nums/.test(css), '台账日期列必须 tabular-nums');
 });
 
-check('toast 是磨砂玻璃而不是纯半透明，且 .72 玻璃规则确实包在 @supports 里', () => {
+check('toast 是磨砂玻璃：降级底与玻璃底都走令牌，且玻璃规则包在 @supports 里', () => {
   const css = html.replace(/\/\*[\s\S]*?\*\//g, '');
   // 规范的 toast 配方 = 磨砂玻璃 + 降级。这里要钉**两条**规则，缺一不可：
   //   · @supports 外：.88 半透明白底（不支持 backdrop-filter 的浏览器靠它保证可读）
   //   · @supports 内：.72 白底 + saturate(180%) blur(20px)（与侧栏、插件顶栏同源的玻璃配方）
   // 只留 .88 就退回"半透明"而不是"磨砂"；只留 .72 且不包在 @supports 里，
   // 则不支持的浏览器上既没磨砂又更透 → 文字直接糊在底下内容上。
-  const glass = /\.toast\s*\{[^{}]*rgba\(255, 255, 255, \.72\)[^{}]*\}/.exec(css);
-  assert.ok(glass, 'toast 缺磨砂玻璃规则：应有 rgba(255,255,255,.72) 白底 + backdrop-filter');
+  // 底色必须走令牌而不是写死 rgba(255,255,255,.72)：写死的话深色模式翻不了，
+  // toast 会在黑底上变成一块刺眼的白玻璃。
+  assert.ok(/\.toast\s*\{[^{}]*background:\s*var\(--toast-bg\)/.test(css),
+    'toast 的降级底应走 var(--toast-bg)');
+  const glass = /\.toast\s*\{[^{}]*var\(--toast-glass\)[^{}]*\}/.exec(css);
+  assert.ok(glass, 'toast 缺磨砂玻璃规则：应有 var(--toast-glass) + backdrop-filter');
   assert.ok(/backdrop-filter:\s*saturate\(180%\) blur\(20px\)/.test(glass[0]),
     'toast 的磨砂配方应与侧栏/插件顶栏同源：saturate(180%) blur(20px)');
   assert.ok(/-webkit-backdrop-filter/.test(glass[0]), 'toast 的玻璃规则缺 -webkit- 前缀，Safari 上拿不到磨砂');
-  assert.ok(/\.toast\s*\{[^{}]*background:\s*rgba\(255, 255, 255, \.88\)/.test(css),
-    'toast 必须在 @supports 之外保留 .88 半透明白底作为降级');
+  assert.ok(/--toast-bg:\s*rgba\(255, 255, 255, \.88\)/.test(css),
+    '--toast-bg 的浅色值应是 .88 半透明白（@supports 外的降级底）');
   // 玻璃规则必须真的在 @supports 里（{0,120} 限定跨度，避免匹配到远处的另一个块）
-  assert.ok(/@supports \(backdrop-filter[\s\S]{0,120}?\{\s*\.toast\s*\{[^{}]*rgba\(255, 255, 255, \.72\)/.test(css),
-    'toast 的 .72 玻璃规则必须包在 @supports (backdrop-filter) 块里，否则不支持的浏览器上会失去降级');
+  assert.ok(/@supports \(backdrop-filter[\s\S]{0,120}?\{\s*\.toast\s*\{[^{}]*var\(--toast-glass\)/.test(css),
+    'toast 的玻璃规则必须包在 @supports (backdrop-filter) 块里，否则不支持的浏览器上会失去降级');
+  assert.ok(/--toast-glass:\s*rgba\(255, 255, 255, \.72\)/.test(css),
+    '--toast-glass 的浅色值应是 .72（与侧栏玻璃同源配方）');
 });
 
 check('@keyframes view-in 只定义一份，且入场位移与时长符合规范', () => {
@@ -1862,6 +1868,142 @@ check('柔底与卡片承托影全部走令牌（深色模式的前置：黑底�
     '卡片承托影的字面值应只剩 --sh-card 定义处一份，其余 5 个使用点全部走 var(--sh-card)');
   assert.ok(/--sh-ambient: var\(--sh-card\),/.test(css),
     '--sh-ambient 的第一层应复用 var(--sh-card)，两处各写一遍就会各自漂移');
+});
+
+// ─────────────────────────────────────────────
+// v4.13.0 深色模式：令牌覆盖完整性 / 阶段色阶对比度 / 与插件端 dark palette 对账
+// ─────────────────────────────────────────────
+// 从 CSS 文本里取出某个 :root 块的 --name: value 映射
+function parseRoot(block) {
+  const out = {};
+  for (const m of block.matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+  return out;
+}
+const CSS_NOCOMMENT = html.replace(/\/\*[\s\S]*?\*\//g, '');
+const LIGHT_ROOT = parseRoot((/:root \{([\s\S]*?)\n    \}/.exec(CSS_NOCOMMENT) || [, ''])[1]);
+const DARK_BLOCK = /@media \(prefers-color-scheme: dark\) \{([\s\S]*?)\n    \}/.exec(CSS_NOCOMMENT);
+const DARK_ROOT = parseRoot((/@media \(prefers-color-scheme: dark\) \{\s*:root \{([\s\S]*?)\n      \}/.exec(CSS_NOCOMMENT) || [, ''])[1]);
+
+check('深色模式：浅色 :root 里每个「带字面色」的令牌都在暗色块里有覆盖', () => {
+  assert.ok(DARK_BLOCK, '产物里找不到 @media (prefers-color-scheme: dark) 块');
+  // 判据是**值里有没有字面色**，而不是靠一份手写的令牌名单：
+  // 名单一定会漏，且新增令牌时没人记得回来补。值是 var(...) 的令牌会自动跟随
+  // （--shadow/--shadow-1/--shadow-2/--ring/--radius 都是），几何与曲线令牌与主题无关。
+  const hasLiteralColor = v => /#[0-9a-fA-F]{3,8}\b/.test(v) || /rgba?\(/.test(v);
+  const isNoop = v => /rgba\([^)]*,\s*0\)$/.test(v);          // --hi 那类零 alpha，翻不翻都一样
+  const missing = Object.entries(LIGHT_ROOT)
+    .filter(([, v]) => hasLiteralColor(v) && !isNoop(v))
+    .map(([k]) => k)
+    .filter(k => !(k in DARK_ROOT));
+  assert.deepStrictEqual(missing, [],
+    `这些令牌的值带字面色，但深色模式下没有覆盖，会保持浅色值：${missing.join(', ')}。` +
+    '典型后果：黑底上一块白玻璃、看不见的滚动条滑块、或者对比度翻车的灰字。');
+});
+
+check('深色模式：柔底 / 滑块 / 玻璃在暗色下必须翻成白基（黑基在黑底上等于没有）', () => {
+  // 失效模式极其安静：rgba(0,0,0,.04) 叠在 #1c1c1e 上肉眼不可辨，
+  // 于是 hover / 按下 / 激活态全部哑掉，控制台零报错，用户只觉得"点了没反应"。
+  for (const name of ['wash-1', 'wash-2', 'wash-3', 'wash-4', 'thumb', 'thumb-hover']) {
+    const v = DARK_ROOT[name];
+    assert.ok(v, `暗色块缺 --${name}`);
+    assert.ok(/rgba\(255, 255, 255/.test(v), `--${name} 在暗色下应是白基 rgba(255,255,255,…)，实际 ${v}`);
+  }
+  // 玻璃与遮罩方向相反：玻璃要反色成深底，遮罩要更深
+  assert.ok(/rgba\(28, 28, 30/.test(DARK_ROOT['glass'] || ''), `--glass 暗色应是深色反色玻璃，实际 ${DARK_ROOT['glass']}`);
+  // alpha 必须按 "0." + 数字 解析，不能把数字当整数再除 100：
+  // CSS 的 .3 是 0.3、.10 才是 0.10。按整数解析会把 .3 读成 0.03，
+  // 于是"暗色遮罩比浅色更深"这条断言方向整个反过来还照样绿（negative test 抓到的）。
+  const alphaOf = v => Number('0.' + /rgba\(0, 0, 0, \.(\d+)\)/.exec(v || '')[1]);
+  const scrimDark = alphaOf(DARK_ROOT['scrim']), scrimLight = alphaOf(LIGHT_ROOT['scrim']);
+  assert.ok(scrimDark > scrimLight,
+    `暗色遮罩 alpha（${scrimDark}）必须比浅色（${scrimLight}）更大，否则弹窗在暗底上浮不出来`);
+});
+
+check('深色模式：阶段色阶 14 档的对比度逐档复算，chip 内 ≥4.5:1、对 surface ≥4.5:1', () => {
+  // 这条守卫是"色阶可以按审美改、但改不坏可读性"的保证：
+  // 暗色阶段的取值是按规则推导的临时方案（亮度区间反转映射 + 对比度求解），
+  // 色相审美留给人定夺，但只要动过就重新复算，不达 WCAG AA 直接红。
+  const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+  const lin = v => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const surface = hex2rgb(DARK_ROOT['surface'].trim());
+  const darkCss = DARK_BLOCK[1];
+  const rows = [...darkCss.matchAll(/\.badge\[data-stage="([^"]+)"\][^{]*\{ --stage-color: (#[0-9a-f]{6}); --stage-soft: rgba\((\d+), (\d+), (\d+), (\.?\d+)\)/g)];
+  assert.strictEqual(rows.length, 14, `暗色阶段色阶应恰好 14 档，实际解析到 ${rows.length} 档`);
+  const bad = [];
+  for (const [, stage, hex, r, g, b, a] of rows) {
+    const fg = hex2rgb(hex);
+    const alpha = Number(a);
+    // soft 底 = 该色 alpha 叠在 --surface 上
+    const bg = [fg[0] * alpha + surface[0] * (1 - alpha), fg[1] * alpha + surface[1] * (1 - alpha), fg[2] * alpha + surface[2] * (1 - alpha)];
+    const inChip = ratio(fg, bg), onSurface = ratio(fg, surface);
+    if (inChip < 4.5) bad.push(`${stage} chip 内 ${inChip.toFixed(2)}:1`);
+    if (onSurface < 4.5) bad.push(`${stage} 对 surface ${onSurface.toFixed(2)}:1`);
+  }
+  assert.deepStrictEqual(bad, [], `暗色阶段色阶有档位不达 WCAG AA（4.5:1）：${bad.join('；')}`);
+  // 递进关系不能被改坏：一面→五面是同色相同饱和度的纯亮度递进，暗色下必须**递增**
+  // （浅色下是递减；暗底上若也递减，靠后的阶段会压进背景里看不见）
+  const L = hex => { const [r, g, b] = hex2rgb(hex); const mx = Math.max(r, g, b), mn = Math.min(r, g, b); return (mx + mn) / 2; };
+  // pick 返回 **hex 字符串**而不是 rgb 数组：L() 自己会调 hex2rgb，
+  // 这里先转一次会让 L() 对数组再转一次 → 全 NaN（第一次跑就是这样，对比度部分反而是对的）。
+  const pick = n => new RegExp(`\\.badge\\[data-stage="${n}"\\][^{]*\\{ --stage-color: (#[0-9a-f]{6})`).exec(darkCss)[1];
+  const blues = ['一面', '二面', '三面', '四面', '五面'].map(n => L(pick(n)));
+  for (let i = 1; i < blues.length; i++) {
+    assert.ok(blues[i] > blues[i - 1],
+      `暗色下一面→五面的亮度必须严格递增（第 ${i} 档 ${blues[i - 1].toFixed(3)} → ${blues[i].toFixed(3)}），否则五档蓝会变成同色`);
+  }
+});
+
+check('深色模式：网页端暗色结构层与插件端 dark palette 逐项对账（两端不得各配一套暗色）', () => {
+  // 插件端 common/tokens.js 的 dark palette 每个值都注明了出自设计资源，且已经上线跑过。
+  // 网页端复用同一套取值，用户在同一台机器上切系统主题时两端不会割裂。
+  // 这条守卫把"复用"变成机器可查的约束——任何一端改了暗色值，另一端会立刻红。
+  const extTokens = fs.readFileSync(path.resolve(__dirname, '../extension/common/tokens.js'), 'utf8');
+  const darkBlock = /dark: \{([\s\S]*?)\n    \}/.exec(extTokens);
+  assert.ok(darkBlock, 'extension/common/tokens.js 里找不到 dark palette');
+  const ext = {};
+  for (const m of darkBlock[1].matchAll(/(\w+):\s*'([^']+)'/g)) ext[m[1]] = m[2];
+  const norm = v => String(v).replace(/\s+/g, '').toLowerCase();
+  // [插件端键, 网页端令牌]
+  const MAP = [
+    ['bg', 'surface'], ['bgSub', 'surface-2'], ['bgHover', 'surface-3'],
+    ['text', 'ink'], ['textMute', 'faint'], ['border', 'line-strong'], ['borderSoft', 'line'],
+    ['accent', 'accent'], ['accentHover', 'accent-ink'],
+    ['danger', 'danger'], ['warn', 'warn'], ['glass', 'glass']
+  ];
+  const drift = [];
+  for (const [ek, wk] of MAP) {
+    if (!(ek in ext)) { drift.push(`插件端 dark 缺 ${ek}`); continue; }
+    if (!(wk in DARK_ROOT)) { drift.push(`网页端暗色块缺 --${wk}`); continue; }
+    if (norm(ext[ek]) !== norm(DARK_ROOT[wk])) {
+      drift.push(`--${wk}: 网页 ${DARK_ROOT[wk]} vs 插件 dark.${ek} ${ext[ek]}`);
+    }
+  }
+  assert.deepStrictEqual(drift, [], `两端暗色取值漂移：${drift.join('；')}`);
+  // 网页端 --bg 比插件端更深一档（插件 bg 是面板底=网页的卡片底），这个差异是刻意的，钉住它
+  assert.strictEqual(DARK_ROOT['bg'], '#000000', '网页端页面画布应是 #000000（Apple 暗色 systemBackground 基色）');
+});
+
+check('深色模式的入口声明齐全：color-scheme 与两条 theme-color 变体', () => {
+  // 只写 <meta name="color-scheme" content="light"> 等于向浏览器声明"本站不支持深色"，
+  // 表单控件与滚动条会保持浅色 UA 样式，与 CSS 里的 @media (prefers-color-scheme: dark) 自相矛盾。
+  assert.ok(/<meta name="color-scheme" content="light dark">/.test(html),
+    'color-scheme 必须是 "light dark"；只写 light 会让 UA 控件在深色下仍是浅色');
+  // theme-color 决定手机地址栏 / 桌面标签条的颜色，缺深色变体就是一条刺眼的白
+  const light = /<meta name="theme-color" content="(#[0-9a-f]{6})" media="\(prefers-color-scheme: light\)"/.exec(html);
+  const dark = /<meta name="theme-color" content="(#[0-9a-f]{6})" media="\(prefers-color-scheme: dark\)"/.exec(html);
+  assert.ok(light && dark, 'theme-color 必须给 light 与 dark 两条 media 变体');
+  // 取值要与 --bg 的两套值一致，否则地址栏与页面底色会错开一条缝
+  assert.strictEqual(light[1].toLowerCase(), LIGHT_ROOT['bg'].trim().toLowerCase(),
+    '浅色 theme-color 应与 --bg 的浅色值一致');
+  assert.strictEqual(dark[1].toLowerCase(), DARK_ROOT['bg'].trim().toLowerCase(),
+    '深色 theme-color 应与 --bg 的深色值一致');
+  // manifest 的 background_color 规范上不支持深色变体（PWA 启动闪屏在深色下会白一下），
+  // 这是平台限制不是缺陷，但要钉住它仍是浅色值，别有人误改成暗色导致浅色用户闪黑屏。
+  const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../manifest.webmanifest'), 'utf8'));
+  assert.strictEqual(manifest.background_color, '#f5f5f7',
+    'manifest 的 background_color 应保持浅色（规范不支持 media 变体，改暗会让浅色用户启动时闪黑屏）');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

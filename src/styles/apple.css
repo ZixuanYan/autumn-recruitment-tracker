@@ -40,6 +40,24 @@
       --ring: 0 0 0 1px var(--line); --hi: inset 0 0 0 rgba(255, 255, 255, 0);
       --sh-ambient: var(--sh-card), 0 8px 24px rgba(0, 0, 0, .06);
       --sh-pop: 0 12px 40px rgba(0, 0, 0, .12);
+      /* ── 结构层的其余字面色也收进令牌（v4.13.0）──────────────────────
+         这些值此前散落在规则里，浅色下没问题，但深色模式必须能翻转它们：
+         滚动条滑块用黑 alpha 在黑底上直接消失、侧栏玻璃用白 .72 在暗色下会刺眼、
+         #86868b（设计资源叫 Ink Soft）与 #c7c7cc 这类灰在暗底上对比度会翻车。
+         收进令牌之后深色只需覆盖这一个块，不必去追 17 个分散的使用点。 */
+      --ink-soft: #86868b;                      /* 设计资源 Ink Soft：副标题、搜索图标、label */
+      --line-hover: #c7c7cc;                    /* 按钮 hover 描边，比 --line-strong 再深一档 */
+      --accent-soft-hover: #d6e8fb;             /* .btn-soft:hover */
+      --accent-border: rgba(0, 113, 227, .3);   /* 强调色描边（字段库项 hover） */
+      --selection: rgba(0, 113, 227, .16);      /* 文本选中底 */
+      --wash-5: #e8e8ed;                        /* 比 --wash-4 更实的柔底（关闭按钮 hover）；此处是实色不是 alpha */
+      --scrim: rgba(0, 0, 0, .3);               /* 弹窗与抽屉的遮罩 */
+      --thumb: rgba(0, 0, 0, .15);              /* 滚动条滑块（规范原值） */
+      --thumb-hover: rgba(0, 0, 0, .28);
+      --glass: rgba(255, 255, 255, .72);        /* 侧栏磨砂（规范 glass-nav 原值） */
+      --toast-bg: rgba(255, 255, 255, .88);     /* toast 降级底（不支持 backdrop-filter 时） */
+      --toast-glass: rgba(255, 255, 255, .72);  /* toast 磨砂底 */
+      --tip-bg: rgba(255, 255, 255, .85);       /* 悬浮明细浮层底 */
       /* 「轻微加深」的四档柔底 + 一档卡片承托影。
          为什么必须收进令牌而不是就地写 rgba(0,0,0,.xx)：在**黑底**上 rgba(0,0,0,.04) 是
          不可见的（黑上加黑），于是 hover / 按下 / 激活 / 选中态会静默失去全部视觉反馈——
@@ -69,31 +87,110 @@
       /* 兼容别名：供仍引用旧变量名的基础层规则使用（--paper 同时是 .brand-mark 的文字色，必须是浅色） */
       --paper: #f5f5f7; --surface-soft: #f5f5f7; --shadow-1: var(--sh-ambient); --shadow-2: var(--sh-pop); --radius-sm: 10px;
     }
+
+    /* ══════════════════════════════════════════════════════════════════
+       深色模式（v4.13.0）。跟随系统 prefers-color-scheme，与插件端一致——
+       插件的 Side Panel 是浏览器 UI 的一部分，早已跟随系统深浅；网页版此前永远白着，
+       同一台机器上两端气质割裂。
+
+       取值来源不是新发明的：结构层直接复用插件端 common/tokens.js 的 dark palette
+       （那边每个值都注明了出自设计资源，且已经在用户眼前跑了一段时间），
+       画布三级是 Apple 暗色 systemBackground 阶（#000 → #1c1c1e → #2c2c2e → #3a3a3c），
+       强调色 #2997ff 是设计资源明确写的「暗背景上的链接与高亮」
+       （#0071e3 在 #1c1c1e 上只有约 3.4:1，不达标）。
+
+       ⚠️ 阶段色阶的暗色版本是**按规则推导的临时方案，待人眼定夺**：
+       浅色下用「亮度递减」编码进度（一面 45% → 五面 26%，同色相同饱和度），
+       暗底上必须反过来用「亮度递增」，否则靠后的阶段压在暗色轨道上几乎同色、
+       阶段分布条直接看不见。规则是把浅色的亮度区间线性反转映射到 [56%, 80%]，
+       保色相、保递进顺序，再逐档用对比度求解器把不达 4.5:1 的提亮。
+       test/web-check.js 有守卫盯着每一档的对比度，所以改色相审美不会把可读性改坏。
+       ══════════════════════════════════════════════════════════════════ */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #000000; --surface: #1c1c1e; --surface-2: #2c2c2e; --surface-3: #3a3a3c;
+        --ink: #f5f5f7; --ink-2: rgba(255, 255, 255, .85); --muted: rgba(255, 255, 255, .70);
+        --ink-soft: rgba(255, 255, 255, .60); --faint: #8e8e93;
+        /* 发丝线翻成白：黑底上 rgba(0,0,0,.08) 等于没有线 */
+        --line: rgba(255, 255, 255, .10); --line-strong: #48484a; --line-hover: #636366;
+        --accent: #2997ff; --accent-ink: #4dabff; --accent-soft: rgba(41, 151, 255, .18);
+        --accent-soft-hover: rgba(41, 151, 255, .28); --accent-border: rgba(41, 151, 255, .40);
+        --primary: #2997ff; --primary-dark: #4dabff; --primary-soft: rgba(41, 151, 255, .18);
+        /* 语义色在暗底要提亮（Apple 暗色系统色），soft 档改成低 alpha 而不是浅色实底 */
+        --ok: #30d158; --ok-soft: rgba(48, 209, 88, .16); --ok-bright: #30d158;
+        --warn: #ff9f0a; --warn-soft: rgba(255, 159, 10, .16); --warn-bright: #ff9f0a;
+        --danger: #ff453a; --danger-soft: rgba(255, 69, 58, .16); --danger-soft-hover: rgba(255, 69, 58, .28);
+        --danger-bright: #ff453a;
+        --green: #30d158; --green-soft: rgba(48, 209, 88, .16);
+        --amber: #ff9f0a; --amber-soft: rgba(255, 159, 10, .16);
+        --red: #ff453a; --red-soft: rgba(255, 69, 58, .16);
+        --offer-gold: #30d158; --offer-gold-soft: rgba(48, 209, 88, .16);
+        --seal: #ff453a; --seal-soft: rgba(255, 69, 58, .16);
+        --silver: #8e8e93; --silver-soft: #2c2c2e;
+        /* 兼容别名里的颜色档也要翻（base.css 的 tbody tr:hover、.sidebar-footer 在用）；
+           --shadow/--shadow-1/--shadow-2/--ring 的值是 var(...)，会自动跟随，不必重复。 */
+        --paper: #f5f5f7; --surface-soft: #2c2c2e;
+        /* 柔底翻成白：黑底上 rgba(0,0,0,.04) 等于什么都没叠，hover/按下/激活态会静默哑掉 */
+        --wash-1: rgba(255, 255, 255, .04); --wash-2: rgba(255, 255, 255, .06);
+        --wash-3: rgba(255, 255, 255, .08); --wash-4: rgba(255, 255, 255, .12); --wash-5: #3a3a3c;
+        /* 投影在暗底要更深才看得出来；遮罩同理 */
+        --sh-card: 0 1px 2px rgba(0, 0, 0, .50);
+        --sh-ambient: var(--sh-card), 0 8px 24px rgba(0, 0, 0, .45);
+        --sh-pop: 0 12px 40px rgba(0, 0, 0, .60);
+        --scrim: rgba(0, 0, 0, .55);
+        /* 玻璃「深色区反色」（设计资源原话）；滑块翻成白否则在黑底上消失 */
+        --glass: rgba(28, 28, 30, .72); --toast-bg: rgba(44, 44, 46, .92);
+        --toast-glass: rgba(28, 28, 30, .72); --tip-bg: rgba(44, 44, 46, .90);
+        --thumb: rgba(255, 255, 255, .22); --thumb-hover: rgba(255, 255, 255, .36);
+        --selection: rgba(41, 151, 255, .30);
+        /* 企业性质四色：暗底提亮，soft 改低 alpha（与插件端 dark 的 accentSoft 同款做法） */
+        --ct-soe: #ff7a5c; --ct-soe-soft: rgba(255, 122, 92, .18);
+        --ct-private: #2997ff; --ct-private-soft: rgba(41, 151, 255, .18);
+        --ct-foreign: #64d2ff; --ct-foreign-soft: rgba(100, 210, 255, .18);
+        --ct-none: #8e8e93; --ct-none-soft: rgba(142, 142, 147, .18);
+      }
+      /* 阶段色阶的暗色版：选择器与浅色那份逐字相同，只是值换成推导结果 */
+    .stage-cell[data-stage="待投递"], .badge[data-stage="待投递"], .step[data-stage="待投递"] { --stage-color: #a9a9ac; --stage-soft: rgba(169, 169, 172, .18); --stage-border: rgba(169, 169, 172, .40); }
+    .stage-cell[data-stage="已投递"], .badge[data-stage="已投递"], .step[data-stage="已投递"] { --stage-color: #97a3b4; --stage-soft: rgba(151, 163, 180, .18); --stage-border: rgba(151, 163, 180, .40); }
+    .stage-cell[data-stage="测评"], .badge[data-stage="测评"], .step[data-stage="测评"] { --stage-color: #879ebd; --stage-soft: rgba(135, 158, 189, .18); --stage-border: rgba(135, 158, 189, .40); }
+    .stage-cell[data-stage="笔试"], .badge[data-stage="笔试"], .step[data-stage="笔试"] { --stage-color: #819dc9; --stage-soft: rgba(129, 157, 201, .18); --stage-border: rgba(129, 157, 201, .40); }
+    .stage-cell[data-stage="机试"], .badge[data-stage="机试"], .step[data-stage="机试"] { --stage-color: #759fd7; --stage-soft: rgba(117, 159, 215, .18); --stage-border: rgba(117, 159, 215, .40); }
+    .stage-cell[data-stage="一面"], .badge[data-stage="一面"], .step[data-stage="一面"] { --stage-color: #55aaff; --stage-soft: rgba(85, 170, 255, .18); --stage-border: rgba(85, 170, 255, .40); }
+    .stage-cell[data-stage="二面"], .badge[data-stage="二面"], .step[data-stage="二面"] { --stage-color: #66b2ff; --stage-soft: rgba(102, 178, 255, .18); --stage-border: rgba(102, 178, 255, .40); }
+    .stage-cell[data-stage="三面"], .badge[data-stage="三面"], .step[data-stage="三面"] { --stage-color: #7bbdff; --stage-soft: rgba(123, 189, 255, .18); --stage-border: rgba(123, 189, 255, .40); }
+    .stage-cell[data-stage="四面"], .badge[data-stage="四面"], .step[data-stage="四面"] { --stage-color: #89c4ff; --stage-soft: rgba(137, 196, 255, .18); --stage-border: rgba(137, 196, 255, .40); }
+    .stage-cell[data-stage="五面"], .badge[data-stage="五面"], .step[data-stage="五面"] { --stage-color: #99ccff; --stage-soft: rgba(153, 204, 255, .18); --stage-border: rgba(153, 204, 255, .40); }
+    .stage-cell[data-stage="交叉面"], .badge[data-stage="交叉面"], .step[data-stage="交叉面"] { --stage-color: #9694e5; --stage-soft: rgba(150, 148, 229, .18); --stage-border: rgba(150, 148, 229, .40); }
+    .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"], .step[data-stage="HR面"] { --stage-color: #ac8ee0; --stage-soft: rgba(172, 142, 224, .18); --stage-border: rgba(172, 142, 224, .40); }
+    .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"], .step[data-stage="Offer"] { --stage-color: #a3e8b4; --stage-soft: rgba(163, 232, 180, .18); --stage-border: rgba(163, 232, 180, .40); }
+    .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"], .step[data-stage="已结束"] { --stage-color: #9c9ca0; --stage-soft: rgba(156, 156, 160, .18); --stage-border: rgba(156, 156, 160, .40); }
+    }
     /* body：删掉旧的钴蓝 radial-gradient 铺底（Apple 禁忌「蓝色铺底 / 多彩渐变」，且那是旧主色的残留）。
        排印三件套来自设计资源 body 的原值：line-height 1.55（Body 档）、letter-spacing -.005em、
        font-feature-settings 开 SF Pro 的替代字形 cv02/cv03/cv04/cv11（数字与字母的苹果排印细节）。
        -moz-osx-font-smoothing 与 -webkit- 成对，只写一个在 Firefox 上会是粗体渲染。 */
     body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 14px; line-height: 1.55; letter-spacing: -.005em; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-feature-settings: "cv02", "cv03", "cv04", "cv11"; }
-    ::selection { background: rgba(0, 113, 227, .16); color: var(--ink); }
+    ::selection { background: var(--selection); color: var(--ink); }
     /* 全局滚动条（规范原值：10px、rgba(0,0,0,.15)、hover .28）。基础层 L361 的
        .sidebar-nav{scrollbar-width:none} 是类选择器，特异性更高，移动端隐藏滚动条不受影响。 */
-    * { scrollbar-width: thin; scrollbar-color: rgba(0, 0, 0, .15) transparent; }
+    * { scrollbar-width: thin; scrollbar-color: var(--thumb) transparent; }
     ::-webkit-scrollbar { width: 10px; height: 10px; }
-    ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .15); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, .28); background-clip: content-box; }
+    ::-webkit-scrollbar-thumb { background: var(--thumb); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--thumb-hover); background-clip: content-box; }
     ::-webkit-scrollbar-track { background: transparent; }
     button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     /* M1a 白卡类：废弃机加工三件套（内高光 + ring + 环境影），改为「1px 发丝线 + 近不可见承托影」。
        规范依据：发丝分割线替代大部分投影。dialog 用 24px 圆角与 lift 阴影（浮层档）。 */
     .panel, .stat-card, .tool-card, .resume-section-block, .distribution { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-card); }
     dialog { background: var(--surface); border: 0; border-radius: var(--r-xl); box-shadow: var(--sh-pop); }
-    dialog::backdrop { background: rgba(0, 0, 0, .3); backdrop-filter: blur(6px); }
+    dialog::backdrop { background: var(--scrim); backdrop-filter: blur(6px); }
     /* 侧栏是全站唯一的 sticky chrome，所以磨砂玻璃用在这里、而不是设计资源规范的顶栏
        （本项目顶栏不 sticky，磨砂无意义）。必须带 @supports 降级：不支持 backdrop-filter 的
        浏览器要退回纯白，否则侧栏变成半透明白与内容糊在一起不可读。 */
     .app-sidebar { background: var(--surface); border-right: 1px solid var(--line); }
     @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
-      .app-sidebar { background: rgba(255, 255, 255, .72); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+      .app-sidebar { background: var(--glass); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
     }
     .sidebar-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
     .sidebar-brand .brand-mark { border-radius: 12px; background: var(--accent); color: #fff; box-shadow: none; }
@@ -108,7 +205,7 @@
     .topbar { min-height: 60px; }
     h1 { font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: -.025em; line-height: 1.15; }
     .page-kicker { display: inline-block; margin-bottom: 4px; padding: 3px 10px; border-radius: var(--r-pill); background: var(--wash-3); color: var(--muted); font-family: var(--font-sans); font-size: 10px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
-    .subtitle { color: #86868b; font-size: 13px; line-height: 1.4; }
+    .subtitle { color: var(--ink-soft); font-size: 13px; line-height: 1.4; }
     .brand-mark { border-radius: 12px; background: var(--accent); color: #fff; box-shadow: none; }
     /* Apple 按钮：hover **只变暗不位移**（废弃 translateY 抬升与彩色投影）；:active 按压态用
        --surface-3（= base-300 #ededf2，设计资源 secondary button hover 同值）。 */
@@ -117,7 +214,7 @@
        44 同时是 Apple 的最小触控目标，所以这一档在手机上也站得住。
        代价是工具栏会长 6px——这是刻意用一点密度换秩序感。 */
     .btn { border: 1px solid var(--line-strong); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); min-height: 44px; padding: 0 24px; font-weight: 500; font-size: 14px; box-shadow: none; transition: background .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease); }
-    .btn:hover { transform: none; background: var(--surface-2); border-color: #c7c7cc; box-shadow: none; }
+    .btn:hover { transform: none; background: var(--surface-2); border-color: var(--line-hover); box-shadow: none; }
     .btn:active { transform: scale(.97); background: var(--surface-3); }
     .btn-primary { background: var(--accent); border-color: transparent; color: #fff; box-shadow: none; }
     .btn-primary:hover { background: var(--accent-ink); border-color: transparent; }
@@ -125,7 +222,7 @@
     .icon svg { width: 1.15em; height: 1.15em; vertical-align: -0.18em; }
     .btn-primary .icon svg { width: 14px; height: 14px; vertical-align: 0; }
     .btn-soft { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; box-shadow: none; }
-    .btn-soft:hover { background: #d6e8fb; }
+    .btn-soft:hover { background: var(--accent-soft-hover); }
     .btn-danger { background: var(--danger-soft); color: var(--danger); border-color: transparent; box-shadow: none; }
     .btn-danger:hover { background: var(--danger-soft-hover); }
     .btn-small { min-height: 32px; padding: 0 16px; font-size: 12.5px; font-weight: 500; }
@@ -142,11 +239,11 @@
     .control:focus { border-color: var(--accent); box-shadow: none; outline: none; background: var(--surface); }
     .control:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     textarea.control { border-radius: var(--r-lg); min-height: 78px; padding: 12px 14px; }
-    .search-glyph { color: #86868b; }
+    .search-glyph { color: var(--ink-soft); }
     /* 表单 label：13px / weight 500 / ink-soft / 下间距 6px（设计资源规范）。
        基础层是 700 且继承 ink，在小尺寸密集表单里过重。
        .exp-fields-grid label 与 .safety-label 特异性更高，不受本条影响。 */
-    label { color: #86868b; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+    label { color: var(--ink-soft); font-size: 13px; font-weight: 500; margin-bottom: 6px; }
     .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
     .stat-card { padding: 14px 16px; }
     .stat-card:first-child { grid-column: span 2; }
@@ -253,11 +350,11 @@
     .section-type-body strong { color: var(--ink); font-size: 13px; font-weight: 600; }
     .section-type-body span { color: var(--muted); font-size: 12px; line-height: 1.5; }
     .field-library-item { border: 1px solid var(--line); box-shadow: none; border-radius: var(--r-md); background: var(--surface); }
-    .field-library-item:hover { background: var(--accent-soft); border-color: rgba(0, 113, 227, .3); box-shadow: none; }
+    .field-library-item:hover { background: var(--accent-soft); border-color: var(--accent-border); box-shadow: none; }
     .modal-head { padding: 16px 24px; }
     .modal-head h2 { font-family: var(--font-display); font-size: 18px; font-weight: 600; letter-spacing: -.015em; line-height: 1.2; }
     .close-btn { border-radius: 10px; background: var(--surface-2); color: var(--muted); box-shadow: none; border: 0; }
-    .close-btn:hover { background: #e8e8ed; color: var(--ink); }
+    .close-btn:hover { background: var(--wash-5); color: var(--ink); }
     .capture-note { background: var(--accent-soft); color: var(--accent-ink); border-radius: var(--r-md); }
     .capture-status.success { color: var(--ok); }
     .capture-status.error { color: var(--danger); }
@@ -319,9 +416,9 @@
        不支持时留在上面那条 .88 的不透明降级值。
        与设计资源的四处对齐：圆角用矩形档而非胶囊（toast 常是标题+副文本两行，胶囊会压行）、
        阴影用 soft 档而非 lift、时长 320ms（规范 SpecList 明确含 toast）、action 是纯文字链接。 */
-    .toast { background: rgba(255, 255, 255, .88); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-ambient); padding: 10px 16px; font-size: 14px; font-weight: 500; transition: .32s var(--ease); }
+    .toast { background: var(--toast-bg); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-ambient); padding: 10px 16px; font-size: 14px; font-weight: 500; transition: .32s var(--ease); }
     @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
-      .toast { background: rgba(255, 255, 255, .72); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+      .toast { background: var(--toast-glass); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
     }
     .toast-action { border: 0; background: transparent; color: var(--accent); font-weight: 500; }
     .toast-action:hover { text-decoration: underline; background: transparent; }
@@ -437,7 +534,7 @@
     /* ===== v4.6.0：悬浮明细浮层（自绘 tooltip）===== */
     /* 磨砂浮层。不透明度刻意提到 .85（高于设计资源玻璃配方的 .72）：tip 是小面积浮层且
        承载 12px 密集文本，.72 在复杂背景上会糊；这是**有记录的偏离**，不是漏改。 */
-    .tip { position: fixed; z-index: 60; left: 0; top: 0; display: block; max-width: min(360px, calc(100vw - 16px)); padding: 9px 11px; border-radius: var(--r-md); background: rgba(255, 255, 255, .85); border: 1px solid var(--line); box-shadow: var(--sh-pop); font-size: 12px; line-height: 1.55; pointer-events: none; }
+    .tip { position: fixed; z-index: 60; left: 0; top: 0; display: block; max-width: min(360px, calc(100vw - 16px)); padding: 9px 11px; border-radius: var(--r-md); background: var(--tip-bg); border: 1px solid var(--line); box-shadow: var(--sh-pop); font-size: 12px; line-height: 1.55; pointer-events: none; }
     @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
       .tip { backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
     }
@@ -518,7 +615,7 @@
     .intent-dots i.on { background: var(--ok-bright); }
 
     /* ===== v4.4.0：记录详情抽屉 ===== */
-    .drawer-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .3); backdrop-filter: blur(6px); }
+    .drawer-backdrop { position: fixed; inset: 0; z-index: 40; background: var(--scrim); backdrop-filter: blur(6px); }
     .drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 41; display: flex; flex-direction: column; width: min(560px, 100vw); background: var(--surface); box-shadow: -12px 0 40px rgba(0, 0, 0, .10); animation: drawer-in .32s var(--ease); }
     /* 关键：作者样式的 display:flex 会覆盖 [hidden] 的 UA display:none（同 .view[hidden] 的处理）。
        漏了这条，关闭态的抽屉仍占位 560px 并吞掉右侧元素的点击，只是靠动画停在 opacity:0 才看不见。 */

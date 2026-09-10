@@ -3,8 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#f5f5f7">
+  <!-- color-scheme 必须写 light dark：只写 light 等于向浏览器声明"本站不支持深色"，
+       表单控件与滚动条会保持浅色 UA 样式，与 CSS 里的 @media (prefers-color-scheme: dark) 自相矛盾。 -->
+  <meta name="color-scheme" content="light dark">
+  <!-- 浏览器 chrome（手机地址栏 / 桌面标签条）的颜色。两条 media 变体缺一不可：
+       只给浅色的话，系统切深色后地址栏仍是一条刺眼的白。取值与 --bg 的两套值一致。 -->
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="description" content="本地保存、随时跟进的秋招投递管理器">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
