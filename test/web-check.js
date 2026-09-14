@@ -345,7 +345,7 @@ check('CORE 纯函数模块已按清单加载（6 个文件，531 行）', () =>
   assert.ok(coreSrc.length > 500, `CORE 块过短或未读到：${coreSrc.length}`);
 });
 
-const CORE_DEP_NAMES = ['stageOrder', 'parseLocal', 'localDateInput', 'localDateTimeInput', 'formatDate', 'formatDateTime', 'isActive', 'cryptoId', 'sanitizeTimeline', 'deriveStage', 'normalizeRecord', 'escapeHtml'];
+const CORE_DEP_NAMES = ['stageOrder', 'parseLocal', 'localDateInput', 'localDateTimeInput', 'formatDate', 'formatDateTime', 'isActive', 'cryptoId', 'sanitizeTimeline', 'deriveStage', 'normalizeRecord', 'escapeHtml', 'sanitizeEvents', 'migrateLegacyEvents'];
 const coreDeps = CORE_DEP_NAMES.map(name => extractFunction(html, name));
 check('CORE 依赖函数全部从 index.html 抽取到（无复制实现，避免漂移）', () => {
   const missing = CORE_DEP_NAMES.filter((name, idx) => !coreDeps[idx]);
@@ -357,7 +357,9 @@ function extractConstLine(src, name) {
   const line = src.split('\n').find(l => l.includes(`const ${name} =`));
   return line ? line.trim() : '';
 }
-const CORE_CONST_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET', 'COMPANY_TYPE_ALIASES'];
+const CORE_CONST_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET', 'COMPANY_TYPE_ALIASES',
+  // v4.19.0 关键时间类型（events[] 用）：core 的 dates/insights/ics 都读它们
+  'TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'isTimeEventAllDay', 'normalizeTimeEventType'];
 const coreConsts = CORE_CONST_NAMES.map(name => extractConstLine(html, name));
 check('CORE 依赖的顶层常量全部从 index.html 抽取到', () => {
   const missing = CORE_CONST_NAMES.filter((name, idx) => !coreConsts[idx]);
@@ -385,6 +387,11 @@ const ALIAS_ONLY = {
   COMPANY_TYPES: /^const COMPANY_TYPES = AJA\.COMPANY_TYPES;$/,
   COMPANY_TYPE_UNSET: /^const COMPANY_TYPE_UNSET = AJA\.COMPANY_TYPE_UNSET;$/,
   COMPANY_TYPE_ALIASES: /^const COMPANY_TYPE_ALIASES = AJA\.COMPANY_TYPE_ALIASES;$/,
+  // v4.19.0 关键时间类型：同样只能转发，不得在网页端再写一份枚举字面量
+  TIME_EVENT_TYPES: /^const TIME_EVENT_TYPES = AJA\.TIME_EVENT_TYPES;$/,
+  TIME_EVENT_DEADLINE: /^const TIME_EVENT_DEADLINE = AJA\.TIME_EVENT_DEADLINE;$/,
+  isTimeEventAllDay: /^const isTimeEventAllDay = AJA\.isTimeEventAllDay;$/,
+  normalizeTimeEventType: /^const normalizeTimeEventType = AJA\.normalizeTimeEventType;$/,
   DEFAULT_RESUME: /^const DEFAULT_RESUME = AJA\.DEFAULT_RESUME;$/,
   companyGroupKey: /^const companyGroupKey = AJA\.companyGroupKey;$/,
   sameCompanyGroup: /^const sameCompanyGroup = AJA\.sameCompanyGroup;$/,
@@ -420,6 +427,7 @@ const core = new Function(
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findAwaitingAdvance, findUpcomingDeadlines, collectAlerts,
+     nextTimeEvent, nearestDeadlineEvent,
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
    };`
@@ -441,6 +449,12 @@ function dayOffset(n, base = new Date('2026-09-06T12:00:00')) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 const NOW = new Date('2026-09-06T12:00:00');
+// v4.19.0：关键时间事件。类型枚举与「是否全天」都取自 shared，测试里不复制字面量，
+// 否则将来改类型名（比如「笔试测评」→「笔试」）会出现测试与实现各说各话。
+const DL = AJA_SHARED.TIME_EVENT_DEADLINE;
+function evt(type, at, id) {
+  return { id: id || `ev-${type}-${at}`, type, at, allDay: AJA_SHARED.isTimeEventAllDay(type) };
+}
 
 check('parseDay 把 date-only 当本地午夜（避开 new Date(YYYY-MM-DD) 的 UTC 陷阱）', () => {
   const d = core.parseDay('2026-09-10');
@@ -467,27 +481,31 @@ check('deadlineInfo 分级：>3天正常 / ≤3天 warn / 今天与逾期 danger
 
 check('collectScheduleEvents 逾期置顶 + 已结束不计截止 + limit 生效', () => {
   const recs = [
-    { id: 'a', company: 'A', position: 'p', stage: '一面', scheduleAt: '2026-09-20T10:00', deadline: '' },
-    { id: 'b', company: 'B', position: 'p', stage: '已投递', scheduleAt: '', deadline: dayOffset(-1, NOW) },
-    { id: 'c', company: 'C', position: 'p', stage: '已结束', scheduleAt: '', deadline: dayOffset(2, NOW) },
-    { id: 'd', company: 'D', position: 'p', stage: 'Offer', scheduleAt: '', deadline: dayOffset(2, NOW) }
+    { id: 'a', company: 'A', position: 'p', stage: '一面', events: [evt('面试', '2026-09-20T10:00')] },
+    { id: 'b', company: 'B', position: 'p', stage: '已投递', events: [evt(DL, dayOffset(-1, NOW))] },
+    { id: 'c', company: 'C', position: 'p', stage: '已结束', events: [evt(DL, dayOffset(2, NOW))] },
+    { id: 'd', company: 'D', position: 'p', stage: 'Offer', events: [evt(DL, dayOffset(2, NOW))] }
   ];
   const events = core.collectScheduleEvents(recs, NOW, 6);
   assert.strictEqual(events[0].record.id, 'b', '逾期项应置顶');
   assert.strictEqual(events[0].overdue, true);
   assert.ok(!events.some(e => e.record.id === 'c' || e.record.id === 'd'), '已结束/Offer 的截止不应出现');
   assert.strictEqual(core.collectScheduleEvents(recs, NOW, 1).length, 1);
+  // 类型随事件带出（v4.19.0：不再只有 schedule / deadline 两种，面试与截止能分开）
+  assert.strictEqual(events.find(e => e.record.id === 'a').type, '面试');
+  assert.strictEqual(events.find(e => e.record.id === 'b').type, DL);
 });
 
 check('buildIcs 结构、CRLF、UID 与文本转义', () => {
   const events = core.collectScheduleEvents([
-    { id: 'r1', company: '腾讯,深圳', position: '后端;基础平台', stage: '一面', scheduleAt: '2026-09-20T10:00', deadline: '', recentSchedule: '线上一面\n腾讯会议', applicationUrl: 'https://x.example/a' }
+    { id: 'r1', company: '腾讯,深圳', position: '后端;基础平台', stage: '一面', events: [evt('面试', '2026-09-20T10:00', 'ev1')], recentSchedule: '线上一面\n腾讯会议', applicationUrl: 'https://x.example/a' }
   ], NOW, 10);
   const ics = core.buildIcs(events);
   assert.ok(ics.startsWith('BEGIN:VCALENDAR\r\n'));
   assert.ok(ics.endsWith('END:VCALENDAR\r\n'));
   assert.ok(ics.includes('\r\n'), '必须用 CRLF');
-  assert.ok(ics.includes('UID:r1-schedule@autumn-recruitment-tracker'));
+  // UID 用事件 id 而不是类型：同一记录可以有两个「面试」，用类型做后缀会撞 UID
+  assert.ok(ics.includes('UID:r1-ev1@autumn-recruitment-tracker'));
   assert.ok(ics.includes('DTSTART:20260920T100000'), '浮动本地时间');
   assert.ok(/DTSTAMP:\d{8}T\d{6}Z/.test(ics), 'DTSTAMP 必须是 UTC');
   assert.ok(ics.includes('腾讯\\,深圳'), '逗号需转义');
@@ -532,8 +550,8 @@ function validateIcs(ics) {
 check('buildIcs 通过严格 RFC 5545 校验（长中文描述按 UTF-8 字节折叠，可无损展开还原）', () => {
   const longChinese = '梳理项目经历，准备三分钟自我介绍；提前测试摄像头、麦克风与网络，备好作品集与岗位 JD 的关键要求逐条对照，并复习上一轮面试官提到的系统设计题目';
   const events = core.collectScheduleEvents([
-    { id: 'cjk1', company: '星海科技', position: '产品经理校招生', city: '上海', stage: '一面', scheduleAt: '2026-09-20T10:00', deadline: '', recentSchedule: '线上一面（腾讯会议）', nextAction: longChinese, applicationUrl: '' },
-    { id: 'cjk2', company: '山岚智能', position: '算法工程师', city: '北京', stage: '笔试', scheduleAt: '', deadline: '2026-09-25', nextAction: '', applicationUrl: '' }
+    { id: 'cjk1', company: '星海科技', position: '产品经理校招生', city: '上海', stage: '一面', events: [evt('面试', '2026-09-20T10:00')], recentSchedule: '线上一面（腾讯会议）', nextAction: longChinese, applicationUrl: '' },
+    { id: 'cjk2', company: '山岚智能', position: '算法工程师', city: '北京', stage: '笔试', events: [evt(DL, '2026-09-25')], nextAction: '', applicationUrl: '' }
   ], NOW, 10);
   const ics = core.buildIcs(events);
   const { problems, logical, events: n } = validateIcs(ics);
@@ -567,7 +585,7 @@ check('foldIcsLine 按字节预算折叠且不拆多字节字符', () => {
 
 check('buildIcs 全天截止用 VALUE=DATE', () => {
   const events = core.collectScheduleEvents([
-    { id: 'r2', company: 'A', position: 'p', stage: '已投递', scheduleAt: '', deadline: '2026-09-20' }
+    { id: 'r2', company: 'A', position: 'p', stage: '已投递', events: [evt(DL, '2026-09-20')] }
   ], NOW, 10);
   const ics = core.buildIcs(events);
   assert.ok(ics.includes('DTSTART;VALUE=DATE:20260920'));
@@ -714,13 +732,13 @@ check('findStalled 只统计进行中且超过阈值', () => {
 
 check('findUpcomingDeadlines 只返回逾期与 withinDays 内临期，且按紧急度排序、排除已结束/Offer', () => {
   const recs = [
-    { id: 'far', company: 'A', position: 'p', stage: '一面', deadline: dayOffset(20, NOW) },
-    { id: 'soon', company: 'B', position: 'p', stage: '一面', deadline: dayOffset(2, NOW) },
-    { id: 'today', company: 'C', position: 'p', stage: '已投递', deadline: dayOffset(0, NOW) },
-    { id: 'over', company: 'D', position: 'p', stage: '已投递', deadline: dayOffset(-5, NOW) },
-    { id: 'closed', company: 'E', position: 'p', stage: '已结束', deadline: dayOffset(1, NOW) },
-    { id: 'offer', company: 'F', position: 'p', stage: 'Offer', deadline: dayOffset(1, NOW) },
-    { id: 'none', company: 'G', position: 'p', stage: '一面', deadline: '' }
+    { id: 'far', company: 'A', position: 'p', stage: '一面', events: [evt(DL, dayOffset(20, NOW))] },
+    { id: 'soon', company: 'B', position: 'p', stage: '一面', events: [evt(DL, dayOffset(2, NOW))] },
+    { id: 'today', company: 'C', position: 'p', stage: '已投递', events: [evt(DL, dayOffset(0, NOW))] },
+    { id: 'over', company: 'D', position: 'p', stage: '已投递', events: [evt(DL, dayOffset(-5, NOW))] },
+    { id: 'closed', company: 'E', position: 'p', stage: '已结束', events: [evt(DL, dayOffset(1, NOW))] },
+    { id: 'offer', company: 'F', position: 'p', stage: 'Offer', events: [evt(DL, dayOffset(1, NOW))] },
+    { id: 'none', company: 'G', position: 'p', stage: '一面', events: [] }
   ];
   const hits = core.findUpcomingDeadlines(recs, NOW, 3);
   assert.strictEqual(hits.map(h => h.record.id).join('|'), 'over|today|soon', '逾期最久在前，20 天后的与已结束/Offer/无截止都被排除');
@@ -734,9 +752,9 @@ check('findUpcomingDeadlines 只返回逾期与 withinDays 内临期，且按紧
 
 check('collectAlerts danger 优先且受 limit 约束', () => {
   const recs = [
-    { id: '1', company: 'A', position: 'p', stage: '已投递', deadline: dayOffset(-1, NOW), scheduleAt: '', applicationDate: dayOffset(-1, NOW), timeline: [{ stage: '已投递', at: dayOffset(-1, NOW) }] },
-    { id: '2', company: 'B', position: 'p', stage: '一面', deadline: dayOffset(2, NOW), scheduleAt: '', applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '一面', at: dayOffset(-30, NOW) }] },
-    { id: '3', company: 'C', position: 'p', stage: '二面', deadline: '', scheduleAt: '', applicationDate: dayOffset(-40, NOW), timeline: [{ stage: '二面', at: dayOffset(-40, NOW) }] }
+    { id: '1', company: 'A', position: 'p', stage: '已投递', events: [evt(DL, dayOffset(-1, NOW))], applicationDate: dayOffset(-1, NOW), timeline: [{ stage: '已投递', at: dayOffset(-1, NOW) }] },
+    { id: '2', company: 'B', position: 'p', stage: '一面', events: [evt(DL, dayOffset(2, NOW))], applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '一面', at: dayOffset(-30, NOW) }] },
+    { id: '3', company: 'C', position: 'p', stage: '二面', events: [], applicationDate: dayOffset(-40, NOW), timeline: [{ stage: '二面', at: dayOffset(-40, NOW) }] }
   ];
   const alerts = core.collectAlerts(recs, NOW, 5);
   assert.ok(alerts.length >= 3);
@@ -1118,7 +1136,9 @@ check('企业性质改名（民企→私企）：别名表合法、读时迁移�
 check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、intent 夹取、notes 清洗', () => {
   // 老数据（完全没有 v4.4.0 字段）
   const legacy = core.normalizeRecord({ id: 'old1', company: '星海科技', position: '产品', city: '上海', applicationDate: '2026-09-01', stage: '一面', updatedAt: 1 });
-  assert.strictEqual(legacy.deadline, '');
+  // v4.19.0：scheduleAt / deadline 不再是记录字段（被 events[] 取代），老数据读时迁移
+  assert.ok(!('deadline' in legacy) && !('scheduleAt' in legacy), 'scheduleAt / deadline 不得再出现在归一化结果里');
+  assert.deepStrictEqual(legacy.events, [], '没有任何时间的老数据 → 空事件列表');
   assert.strictEqual(legacy.orgUnit, '', 'v4.11.0 新增的机构：老数据缺省为空');
   assert.strictEqual(legacy.referral, '');
   assert.strictEqual(legacy.salary, '');
@@ -1135,7 +1155,9 @@ check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、
     notes: [{ id: 'k1', at: 5, text: '一面问了项目' }, { text: '' }, null, { text: '  补一条  ' }],
     timeline: [{ stage: '已投递', at: '2026-09-01', note: '' }, { stage: '一面', at: '2026-09-05', note: '' }]
   });
-  assert.strictEqual(full.deadline, '2026-09-20');
+  assert.deepStrictEqual(full.events.map(e => [e.type, e.at, e.allDay]), [[DL, '2026-09-20', true]],
+    '旧 deadline 读时迁移成「截止」事件（全天、只有日期）');
+  assert.ok(!('deadline' in full), '迁移后不得再留 deadline 字段（双事实源）');
   assert.strictEqual(full.orgUnit, '云计算事业部');
   assert.strictEqual(full.referral, '张三');
   // 已删除的字段必须**真的不在**结果里（而不是留一个空值）。
@@ -1152,6 +1174,65 @@ check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、
   assert.strictEqual(core.normalizeRecord({ company: 'x', intent: 99 }).intent, 5);
   assert.strictEqual(core.normalizeRecord({ company: 'x', intent: -3 }).intent, 0);
   assert.strictEqual(core.normalizeRecord({ company: 'x', intent: 'abc' }).intent, 0);
+});
+
+// ---- v4.19.0 关键时间：events[] 是唯一事实源 ----
+check('sanitizeEvents（经 normalizeRecord）：非法类型归「其他」、全天由类型决定、无时间的条目被丢弃', () => {
+  const rec = core.normalizeRecord({
+    id: 'e1', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01',
+    events: [
+      { id: 'x1', type: '面试', at: '2026-09-10T14:00' },
+      { id: 'x2', type: '不存在的类型', at: '2026-09-11T09:00' }, // 非法 → 其他
+      { id: 'x3', type: DL, at: '2026-09-12T00:00' },            // 全天 → 只留日期
+      { id: 'x4', type: '面试', at: '' },                        // 无时间 → 丢弃
+      null
+    ]
+  });
+  assert.deepStrictEqual(rec.events.map(e => [e.type, e.at, e.allDay]), [
+    ['面试', '2026-09-10T14:00', false],
+    ['其他', '2026-09-11T09:00', false],
+    [DL, '2026-09-12', true]
+  ]);
+  assert.ok(rec.events.every(e => e.id), '每条事件都要有 id（ICS 的 UID 依赖它，换 id 会被日历当成新事件）');
+});
+
+check('老数据迁移：scheduleAt 按阶段名推断类型，deadline 归「截止」；已有 events 时不再迁移', () => {
+  const m = core.normalizeRecord({ id: 'm1', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01', stage: '一面', scheduleAt: '2026-09-10T14:00', deadline: '2026-09-08' });
+  assert.deepStrictEqual(m.events.map(e => [e.type, e.at]), [[DL, '2026-09-08'], ['面试', '2026-09-10T14:00']]);
+  assert.ok(!('scheduleAt' in m) && !('deadline' in m), '迁移后旧字段必须消失（不留双事实源）');
+  // 阶段名是用户自己填的，据此推断类型属于"可推断"而不是编造
+  const w = core.normalizeRecord({ id: 'm2', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01', stage: '笔试', scheduleAt: '2026-09-10T14:00' });
+  assert.strictEqual(w.events[0].type, '笔试测评');
+  // 已有 events（哪怕是空数组）时以它为准：用户删光了时间，不该被旧 deadline 复活
+  const keep = core.normalizeRecord({ id: 'm3', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01', deadline: '2026-09-08', events: [] });
+  assert.deepStrictEqual(keep.events, [], '显式 events 优先，旧 deadline 不得复活');
+});
+
+check('nextTimeEvent / nearestDeadlineEvent：未来优先、其次最近的过去；一条记录多条同类事件也只取最近', () => {
+  const now = new Date('2026-09-06T12:00:00');
+  const evs = [evt('面试', '2026-09-01T10:00'), evt('面试', '2026-09-20T10:00'), evt(DL, '2026-09-30'), evt(DL, '2026-09-02')];
+  const n = core.nextTimeEvent(evs, now);
+  assert.strictEqual(n.event.at, '2026-09-20T10:00', '未来优先，取最近的那个');
+  assert.strictEqual(n.future, true);
+  const pastOnly = core.nextTimeEvent([evt('面试', '2026-09-01T10:00'), evt('面试', '2026-09-03T10:00')], now);
+  assert.strictEqual(pastOnly.event.at, '2026-09-03T10:00', '全在过去时取最近的过去');
+  assert.strictEqual(pastOnly.future, false);
+  assert.strictEqual(core.nextTimeEvent([], now), null);
+  assert.strictEqual(core.nearestDeadlineEvent(evs, now).event.at, '2026-09-30', '截止只看「截止」类型');
+  assert.strictEqual(core.nearestDeadlineEvent([evt('面试', '2026-09-20T10:00')], now), null, '没有截止事件时返回 null（不是编一个）');
+});
+
+check('关键时间 UI 贯通：表单编辑器 / 表头 / 提交 / 取值口径都改读 events', () => {
+  assert.ok(/id="eventEditor"/.test(html) && /id="addEventBtn"/.test(html), '记录弹窗要有关键时间编辑器与添加按钮');
+  assert.ok(/function renderEventEditor\(/.test(html) && /function collectEvents\(/.test(html), '渲染与收集函数都要在');
+  assert.ok(/events: collectEvents\(\)/.test(html), 'submitForm 必须把收集到的事件写进记录（漏了等于编辑器白做）');
+  assert.ok(/<th>最近时间<\/th>/.test(html), '表头应从「最近安排」改为「最近时间」（它现在可能显示截止）');
+  // 旧字段彻底退场：网页端不得再读 record.deadline / record.scheduleAt（这才是"单一事实源"的硬约束）
+  assert.ok(!/\brecord\.deadline\b/.test(html) && !/\brecord\.scheduleAt\b/.test(html),
+    '网页端仍在读 record.deadline / record.scheduleAt —— events[] 是唯一事实源');
+  assert.ok(html.includes('关键时间'), '详情抽屉要有「关键时间」一行');
+  assert.ok(/nextTimeEvent\(/.test(html) && /nearestDeadlineEvent\(/.test(html),
+    '「取最近一条」的口径必须走共用的纯函数，不得各处自己挑');
 });
 
 check('normalizeRecord companyType：白名单校验，老数据与非法值一律归「未设置」', () => {
@@ -2262,14 +2343,18 @@ check('就地编辑的草稿必须在重渲染后保住（云同步与「重新�
   assert.ok(!/localStorage[^\n]*mailDraft/i.test(html), 'mailDrafts 不该被持久化到 localStorage');
 });
 
-check('deadline 贯通网页端：卡片有编辑器、apply 会写进台账', () => {
-  // 台账一直有 deadline 字段（「签约截止」列 + deadlineInfo 倒计时 + 按截止日排序），
-  // 但 v4.16.0 之前邮件链路从来不喂它 —— 而笔试/测评邮件里最有用的时间恰恰是截止时间。
+check('deadline 贯通网页端：卡片有编辑器、apply 会写成「截止」关键时间', () => {
+  // 台账的时间模型 v4.19.0 起是 events[]（带类型）。邮件链路仍以 scheduleAt / deadline 两个字段
+  // 送来（跨仓库契约不动），网页端按邮件类型把它折成对应事件——截止这条必须真的落到 events 里，
+  // 而安排时间要按邮件类型判成「面试」还是「笔试测评」，不能只是丢掉。
   const cardSrc = extractFunction(html, 'mailCardHtml').replace(/\/\/[^\n]*/g, '');   // 同样先剥行注释
   assert.ok(/data-mail-edit="deadline"/.test(cardSrc), '邮件卡片应有 deadline 的编辑器');
+  assert.ok(/data-mail-edit="scheduleAt"/.test(cardSrc), '邮件卡片应有 scheduleAt 的编辑器');
   const apply = extractFunction(html, 'applyMailSuggestion').replace(/\/\/[^\n]*/g, '');
-  assert.ok(/rec\.deadline = readEd\('deadline'\)/.test(apply),
-    'apply 必须把 deadline 写进台账，否则 AI 侧接住了也白接');
+  assert.ok(/upsertEvent\(rec, TIME_EVENT_DEADLINE, readEd\('deadline'\)\)/.test(apply),
+    'apply 必须把 deadline 写成「截止」关键时间，否则 AI 侧接住了也白接');
+  assert.ok(/upsertEvent\(rec, mailScheduleType\(s\), readEd\('scheduleAt'\)\)/.test(apply),
+    'apply 必须把 scheduleAt 按邮件类型写成事件（面试 / 笔试测评）');
   // 来源三态都要有对应的视觉标记：兜底值必须显眼，否则用户会以为它是邮件里读出来的
   for (const cls of ['is-fallback', 'is-email', 'is-unknown']) {
     assert.ok(cardSrc.includes(cls), `mailCardHtml 缺 atSource 的 ${cls} 分支`);
@@ -2452,6 +2537,11 @@ check('用户文档与当前行为一致（看板横带 / 邮箱多服务商 / �
   assert.ok(/也不换列|不推进/.test(tut), '安装教程应说清「完成」不会推进阶段，否则等于没讲');
   assert.ok(qs.includes('标记完成') && qs.includes('「完成」与「推进」是两件事'),
     '快速上手指南应给出与安装教程一致的口径');
+
+  // ⑤ 关键时间分类（v4.19.0）：文档不讲，用户仍会把面试时间填进「截止」或只填一个时间
+  assert.ok(tut.includes('关键时间'), '安装教程应说明「关键时间」可填多个并分类（v4.19.0）');
+  assert.ok(tut.includes('自动迁成带类型的事件'), '安装教程应说明旧字段会自动迁移，否则老用户会担心要手改');
+  assert.ok(qs.includes('关键时间'), '快速上手指南也应讲到关键时间分类');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

@@ -143,6 +143,13 @@
     .tl-row .control { min-height: 34px; }
     .tl-del { flex: 0 0 30px; width: 30px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; line-height: 1; font-size: 13px; }
     .tl-del:hover { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+    /* 关键时间编辑器（记录弹窗，v4.19.0）：一行 = 类型 + 时间 + 删除。
+       与时间线编辑器同款布局，复用 .tl-del 的删除按钮样式（视觉与行为都一致）。 */
+    .event-editor { display: grid; gap: 7px; margin: 8px 0; }
+    .ev-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .ev-row .ev-type { flex: 0 0 116px; }
+    .ev-row .ev-at { flex: 1 1 180px; }
+    .ev-row .control { min-height: 34px; }
     .advance-stage-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
     .row-actions { display: flex; gap: 7px; white-space: nowrap; }
     .text-button { min-height: 30px; padding: 3px 6px; background: transparent; border: 0; color: var(--muted); font-size: 13px; border-radius: 7px; }

@@ -33,15 +33,22 @@
           // 机构进标题（v4.11.0）：不进的话日历上会出现三个一模一样的「招商银行 · 客户经理」，
           // 分不清哪个是杭州分行、哪个是成都分行 —— 而日历正是靠标题扫读的。
           const companyBit = [r.company || '投递', r.orgUnit].filter(Boolean).join(' ');
-          const title = `${companyBit} · ${ev.type === 'deadline' ? `截止（${r.position || '岗位'}）` : (r.recentSchedule || r.position || '安排')}`;
+          // v4.19.0：事件自带类型（截止 / 面试 / 笔试测评 / 其他），标题直接用它——
+          // 此前所有安排都写成「最近安排」，日历上分不清哪个是笔试、哪个是面试。
+          const isDeadline = ev.type === TIME_EVENT_DEADLINE;
+          const title = isDeadline
+            ? `${companyBit} · 截止（${r.position || '岗位'}）`
+            : `${companyBit} · ${ev.type}${r.recentSchedule ? `（${r.recentSchedule}）` : ''}`;
           const desc = [
             `岗位：${r.position || '—'}`, `机构：${r.orgUnit || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
-            ev.type === 'deadline' ? `截止日期：${r.deadline || '—'}` : `安排时间：${r.scheduleAt || '—'}`,
+            isDeadline ? `截止日期：${String((ev.event && ev.event.at) || '—').slice(0, 10)}` : `${ev.type}时间：${formatDateTime(ev.at)}`,
             r.nextAction ? `下一步：${r.nextAction}` : ''
           ].filter(Boolean).join('\n');
           lines.push(
             'BEGIN:VEVENT',
-            `UID:${icsEscape(r.id || 'unknown')}-${ev.type}@autumn-recruitment-tracker`,
+            // UID 用事件 id 而不是类型：同一条记录可以有多个同类型事件（两次面试），
+            // 用类型做后缀会生成重复 UID，严格日历会合并或丢弃其中一个。
+            `UID:${icsEscape(r.id || 'unknown')}-${icsEscape((ev.event && ev.event.id) || ev.type)}@autumn-recruitment-tracker`,
             `DTSTAMP:${icsUtc(now)}`,
             ev.allDay ? `DTSTART;VALUE=DATE:${icsLocal(start, true)}` : `DTSTART:${icsLocal(start, false)}`,
             ev.allDay ? `DTEND;VALUE=DATE:${icsLocal(end, true)}` : `DTEND:${icsLocal(end, false)}`,

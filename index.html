@@ -164,6 +164,13 @@
     .tl-row .control { min-height: 34px; }
     .tl-del { flex: 0 0 30px; width: 30px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; line-height: 1; font-size: 13px; }
     .tl-del:hover { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+    /* 关键时间编辑器（记录弹窗，v4.19.0）：一行 = 类型 + 时间 + 删除。
+       与时间线编辑器同款布局，复用 .tl-del 的删除按钮样式（视觉与行为都一致）。 */
+    .event-editor { display: grid; gap: 7px; margin: 8px 0; }
+    .ev-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .ev-row .ev-type { flex: 0 0 116px; }
+    .ev-row .ev-at { flex: 1 1 180px; }
+    .ev-row .control { min-height: 34px; }
     .advance-stage-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
     .row-actions { display: flex; gap: 7px; white-space: nowrap; }
     .text-button { min-height: 30px; padding: 3px 6px; background: transparent; border: 0; color: var(--muted); font-size: 13px; border-radius: 7px; }
@@ -1459,7 +1466,7 @@
         <div class="search-wrap"><span class="search-glyph">⌕</span><input class="control" id="searchInput" type="search" placeholder="搜索公司或岗位" aria-label="搜索公司或岗位"></div>
         <select class="control" id="stageFilter" aria-label="按阶段筛选"><option value="all">全部阶段</option></select>
         <select class="control" id="sortSelect" aria-label="排序方式">
-          <option value="schedule">最近安排优先</option>
+          <option value="schedule">最近时间优先</option>
           <option value="applied-desc">投递日期：从新到旧</option>
           <option value="updated-desc">最近更新优先</option>
           <option value="company">公司名称排序</option>
@@ -1474,7 +1481,7 @@
       </div>
       <div class="table-scroll" id="recordsTableScroll">
         <table>
-          <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
+          <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近时间</th><th>下一步行动</th><th>操作</th></tr></thead>
           <tbody id="recordBody"></tbody>
         </table>
       </div>
@@ -1628,8 +1635,12 @@
             <div class="hint">用于洞察里的央国企 / 私企 / 外企统计；插件一键收录时也能直接选</div>
           </div>
           <div class="field"><label for="applicationDate">投递日期 <span class="required">*</span></label><input class="control" id="applicationDate" name="applicationDate" type="date" required></div>
-          <div class="field"><label for="scheduleAt">安排时间</label><input class="control" id="scheduleAt" name="scheduleAt" type="datetime-local"><div class="hint">有面试、笔试或跟进时间时填写</div></div>
-          <div class="field"><label for="deadline">截止日期</label><input class="control" id="deadline" name="deadline" type="date"><div class="hint">网申 / 测评 / 笔试 / 签约的截止时间，会进入「未来安排」并可导出到日历</div></div>
+          <div class="field full">
+            <label>关键时间</label>
+            <div class="hint">分开放：<strong>截止</strong>是必须赶的硬期限（只有日期，参与倒计时与排序），<strong>面试</strong> / <strong>笔试测评</strong>是已确定的安排（精确到分）。都会进入「未来安排」并可导出到日历。</div>
+            <div class="event-editor" id="eventEditor"></div>
+            <button class="btn btn-small" id="addEventBtn" type="button">＋ 添加时间</button>
+          </div>
           <div class="field">
             <label for="intent">意向度</label>
             <select class="control" id="intent" name="intent">
@@ -1861,6 +1872,11 @@
       const COMPANY_TYPE_UNSET = AJA.COMPANY_TYPE_UNSET;
       // v4.11.0 改名的读时迁移表（旧值「民企」→「私企」），同样只是 shared/ 的转发别名
       const COMPANY_TYPE_ALIASES = AJA.COMPANY_TYPE_ALIASES;
+      // v4.19.0 关键时间类型（截止 / 面试 / 笔试测评 / 其他）与「只有日期」的判定，同样转发 shared/
+      const TIME_EVENT_TYPES = AJA.TIME_EVENT_TYPES;
+      const TIME_EVENT_DEADLINE = AJA.TIME_EVENT_DEADLINE;
+      const isTimeEventAllDay = AJA.isTimeEventAllDay;
+      const normalizeTimeEventType = AJA.normalizeTimeEventType;
       // 阶段排序：预设返回索引；自定义/未知返回大值（视为“更靠后”），用 9000 规避 2^53 精度问题
       function stageOrder(stage) {
         const i = STAGE_PRESETS.indexOf(stage);
@@ -1923,6 +1939,41 @@
         });
         return setTimeline(rec, tl);
       }
+      // ===== 关键时间（v4.19.0）：events[] 是唯一事实源 =====
+      // 一个事件 = { id, type, at, allDay }。type 由 shared 的白名单收敛（非法值 → 其他）；
+      // allDay 由 type 决定（只有「截止」是全天），ICS 的 DTSTART、倒计时是否显示时分、
+      // 输入框是 date 还是 datetime-local，全都以它为准，不会再各判一套。
+      function sanitizeEvents(list) {
+        if (!Array.isArray(list)) return [];
+        return list.map(e => {
+          if (!e || typeof e !== 'object') return null;
+          const at = String(e.at || '').trim();
+          if (!at) return null; // 没有时间的事件没有意义，直接丢掉（与里程碑丢掉空阶段同理）
+          const type = normalizeTimeEventType(e.type);
+          const allDay = isTimeEventAllDay(type);
+          return {
+            id: String(e.id || cryptoId()),
+            type,
+            at: allDay ? at.slice(0, 10) : at, // 全天事件只保留日期，避免存成"带时刻的全天"半吊子
+            allDay
+          };
+        }).filter(Boolean);
+      }
+      // 旧数据迁移：单一 scheduleAt / deadline → 带类型的事件。只在记录还没有 events 时执行。
+      // scheduleAt 的类型按**当前阶段名推断**（含「面」→ 面试；含笔试/测评/机试 → 笔试测评；否则其他）：
+      // 老数据没存类型，但阶段名是用户自己填的，属于可推断，而不是编造。
+      function migrateLegacyEvents(item) {
+        const out = [];
+        const deadline = String(item && item.deadline || '').trim();
+        if (deadline) out.push({ id: cryptoId(), type: '截止', at: deadline.slice(0, 10), allDay: true });
+        const scheduleAt = String(item && item.scheduleAt || '').trim();
+        if (scheduleAt) {
+          const stage = String(item && item.stage || '');
+          const type = /面/.test(stage) ? '面试' : (/笔试|测评|机试/.test(stage) ? '笔试测评' : '其他');
+          out.push({ id: cryptoId(), type, at: scheduleAt, allDay: false });
+        }
+        return out;
+      }
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
       const RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
@@ -1937,7 +1988,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.18.0';
+      const APP_VERSION = '4.19.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2030,12 +2081,15 @@
 
       function exampleRecords() {
         const now = Date.now();
+        // v4.19.0：示例数据**直接给出 events[]**（带类型）。不能再用旧的 scheduleAt 让迁移去兜——
+        // 首启时这份数据是原样写进 localStorage 的、不过 normalizeRecord，内存里将没有 events。
+        const one = (type, at) => [{ id: cryptoId(), type, at, allDay: type === TIME_EVENT_DEADLINE }];
         return [
-          { id: cryptoId(), company: '星海科技', position: '产品经理校招生', city: '上海', applicationDate: localDateInput(dateOffset(-12)), stage: '一面', scheduleAt: localDateTimeInput(dateOffset(1, 14, 0)), recentSchedule: '线上一面', nextAction: '梳理项目经历，准备三分钟自我介绍', updatedAt: now - 2000 },
-          { id: cryptoId(), company: '山岚智能', position: '算法工程师', city: '北京', applicationDate: localDateInput(dateOffset(-18)), stage: '笔试', scheduleAt: localDateTimeInput(dateOffset(3, 19, 0)), recentSchedule: '在线笔试', nextAction: '复习动态规划与概率题', updatedAt: now - 5000 },
-          { id: cryptoId(), company: '青禾互娱', position: '用户运营', city: '杭州', applicationDate: localDateInput(dateOffset(-7)), stage: '已投递', scheduleAt: localDateTimeInput(dateOffset(5, 10, 30)), recentSchedule: '邮件跟进招聘进度', nextAction: '检查邮箱并准备补充作品集', updatedAt: now - 8000 },
-          { id: cryptoId(), company: '远帆咨询', position: '商业分析顾问', city: '深圳', applicationDate: localDateInput(dateOffset(-28)), stage: '二面', timeline: [{ stage: '已投递', at: localDateInput(dateOffset(-28)), note: '' }, { stage: '笔试', at: localDateInput(dateOffset(-20)), note: '在线测评' }, { stage: '一面', at: localDateInput(dateOffset(-10)), note: '' }, { stage: '二面', at: localDateInput(dateOffset(-3)), note: '业务负责人面' }], scheduleAt: localDateTimeInput(dateOffset(8, 15, 0)), recentSchedule: '业务负责人面试', nextAction: '练习市场规模估算案例', updatedAt: now - 12000 },
-          { id: cryptoId(), company: '拾光设计', position: '交互设计师', city: '广州', applicationDate: localDateInput(dateOffset(-33)), stage: 'Offer', scheduleAt: '', recentSchedule: '已收到录用通知', nextAction: '确认入职时间并回复邮件', updatedAt: now - 15000 }
+          { id: cryptoId(), company: '星海科技', position: '产品经理校招生', city: '上海', applicationDate: localDateInput(dateOffset(-12)), stage: '一面', events: one('面试', localDateTimeInput(dateOffset(1, 14, 0))), recentSchedule: '线上一面', nextAction: '梳理项目经历，准备三分钟自我介绍', updatedAt: now - 2000 },
+          { id: cryptoId(), company: '山岚智能', position: '算法工程师', city: '北京', applicationDate: localDateInput(dateOffset(-18)), stage: '笔试', events: [{ id: cryptoId(), type: TIME_EVENT_DEADLINE, at: localDateInput(dateOffset(2)), allDay: true }].concat(one('笔试测评', localDateTimeInput(dateOffset(3, 19, 0)))), recentSchedule: '在线笔试', nextAction: '复习动态规划与概率题', updatedAt: now - 5000 },
+          { id: cryptoId(), company: '青禾互娱', position: '用户运营', city: '杭州', applicationDate: localDateInput(dateOffset(-7)), stage: '已投递', events: one('其他', localDateTimeInput(dateOffset(5, 10, 30))), recentSchedule: '邮件跟进招聘进度', nextAction: '检查邮箱并准备补充作品集', updatedAt: now - 8000 },
+          { id: cryptoId(), company: '远帆咨询', position: '商业分析顾问', city: '深圳', applicationDate: localDateInput(dateOffset(-28)), stage: '二面', timeline: [{ stage: '已投递', at: localDateInput(dateOffset(-28)), note: '' }, { stage: '笔试', at: localDateInput(dateOffset(-20)), note: '在线测评' }, { stage: '一面', at: localDateInput(dateOffset(-10)), note: '' }, { stage: '二面', at: localDateInput(dateOffset(-3)), note: '业务负责人面' }], events: one('面试', localDateTimeInput(dateOffset(8, 15, 0))), recentSchedule: '业务负责人面试', nextAction: '练习市场规模估算案例', updatedAt: now - 12000 },
+          { id: cryptoId(), company: '拾光设计', position: '交互设计师', city: '广州', applicationDate: localDateInput(dateOffset(-33)), stage: 'Offer', events: [], recentSchedule: '已收到录用通知', nextAction: '确认入职时间并回复邮件', updatedAt: now - 15000 }
         ];
       }
 
@@ -2096,10 +2150,17 @@
           orgUnit: String(item.orgUnit || '').trim().slice(0, 60),
           applicationDate: String(item.applicationDate || ''),
           applicationUrl: /^https?:\/\//i.test(String(item.applicationUrl || '')) ? String(item.applicationUrl) : '',
-          scheduleAt: String(item.scheduleAt || ''), recentSchedule: String(item.recentSchedule || ''),
+          recentSchedule: String(item.recentSchedule || ''),
           nextAction: String(item.nextAction || ''), updatedAt: Number(item.updatedAt) || Date.now(),
           // ===== v4.4.0 新增字段（全部可选，老数据缺省即为空；必须在此显式携带，否则每次 load/sync 会静默丢失）=====
-          deadline: String(item.deadline || ''),            // 网申/测评/笔试/签约截止日（YYYY-MM-DD）
+          // v4.19.0：scheduleAt / deadline 被 events[] 取代（定义见上方 sanitizeEvents）。
+          // 它们**不再持久化**：读取时由 migrateLegacyEvents 折成带类型的事件，写回后即消失，
+          // 避免"两处都存时间、改一处另一处不变"的双事实源。事件是数组，必须在此显式携带。
+          // 判定用「是不是数组」而不是「长度」：用户把时间全删光时是 events: []，
+          // 那必须尊重为"真的没有时间"，不能又把遗留的 deadline 迁移回来。
+          events: Array.isArray(item.events)
+            ? sanitizeEvents(item.events)
+            : migrateLegacyEvents(item),
           referral: String(item.referral || ''),            // 内推人或联系方式
           salary: String(item.salary || ''),                // 薪资文本（Offer 对比用）
           intent: Math.min(5, Math.max(0, Number(item.intent) || 0)), // 意向度 0-5，0=未设
@@ -3307,9 +3368,11 @@
           // tier 0 = 未来安排（按时间升序，最近的最靠前）；tier 1 = 无安排（居中）；tier 2 = 已过期（置底）
           const now = Date.now();
           const rankOf = (rec) => {
-            const t = parseLocal(rec.scheduleAt)?.getTime();
-            if (t == null) return { tier: 1, time: 0 };
-            return t >= now ? { tier: 0, time: t } : { tier: 2, time: t };
+            // v4.19.0：改看 events[] 里最近的一条（未来优先）——「最近安排优先」不再依赖单一 scheduleAt
+            const hit = nextTimeEvent(rec.events, new Date(now));
+            if (!hit) return { tier: 1, time: 0 };
+            const t = hit.at.getTime();
+            return hit.future ? { tier: 0, time: t } : { tier: 2, time: t };
           };
           const ra = rankOf(a), rb = rankOf(b);
           if (ra.tier !== rb.tier) return ra.tier - rb.tier;
@@ -3333,7 +3396,12 @@
         els.total.textContent = records.length;
         els.today.textContent = records.filter(r => r.applicationDate === localDateInput(now)).length;
         els.active.textContent = records.filter(isActive).length;
-        els.week.textContent = records.filter(r => { const d = parseLocal(r.scheduleAt); return d && d >= now && d <= sevenDays; }).length;
+        els.week.textContent = records.filter(r => {
+          // 口径与旧版一致：只数"有时间点的安排"（面试/笔试测评/其他），不含全天截止——
+          // 截止有它自己的倒计时与未来安排清单，混进"七天内安排"会让两个数字互相打架。
+          const hit = nextTimeEvent((r.events || []).filter(ev => ev && !ev.allDay), now);
+          return hit && hit.future && hit.at <= sevenDays;
+        }).length;
         els.offer.textContent = records.filter(r => r.stage === 'Offer').length;
       }
 
@@ -3595,12 +3663,18 @@
         if (!wrap || !table) return;
         const offers = records.filter(record => record.stage === 'Offer');
         if (offers.length < 2) { wrap.hidden = true; table.innerHTML = ''; return; }
+        // v4.19.0：签约截止改为「取最近的截止事件」——一条记录可能有多条截止（测评截止 / 签约截止）
+        const deadlineOf = rec => {
+          const hit = nearestDeadlineEvent(rec.events);
+          return hit ? String(hit.event.at).slice(0, 10) : '';
+        };
         const sorted = offers.slice().sort((a, b) => (Number(b.intent) || 0) - (Number(a.intent) || 0)
-          || String(a.deadline || '9999-12-31').localeCompare(String(b.deadline || '9999-12-31')));
+          || String(deadlineOf(a) || '9999-12-31').localeCompare(String(deadlineOf(b) || '9999-12-31')));
         wrap.hidden = false;
         table.innerHTML = `<thead><tr><th>公司 / 岗位</th><th>城市</th><th>薪资 / 待遇</th><th>意向度</th><th>签约截止</th><th>最新备注</th></tr></thead>
           <tbody>${sorted.map(record => {
-            const dl = deadlineInfo(record.deadline);
+            const dlDate = deadlineOf(record);
+            const dl = dlDate ? deadlineInfo(dlDate) : null;
             const notes = Array.isArray(record.notes) ? record.notes : [];
             const lastNote = notes.length ? notes[notes.length - 1].text : (record.nextAction || '—');
             return `<tr class="offer-row" data-id="${escapeHtml(record.id)}">
@@ -3608,7 +3682,7 @@
               <td data-label="城市">${escapeHtml(record.city || '—')}</td>
               <td data-label="薪资 / 待遇">${escapeHtml(record.salary || '—')}</td>
               <td data-label="意向度">${intentDotsHtml(record.intent) || '<span class="muted-text">未设</span>'}</td>
-              <td data-label="签约截止">${record.deadline ? `<span class="deadline-hint ${dl ? dl.level : ''}">${escapeHtml(formatDate(record.deadline))}${dl ? ` · ${escapeHtml(dl.text.replace('截止 · ', ''))}` : ''}</span>` : '—'}</td>
+              <td data-label="签约截止">${dlDate ? `<span class="deadline-hint ${dl ? dl.level : ''}">${escapeHtml(formatDate(dlDate))}${dl ? ` · ${escapeHtml(dl.text.replace('截止 · ', ''))}` : ''}</span>` : '—'}</td>
               <td data-label="最新备注"><div class="next-action">${escapeHtml(lastNote)}</div></td>
             </tr>`;
           }).join('')}</tbody>`;
@@ -3683,14 +3757,19 @@
 
       // 台账单行 HTML（表格视图）；companyIndex/groupKeyById 用于「同公司多岗位」chip 与公司配色
       function recordRowHtml(record, recordNo, companyIndex, groupKeyById) {
-        const scheduleDate = parseLocal(record.scheduleAt);
-        const overdue = scheduleDate && scheduleDate < new Date() && !['Offer', '已结束'].includes(record.stage);
+        const now = new Date();
+        // v4.19.0：表格「最近时间」与截止倒计时都从 events[] 派生
+        const nextEv = nextTimeEvent(record.events, now);
+        const overdue = !!(nextEv && !nextEv.future) && !['Offer', '已结束'].includes(record.stage);
         const canAdvance = record.stage !== '已结束';
         // 完成态（v4.18.0）：当前阶段（时间线末条）是否已标记完成。终态若已被标记，也允许取消。
         const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
         const curDone = !!(curMilestone && curMilestone.done);
         const canMarkDone = !['Offer', '已结束'].includes(record.stage) || curDone;
-        const dl = deadlineInfo(record.deadline);
+        const dlHit = nearestDeadlineEvent(record.events, now);
+        const dl = dlHit ? deadlineInfo(String(dlHit.event.at).slice(0, 10), now) : null;
+        // 注意：即使「最近时间」本身就是这条截止，也**保留**倒计时提示——它带黄/红的紧急色，
+        // 去掉它等于把"还剩 2 天 / 已过期"这个信号藏了；日期重复出现只是外观小瑕疵。
         const dlHtml = dl && !['Offer', '已结束'].includes(record.stage)
           ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
         const companyHtml = record.applicationUrl
@@ -3709,7 +3788,7 @@
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.done ? '（已完成）' : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span>${curDone ? '<span class="stage-done-chip" title="当前阶段已标记完成，尚未推进">已完成</span>' : ''}</td>
-          <td class="schedule" data-label="最近安排"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(formatDateTime(record.scheduleAt))}${overdue ? ' · 已到期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
+          <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
           <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
           <td data-label="操作"><div class="row-actions">
             ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
@@ -3788,25 +3867,25 @@
       }
 
       function renderUpcoming() {
-        // 统一事件流：安排时间 + 截止日期一起排（逾期置顶），最多 6 项
+        // 统一事件流：events[] 里的事件一起排（逾期置顶），最多 6 项
         const events = collectScheduleEvents(records, new Date(), 6);
         if (!events.length) {
-          els.upcoming.innerHTML = '<div class="side-empty">近期还没有安排或截止<br>新增 / 编辑记录时填写「安排时间」或「截止日期」</div>';
+          els.upcoming.innerHTML = '<div class="side-empty">近期还没有安排或截止<br>新增 / 编辑记录时在「关键时间」里填写面试 / 笔试或截止日期</div>';
           return;
         }
         els.upcoming.innerHTML = events.map(ev => {
           const r = ev.record;
           const d = ev.at;
           const diff = daysUntil(d);
-          const isDeadline = ev.type === 'deadline';
+          const isDeadline = ev.type === TIME_EVENT_DEADLINE;
           const when = ev.overdue
             ? `已过期${diff < 0 ? ` ${-diff} 天` : ''}`
-            : (diff === 0 ? '就是今天' : (diff > 0 && diff <= 3 ? `还剩 ${diff} 天` : (ev.allDay ? formatDate(localDateInput(d)) : formatDateTime(r.scheduleAt))));
+            : (diff === 0 ? '就是今天' : (diff > 0 && diff <= 3 ? `还剩 ${diff} 天` : (ev.allDay ? formatDate(localDateInput(d)) : `${ev.type} · ${formatDateTime(ev.event && ev.event.at)}`)));
           return `<article class="schedule-item${isDeadline ? ' is-deadline' : ''}${ev.overdue ? ' is-overdue' : ''}" data-id="${escapeHtml(r.id)}" role="button" tabindex="0" title="查看详情">
             <div class="date-tile"><div class="date-month">${d.getMonth() + 1} 月</div><div class="date-day">${d.getDate()}</div></div>
             <div class="schedule-body">
               <div class="side-company">${escapeHtml(r.company)} · ${escapeHtml(r.position)} <span class="badge badge-sm" data-stage="${escapeHtml(r.stage)}">${escapeHtml(r.stage)}</span></div>
-              <div class="side-detail"><span class="side-kind">${isDeadline ? '截止' : '安排'}</span>${escapeHtml(isDeadline ? (r.deadline || '') : (r.recentSchedule || r.nextAction || '待处理安排'))}</div>
+              <div class="side-detail"><span class="side-kind">${escapeHtml(ev.type)}</span>${escapeHtml(isDeadline ? String(ev.event && ev.event.at || '') : (r.recentSchedule || r.nextAction || '待处理安排'))}</div>
               <div class="side-time${ev.overdue ? ' overdue' : ''}">${escapeHtml(when)}</div>
             </div>
           </article>`;
@@ -3848,16 +3927,40 @@
         if (diff <= 3) return { text: `截止 · 还剩 ${diff} 天`, level: 'warn', days: diff };
         return { text: `截止 · 还剩 ${diff} 天`, level: '', days: diff };
       }
-      // 把「安排时间(scheduleAt)」与「截止日期(deadline)」合成统一事件流：
-      // 逾期未处理项置顶（按逾期时长倒序），其余按时间升序，最后截断 limit 条。
+      // 取事件列表里「最该显示」的一条：优先最近的未来事件，其次最近的过去事件。
+      // 台账「最近时间」列与看板 chip 都用它，避免两处各写一套"取哪一条"的规则。
+      function nextTimeEvent(events, now = new Date()) {
+        const list = (Array.isArray(events) ? events : [])
+          .map(ev => ({ ev, at: ev && ev.allDay ? parseDay(ev.at) : parseLocal(ev && ev.at) }))
+          .filter(x => x.ev && x.at);
+        if (!list.length) return null;
+        const future = list.filter(x => x.at >= now).sort((a, b) => a.at - b.at);
+        if (future.length) return { event: future[0].ev, at: future[0].at, future: true };
+        const past = list.sort((a, b) => b.at - a.at);
+        return { event: past[0].ev, at: past[0].at, future: false };
+      }
+      // 最近的截止事件（未来的优先）。存在性判定与倒计时都用它，口径只有这一处。
+      function nearestDeadlineEvent(events, now = new Date()) {
+        return nextTimeEvent((Array.isArray(events) ? events : []).filter(e => e && e.type === TIME_EVENT_DEADLINE), now);
+      }
+      // 把记录的关键时间合成统一事件流（v4.19.0：来源由单一 scheduleAt/deadline 改为 events[]）。
+      // 逾期未处理项置顶（按时间倒序），其余按时间升序，最后截断 limit 条。
+      // 语义与旧版保持：终态（Offer / 已结束）不再列截止；已发生的"安排"若已终态也不再列。
       function collectScheduleEvents(records, now = new Date(), limit = 6) {
         const out = [];
         for (const r of (Array.isArray(records) ? records : [])) {
           const closed = ['Offer', '已结束'].includes(r.stage);
-          const s = parseLocal(r.scheduleAt);
-          if (s && (!closed || s >= now)) out.push({ type: 'schedule', at: s, allDay: false, record: r, overdue: s < now && !closed });
-          const d = parseDay(r.deadline);
-          if (d && !closed) out.push({ type: 'deadline', at: d, allDay: true, record: r, overdue: d < now });
+          for (const ev of (Array.isArray(r.events) ? r.events : [])) {
+            if (!ev) continue;
+            const isDeadline = ev.type === TIME_EVENT_DEADLINE;
+            const at = ev.allDay ? parseDay(ev.at) : parseLocal(ev.at);
+            if (!at) continue;
+            if (isDeadline) {
+              if (!closed) out.push({ type: ev.type, at, allDay: true, record: r, event: ev, overdue: at < now });
+            } else if (!closed || at >= now) {
+              out.push({ type: ev.type, at, allDay: false, record: r, event: ev, overdue: at < now && !closed });
+            }
+          }
         }
         const overdueList = out.filter(e => e.overdue).sort((a, b) => a.at - b.at);
         const futureList = out.filter(e => !e.overdue).sort((a, b) => a.at - b.at);
@@ -3899,15 +4002,22 @@
           // 机构进标题（v4.11.0）：不进的话日历上会出现三个一模一样的「招商银行 · 客户经理」，
           // 分不清哪个是杭州分行、哪个是成都分行 —— 而日历正是靠标题扫读的。
           const companyBit = [r.company || '投递', r.orgUnit].filter(Boolean).join(' ');
-          const title = `${companyBit} · ${ev.type === 'deadline' ? `截止（${r.position || '岗位'}）` : (r.recentSchedule || r.position || '安排')}`;
+          // v4.19.0：事件自带类型（截止 / 面试 / 笔试测评 / 其他），标题直接用它——
+          // 此前所有安排都写成「最近安排」，日历上分不清哪个是笔试、哪个是面试。
+          const isDeadline = ev.type === TIME_EVENT_DEADLINE;
+          const title = isDeadline
+            ? `${companyBit} · 截止（${r.position || '岗位'}）`
+            : `${companyBit} · ${ev.type}${r.recentSchedule ? `（${r.recentSchedule}）` : ''}`;
           const desc = [
             `岗位：${r.position || '—'}`, `机构：${r.orgUnit || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
-            ev.type === 'deadline' ? `截止日期：${r.deadline || '—'}` : `安排时间：${r.scheduleAt || '—'}`,
+            isDeadline ? `截止日期：${String((ev.event && ev.event.at) || '—').slice(0, 10)}` : `${ev.type}时间：${formatDateTime(ev.at)}`,
             r.nextAction ? `下一步：${r.nextAction}` : ''
           ].filter(Boolean).join('\n');
           lines.push(
             'BEGIN:VEVENT',
-            `UID:${icsEscape(r.id || 'unknown')}-${ev.type}@autumn-recruitment-tracker`,
+            // UID 用事件 id 而不是类型：同一条记录可以有多个同类型事件（两次面试），
+            // 用类型做后缀会生成重复 UID，严格日历会合并或丢弃其中一个。
+            `UID:${icsEscape(r.id || 'unknown')}-${icsEscape((ev.event && ev.event.id) || ev.type)}@autumn-recruitment-tracker`,
             `DTSTAMP:${icsUtc(now)}`,
             ev.allDay ? `DTSTART;VALUE=DATE:${icsLocal(start, true)}` : `DTSTART:${icsLocal(start, false)}`,
             ev.allDay ? `DTEND;VALUE=DATE:${icsLocal(end, true)}` : `DTEND:${icsLocal(end, false)}`,
@@ -4165,7 +4275,11 @@
         const out = [];
         for (const r of (Array.isArray(records) ? records : [])) {
           if (['Offer', '已结束'].includes(r.stage)) continue;
-          const info = deadlineInfo(r.deadline, now);
+          // v4.19.0：一条记录可能有多条截止事件，取最近的一条参与临期判定
+          //（"取哪一条"的口径由 nearestDeadlineEvent 统一，不再各处自己挑）
+          const hit = nearestDeadlineEvent(r.events, now);
+          if (!hit) continue;
+          const info = deadlineInfo(String(hit.event.at).slice(0, 10), now);
           if (!info) continue;
           if (info.days < 0 || info.days <= span) out.push({ record: r, info });
         }
@@ -4181,8 +4295,13 @@
         }
         for (const r of list) {
           if (['Offer', '已结束'].includes(r.stage)) continue;
-          const s = parseLocal(r.scheduleAt);
-          if (s && s < now) alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：安排已过（${formatDateTime(r.scheduleAt)}）但阶段仍是「${r.stage}」` });
+          // v4.19.0：改看 events[] 里已过期的「非截止」事件（面试 / 笔试测评 / 其他）。
+          // 截止类的逾期由上一条 findUpcomingDeadlines 负责，这里不重复报。
+          for (const ev of (Array.isArray(r.events) ? r.events : [])) {
+            if (!ev || ev.allDay || ev.type === TIME_EVENT_DEADLINE) continue;
+            const s = parseLocal(ev.at);
+            if (s && s < now) alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：${ev.type}时间已过（${formatDateTime(ev.at)}）但阶段仍是「${r.stage}」` });
+          }
         }
         for (const item of findStalled(list, now, 14)) {
           alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：停在「${item.stage}」已 ${item.days} 天` });
@@ -4656,11 +4775,14 @@
 
       function boardCardHtml(record, groupKeyById, stalledDays) {
         const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
-        const dl = deadlineInfo(record.deadline);
+        const nowBoard = new Date();
+        // v4.19.0：截止倒计时与「下一个安排」都从 events[] 派生
+        const dlHit = nearestDeadlineEvent(record.events, nowBoard);
+        const dl = dlHit ? deadlineInfo(String(dlHit.event.at).slice(0, 10), nowBoard) : null;
         // 终态（Offer / 已结束）：截止日期、最近安排、停滞提醒都不再有意义——
         // 事情已经结束了，继续催跟进只是噪声。
         const terminal = ['Offer', '已结束'].includes(record.stage);
-        const schedule = parseLocal(record.scheduleAt);
+        const schedule = nextTimeEvent((record.events || []).filter(e => e && !e.allDay), nowBoard);
         const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
         // 完成态（v4.18.0）：当前阶段已标记完成、却还没推进。卡片留在原列，
         // 用一枚 chip 说明「这一步做完了、球在对方」，与「停滞」明确区分。
@@ -4670,7 +4792,7 @@
         // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
         // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
         if (dl && !terminal) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
-        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
+        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(`${schedule.event.type} · ${formatDateTime(schedule.event.at)}`)}</span>`);
         // 停滞提醒只对进行中的阶段有意义。findStalled 本身就用 isActive 排除了
         // 待投递/Offer/已结束，所以这里是**第二道防线**：万一将来 isActive 放宽，
         // 终态卡片也不会长出"停滞 N 天"（已结束还催你跟进是荒谬的）。
@@ -4860,7 +4982,15 @@
           // 企业性质用带色徽章紧跟阶段徽章；facts 里的 value 是 HTML，两处都能安全注入
           sub.innerHTML = `<span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>${companyTypeChipHtml(record.companyType)} ${escapeHtml(bits.join(' · '))}`;
         }
-        const dl = deadlineInfo(record.deadline);
+        // v4.19.0：关键时间按类型逐条列出（截止 / 面试 / 笔试测评 / 其他），按时间升序。
+        // 此前是两个固定字段（安排时间 / 截止日期），一条记录只能各有一个时间。
+        const drawerEvents = (Array.isArray(record.events) ? record.events : [])
+          .map(ev => ({ ev, at: ev.allDay ? parseDay(ev.at) : parseLocal(ev.at) }))
+          .filter(x => x.at)
+          .sort((a, b) => a.at - b.at);
+        const eventsValue = drawerEvents.length
+          ? drawerEvents.map(x => `${x.ev.type}：${x.ev.allDay ? formatDate(String(x.ev.at).slice(0, 10)) : formatDateTime(x.ev.at)}`).join('；')
+          : '—';
         // facts 的 value 默认会被 escapeHtml；只有这两个是「我们自己生成的、内部已转义过的 HTML」，
         // 需要原样注入。新增可信 HTML 行时必须显式加进这个白名单，否则会被转义成字面标签文本
         // （企业性质徽章第一次加进来时就踩了：抽屉里显示成 &lt;span class="ct-chip"…）。
@@ -4871,8 +5001,7 @@
           { label: '机构', value: record.orgUnit || '—' },
           { label: '投递日期', value: formatDate(record.applicationDate) },
           { label: '企业性质', value: companyTypeChipHtml(record.companyType) || '<span class="muted-text">未设置</span>' },
-          { label: '安排时间', value: record.scheduleAt ? formatDateTime(record.scheduleAt) : '—' },
-          { label: '截止日期', value: record.deadline ? `${formatDate(record.deadline)}${dl ? `（${dl.text.replace('截止 · ', '')}）` : ''}` : '—' },
+          { label: '关键时间', value: eventsValue },
           { label: '意向度', value: record.intent ? `${record.intent} / 5` : '未设' },
           { label: '内推人', value: record.referral || '—' },
           { label: '薪资 / 待遇', value: record.salary || '—' },
@@ -5312,6 +5441,26 @@
         return list.map(x => `<option value="${escapeHtml(x)}"${x === cur ? ' selected' : ''}>${escapeHtml(x)}</option>`).join('');
       }
 
+      // 邮件里的 scheduleAt 该归到哪个类型：AI 契约仍然只有 scheduleAt / deadline 两个字段
+      //（跨仓库契约不动），网页端按邮件类型判断是面试还是笔试测评。判不出来就归「其他」。
+      function mailScheduleType(s) {
+        const t = String((s && s.emailType) || '');
+        if (/面/.test(t)) return '面试';
+        if (/笔试|测评|机试/.test(t)) return '笔试测评';
+        return '其他';
+      }
+      // 往记录里追加一个关键时间。同一「类型 + 时间」视为同一条：重复应用同一封邮件
+      //（或一封邮件应用到多条台账后再点一次）不会堆出重复条目。
+      function upsertEvent(rec, type, at) {
+        const kind = normalizeTimeEventType(type);
+        const allDay = isTimeEventAllDay(kind);
+        const value = allDay ? String(at || '').slice(0, 10) : String(at || '');
+        if (!value) return;
+        const list = (Array.isArray(rec.events) ? rec.events : []).filter(ev => !(ev && ev.type === kind && ev.at === value));
+        list.push({ id: cryptoId(), type: kind, at: value, allDay });
+        rec.events = sanitizeEvents(list);
+      }
+
       function mailCardHtml(s) {
         const conf = Number(s.confidence) || 0;
         const lowConf = conf < 0.6;
@@ -5389,11 +5538,13 @@
           const noteText = mileNoteText(mile.note, s.summary);
           fields.push({ key: 'milestone', label: '推进里程碑', editor: `<select class="control mail-ed" data-mail-edit="milestone.stage">${mailStageOptions(ed('milestone.stage', mile.stage))}</select><input class="control mail-ed" type="date" data-mail-edit="milestone.at" value="${escapeHtml(ed('milestone.at', mile.at))}"><span class="mail-ed-src ${src.cls}" title="${escapeHtml(src.tip)}">${src.text}</span><input class="control mail-ed mail-ed-wide" type="text" maxlength="48" data-mail-edit="milestone.note" value="${escapeHtml(ed('milestone.note', noteText))}" placeholder="里程碑备注（永久写进时间线）">` });
         }
-        if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: '安排时间', editor: `<input class="control mail-ed" type="datetime-local" data-mail-edit="scheduleAt" value="${escapeHtml(ed('scheduleAt', p.scheduleAt))}">` });
-        // 截止时间：台账一直有 deadline 字段（「签约截止」列 + deadlineInfo 倒计时 + 按截止日排序），
-        // 但 v4.16.0 之前 AI 契约与 proposed 里都没有它，所以笔试/测评邮件里最有用的那个时间
-        // （"链接 X 日失效"、"请在 X 日前完成"）被整条链路丢弃。
-        if (p.deadline) fields.push({ key: 'deadline', label: '截止时间', editor: `<input class="control mail-ed" type="date" data-mail-edit="deadline" value="${escapeHtml(ed('deadline', p.deadline))}"><span class="mail-ed-hint">写入台账「签约截止」，参与倒计时与排序</span>` });
+        // v4.19.0：邮件里的两个时间字段（AI 契约仍是 scheduleAt / deadline，跨仓库契约不动）
+        // 在网页端被归到「关键时间」的对应类型——scheduleAt 按邮件类型判面试还是笔试测评。
+        const schedType = mailScheduleType(s);
+        if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: `安排时间（${schedType}）`, editor: `<input class="control mail-ed" type="datetime-local" data-mail-edit="scheduleAt" value="${escapeHtml(ed('scheduleAt', p.scheduleAt))}">` });
+        // 截止时间：笔试/测评邮件里最有用的那个时间（"链接 X 日失效"、"请在 X 日前完成"），
+        // v4.16.0 补齐，v4.19.0 起写成一条「截止」类型的关键时间，参与倒计时与排序。
+        if (p.deadline) fields.push({ key: 'deadline', label: '截止时间', editor: `<input class="control mail-ed" type="date" data-mail-edit="deadline" value="${escapeHtml(ed('deadline', p.deadline))}"><span class="mail-ed-hint">写入台账「关键时间 · 截止」，参与倒计时与排序</span>` });
         if (p.recentSchedule) fields.push({ key: 'recentSchedule', label: '最近安排', editor: `<input class="control mail-ed mail-ed-wide" type="text" maxlength="100" data-mail-edit="recentSchedule" value="${escapeHtml(ed('recentSchedule', p.recentSchedule))}">` });
         if (p.nextAction) fields.push({ key: 'nextAction', label: '下一步行动', editor: `<input class="control mail-ed mail-ed-wide" type="text" maxlength="100" data-mail-edit="nextAction" value="${escapeHtml(ed('nextAction', p.nextAction))}">` });
         const fieldsHtml = fields.length
@@ -5544,8 +5695,8 @@
             setTimeline(rec, [...(rec.timeline || []), { stage: edStage, at: edAt, note: readEd('milestone.note') || mile.note || '邮件' }]);
             milestoneApplied = true;
           }
-          if (checked.has('scheduleAt') && readEd('scheduleAt')) rec.scheduleAt = readEd('scheduleAt');
-          if (checked.has('deadline') && readEd('deadline')) rec.deadline = readEd('deadline');
+          if (checked.has('scheduleAt') && readEd('scheduleAt')) upsertEvent(rec, mailScheduleType(s), readEd('scheduleAt'));
+          if (checked.has('deadline') && readEd('deadline')) upsertEvent(rec, TIME_EVENT_DEADLINE, readEd('deadline'));
           if (checked.has('recentSchedule') && readEd('recentSchedule')) rec.recentSchedule = readEd('recentSchedule');
           if (checked.has('nextAction') && readEd('nextAction')) rec.nextAction = readEd('nextAction');
           rec.updatedAt = Date.now();
@@ -5586,7 +5737,10 @@
           position: s.position || '',
           city: '',
           applicationDate: mile.at || today,
-          scheduleAt: p.scheduleAt || '',
+          events: [
+            ...(p.scheduleAt ? [{ id: cryptoId(), type: mailScheduleType(s), at: p.scheduleAt, allDay: false }] : []),
+            ...(p.deadline ? [{ id: cryptoId(), type: TIME_EVENT_DEADLINE, at: String(p.deadline).slice(0, 10), allDay: true }] : [])
+          ],
           recentSchedule: p.recentSchedule || '',
           nextAction: p.nextAction || '',
           stage: mile.stage || '已投递',
@@ -5885,6 +6039,45 @@
         if (last) last.focus();
       }
 
+      // ================= 关键时间编辑器（记录弹窗内，v4.19.0）=================
+      // 一条记录可以有多个时间，且必须分类（截止 / 面试 / 笔试测评 / 其他）。
+      // 「截止」是全天（只有日期），其余精确到分——输入控件类型由类型决定，
+      // 与 ICS 的 DTSTART、倒计时是否显示时分共用 isTimeEventAllDay 这一个判定。
+      function eventRowHtml(e) {
+        const type = normalizeTimeEventType(e && e.type);
+        const allDay = isTimeEventAllDay(type);
+        const at = String(e && e.at || '');
+        return `<div class="ev-row" data-ev-id="${escapeHtml(String(e && e.id || ''))}">
+          <select class="control ev-type">${TIME_EVENT_TYPES.map(t => `<option value="${escapeHtml(t)}"${t === type ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>
+          <input class="control ev-at" type="${allDay ? 'date' : 'datetime-local'}" value="${escapeHtml(allDay ? at.slice(0, 10) : at)}" aria-label="时间">
+          <button class="tl-del" type="button" title="删除该时间" aria-label="删除该时间">✕</button>
+        </div>`;
+      }
+      function renderEventEditor(source) {
+        const list = Array.isArray(source && source.events) ? source.events : [];
+        $('#eventEditor').innerHTML = list.map(eventRowHtml).join('');
+      }
+      function collectEvents() {
+        return [...document.querySelectorAll('#eventEditor .ev-row')].map(row => {
+          const type = normalizeTimeEventType(row.querySelector('.ev-type').value);
+          const raw = String(row.querySelector('.ev-at').value || '');
+          const allDay = isTimeEventAllDay(type);
+          return {
+            // 沿用行上的 id：每次保存都换新 id 会让 ICS 的 UID 不稳定（同一事件被日历当成新的）
+            id: row.dataset.evId || cryptoId(),
+            type,
+            at: allDay ? raw.slice(0, 10) : raw,
+            allDay
+          };
+        }).filter(e => e.at);
+      }
+      function addEventRow() {
+        const ed = $('#eventEditor');
+        ed.insertAdjacentHTML('beforeend', eventRowHtml({ type: '面试', at: '' }));
+        const last = ed.querySelector('.ev-row:last-child .ev-at');
+        if (last) last.focus();
+      }
+
       // 公司名 → 企业 + 机构 的拆分**建议**（v4.11.0）。三条精度纪律，都是实测出来的：
       //
       // 1. 企业名用**贪婪**匹配。机构名短（杭州分行）、企业名长（招商银行），贪婪才会在正确的
@@ -5988,9 +6181,11 @@
         els.form.reset();
         $('#applicationDate').value = source ? (source.applicationDate || '') : localDateInput(new Date());
         renderTimelineEditor(source);
+        renderEventEditor(source);
         // 回填字段清单：新增任何表单字段都必须同步加进这里，否则「编辑」时该字段会被静默清空。
         // 取不到元素时跳过（null 安全），便于分阶段加字段。
-        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'referral', 'intent', 'salary']) {
+        // v4.19.0：scheduleAt / deadline 已从表单移除，改由 keyEvents 编辑器（renderEventEditor）负责。
+        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'recentSchedule', 'nextAction', 'referral', 'intent', 'salary']) {
           const input = document.getElementById(field);
           if (!input) continue;
           // intent 是下拉框：0（未设）要映射成空字符串，否则 select 会落在无匹配项的状态
@@ -6089,7 +6284,7 @@
         const timeline = collectTimeline();
         if (!timeline.length) { showToast('请至少填写一个阶段（如“已投递”）'); return; }
         const data = Object.fromEntries(new FormData(els.form).entries());
-        const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now(), timeline });
+        const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now(), timeline, events: collectEvents() });
         let sameCompanyHint = '';
         if (!editingId) {
           // 手填新增：统一走 resolveDuplicate —— duplicate / variant 都给逃生口，same-company 只做非阻断提示
@@ -6168,7 +6363,9 @@
         // 备注（v4.8.0）：拖到「已结束」列时预填结束原因引导，其余入口留空由用户自由填写
         const noteEl = $('#advanceNote');
         if (noteEl) noteEl.value = String(options.note || '');
-        $('#advanceDate').value = (record.scheduleAt ? String(record.scheduleAt).slice(0, 10) : '') || localDateInput(new Date());
+        // v4.19.0：默认日期取「下一个关键时间」，没有就用今天（此前读的是单一 scheduleAt）
+        const nextForAdvance = nextTimeEvent(record.events, new Date());
+        $('#advanceDate').value = (nextForAdvance ? localDateInput(nextForAdvance.at) : '') || localDateInput(new Date());
         $('#advanceDialog').showModal();
       }
       function applyAdvance(stage) {
@@ -6731,11 +6928,35 @@
       $('#company').addEventListener('input', scheduleSameCompanyHint);
       $('#position').addEventListener('input', scheduleSameCompanyHint);
       $('#addTimelineBtn').addEventListener('click', addTimelineRow);
+      $('#addEventBtn').addEventListener('click', addEventRow);
+      // 时间类型改变时换输入控件：「截止」只要日期，面试/笔试要精确到分。
+      // 只换 .ev-at 这一个元素（保留行内其余状态），并把能沿用的值带过去。
+      $('#eventEditor').addEventListener('change', event => {
+        const sel = event.target.closest('.ev-type');
+        if (!sel) return;
+        const row = sel.closest('.ev-row');
+        const input = row.querySelector('.ev-at');
+        if (!input) return;
+        const allDay = isTimeEventAllDay(sel.value);
+        const old = String(input.value || '');
+        const next = document.createElement('input');
+        next.className = 'control ev-at';
+        next.type = allDay ? 'date' : 'datetime-local';
+        next.value = allDay ? old.slice(0, 10) : old;
+        next.setAttribute('aria-label', '时间');
+        input.replaceWith(next);
+      });
       $('#timelineEditor').addEventListener('click', event => {
         const del = event.target.closest('.tl-del');
         if (!del) return;
         if (document.querySelectorAll('#timelineEditor .tl-row').length <= 1) { showToast('至少保留一个阶段'); return; }
         del.closest('.tl-row').remove();
+      });
+      // 关键时间可以删到 0 条（不是每条记录都必须有时间），所以没有"至少保留一条"的拦截
+      $('#eventEditor').addEventListener('click', event => {
+        const del = event.target.closest('.tl-del');
+        if (!del) return;
+        del.closest('.ev-row').remove();
       });
       els.body.addEventListener('click', handleTableAction);
       // 搜索 / 筛选 / 排序变化后重渲染「当前视图」（表格或看板），两者共用同一份 getVisibleRecords

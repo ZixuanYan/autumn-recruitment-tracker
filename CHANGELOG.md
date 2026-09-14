@@ -1,3 +1,42 @@
+## v4.19.0（网页：关键时间分类 —— events[] 取代 scheduleAt / deadline）
+
+插件端未改动，仍 v5.5.0。新增 5 条守卫。
+
+### ① 问题：一条记录只能有一个「安排」和一个「截止」
+
+此前是 `scheduleAt`（安排时间）+ `deadline`（签约截止）两个固定字段：
+「确定的面试时间」与「截止时间」只能靠**字段**区分，笔试与面试又都塞进同一个 `scheduleAt`，
+于是看板 chip、表格列、日历事件全写着「最近安排」，分不清哪个是笔试、哪个是面试；
+一次笔试既有开始时间又有链接失效时间时，只能记一个。
+
+### ② 改法：events[] 成为唯一事实源
+
+- 记录新增 `events: [{ id, type, at, allDay }]`，`type ∈ 截止 | 面试 | 笔试测评 | 其他`
+  （枚举与新档位在 `shared/stages.js`，三端同源；网页端只做转发别名，别名守卫盯着）。
+- **`scheduleAt` / `deadline` 不再持久化**：读取时由 `migrateLegacyEvents` 折成带类型的事件，
+  写回后即消失。`scheduleAt` 的类型按**当前阶段名推断**（含「面」→ 面试，含笔试/测评/机试 →
+  笔试测评，否则其他）——老数据没存类型，但阶段名是用户自己填的，属可推断而非编造。
+- `allDay` 由类型决定（只有「截止」是全天）：ICS 的 `DTSTART;VALUE=DATE`、倒计时是否显示时分、
+  输入框是 `date` 还是 `datetime-local`，全部走 `isTimeEventAllDay` 这一个判定。
+- 键事件 id 稳定：编辑时沿用行上的 `data-ev-id`，否则每次保存都换 id，ICS 的 UID 会变，
+  日历会把同一场面试当成新事件重复添加。
+
+### ③ 消费点全部改读 events（不留双事实源）
+
+`collectScheduleEvents`（未来安排）、`findUpcomingDeadlines` / `collectAlerts`（卡点与逾期）、
+`buildIcs`（标题按类型、UID 用事件 id）、台账「最近时间」列、七天内统计、排序、
+Offer 矩阵的签约截止、看板 chip、抽屉「关键时间」、推进弹窗默认日期、邮件卡片与
+`applyMailSuggestion`（邮件仍以 scheduleAt / deadline 送来，网页端折成对应类型的事件）。
+
+**「取哪一条」的口径只有一处**：新增纯函数 `nextTimeEvent` / `nearestDeadlineEvent`
+（未来优先、其次最近的过去），表格 / 看板 / 洞察共用。守卫直接断言
+`index.html` 里不再出现 `record.deadline` / `record.scheduleAt`。
+
+### ④ 表单：可增删的「关键时间」编辑区
+
+两个固定输入框换成一行一条的编辑区（类型下拉 + 时间 + 删除）：类型选「截止」时输入框自动
+切成日期（全天），选面试/笔试测评时切成 `datetime-local`。可以删到 0 条——不是每条记录都必须有时间。
+
 ## v4.18.0（网页：阶段可单独「标记完成」，与「推进」解耦）
 
 插件端未改动，仍 v5.5.0。新增 4 条守卫（3 条核心逻辑 + 1 条 UI 贯通）+ 1 条运行时用例。

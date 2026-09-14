@@ -29,5 +29,28 @@
   // stageOrder 用 indexOf 排序、Action 的 allowedStages 与合法性校验都读这一份。
   const STAGE_PRESETS = ['待投递', '已投递', '测评', '笔试', '机试', 'AI面试', '一面', '二面', '三面', '四面', '五面', '交叉面', 'HR面', 'Offer', '已结束'];
 
-  return { STAGE_PRESETS };
+  // 关键时间类型（v4.19.0）。一条记录可以有**多个**时间，且必须分类——
+  // 此前只有单一 scheduleAt（安排）+ deadline（签约截止）两个字段，"确定的面试时间"与
+  // "截止时间"只能靠字段区分，笔试/面试时间又和"最近安排"混在一处。
+  // 现在每个时间是一条事件 { id, type, at, allDay }，type 取这里的枚举：
+  //   截止     = 必须赶的硬期限（全天，只有日期）——网申/测评/笔试/签约截止
+  //   面试     = 已确定的面试时间（精确到分）
+  //   笔试测评 = 已确定的笔试 / 测评 / 机试时间（精确到分）
+  //   其他     = 宣讲会、资料提交等兜底
+  const TIME_EVENT_TYPES = ['截止', '面试', '笔试测评', '其他'];
+  // 「截止」在代码里被单独判定（倒计时 / 逾期提醒 / ICS 全天），故给出具名常量，
+  // 免得各处散落 '截止' 字面量——将来改类型名漏改一处，就会静默退化成「其他」。
+  const TIME_EVENT_DEADLINE = TIME_EVENT_TYPES[0];
+  // 只有日期、没有时刻的类型。ICS 的 DTSTART 是否带 VALUE=DATE、倒计时是否显示时分都由它决定。
+  const TIME_EVENT_ALL_DAY = ['截止'];
+  function isTimeEventAllDay(type) {
+    return TIME_EVENT_ALL_DAY.includes(String(type || ''));
+  }
+  // 非法/缺失类型一律归到「其他」，避免自由文本污染分桶（与 companyType 的白名单同源思路）
+  function normalizeTimeEventType(type) {
+    const t = String(type || '').trim();
+    return TIME_EVENT_TYPES.includes(t) ? t : '其他';
+  }
+
+  return { STAGE_PRESETS, TIME_EVENT_TYPES, TIME_EVENT_ALL_DAY, TIME_EVENT_DEADLINE, isTimeEventAllDay, normalizeTimeEventType };
 });

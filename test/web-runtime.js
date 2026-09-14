@@ -78,6 +78,15 @@ sandbox.companyGroupKey = AJA_SHARED.companyGroupKey;
 // mailStageOptions（v4.16.0 就地编辑的阶段下拉）要用 STAGE_PRESETS，而它在产物里是
 // **块外**的转发别名（const STAGE_PRESETS = AJA.STAGE_PRESETS;），不在被抽取的邮件段内。
 sandbox.STAGE_PRESETS = AJA_SHARED.STAGE_PRESETS;
+// v4.19.0：applyMailSuggestion 会把邮件里的 scheduleAt / deadline 折成关键时间事件，
+// 于是邮件段新增了对这几样的引用。类型枚举与判定直接取 shared（避免第二份实现），
+// sanitizeEvents 用真实实现抽取，cryptoId 给个稳定桩（邮件用例不断言事件 id）。
+sandbox.normalizeTimeEventType = AJA_SHARED.normalizeTimeEventType;
+sandbox.isTimeEventAllDay = AJA_SHARED.isTimeEventAllDay;
+sandbox.TIME_EVENT_TYPES = AJA_SHARED.TIME_EVENT_TYPES;
+sandbox.TIME_EVENT_DEADLINE = AJA_SHARED.TIME_EVENT_DEADLINE;
+sandbox.sanitizeEvents = extractFunction(html, 'sanitizeEvents');
+sandbox.cryptoId = (() => { let n = 0; return () => `ev-${(n += 1)}`; })();
 vm.createContext(sandbox);
 vm.runInContext(extractFunction(loadSrc.coreSrc, 'positionWithUnit'), sandbox, { filename: 'core-positionWithUnit.js' });
 vm.runInContext(sectionSrc, sandbox, { filename: 'mail-section.js' });
@@ -608,8 +617,12 @@ const v45Section = extractBlock(html, V45_START, V44_START);
 // setCurrentMilestoneDone（v4.18.0）与 normalizeRecord 同段、依赖相同（sanitizeTimeline / setTimeline /
 // localDateInput 都已在本沙箱里），因此一并抽真实现来做行为断言——它「没有时间线时要合成一条」
 // 这条分支静态断言覆盖不到，而那正是示例数据点「标记完成」静默无动作的成因。
-const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId', 'setCurrentMilestoneDone']
+const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId', 'setCurrentMilestoneDone', 'sanitizeEvents', 'migrateLegacyEvents']
   .map(name => extractFunction(html, name));
+// v4.19.0 关键时间类型的转发别名。它们在 index.html 里位于 bootstrap 段（不在被抽取的块内），
+// 而 sanitizeEvents / coreBlock 的 dates·insights·ics 都要用，所以按同样的转发形态在这里补齐。
+const TIME_EVENT_ALIASES = ['TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'isTimeEventAllDay', 'normalizeTimeEventType']
+  .map(n => `const ${n} = AJA.${n};`).join('\n');
 
 for (const [label, src] of [['CORE 纯函数块', coreBlock], ['邮件纯函数块', mailPureBlock], ['洞察/台账渲染段', insightSection], ['台账视图增强段', v44Section], ['getVisibleRecords', getVisibleRecordsSrc], ['查重统一处置段(v4.5.0)', v45Section], ...timelineEditorSrc.map((src, i) => [[ 'timelineRowHtml', 'renderTimelineEditor' ][i], src])]) {
   if (!src || src.length < 40) { console.error(`✗ 未定位到${label}`); process.exit(1); }
@@ -736,6 +749,9 @@ const sandbox2 = {
   editingId: null,
   pendingMailSeedId: null,
   collectTimeline: () => [{ stage: '已投递', at: '2026-09-06', note: '' }],
+  // v4.19.0：submitForm 现在还会收集「关键时间」。这些用例只关心查重与新增，输入固定为空，
+  // 与 collectTimeline 同一种做法（输入侧打桩，被测逻辑仍是真实实现）。
+  collectEvents: () => [],
   closeDialog: () => { calls.closeDialog = (calls.closeDialog || 0) + 1; },
   markMailApplied: () => {}, renderMailView: () => {}, updateMailBadge: () => {},
   // submitForm 用 Object.fromEntries(new FormData(form).entries()) 取值：用 _entries 数组驱动
@@ -756,7 +772,7 @@ sandbox2.self = sandbox2; // cryptoId 用 self.crypto 探测
 sandbox2.AJA = AJA_SHARED; // coreBlock 里有 `const companyGroupKey = AJA.companyGroupKey;` 等四个转发别名
 vm.createContext(sandbox2);
 vm.runInContext(
-  [mailPureBlock, coreBlock, v45Section, normalizeRecordSrc.join('\n'), getVisibleRecordsSrc, applyAdvanceSrc, loadRecordsSrc, submitFormSrc, timelineEditorSrc.join('\n'), insightSection, v44Section].join('\n'),
+  [TIME_EVENT_ALIASES, mailPureBlock, coreBlock, v45Section, normalizeRecordSrc.join('\n'), getVisibleRecordsSrc, applyAdvanceSrc, loadRecordsSrc, submitFormSrc, timelineEditorSrc.join('\n'), insightSection, v44Section].join('\n'),
   sandbox2,
   { filename: 'v44-sections.js' }
 );
@@ -1025,7 +1041,9 @@ check('recordRowHtml：同公司 +N 岗位 chip、机构、截止倒计时分级
   seedRecords();
   // 截止日按「今天 +2 天」动态生成，避免测试随真实日期漂移而失效
   const soon = new Date(Date.now() + 2 * 86400000);
-  sandbox2.records[0].deadline = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
+  // v4.19.0：截止是「截止」类型的关键时间事件（全天、只有日期），不再是 record.deadline
+  const soonYmd = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
+  sandbox2.records[0].events = [{ id: 'ev-dl', type: '截止', at: soonYmd, allDay: true }];
   const groups = sandbox2.groupRecordsByCompany(sandbox2.records);
   const index = new Map(groups.map(g => [g.key, g.records]));
   const groupKeyById = sandbox2.companyGroupIndex(sandbox2.records);
@@ -1039,7 +1057,7 @@ check('recordRowHtml：同公司 +N 岗位 chip、机构、截止倒计时分级
   assert.strictEqual(groupKeyById.get('r1'), groupKeyById.get('r2'), '腾讯与腾讯科技有限公司同组');
   const solo = sandbox2.recordRowHtml(sandbox2.records[2], rowNo, index, groupKeyById);
   assert.ok(!solo.includes('company-chip'), '单独一家公司不显示 chip');
-  sandbox2.records[0].deadline = '';
+  sandbox2.records[0].events = [];
 });
 
 section('v4.6.0 企业性质在台账 / 看板 / 抽屉上的可见性');

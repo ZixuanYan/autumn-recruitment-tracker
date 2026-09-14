@@ -249,11 +249,14 @@
 
       function boardCardHtml(record, groupKeyById, stalledDays) {
         const key = (groupKeyById && groupKeyById.get(record.id)) || companyGroupKey(record);
-        const dl = deadlineInfo(record.deadline);
+        const nowBoard = new Date();
+        // v4.19.0：截止倒计时与「下一个安排」都从 events[] 派生
+        const dlHit = nearestDeadlineEvent(record.events, nowBoard);
+        const dl = dlHit ? deadlineInfo(String(dlHit.event.at).slice(0, 10), nowBoard) : null;
         // 终态（Offer / 已结束）：截止日期、最近安排、停滞提醒都不再有意义——
         // 事情已经结束了，继续催跟进只是噪声。
         const terminal = ['Offer', '已结束'].includes(record.stage);
-        const schedule = parseLocal(record.scheduleAt);
+        const schedule = nextTimeEvent((record.events || []).filter(e => e && !e.allDay), nowBoard);
         const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
         // 完成态（v4.18.0）：当前阶段已标记完成、却还没推进。卡片留在原列，
         // 用一枚 chip 说明「这一步做完了、球在对方」，与「停滞」明确区分。
@@ -263,7 +266,7 @@
         // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
         // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
         if (dl && !terminal) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
-        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(formatDateTime(record.scheduleAt))}</span>`);
+        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(`${schedule.event.type} · ${formatDateTime(schedule.event.at)}`)}</span>`);
         // 停滞提醒只对进行中的阶段有意义。findStalled 本身就用 isActive 排除了
         // 待投递/Offer/已结束，所以这里是**第二道防线**：万一将来 isActive 放宽，
         // 终态卡片也不会长出"停滞 N 天"（已结束还催你跟进是荒谬的）。
@@ -453,7 +456,15 @@
           // 企业性质用带色徽章紧跟阶段徽章；facts 里的 value 是 HTML，两处都能安全注入
           sub.innerHTML = `<span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>${companyTypeChipHtml(record.companyType)} ${escapeHtml(bits.join(' · '))}`;
         }
-        const dl = deadlineInfo(record.deadline);
+        // v4.19.0：关键时间按类型逐条列出（截止 / 面试 / 笔试测评 / 其他），按时间升序。
+        // 此前是两个固定字段（安排时间 / 截止日期），一条记录只能各有一个时间。
+        const drawerEvents = (Array.isArray(record.events) ? record.events : [])
+          .map(ev => ({ ev, at: ev.allDay ? parseDay(ev.at) : parseLocal(ev.at) }))
+          .filter(x => x.at)
+          .sort((a, b) => a.at - b.at);
+        const eventsValue = drawerEvents.length
+          ? drawerEvents.map(x => `${x.ev.type}：${x.ev.allDay ? formatDate(String(x.ev.at).slice(0, 10)) : formatDateTime(x.ev.at)}`).join('；')
+          : '—';
         // facts 的 value 默认会被 escapeHtml；只有这两个是「我们自己生成的、内部已转义过的 HTML」，
         // 需要原样注入。新增可信 HTML 行时必须显式加进这个白名单，否则会被转义成字面标签文本
         // （企业性质徽章第一次加进来时就踩了：抽屉里显示成 &lt;span class="ct-chip"…）。
@@ -464,8 +475,7 @@
           { label: '机构', value: record.orgUnit || '—' },
           { label: '投递日期', value: formatDate(record.applicationDate) },
           { label: '企业性质', value: companyTypeChipHtml(record.companyType) || '<span class="muted-text">未设置</span>' },
-          { label: '安排时间', value: record.scheduleAt ? formatDateTime(record.scheduleAt) : '—' },
-          { label: '截止日期', value: record.deadline ? `${formatDate(record.deadline)}${dl ? `（${dl.text.replace('截止 · ', '')}）` : ''}` : '—' },
+          { label: '关键时间', value: eventsValue },
           { label: '意向度', value: record.intent ? `${record.intent} / 5` : '未设' },
           { label: '内推人', value: record.referral || '—' },
           { label: '薪资 / 待遇', value: record.salary || '—' },

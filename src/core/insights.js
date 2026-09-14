@@ -129,7 +129,11 @@
         const out = [];
         for (const r of (Array.isArray(records) ? records : [])) {
           if (['Offer', '已结束'].includes(r.stage)) continue;
-          const info = deadlineInfo(r.deadline, now);
+          // v4.19.0：一条记录可能有多条截止事件，取最近的一条参与临期判定
+          //（"取哪一条"的口径由 nearestDeadlineEvent 统一，不再各处自己挑）
+          const hit = nearestDeadlineEvent(r.events, now);
+          if (!hit) continue;
+          const info = deadlineInfo(String(hit.event.at).slice(0, 10), now);
           if (!info) continue;
           if (info.days < 0 || info.days <= span) out.push({ record: r, info });
         }
@@ -145,8 +149,13 @@
         }
         for (const r of list) {
           if (['Offer', '已结束'].includes(r.stage)) continue;
-          const s = parseLocal(r.scheduleAt);
-          if (s && s < now) alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：安排已过（${formatDateTime(r.scheduleAt)}）但阶段仍是「${r.stage}」` });
+          // v4.19.0：改看 events[] 里已过期的「非截止」事件（面试 / 笔试测评 / 其他）。
+          // 截止类的逾期由上一条 findUpcomingDeadlines 负责，这里不重复报。
+          for (const ev of (Array.isArray(r.events) ? r.events : [])) {
+            if (!ev || ev.allDay || ev.type === TIME_EVENT_DEADLINE) continue;
+            const s = parseLocal(ev.at);
+            if (s && s < now) alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：${ev.type}时间已过（${formatDateTime(ev.at)}）但阶段仍是「${r.stage}」` });
+          }
         }
         for (const item of findStalled(list, now, 14)) {
           alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：停在「${item.stage}」已 ${item.days} 天` });

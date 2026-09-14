@@ -25,16 +25,40 @@
         if (diff <= 3) return { text: `截止 · 还剩 ${diff} 天`, level: 'warn', days: diff };
         return { text: `截止 · 还剩 ${diff} 天`, level: '', days: diff };
       }
-      // 把「安排时间(scheduleAt)」与「截止日期(deadline)」合成统一事件流：
-      // 逾期未处理项置顶（按逾期时长倒序），其余按时间升序，最后截断 limit 条。
+      // 取事件列表里「最该显示」的一条：优先最近的未来事件，其次最近的过去事件。
+      // 台账「最近时间」列与看板 chip 都用它，避免两处各写一套"取哪一条"的规则。
+      function nextTimeEvent(events, now = new Date()) {
+        const list = (Array.isArray(events) ? events : [])
+          .map(ev => ({ ev, at: ev && ev.allDay ? parseDay(ev.at) : parseLocal(ev && ev.at) }))
+          .filter(x => x.ev && x.at);
+        if (!list.length) return null;
+        const future = list.filter(x => x.at >= now).sort((a, b) => a.at - b.at);
+        if (future.length) return { event: future[0].ev, at: future[0].at, future: true };
+        const past = list.sort((a, b) => b.at - a.at);
+        return { event: past[0].ev, at: past[0].at, future: false };
+      }
+      // 最近的截止事件（未来的优先）。存在性判定与倒计时都用它，口径只有这一处。
+      function nearestDeadlineEvent(events, now = new Date()) {
+        return nextTimeEvent((Array.isArray(events) ? events : []).filter(e => e && e.type === TIME_EVENT_DEADLINE), now);
+      }
+      // 把记录的关键时间合成统一事件流（v4.19.0：来源由单一 scheduleAt/deadline 改为 events[]）。
+      // 逾期未处理项置顶（按时间倒序），其余按时间升序，最后截断 limit 条。
+      // 语义与旧版保持：终态（Offer / 已结束）不再列截止；已发生的"安排"若已终态也不再列。
       function collectScheduleEvents(records, now = new Date(), limit = 6) {
         const out = [];
         for (const r of (Array.isArray(records) ? records : [])) {
           const closed = ['Offer', '已结束'].includes(r.stage);
-          const s = parseLocal(r.scheduleAt);
-          if (s && (!closed || s >= now)) out.push({ type: 'schedule', at: s, allDay: false, record: r, overdue: s < now && !closed });
-          const d = parseDay(r.deadline);
-          if (d && !closed) out.push({ type: 'deadline', at: d, allDay: true, record: r, overdue: d < now });
+          for (const ev of (Array.isArray(r.events) ? r.events : [])) {
+            if (!ev) continue;
+            const isDeadline = ev.type === TIME_EVENT_DEADLINE;
+            const at = ev.allDay ? parseDay(ev.at) : parseLocal(ev.at);
+            if (!at) continue;
+            if (isDeadline) {
+              if (!closed) out.push({ type: ev.type, at, allDay: true, record: r, event: ev, overdue: at < now });
+            } else if (!closed || at >= now) {
+              out.push({ type: ev.type, at, allDay: false, record: r, event: ev, overdue: at < now && !closed });
+            }
+          }
         }
         const overdueList = out.filter(e => e.overdue).sort((a, b) => a.at - b.at);
         const futureList = out.filter(e => !e.overdue).sort((a, b) => a.at - b.at);

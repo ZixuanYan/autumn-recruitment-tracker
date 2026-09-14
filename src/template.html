@@ -174,7 +174,7 @@
         <div class="search-wrap"><span class="search-glyph">⌕</span><input class="control" id="searchInput" type="search" placeholder="搜索公司或岗位" aria-label="搜索公司或岗位"></div>
         <select class="control" id="stageFilter" aria-label="按阶段筛选"><option value="all">全部阶段</option></select>
         <select class="control" id="sortSelect" aria-label="排序方式">
-          <option value="schedule">最近安排优先</option>
+          <option value="schedule">最近时间优先</option>
           <option value="applied-desc">投递日期：从新到旧</option>
           <option value="updated-desc">最近更新优先</option>
           <option value="company">公司名称排序</option>
@@ -189,7 +189,7 @@
       </div>
       <div class="table-scroll" id="recordsTableScroll">
         <table>
-          <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近安排</th><th>下一步行动</th><th>操作</th></tr></thead>
+          <thead><tr><th>编号</th><th>公司 / 岗位</th><th>城市</th><th>投递日期</th><th>当前阶段</th><th>最近时间</th><th>下一步行动</th><th>操作</th></tr></thead>
           <tbody id="recordBody"></tbody>
         </table>
       </div>
@@ -343,8 +343,12 @@
             <div class="hint">用于洞察里的央国企 / 私企 / 外企统计；插件一键收录时也能直接选</div>
           </div>
           <div class="field"><label for="applicationDate">投递日期 <span class="required">*</span></label><input class="control" id="applicationDate" name="applicationDate" type="date" required></div>
-          <div class="field"><label for="scheduleAt">安排时间</label><input class="control" id="scheduleAt" name="scheduleAt" type="datetime-local"><div class="hint">有面试、笔试或跟进时间时填写</div></div>
-          <div class="field"><label for="deadline">截止日期</label><input class="control" id="deadline" name="deadline" type="date"><div class="hint">网申 / 测评 / 笔试 / 签约的截止时间，会进入「未来安排」并可导出到日历</div></div>
+          <div class="field full">
+            <label>关键时间</label>
+            <div class="hint">分开放：<strong>截止</strong>是必须赶的硬期限（只有日期，参与倒计时与排序），<strong>面试</strong> / <strong>笔试测评</strong>是已确定的安排（精确到分）。都会进入「未来安排」并可导出到日历。</div>
+            <div class="event-editor" id="eventEditor"></div>
+            <button class="btn btn-small" id="addEventBtn" type="button">＋ 添加时间</button>
+          </div>
           <div class="field">
             <label for="intent">意向度</label>
             <select class="control" id="intent" name="intent">

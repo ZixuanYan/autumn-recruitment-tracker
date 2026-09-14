@@ -40,6 +40,26 @@
         return list.map(x => `<option value="${escapeHtml(x)}"${x === cur ? ' selected' : ''}>${escapeHtml(x)}</option>`).join('');
       }
 
+      // 邮件里的 scheduleAt 该归到哪个类型：AI 契约仍然只有 scheduleAt / deadline 两个字段
+      //（跨仓库契约不动），网页端按邮件类型判断是面试还是笔试测评。判不出来就归「其他」。
+      function mailScheduleType(s) {
+        const t = String((s && s.emailType) || '');
+        if (/面/.test(t)) return '面试';
+        if (/笔试|测评|机试/.test(t)) return '笔试测评';
+        return '其他';
+      }
+      // 往记录里追加一个关键时间。同一「类型 + 时间」视为同一条：重复应用同一封邮件
+      //（或一封邮件应用到多条台账后再点一次）不会堆出重复条目。
+      function upsertEvent(rec, type, at) {
+        const kind = normalizeTimeEventType(type);
+        const allDay = isTimeEventAllDay(kind);
+        const value = allDay ? String(at || '').slice(0, 10) : String(at || '');
+        if (!value) return;
+        const list = (Array.isArray(rec.events) ? rec.events : []).filter(ev => !(ev && ev.type === kind && ev.at === value));
+        list.push({ id: cryptoId(), type: kind, at: value, allDay });
+        rec.events = sanitizeEvents(list);
+      }
+
       function mailCardHtml(s) {
         const conf = Number(s.confidence) || 0;
         const lowConf = conf < 0.6;
@@ -117,11 +137,13 @@
           const noteText = mileNoteText(mile.note, s.summary);
           fields.push({ key: 'milestone', label: '推进里程碑', editor: `<select class="control mail-ed" data-mail-edit="milestone.stage">${mailStageOptions(ed('milestone.stage', mile.stage))}</select><input class="control mail-ed" type="date" data-mail-edit="milestone.at" value="${escapeHtml(ed('milestone.at', mile.at))}"><span class="mail-ed-src ${src.cls}" title="${escapeHtml(src.tip)}">${src.text}</span><input class="control mail-ed mail-ed-wide" type="text" maxlength="48" data-mail-edit="milestone.note" value="${escapeHtml(ed('milestone.note', noteText))}" placeholder="里程碑备注（永久写进时间线）">` });
         }
-        if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: '安排时间', editor: `<input class="control mail-ed" type="datetime-local" data-mail-edit="scheduleAt" value="${escapeHtml(ed('scheduleAt', p.scheduleAt))}">` });
-        // 截止时间：台账一直有 deadline 字段（「签约截止」列 + deadlineInfo 倒计时 + 按截止日排序），
-        // 但 v4.16.0 之前 AI 契约与 proposed 里都没有它，所以笔试/测评邮件里最有用的那个时间
-        // （"链接 X 日失效"、"请在 X 日前完成"）被整条链路丢弃。
-        if (p.deadline) fields.push({ key: 'deadline', label: '截止时间', editor: `<input class="control mail-ed" type="date" data-mail-edit="deadline" value="${escapeHtml(ed('deadline', p.deadline))}"><span class="mail-ed-hint">写入台账「签约截止」，参与倒计时与排序</span>` });
+        // v4.19.0：邮件里的两个时间字段（AI 契约仍是 scheduleAt / deadline，跨仓库契约不动）
+        // 在网页端被归到「关键时间」的对应类型——scheduleAt 按邮件类型判面试还是笔试测评。
+        const schedType = mailScheduleType(s);
+        if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: `安排时间（${schedType}）`, editor: `<input class="control mail-ed" type="datetime-local" data-mail-edit="scheduleAt" value="${escapeHtml(ed('scheduleAt', p.scheduleAt))}">` });
+        // 截止时间：笔试/测评邮件里最有用的那个时间（"链接 X 日失效"、"请在 X 日前完成"），
+        // v4.16.0 补齐，v4.19.0 起写成一条「截止」类型的关键时间，参与倒计时与排序。
+        if (p.deadline) fields.push({ key: 'deadline', label: '截止时间', editor: `<input class="control mail-ed" type="date" data-mail-edit="deadline" value="${escapeHtml(ed('deadline', p.deadline))}"><span class="mail-ed-hint">写入台账「关键时间 · 截止」，参与倒计时与排序</span>` });
         if (p.recentSchedule) fields.push({ key: 'recentSchedule', label: '最近安排', editor: `<input class="control mail-ed mail-ed-wide" type="text" maxlength="100" data-mail-edit="recentSchedule" value="${escapeHtml(ed('recentSchedule', p.recentSchedule))}">` });
         if (p.nextAction) fields.push({ key: 'nextAction', label: '下一步行动', editor: `<input class="control mail-ed mail-ed-wide" type="text" maxlength="100" data-mail-edit="nextAction" value="${escapeHtml(ed('nextAction', p.nextAction))}">` });
         const fieldsHtml = fields.length
@@ -272,8 +294,8 @@
             setTimeline(rec, [...(rec.timeline || []), { stage: edStage, at: edAt, note: readEd('milestone.note') || mile.note || '邮件' }]);
             milestoneApplied = true;
           }
-          if (checked.has('scheduleAt') && readEd('scheduleAt')) rec.scheduleAt = readEd('scheduleAt');
-          if (checked.has('deadline') && readEd('deadline')) rec.deadline = readEd('deadline');
+          if (checked.has('scheduleAt') && readEd('scheduleAt')) upsertEvent(rec, mailScheduleType(s), readEd('scheduleAt'));
+          if (checked.has('deadline') && readEd('deadline')) upsertEvent(rec, TIME_EVENT_DEADLINE, readEd('deadline'));
           if (checked.has('recentSchedule') && readEd('recentSchedule')) rec.recentSchedule = readEd('recentSchedule');
           if (checked.has('nextAction') && readEd('nextAction')) rec.nextAction = readEd('nextAction');
           rec.updatedAt = Date.now();
@@ -314,7 +336,10 @@
           position: s.position || '',
           city: '',
           applicationDate: mile.at || today,
-          scheduleAt: p.scheduleAt || '',
+          events: [
+            ...(p.scheduleAt ? [{ id: cryptoId(), type: mailScheduleType(s), at: p.scheduleAt, allDay: false }] : []),
+            ...(p.deadline ? [{ id: cryptoId(), type: TIME_EVENT_DEADLINE, at: String(p.deadline).slice(0, 10), allDay: true }] : [])
+          ],
           recentSchedule: p.recentSchedule || '',
           nextAction: p.nextAction || '',
           stage: mile.stage || '已投递',
@@ -613,6 +638,45 @@
         if (last) last.focus();
       }
 
+      // ================= 关键时间编辑器（记录弹窗内，v4.19.0）=================
+      // 一条记录可以有多个时间，且必须分类（截止 / 面试 / 笔试测评 / 其他）。
+      // 「截止」是全天（只有日期），其余精确到分——输入控件类型由类型决定，
+      // 与 ICS 的 DTSTART、倒计时是否显示时分共用 isTimeEventAllDay 这一个判定。
+      function eventRowHtml(e) {
+        const type = normalizeTimeEventType(e && e.type);
+        const allDay = isTimeEventAllDay(type);
+        const at = String(e && e.at || '');
+        return `<div class="ev-row" data-ev-id="${escapeHtml(String(e && e.id || ''))}">
+          <select class="control ev-type">${TIME_EVENT_TYPES.map(t => `<option value="${escapeHtml(t)}"${t === type ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>
+          <input class="control ev-at" type="${allDay ? 'date' : 'datetime-local'}" value="${escapeHtml(allDay ? at.slice(0, 10) : at)}" aria-label="时间">
+          <button class="tl-del" type="button" title="删除该时间" aria-label="删除该时间">✕</button>
+        </div>`;
+      }
+      function renderEventEditor(source) {
+        const list = Array.isArray(source && source.events) ? source.events : [];
+        $('#eventEditor').innerHTML = list.map(eventRowHtml).join('');
+      }
+      function collectEvents() {
+        return [...document.querySelectorAll('#eventEditor .ev-row')].map(row => {
+          const type = normalizeTimeEventType(row.querySelector('.ev-type').value);
+          const raw = String(row.querySelector('.ev-at').value || '');
+          const allDay = isTimeEventAllDay(type);
+          return {
+            // 沿用行上的 id：每次保存都换新 id 会让 ICS 的 UID 不稳定（同一事件被日历当成新的）
+            id: row.dataset.evId || cryptoId(),
+            type,
+            at: allDay ? raw.slice(0, 10) : raw,
+            allDay
+          };
+        }).filter(e => e.at);
+      }
+      function addEventRow() {
+        const ed = $('#eventEditor');
+        ed.insertAdjacentHTML('beforeend', eventRowHtml({ type: '面试', at: '' }));
+        const last = ed.querySelector('.ev-row:last-child .ev-at');
+        if (last) last.focus();
+      }
+
       // 公司名 → 企业 + 机构 的拆分**建议**（v4.11.0）。三条精度纪律，都是实测出来的：
       //
       // 1. 企业名用**贪婪**匹配。机构名短（杭州分行）、企业名长（招商银行），贪婪才会在正确的
@@ -716,9 +780,11 @@
         els.form.reset();
         $('#applicationDate').value = source ? (source.applicationDate || '') : localDateInput(new Date());
         renderTimelineEditor(source);
+        renderEventEditor(source);
         // 回填字段清单：新增任何表单字段都必须同步加进这里，否则「编辑」时该字段会被静默清空。
         // 取不到元素时跳过（null 安全），便于分阶段加字段。
-        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'scheduleAt', 'deadline', 'recentSchedule', 'nextAction', 'referral', 'intent', 'salary']) {
+        // v4.19.0：scheduleAt / deadline 已从表单移除，改由 keyEvents 编辑器（renderEventEditor）负责。
+        for (const field of ['company', 'orgUnit', 'position', 'city', 'companyType', 'applicationUrl', 'recentSchedule', 'nextAction', 'referral', 'intent', 'salary']) {
           const input = document.getElementById(field);
           if (!input) continue;
           // intent 是下拉框：0（未设）要映射成空字符串，否则 select 会落在无匹配项的状态
@@ -817,7 +883,7 @@
         const timeline = collectTimeline();
         if (!timeline.length) { showToast('请至少填写一个阶段（如“已投递”）'); return; }
         const data = Object.fromEntries(new FormData(els.form).entries());
-        const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now(), timeline });
+        const normalized = normalizeRecord({ ...data, id: editingId || cryptoId(), updatedAt: Date.now(), timeline, events: collectEvents() });
         let sameCompanyHint = '';
         if (!editingId) {
           // 手填新增：统一走 resolveDuplicate —— duplicate / variant 都给逃生口，same-company 只做非阻断提示
@@ -896,7 +962,9 @@
         // 备注（v4.8.0）：拖到「已结束」列时预填结束原因引导，其余入口留空由用户自由填写
         const noteEl = $('#advanceNote');
         if (noteEl) noteEl.value = String(options.note || '');
-        $('#advanceDate').value = (record.scheduleAt ? String(record.scheduleAt).slice(0, 10) : '') || localDateInput(new Date());
+        // v4.19.0：默认日期取「下一个关键时间」，没有就用今天（此前读的是单一 scheduleAt）
+        const nextForAdvance = nextTimeEvent(record.events, new Date());
+        $('#advanceDate').value = (nextForAdvance ? localDateInput(nextForAdvance.at) : '') || localDateInput(new Date());
         $('#advanceDialog').showModal();
       }
       function applyAdvance(stage) {
@@ -1459,11 +1527,35 @@
       $('#company').addEventListener('input', scheduleSameCompanyHint);
       $('#position').addEventListener('input', scheduleSameCompanyHint);
       $('#addTimelineBtn').addEventListener('click', addTimelineRow);
+      $('#addEventBtn').addEventListener('click', addEventRow);
+      // 时间类型改变时换输入控件：「截止」只要日期，面试/笔试要精确到分。
+      // 只换 .ev-at 这一个元素（保留行内其余状态），并把能沿用的值带过去。
+      $('#eventEditor').addEventListener('change', event => {
+        const sel = event.target.closest('.ev-type');
+        if (!sel) return;
+        const row = sel.closest('.ev-row');
+        const input = row.querySelector('.ev-at');
+        if (!input) return;
+        const allDay = isTimeEventAllDay(sel.value);
+        const old = String(input.value || '');
+        const next = document.createElement('input');
+        next.className = 'control ev-at';
+        next.type = allDay ? 'date' : 'datetime-local';
+        next.value = allDay ? old.slice(0, 10) : old;
+        next.setAttribute('aria-label', '时间');
+        input.replaceWith(next);
+      });
       $('#timelineEditor').addEventListener('click', event => {
         const del = event.target.closest('.tl-del');
         if (!del) return;
         if (document.querySelectorAll('#timelineEditor .tl-row').length <= 1) { showToast('至少保留一个阶段'); return; }
         del.closest('.tl-row').remove();
+      });
+      // 关键时间可以删到 0 条（不是每条记录都必须有时间），所以没有"至少保留一条"的拦截
+      $('#eventEditor').addEventListener('click', event => {
+        const del = event.target.closest('.tl-del');
+        if (!del) return;
+        del.closest('.ev-row').remove();
       });
       els.body.addEventListener('click', handleTableAction);
       // 搜索 / 筛选 / 排序变化后重渲染「当前视图」（表格或看板），两者共用同一份 getVisibleRecords
