@@ -1008,6 +1008,17 @@
     .board-card.is-done { opacity: .9; }
     .board-chip.done { background: var(--ok-soft); color: var(--ok); box-shadow: none; }
     .text-button.is-on, .btn.is-on { background: var(--ok-soft); color: var(--ok); }
+    /* 记录详情抽屉的「相关邮件」（v4.20.0）：一条来源邮件一行，与邮件提醒页的建议卡片共用 .mail-type 配色 */
+    .mail-ref-list { display: grid; gap: 8px; }
+    .mail-ref-item { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); border-left: 3px solid var(--accent); }
+    .mail-ref-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+    .mail-ref-subject { font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+    .mail-ref-meta { margin-top: 2px; color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+    .mail-ref-summary { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
+    .mail-ref-item .text-button { margin-top: 4px; padding-left: 0; }
+    /* 从记录跳回邮件提醒时闪一下目标卡片，否则用户不知道被带到了哪一条 */
+    .mail-card.is-flash { animation: mailFlash 1.6s ease-out; }
+    @keyframes mailFlash { 0%, 60% { box-shadow: 0 0 0 3px var(--accent-border); } 100% { box-shadow: none; } }
     .note-list { display: grid; gap: 8px; }
     .note-item { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
     .note-item-head { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 11.5px; }
@@ -1974,6 +1985,59 @@
         }
         return out;
       }
+      // ===== 邮件关联（v4.20.0）：记录 → 邮件 =====
+      // 邮件建议此前只把字段写进记录、**不留任何引用**：应用后卡片就被 appliedIds 过滤掉，
+      // 想回看"这条投递当时是哪封邮件通知的"只能去翻邮箱。这里在记录上留一条引用，
+      // 详情抽屉据此列出相关邮件；建议本身被清理（Gist 30 天 / 100 条）后引用里的快照仍在。
+      function sanitizeMailRef(ref) {
+        if (!ref || typeof ref !== 'object') return null;
+        const uid = Number(ref.uid) || 0;
+        const subject = String(ref.subject || '').trim().slice(0, 200);
+        if (!uid && !subject) return null; // 既无 uid 又无主题的引用没有检索价值
+        return {
+          uid,
+          subject,
+          from: String(ref.from || '').trim().slice(0, 120),
+          receivedAt: String(ref.receivedAt || ''),
+          emailType: String(ref.emailType || '').slice(0, 20),
+          summary: String(ref.summary || '').trim().slice(0, 300),
+          linkedAt: String(ref.linkedAt || '')
+        };
+      }
+      // 去重（uid 优先，退化为主题）+ 上限 50 条防膨胀；先出现者胜
+      function sanitizeMailRefs(list) {
+        const out = [];
+        const seen = new Set();
+        for (const ref of (Array.isArray(list) ? list : [])) {
+          const clean = sanitizeMailRef(ref);
+          if (!clean) continue;
+          const key = clean.uid ? `u${clean.uid}` : `s${clean.subject}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(clean);
+        }
+        return out.slice(-50);
+      }
+      // 取并集：mailRefs 是「只增不改」的事实，两端各自应用过的邮件都不该因为 LWW 而丢
+      function unionMailRefs(a, b) {
+        return sanitizeMailRefs([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]);
+      }
+      // 把一封邮件建议挂到记录上：同一 uid 只留一条（重复应用同一封不会堆叠），新值覆盖旧值
+      function linkMailToRecord(rec, suggestion) {
+        if (!rec || !suggestion) return;
+        const ref = sanitizeMailRef({
+          uid: suggestion.sourceUid,
+          subject: suggestion.subject,
+          from: suggestion.from,
+          receivedAt: suggestion.receivedAt,
+          emailType: suggestion.emailType,
+          summary: suggestion.summary,
+          linkedAt: new Date().toISOString()
+        });
+        if (!ref) return;
+        const kept = (Array.isArray(rec.mailRefs) ? rec.mailRefs : []).filter(x => !(ref.uid && Number(x.uid) === ref.uid));
+        rec.mailRefs = sanitizeMailRefs([...kept, ref]);
+      }
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
       const RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
@@ -1988,7 +2052,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.19.0';
+      const APP_VERSION = '4.20.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2163,6 +2227,8 @@
             : migrateLegacyEvents(item),
           referral: String(item.referral || ''),            // 内推人或联系方式
           salary: String(item.salary || ''),                // 薪资文本（Offer 对比用）
+          // v4.20.0 邮件关联：这条记录关联过的招聘邮件（应用邮件建议时写入）。上限 50、按 uid 去重。
+          mailRefs: sanitizeMailRefs(item.mailRefs),
           intent: Math.min(5, Math.max(0, Number(item.intent) || 0)), // 意向度 0-5，0=未设
           // v4.6.0：企业性质（央国企/私企/外企）。封闭枚举 + 白名单校验，非法值一律归 ''（未设置），
           // 避免插件旧版本或手工改 JSON 塞进自由文本后污染洞察统计的分桶。
@@ -2278,10 +2344,15 @@
         });
         const mergedRecords = [];
         new Set([...localById.keys(), ...remoteById.keys()]).forEach(id => {
-          const newest = [localById.get(id), remoteById.get(id)].filter(Boolean).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+          const local = localById.get(id);
+          const remoteRec = remoteById.get(id);
+          const newest = [local, remoteRec].filter(Boolean).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
           const stone = stoneById.get(id);
           if (stone && Number(stone.deletedAt) >= Number(newest.updatedAt || 0)) return;
           if (stone) stoneById.delete(id);
+          // v4.20.0：整条 LWW 会让"一端新关联了一封邮件"被另一端的旧版本盖掉，
+          // 而邮件关联是只增不改的事实，所以两端都有这条记录时对 mailRefs 取并集。
+          if (local && remoteRec) newest.mailRefs = unionMailRefs(local.mailRefs, remoteRec.mailRefs);
           mergedRecords.push(newest);
         });
         const mergedTombstones = pruneTombstones([...stoneById.values()]);
@@ -4991,6 +5062,8 @@
         const eventsValue = drawerEvents.length
           ? drawerEvents.map(x => `${x.ev.type}：${x.ev.allDay ? formatDate(String(x.ev.at).slice(0, 10)) : formatDateTime(x.ev.at)}`).join('；')
           : '—';
+        // v4.20.0：这条记录关联过的招聘邮件（应用邮件建议时写入）。倒序 = 最近关联的在前。
+        const mailRefs = Array.isArray(record.mailRefs) ? record.mailRefs : [];
         // facts 的 value 默认会被 escapeHtml；只有这两个是「我们自己生成的、内部已转义过的 HTML」，
         // 需要原样注入。新增可信 HTML 行时必须显式加进这个白名单，否则会被转义成字面标签文本
         // （企业性质徽章第一次加进来时就踩了：抽屉里显示成 &lt;span class="ct-chip"…）。
@@ -5016,6 +5089,13 @@
           body.innerHTML = `
             <div class="drawer-section"><h3>里程碑时间线</h3>${stepsHtml(record)}</div>
             <div class="drawer-section"><h3>关键信息</h3><dl class="drawer-facts">${facts.map(fact => `<div class="drawer-fact"><dt>${escapeHtml(fact.label)}</dt><dd>${HTML_FACT_LABELS.includes(fact.label) ? fact.value : escapeHtml(fact.value)}</dd></div>`).join('')}</dl></div>
+            ${mailRefs.length ? `<div class="drawer-section"><h3>相关邮件（${mailRefs.length}）</h3><div class="mail-ref-list">${mailRefs.slice().reverse().map(ref => `
+              <div class="mail-ref-item">
+                <div class="mail-ref-top">${ref.emailType ? `<span class="mail-type" data-type="${escapeHtml(ref.emailType)}">${escapeHtml(ref.emailType)}</span>` : ''}<span class="mail-ref-subject">${escapeHtml(ref.subject || '（无主题）')}</span></div>
+                <div class="mail-ref-meta">${escapeHtml(ref.from || '（无发件人）')}${ref.receivedAt ? ` · ${escapeHtml(formatClock(ref.receivedAt) || '')}` : ''}</div>
+                ${ref.summary ? `<div class="mail-ref-summary">${escapeHtml(ref.summary)}</div>` : ''}
+                ${ref.uid ? `<button class="text-button" type="button" data-mail-ref="${escapeHtml(String(ref.uid))}">在邮件提醒中查看</button>` : ''}
+              </div>`).join('')}</div></div>` : ''}
             <div class="drawer-section"><h3>下一步行动</h3><div class="note-text">${escapeHtml(record.nextAction || '—')}</div></div>
             <div class="drawer-section">
               <h3>笔记 / 面经（${notes.length}）</h3>
@@ -5699,6 +5779,9 @@
           if (checked.has('deadline') && readEd('deadline')) upsertEvent(rec, TIME_EVENT_DEADLINE, readEd('deadline'));
           if (checked.has('recentSchedule') && readEd('recentSchedule')) rec.recentSchedule = readEd('recentSchedule');
           if (checked.has('nextAction') && readEd('nextAction')) rec.nextAction = readEd('nextAction');
+          // v4.20.0：把邮件本身挂到记录上（不只是它的字段）。应用后建议卡片会被 appliedIds
+          // 过滤掉，这条引用是日后回看"这条投递的邮件在哪"的唯一入口。
+          linkMailToRecord(rec, s);
           rec.updatedAt = Date.now();
           if (edStage === 'Offer' || rec.stage === 'Offer') offerHit = true;
         }
@@ -5744,6 +5827,8 @@
           recentSchedule: p.recentSchedule || '',
           nextAction: p.nextAction || '',
           stage: mile.stage || '已投递',
+          // v4.20.0：新建记录同样把邮件挂上（保存成功后才真正落库，见 submitForm 的 pendingMailSeedId 分支）
+          mailRefs: [{ uid: s.sourceUid, subject: s.subject, from: s.from, receivedAt: s.receivedAt, emailType: s.emailType, summary: s.summary, linkedAt: new Date().toISOString() }],
           timeline: mile.stage ? [{ stage: mile.stage, at: mile.at || today, note: mile.note || '邮件' }] : undefined
         });
         pendingMailSeedId = String(id);
@@ -6273,6 +6358,29 @@
           return;
         }
       }
+      function openMailRef(uid) {
+        const target = Number(uid) || 0;
+        const hit = mailRawSuggestions.find(x => Number(x.sourceUid) === target);
+        if (!hit) {
+          // 建议只保留 30 天 / 100 条，过期后被清理；抽屉里已经是关联时保存的快照
+          showToast('这封邮件已不在建议队列里（建议只保留 30 天），上面显示的摘要来自关联时的记录');
+          return;
+        }
+        closeRecordDrawer();
+        location.hash = '#/mail';
+        // 渲染在 hash 变化之后才发生，所以下一帧再找卡片
+        requestAnimationFrame(() => {
+          const card = document.querySelector(`.mail-card[data-mail-id="${CSS.escape(String(hit.id))}"]`);
+          if (!card) {
+            showToast('这封邮件已复核过（已应用或已忽略），不在待复核列表里');
+            return;
+          }
+          card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          card.classList.add('is-flash');
+          setTimeout(() => card.classList.remove('is-flash'), 1600);
+        });
+      }
+
       function closeDialog() {
         els.dialog.close();
         editingId = null;
@@ -6818,6 +6926,8 @@
         if (noteDel) { deleteDrawerNote(noteDel.dataset.noteDel); return; }
         const sibling = event.target.closest('button[data-sibling]');
         if (sibling) { openRecordDrawer(sibling.dataset.sibling); return; }
+        const mailRef = event.target.closest('button[data-mail-ref]');
+        if (mailRef) { openMailRef(mailRef.dataset.mailRef); return; }
         if (event.target.closest('#drawerNoteAddBtn')) {
           const input = $('#drawerNoteInput');
           addDrawerNote(input ? input.value : '');

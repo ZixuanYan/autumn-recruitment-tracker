@@ -465,6 +465,8 @@
         const eventsValue = drawerEvents.length
           ? drawerEvents.map(x => `${x.ev.type}：${x.ev.allDay ? formatDate(String(x.ev.at).slice(0, 10)) : formatDateTime(x.ev.at)}`).join('；')
           : '—';
+        // v4.20.0：这条记录关联过的招聘邮件（应用邮件建议时写入）。倒序 = 最近关联的在前。
+        const mailRefs = Array.isArray(record.mailRefs) ? record.mailRefs : [];
         // facts 的 value 默认会被 escapeHtml；只有这两个是「我们自己生成的、内部已转义过的 HTML」，
         // 需要原样注入。新增可信 HTML 行时必须显式加进这个白名单，否则会被转义成字面标签文本
         // （企业性质徽章第一次加进来时就踩了：抽屉里显示成 &lt;span class="ct-chip"…）。
@@ -490,6 +492,13 @@
           body.innerHTML = `
             <div class="drawer-section"><h3>里程碑时间线</h3>${stepsHtml(record)}</div>
             <div class="drawer-section"><h3>关键信息</h3><dl class="drawer-facts">${facts.map(fact => `<div class="drawer-fact"><dt>${escapeHtml(fact.label)}</dt><dd>${HTML_FACT_LABELS.includes(fact.label) ? fact.value : escapeHtml(fact.value)}</dd></div>`).join('')}</dl></div>
+            ${mailRefs.length ? `<div class="drawer-section"><h3>相关邮件（${mailRefs.length}）</h3><div class="mail-ref-list">${mailRefs.slice().reverse().map(ref => `
+              <div class="mail-ref-item">
+                <div class="mail-ref-top">${ref.emailType ? `<span class="mail-type" data-type="${escapeHtml(ref.emailType)}">${escapeHtml(ref.emailType)}</span>` : ''}<span class="mail-ref-subject">${escapeHtml(ref.subject || '（无主题）')}</span></div>
+                <div class="mail-ref-meta">${escapeHtml(ref.from || '（无发件人）')}${ref.receivedAt ? ` · ${escapeHtml(formatClock(ref.receivedAt) || '')}` : ''}</div>
+                ${ref.summary ? `<div class="mail-ref-summary">${escapeHtml(ref.summary)}</div>` : ''}
+                ${ref.uid ? `<button class="text-button" type="button" data-mail-ref="${escapeHtml(String(ref.uid))}">在邮件提醒中查看</button>` : ''}
+              </div>`).join('')}</div></div>` : ''}
             <div class="drawer-section"><h3>下一步行动</h3><div class="note-text">${escapeHtml(record.nextAction || '—')}</div></div>
             <div class="drawer-section">
               <h3>笔记 / 面经（${notes.length}）</h3>

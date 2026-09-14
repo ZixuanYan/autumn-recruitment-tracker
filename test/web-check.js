@@ -357,6 +357,14 @@ function extractConstLine(src, name) {
   const line = src.split('\n').find(l => l.includes(`const ${name} =`));
   return line ? line.trim() : '';
 }
+// v4.20.0 邮件关联助手：不参与 core 计算，但要和 core 在同一沙箱里做行为断言
+//（normalizeRecord 也要用 sanitizeMailRefs，所以这几个必须一起注入）。
+const MAIL_REF_FN_NAMES = ['sanitizeMailRef', 'sanitizeMailRefs', 'linkMailToRecord', 'unionMailRefs'];
+const mailRefFns = MAIL_REF_FN_NAMES.map(name => extractFunction(html, name));
+check('邮件关联助手全部从 index.html 抽取到', () => {
+  assert.deepStrictEqual(MAIL_REF_FN_NAMES.filter((name, idx) => !mailRefFns[idx]), []);
+});
+
 const CORE_CONST_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET', 'COMPANY_TYPE_ALIASES',
   // v4.19.0 关键时间类型（events[] 用）：core 的 dates/insights/ics 都读它们
   'TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'isTimeEventAllDay', 'normalizeTimeEventType'];
@@ -422,12 +430,14 @@ const core = new Function(
   `${coreConsts.join('\n   ')}
    ${pureSrc}
    ${coreDeps.join('\n')}
+   ${mailRefFns.join('\n')}
    ${coreSrc}
    return {
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findAwaitingAdvance, findUpcomingDeadlines, collectAlerts,
      nextTimeEvent, nearestDeadlineEvent,
+     sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs,
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
    };`
@@ -1233,6 +1243,64 @@ check('关键时间 UI 贯通：表单编辑器 / 表头 / 提交 / 取值口径
   assert.ok(html.includes('关键时间'), '详情抽屉要有「关键时间」一行');
   assert.ok(/nextTimeEvent\(/.test(html) && /nearestDeadlineEvent\(/.test(html),
     '「取最近一条」的口径必须走共用的纯函数，不得各处自己挑');
+});
+
+// ---- v4.20.0 邮件关联：记录 → 邮件 ----
+check('mailRefs：规范化（去重 / 上限 / 丢空），没有关联时是空数组', () => {
+  const rec = core.normalizeRecord({
+    id: 'm1', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01',
+    mailRefs: [
+      { uid: 7, subject: '测评通知', from: 'hr@x.com', receivedAt: '2026-09-05T01:00:00Z', emailType: '测评', summary: '请完成测评' },
+      { uid: 7, subject: '重复的同一封' },
+      { subject: '只有主题' },
+      {},
+      null
+    ]
+  });
+  assert.strictEqual(rec.mailRefs.length, 2, '同一 uid 去重，缺 uid 又缺主题的丢掉');
+  assert.strictEqual(rec.mailRefs[0].uid, 7);
+  assert.strictEqual(rec.mailRefs[0].subject, '测评通知', '先出现者胜');
+  assert.strictEqual(rec.mailRefs[1].subject, '只有主题', '没有 uid 时退化为按主题去重');
+  assert.deepStrictEqual(
+    core.normalizeRecord({ id: 'm2', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01' }).mailRefs,
+    [], '没有邮件关联时是空数组（不是 undefined）');
+  const many = core.normalizeRecord({
+    id: 'm3', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01',
+    mailRefs: Array.from({ length: 60 }, (_, i) => ({ uid: i + 1, subject: `s${i + 1}` }))
+  });
+  assert.strictEqual(many.mailRefs.length, 50, '上限 50 条防膨胀');
+  assert.strictEqual(many.mailRefs[49].uid, 60, '保留的是最近的 50 条');
+});
+
+check('linkMailToRecord：同一 uid 只留一条（重复应用同一封不堆叠），同 uid 以新值覆盖', () => {
+  const rec = { id: 'r', company: 'A', timeline: [] };
+  const s = { sourceUid: 12, subject: '一面邀请', from: 'hr@x.com', receivedAt: '2026-09-06T02:00:00Z', emailType: '面试邀请', summary: '请于…' };
+  core.linkMailToRecord(rec, s);
+  core.linkMailToRecord(rec, s);
+  assert.strictEqual(rec.mailRefs.length, 1, '同一封邮件应用两次只留一条引用');
+  assert.strictEqual(rec.mailRefs[0].uid, 12);
+  core.linkMailToRecord(rec, { ...s, subject: '一面邀请（改期）' });
+  assert.strictEqual(rec.mailRefs.length, 1);
+  assert.strictEqual(rec.mailRefs[0].subject, '一面邀请（改期）', '同 uid 以新值覆盖');
+  assert.ok(rec.mailRefs[0].linkedAt, '要记下关联时间');
+});
+
+check('unionMailRefs：跨设备合并取并集（只增不改的事实不该被整条 LWW 盖掉）', () => {
+  const u = core.unionMailRefs([{ uid: 1, subject: 'A' }], [{ uid: 2, subject: 'B' }, { uid: 1, subject: 'A 的旧版本' }]);
+  assert.deepStrictEqual(u.map(x => x.uid), [1, 2], '两端都保留、按 uid 去重');
+  assert.strictEqual(u[0].subject, 'A', '冲突时先出现（本地）优先');
+});
+
+check('邮件关联 UI 贯通：应用即挂引用 / 新建记录也带 / 抽屉可跳回 / 合并取并集', () => {
+  const apply = extractFunction(html, 'applyMailSuggestion').replace(/\/\/[^\n]*/g, '');
+  assert.ok(/linkMailToRecord\(rec, s\)/.test(apply), 'apply 必须把邮件挂到目标记录上（否则应用后邮件与记录再无关联）');
+  const seed = extractFunction(html, 'openMailSeedDialog').replace(/\/\/[^\n]*/g, '');
+  assert.ok(/mailRefs:/.test(seed), '「新建记录」路径也要带上邮件引用');
+  const drawer = extractFunction(html, 'renderDrawer').replace(/\/\/[^\n]*/g, '');
+  assert.ok(/相关邮件/.test(drawer) && /data-mail-ref=/.test(drawer), '抽屉要有「相关邮件」区与跳转入口');
+  assert.ok(/function openMailRef\(/.test(html) && /button\[data-mail-ref\]/.test(html), '要有跳回邮件提醒的实现与事件绑定');
+  const merge = extractFunction(html, 'mergeSyncState').replace(/\/\/[^\n]*/g, '');
+  assert.ok(/unionMailRefs\(/.test(merge), 'mergeSyncState 必须对 mailRefs 取并集');
 });
 
 check('normalizeRecord companyType：白名单校验，老数据与非法值一律归「未设置」', () => {
@@ -2542,6 +2610,10 @@ check('用户文档与当前行为一致（看板横带 / 邮箱多服务商 / �
   assert.ok(tut.includes('关键时间'), '安装教程应说明「关键时间」可填多个并分类（v4.19.0）');
   assert.ok(tut.includes('自动迁成带类型的事件'), '安装教程应说明旧字段会自动迁移，否则老用户会担心要手改');
   assert.ok(qs.includes('关键时间'), '快速上手指南也应讲到关键时间分类');
+
+  // ⑥ 邮件关联（v4.20.0）：应用后能在记录里回看来源邮件
+  assert.ok(tut.includes('相关邮件'), '安装教程应说明记录详情里有「相关邮件」（v4.20.0）');
+  assert.ok(qs.includes('相关邮件'), '快速上手指南也应提到相关邮件');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

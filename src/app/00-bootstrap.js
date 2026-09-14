@@ -121,6 +121,59 @@
         }
         return out;
       }
+      // ===== 邮件关联（v4.20.0）：记录 → 邮件 =====
+      // 邮件建议此前只把字段写进记录、**不留任何引用**：应用后卡片就被 appliedIds 过滤掉，
+      // 想回看"这条投递当时是哪封邮件通知的"只能去翻邮箱。这里在记录上留一条引用，
+      // 详情抽屉据此列出相关邮件；建议本身被清理（Gist 30 天 / 100 条）后引用里的快照仍在。
+      function sanitizeMailRef(ref) {
+        if (!ref || typeof ref !== 'object') return null;
+        const uid = Number(ref.uid) || 0;
+        const subject = String(ref.subject || '').trim().slice(0, 200);
+        if (!uid && !subject) return null; // 既无 uid 又无主题的引用没有检索价值
+        return {
+          uid,
+          subject,
+          from: String(ref.from || '').trim().slice(0, 120),
+          receivedAt: String(ref.receivedAt || ''),
+          emailType: String(ref.emailType || '').slice(0, 20),
+          summary: String(ref.summary || '').trim().slice(0, 300),
+          linkedAt: String(ref.linkedAt || '')
+        };
+      }
+      // 去重（uid 优先，退化为主题）+ 上限 50 条防膨胀；先出现者胜
+      function sanitizeMailRefs(list) {
+        const out = [];
+        const seen = new Set();
+        for (const ref of (Array.isArray(list) ? list : [])) {
+          const clean = sanitizeMailRef(ref);
+          if (!clean) continue;
+          const key = clean.uid ? `u${clean.uid}` : `s${clean.subject}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(clean);
+        }
+        return out.slice(-50);
+      }
+      // 取并集：mailRefs 是「只增不改」的事实，两端各自应用过的邮件都不该因为 LWW 而丢
+      function unionMailRefs(a, b) {
+        return sanitizeMailRefs([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]);
+      }
+      // 把一封邮件建议挂到记录上：同一 uid 只留一条（重复应用同一封不会堆叠），新值覆盖旧值
+      function linkMailToRecord(rec, suggestion) {
+        if (!rec || !suggestion) return;
+        const ref = sanitizeMailRef({
+          uid: suggestion.sourceUid,
+          subject: suggestion.subject,
+          from: suggestion.from,
+          receivedAt: suggestion.receivedAt,
+          emailType: suggestion.emailType,
+          summary: suggestion.summary,
+          linkedAt: new Date().toISOString()
+        });
+        if (!ref) return;
+        const kept = (Array.isArray(rec.mailRefs) ? rec.mailRefs : []).filter(x => !(ref.uid && Number(x.uid) === ref.uid));
+        rec.mailRefs = sanitizeMailRefs([...kept, ref]);
+      }
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
       const RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
@@ -135,7 +188,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.19.0';
+      const APP_VERSION = '4.20.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -310,6 +363,8 @@
             : migrateLegacyEvents(item),
           referral: String(item.referral || ''),            // 内推人或联系方式
           salary: String(item.salary || ''),                // 薪资文本（Offer 对比用）
+          // v4.20.0 邮件关联：这条记录关联过的招聘邮件（应用邮件建议时写入）。上限 50、按 uid 去重。
+          mailRefs: sanitizeMailRefs(item.mailRefs),
           intent: Math.min(5, Math.max(0, Number(item.intent) || 0)), // 意向度 0-5，0=未设
           // v4.6.0：企业性质（央国企/私企/外企）。封闭枚举 + 白名单校验，非法值一律归 ''（未设置），
           // 避免插件旧版本或手工改 JSON 塞进自由文本后污染洞察统计的分桶。
@@ -425,10 +480,15 @@
         });
         const mergedRecords = [];
         new Set([...localById.keys(), ...remoteById.keys()]).forEach(id => {
-          const newest = [localById.get(id), remoteById.get(id)].filter(Boolean).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+          const local = localById.get(id);
+          const remoteRec = remoteById.get(id);
+          const newest = [local, remoteRec].filter(Boolean).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
           const stone = stoneById.get(id);
           if (stone && Number(stone.deletedAt) >= Number(newest.updatedAt || 0)) return;
           if (stone) stoneById.delete(id);
+          // v4.20.0：整条 LWW 会让"一端新关联了一封邮件"被另一端的旧版本盖掉，
+          // 而邮件关联是只增不改的事实，所以两端都有这条记录时对 mailRefs 取并集。
+          if (local && remoteRec) newest.mailRefs = unionMailRefs(local.mailRefs, remoteRec.mailRefs);
           mergedRecords.push(newest);
         });
         const mergedTombstones = pruneTombstones([...stoneById.values()]);

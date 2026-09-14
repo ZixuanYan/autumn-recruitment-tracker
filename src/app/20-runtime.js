@@ -298,6 +298,9 @@
           if (checked.has('deadline') && readEd('deadline')) upsertEvent(rec, TIME_EVENT_DEADLINE, readEd('deadline'));
           if (checked.has('recentSchedule') && readEd('recentSchedule')) rec.recentSchedule = readEd('recentSchedule');
           if (checked.has('nextAction') && readEd('nextAction')) rec.nextAction = readEd('nextAction');
+          // v4.20.0：把邮件本身挂到记录上（不只是它的字段）。应用后建议卡片会被 appliedIds
+          // 过滤掉，这条引用是日后回看"这条投递的邮件在哪"的唯一入口。
+          linkMailToRecord(rec, s);
           rec.updatedAt = Date.now();
           if (edStage === 'Offer' || rec.stage === 'Offer') offerHit = true;
         }
@@ -343,6 +346,8 @@
           recentSchedule: p.recentSchedule || '',
           nextAction: p.nextAction || '',
           stage: mile.stage || '已投递',
+          // v4.20.0：新建记录同样把邮件挂上（保存成功后才真正落库，见 submitForm 的 pendingMailSeedId 分支）
+          mailRefs: [{ uid: s.sourceUid, subject: s.subject, from: s.from, receivedAt: s.receivedAt, emailType: s.emailType, summary: s.summary, linkedAt: new Date().toISOString() }],
           timeline: mile.stage ? [{ stage: mile.stage, at: mile.at || today, note: mile.note || '邮件' }] : undefined
         });
         pendingMailSeedId = String(id);
@@ -872,6 +877,29 @@
           return;
         }
       }
+      function openMailRef(uid) {
+        const target = Number(uid) || 0;
+        const hit = mailRawSuggestions.find(x => Number(x.sourceUid) === target);
+        if (!hit) {
+          // 建议只保留 30 天 / 100 条，过期后被清理；抽屉里已经是关联时保存的快照
+          showToast('这封邮件已不在建议队列里（建议只保留 30 天），上面显示的摘要来自关联时的记录');
+          return;
+        }
+        closeRecordDrawer();
+        location.hash = '#/mail';
+        // 渲染在 hash 变化之后才发生，所以下一帧再找卡片
+        requestAnimationFrame(() => {
+          const card = document.querySelector(`.mail-card[data-mail-id="${CSS.escape(String(hit.id))}"]`);
+          if (!card) {
+            showToast('这封邮件已复核过（已应用或已忽略），不在待复核列表里');
+            return;
+          }
+          card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          card.classList.add('is-flash');
+          setTimeout(() => card.classList.remove('is-flash'), 1600);
+        });
+      }
+
       function closeDialog() {
         els.dialog.close();
         editingId = null;
@@ -1417,6 +1445,8 @@
         if (noteDel) { deleteDrawerNote(noteDel.dataset.noteDel); return; }
         const sibling = event.target.closest('button[data-sibling]');
         if (sibling) { openRecordDrawer(sibling.dataset.sibling); return; }
+        const mailRef = event.target.closest('button[data-mail-ref]');
+        if (mailRef) { openMailRef(mailRef.dataset.mailRef); return; }
         if (event.target.closest('#drawerNoteAddBtn')) {
           const input = $('#drawerNoteInput');
           addDrawerNote(input ? input.value : '');

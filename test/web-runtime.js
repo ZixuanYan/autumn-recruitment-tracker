@@ -85,11 +85,16 @@ sandbox.normalizeTimeEventType = AJA_SHARED.normalizeTimeEventType;
 sandbox.isTimeEventAllDay = AJA_SHARED.isTimeEventAllDay;
 sandbox.TIME_EVENT_TYPES = AJA_SHARED.TIME_EVENT_TYPES;
 sandbox.TIME_EVENT_DEADLINE = AJA_SHARED.TIME_EVENT_DEADLINE;
-sandbox.sanitizeEvents = extractFunction(html, 'sanitizeEvents');
 sandbox.cryptoId = (() => { let n = 0; return () => `ev-${(n += 1)}`; })();
+// v4.19.0 / v4.20.0：邮件段新增了对这些**真实实现**的引用（upsertEvent 用 sanitizeEvents；
+// applyMailSuggestion 用 linkMailToRecord → sanitizeMailRef(s)）。
+// 注意 extractFunction 返回的是**源码文本**，必须拼进 vm 上下文执行；直接赋给 sandbox 属性
+// 只会得到一个字符串（调用时报 "xxx is not a function"）。
+const MAIL_REF_HELPERS = ['upsertEvent', 'sanitizeEvents', 'linkMailToRecord', 'sanitizeMailRef', 'sanitizeMailRefs']
+  .map(n => extractFunction(html, n)).join('\n');
 vm.createContext(sandbox);
 vm.runInContext(extractFunction(loadSrc.coreSrc, 'positionWithUnit'), sandbox, { filename: 'core-positionWithUnit.js' });
-vm.runInContext(sectionSrc, sandbox, { filename: 'mail-section.js' });
+vm.runInContext(`${MAIL_REF_HELPERS}\n${sectionSrc}`, sandbox, { filename: 'mail-section.js' });
 
 let failed = 0;
 // 队列式执行：部分被测函数是 async（如 advanceRecordTo 的回退确认跨 await），
@@ -617,7 +622,7 @@ const v45Section = extractBlock(html, V45_START, V44_START);
 // setCurrentMilestoneDone（v4.18.0）与 normalizeRecord 同段、依赖相同（sanitizeTimeline / setTimeline /
 // localDateInput 都已在本沙箱里），因此一并抽真实现来做行为断言——它「没有时间线时要合成一条」
 // 这条分支静态断言覆盖不到，而那正是示例数据点「标记完成」静默无动作的成因。
-const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId', 'setCurrentMilestoneDone', 'sanitizeEvents', 'migrateLegacyEvents']
+const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId', 'setCurrentMilestoneDone', 'sanitizeEvents', 'migrateLegacyEvents', 'sanitizeMailRef', 'sanitizeMailRefs']
   .map(name => extractFunction(html, name));
 // v4.19.0 关键时间类型的转发别名。它们在 index.html 里位于 bootstrap 段（不在被抽取的块内），
 // 而 sanitizeEvents / coreBlock 的 dates·insights·ics 都要用，所以按同样的转发形态在这里补齐。
