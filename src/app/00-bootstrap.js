@@ -285,6 +285,23 @@
         const id = String(mailId || '');
         return id && mailArchive[id] ? mailArchive[id] : null;
       }
+      // 用建议文件里带回的正文，回填**已存在但正文为空**的归档条目（v4.23.1）。
+      // 为什么需要这一步：正文归档只发生在「应用」那一刻，而 v4.23.0 之前 Action 不一定带回正文
+      // （该部署当时没配 MAIL_ENC_KEY），于是那些归档条目正文为空。而它们早已被 appliedIds 过滤、
+      // 不会再回到待复核队列——"重新应用一次"这条路走不通，只能靠同步时回填。
+      // 只补空正文，绝不覆盖已有正文（同一封两边都有内容时取更完整的那份由 unionMailArchive 负责）。
+      function backfillMailArchive(archive, suggestions) {
+        const out = sanitizeMailArchive(archive);
+        for (const s of (Array.isArray(suggestions) ? suggestions : [])) {
+          const mailId = mailIdOf(s);
+          const body = String((s && s.textBody) || '');
+          if (!mailId || !body) continue;
+          const prev = out[mailId];
+          if (!prev || String(prev.textBody || '')) continue;
+          out[mailId] = sanitizeMailArchiveEntry(mailId, { ...prev, textBody: body });
+        }
+        return out;
+      }
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
       const RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
@@ -299,7 +316,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.23.0';
+      const APP_VERSION = '4.23.1';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -873,6 +890,9 @@
           // 放在 records 合并之后 —— 保护名单要按**合并后**的记录来算。
           const archiveBefore = mailArchiveSignature(mailArchive);
           if (remote && remote.mailArchive) mailArchive = unionMailArchive(mailArchive, remote.mailArchive);
+          // v4.23.1：再用本次建议文件里的正文回填空归档——旧邮件（v4.23.0 之前应用、当时没带回正文）
+          // 不会再进待复核队列，只能在这里补；补完再裁剪，体积预算按补后的真实大小算。
+          mailArchive = backfillMailArchive(mailArchive, mailRawSuggestions);
           mailArchive = pruneMailArchive(mailArchive, referencedMailIds(records));
           const archiveChanged = mailArchiveSignature(mailArchive) !== archiveBefore;
           // 本地简历更新（或云端无简历而本地非空）时随下次推送上传

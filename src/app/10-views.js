@@ -503,7 +503,7 @@
                 ${ref.summary ? `<div class="mail-ref-summary">${escapeHtml(ref.summary)}</div>` : ''}
                 ${body
                   ? `<details class="mail-ref-body"><summary>查看邮件原文（${body.length} 字）</summary><pre>${escapeHtml(body)}</pre></details>`
-                  : `<div class="mail-ref-nobody">这封邮件没有正文快照（多半是 v4.23.0 之前生成的旧建议文件）。重新运行一次 Action 的 mail-sync 再应用即可补上。</div>`}
+                  : `<div class="mail-ref-nobody">这封邮件还没有正文快照（应用它的时候 Action 还没带回正文）。只要它还在云端候选里，重跑一次 Action 的 mail-sync 后本机同步时会自动补上；已被清理的旧邮件补不回来了。</div>`}
               </div>`;
             }).join('')}</div></div>` : ''}
             <div class="drawer-section"><h3>下一步行动</h3><div class="note-text">${escapeHtml(record.nextAction || '—')}</div></div>

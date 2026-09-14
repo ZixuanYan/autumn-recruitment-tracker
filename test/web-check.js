@@ -360,7 +360,8 @@ function extractConstLine(src, name) {
 // v4.20.0 邮件关联助手 + v4.22.0 邮件归档：不参与 core 计算，但要和 core 在同一沙箱里做行为断言
 //（normalizeRecord 也要用 sanitizeMailRefs，所以这几个必须一起注入）。
 const MAIL_REF_FN_NAMES = ['sanitizeMailRef', 'sanitizeMailRefs', 'linkMailToRecord', 'unionMailRefs',
-  'sanitizeMailArchiveEntry', 'sanitizeMailArchive', 'unionMailArchive', 'pruneMailArchive', 'referencedMailIds', 'archiveSuggestionMail'];
+  'sanitizeMailArchiveEntry', 'sanitizeMailArchive', 'unionMailArchive', 'pruneMailArchive', 'referencedMailIds',
+  'archiveSuggestionMail', 'backfillMailArchive'];
 const mailRefFns = MAIL_REF_FN_NAMES.map(name => extractFunction(html, name));
 check('邮件关联助手全部从 index.html 抽取到', () => {
   assert.deepStrictEqual(MAIL_REF_FN_NAMES.filter((name, idx) => !mailRefFns[idx]), []);
@@ -441,7 +442,7 @@ const core = new Function(
      computeDailyApplications, sparklinePath, findStalled, findAwaitingAdvance, findUpcomingDeadlines, collectAlerts,
      nextTimeEvent, nearestDeadlineEvent, isEventPast, isEventSettled,
      sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs, mailIdOf,
-     sanitizeMailArchive, unionMailArchive, pruneMailArchive, referencedMailIds, archiveSuggestionMail,
+     sanitizeMailArchive, unionMailArchive, pruneMailArchive, referencedMailIds, archiveSuggestionMail, backfillMailArchive,
      MAIL_ARCHIVE_MAX_CHARS,
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
@@ -1441,6 +1442,30 @@ check('未来安排 / 需要关注：已了结的事件不再出现，未了结�
   const alerts = core.collectAlerts(recs, NOW, 10);
   assert.ok(alerts.some(a => a.id === 'open'), '未完成的逾期面试仍要进「需要关注」');
   assert.ok(!alerts.some(a => a.id === 'done'), '已完成的不得再进「需要关注」（否则面板会被做掉的事占满）');
+});
+
+check('backfillMailArchive：只用建议里的正文补空归档，绝不覆盖已有正文（v4.23.1）', () => {
+  const sug = (id, body) => ({ messageId: id, sourceUid: 1, uidValidity: 1, mailbox: 'INBOX', subject: 's', textBody: body });
+  const empty = { mailId: 'mid:a@x', subject: 's', summary: '摘要', textBody: '', archivedAt: '2026-09-14T00:00:00.000Z' };
+  const filled = core.backfillMailArchive({ 'mid:a@x': empty }, [sug('a@x', '测评通知正文')]);
+  assert.strictEqual(filled['mid:a@x'].textBody, '测评通知正文', '空正文要用建议里的正文补上');
+  assert.strictEqual(filled['mid:a@x'].archivedAt, '2026-09-14T00:00:00.000Z', '保留原归档时间（并集取"更完整"与裁剪顺序都依赖它）');
+  assert.strictEqual(filled['mid:a@x'].summary, '摘要', '其余字段不动');
+  // 已有正文的条目不得被覆盖：并集那边"取更完整的一份"才是唯一入口
+  const kept = core.backfillMailArchive({ 'mid:a@x': { ...empty, textBody: '原有正文' } }, [sug('a@x', '另一份更长的正文…')]);
+  assert.strictEqual(kept['mid:a@x'].textBody, '原有正文');
+  // 没有归档条目 / 建议里没正文 → 不凭空造条目（编出来的归档会让抽屉假装有原文）
+  assert.deepStrictEqual(core.backfillMailArchive({}, [sug('a@x', '正文')]), {}, '没有条目就不新建');
+  assert.strictEqual(core.backfillMailArchive({ 'mid:a@x': empty }, [sug('a@x', '')])['mid:a@x'].textBody, '', '建议里没正文时保持原样');
+  assert.deepStrictEqual(core.backfillMailArchive(undefined, undefined), {}, '入参缺失不报错');
+});
+
+check('回填真的接在同步链路上：syncNow 合并归档后、裁剪之前调用（v4.23.1）', () => {
+  const sync = extractFunction(html, 'syncNow').replace(/\/\/[^\n]*/g, '');
+  const backfillAt = sync.indexOf('backfillMailArchive(mailArchive, mailRawSuggestions)');
+  const pruneAt = sync.indexOf('pruneMailArchive(mailArchive, referencedMailIds(records))');
+  assert.ok(backfillAt > -1, 'syncNow 必须调用 backfillMailArchive（否则旧邮件的正文永远补不上：已应用的邮件不会再进待复核队列）');
+  assert.ok(pruneAt > backfillAt, '回填必须在裁剪之前——否则体积预算按补正文前的大小算，会多留/少留条目');
 });
 
 check('findUpcomingDeadlines：测评做完之后，那封邮件给的截止不再倒计时（v4.23.0）', () => {
