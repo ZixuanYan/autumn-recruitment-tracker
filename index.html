@@ -990,6 +990,17 @@
     .step-date { color: var(--muted); font-family: var(--font-sans); font-size: 12px; font-variant-numeric: tabular-nums; }
     .step-gap { margin-left: auto; color: var(--muted); font-size: 11.5px; }
     .step-note { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
+    /* 完成态（v4.18.0）：阶段「做完了但还没推进」。绿色走「已达成」语义，
+       与停滞(warn) / 截止(danger) 明确分开，避免两种状态被看成一回事。 */
+    .step.is-done .step-dot { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+    .step-done { padding: 1px 7px; border-radius: var(--r-pill); background: var(--ok-soft); color: var(--ok); font-size: 11px; font-weight: 650; }
+    .step-done-at { color: var(--ok); font-size: 11.5px; }
+    .tl-done { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--muted); font-size: 12px; white-space: nowrap; cursor: pointer; }
+    .tl-done input { margin: 0; }
+    .stage-done-chip { margin-left: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--ok-soft); color: var(--ok); font-size: 11px; font-weight: 650; white-space: nowrap; }
+    .board-card.is-done { opacity: .9; }
+    .board-chip.done { background: var(--ok-soft); color: var(--ok); box-shadow: none; }
+    .text-button.is-on, .btn.is-on { background: var(--ok-soft); color: var(--ok); }
     .note-list { display: grid; gap: 8px; }
     .note-item { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
     .note-item-head { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 11.5px; }
@@ -1855,11 +1866,23 @@
         const i = STAGE_PRESETS.indexOf(stage);
         return i === -1 ? 9000 : i;
       }
-      // 清洗时间线：仅保留有阶段名的里程碑，规范字段，按日期升序（同日期保持插入序）
+      // 清洗时间线：仅保留有阶段名的里程碑，规范字段，按日期升序（同日期保持插入序）。
+      // done/doneAt（v4.18.0）：里程碑的「完成」标记。它**不是**阶段——完成只表示这一步做完了，
+      // 不推进、不改变当前阶段，所以必须在这里显式携带，否则每次 load / 云同步都会被静默丢弃。
       function sanitizeTimeline(list) {
         if (!Array.isArray(list)) return [];
         return list
-          .map(m => ({ stage: String(m && m.stage || '').trim(), at: String(m && m.at || '').trim(), note: String(m && m.note || '').trim() }))
+          .map(m => {
+            const done = !!(m && m.done);
+            return {
+              stage: String(m && m.stage || '').trim(),
+              at: String(m && m.at || '').trim(),
+              note: String(m && m.note || '').trim(),
+              done,
+              // 取消完成时一并清空 doneAt，避免残留一个过期日期误导「待推进 N 天」的算法
+              doneAt: done ? String(m && m.doneAt || '').trim() : ''
+            };
+          })
           .filter(m => m.stage)
           .map((m, i) => ({ m, i }))
           .sort((a, b) => (a.m.at || '9999-99-99').localeCompare(b.m.at || '9999-99-99') || a.i - b.i)
@@ -1877,6 +1900,29 @@
         rec.updatedAt = Date.now();
         return rec;
       }
+      // 标记 / 取消「当前阶段」（时间线末条）的完成态（v4.18.0）。
+      // 刻意只改最后一条里程碑：不追加、不删除、不改变 deriveStage，所以看板位置与当前阶段都不变——
+      // 「完成」与「推进」是两个独立动作，完成了一步不等于要进入下一步（测评做完仍等结果）。
+      // 没有时间线时按 normalizeRecord 的同款迁移合成一条再打勾。为什么不能直接 return：
+      // 内存里的记录未必都过了 normalizeRecord —— 首启播种的示例数据就是 exampleRecords() 原样写入的
+      // （山岚智能等四条都没有 timeline 字段）。直接 return 会让「标记完成」按钮点了没反应、
+      // 也不报错，正是本项目最忌讳的静默失效。
+      function setCurrentMilestoneDone(rec, done, at) {
+        let tl = sanitizeTimeline(rec.timeline);
+        if (!tl.length) {
+          tl = sanitizeTimeline([{
+            stage: String(rec.stage || '').trim() || '待投递',
+            at: String(rec.applicationDate || '').trim() || localDateInput(new Date()),
+            note: ''
+          }]);
+        }
+        const last = tl.length - 1;
+        tl[last] = Object.assign({}, tl[last], {
+          done: !!done,
+          doneAt: done ? (at || localDateInput(new Date())) : ''
+        });
+        return setTimeline(rec, tl);
+      }
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
       const RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
@@ -1891,7 +1937,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.17.0';
+      const APP_VERSION = '4.18.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2030,10 +2076,15 @@
       }
 
       function normalizeRecord(item) {
-        // 时间线迁移：有时间线则清洗；否则由旧的单一 stage 合成一条里程碑（老数据零丢失，自定义阶段不再被打回）
-        const timeline = Array.isArray(item.timeline) && item.timeline.length
-          ? sanitizeTimeline(item.timeline)
-          : [{ stage: String(item.stage || '').trim() || '待投递', at: String(item.applicationDate || '').trim() || localDateInput(new Date()), note: '' }];
+        // 时间线迁移：有时间线则清洗；否则由旧的单一 stage 合成一条里程碑（老数据零丢失，自定义阶段不再被打回）。
+        // 两条路径都必须过 sanitizeTimeline —— 它负责补齐 done/doneAt 这类规范字段。
+        // 只清洗「已有时间线」那一支的话，第一次写回的是**缺** done/doneAt 的结构，第二次 load 才补齐，
+        // 于是每次加载都被判定为"结构变了"而重复写盘（loadRecords 的幂等守卫会红）。
+        const timeline = sanitizeTimeline(
+          Array.isArray(item.timeline) && item.timeline.length
+            ? item.timeline
+            : [{ stage: String(item.stage || '').trim() || '待投递', at: String(item.applicationDate || '').trim() || localDateInput(new Date()), note: '' }]
+        );
         const rec = {
           id: String(item.id || cryptoId()),
           company: String(item.company || ''), position: String(item.position || ''), city: String(item.city || ''),
@@ -3635,6 +3686,10 @@
         const scheduleDate = parseLocal(record.scheduleAt);
         const overdue = scheduleDate && scheduleDate < new Date() && !['Offer', '已结束'].includes(record.stage);
         const canAdvance = record.stage !== '已结束';
+        // 完成态（v4.18.0）：当前阶段（时间线末条）是否已标记完成。终态若已被标记，也允许取消。
+        const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
+        const curDone = !!(curMilestone && curMilestone.done);
+        const canMarkDone = !['Offer', '已结束'].includes(record.stage) || curDone;
         const dl = deadlineInfo(record.deadline);
         const dlHtml = dl && !['Offer', '已结束'].includes(record.stage)
           ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
@@ -3653,11 +3708,12 @@
           <td data-label="公司 / 岗位"><div class="company">${companyHtml}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}</div></td>
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
-          <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
+          <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.done ? '（已完成）' : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span>${curDone ? '<span class="stage-done-chip" title="当前阶段已标记完成，尚未推进">已完成</span>' : ''}</td>
           <td class="schedule" data-label="最近安排"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(formatDateTime(record.scheduleAt))}${overdue ? ' · 已到期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
           <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
           <td data-label="操作"><div class="row-actions">
             ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
+            ${canMarkDone ? `<button class="text-button${curDone ? ' is-on' : ''}" data-action="toggle-done" data-id="${escapeHtml(record.id)}" type="button" title="${curDone ? '取消完成标记（不改变当前阶段）' : '只标记这一步完成，不推进到下一阶段'}">${curDone ? '取消完成' : '标记完成'}</button>` : ''}
             <button class="text-button" data-action="edit" data-id="${escapeHtml(record.id)}" type="button">编辑</button>
             <button class="text-button danger" data-action="delete" data-id="${escapeHtml(record.id)}" type="button">删除</button>
           </div></td>
@@ -4064,18 +4120,41 @@
         return { line, area, max, total: list.reduce((s, c) => s + (Number(c.count) || 0), 0), dots };
       }
 
-      // ----- 卡点：停滞 / 临期截止 / 逾期安排 / 同公司多岗位 -----
+      // ----- 卡点：停滞 / 待推进 / 临期截止 / 逾期安排 / 同公司多岗位 -----
+      // 停滞 = 该你动、却迟迟没动。当前阶段已标记完成（done）的不算停滞：
+      // 那一步已经做完、球在对方手里，再按「停滞」催办会让人分不清是谁卡住了。
+      // 这类记录交给 findAwaitingAdvance 单独提示「已完成 N 天，考虑推进」。
       function findStalled(records, now = new Date(), thresholdDays = 14) {
         const out = [];
         for (const r of (Array.isArray(records) ? records : [])) {
           if (!isActive(r)) continue;
           const tl = Array.isArray(r.timeline) ? r.timeline : [];
-          const lastDate = tl.length ? parseDay(tl[tl.length - 1].at) : parseDay(r.applicationDate);
+          const last = tl.length ? tl[tl.length - 1] : null;
+          if (last && last.done) continue;
+          const lastDate = tl.length ? parseDay(last.at) : parseDay(r.applicationDate);
           if (!lastDate) continue;
           // 用日历日差（daysUntil）而不是时间戳差：里程碑只有日期（本地午夜），
           // 直接减带时刻的 now 会因为半天偏移把「20 天」算成「21 天」
           const days = -daysUntil(lastDate, now);
           if (days >= thresholdDays) out.push({ record: r, stage: r.stage, days });
+        }
+        return out.sort((a, b) => b.days - a.days);
+      }
+      // 待推进：当前阶段已标记完成、却迟迟没有推进到下一步的记录（v4.18.0）。
+      // 与 findStalled 互斥——findStalled 已排除末条 done，两者合起来覆盖
+      // 「该我动」（停滞）与「该往前推」（待推进）两种不同状态。
+      function findAwaitingAdvance(records, now = new Date(), thresholdDays = 7) {
+        const span = Number(thresholdDays) > 0 ? Number(thresholdDays) : 7;
+        const out = [];
+        for (const r of (Array.isArray(records) ? records : [])) {
+          if (!isActive(r)) continue;
+          const tl = Array.isArray(r.timeline) ? r.timeline : [];
+          const last = tl.length ? tl[tl.length - 1] : null;
+          if (!last || !last.done) continue;
+          const from = parseDay(last.doneAt || last.at);
+          if (!from) continue;
+          const days = -daysUntil(from, now);
+          if (days >= span) out.push({ record: r, stage: r.stage, doneAt: last.doneAt || last.at, days });
         }
         return out.sort((a, b) => b.days - a.days);
       }
@@ -4107,6 +4186,10 @@
         }
         for (const item of findStalled(list, now, 14)) {
           alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：停在「${item.stage}」已 ${item.days} 天` });
+        }
+        // 已完成的当前阶段久未推进：换了措辞，不与「停滞」混为一谈
+        for (const item of findAwaitingAdvance(list, now, 7)) {
+          alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：「${item.stage}」已完成 ${item.days} 天，考虑推进到下一步` });
         }
         for (const group of groupRecordsByCompany(list)) {
           const open = group.records.filter(r => isActive(r));
@@ -4444,6 +4527,30 @@
         return true;
       }
 
+      // 标记 / 取消「当前阶段」的完成态（v4.18.0）。与 advanceRecordTo 刻意分开：
+      // 完成只给时间线末条打勾，不追加里程碑、不改变当前阶段，因此卡片不会换列。
+      // 完成后给 6 秒撤销——「标记完成」是一次会写库的状态改动，误点后不该只能手动逆转。
+      function toggleStageDone(record, force) {
+        if (!record) return;
+        const tl = Array.isArray(record.timeline) ? record.timeline : [];
+        const cur = tl.length ? tl[tl.length - 1] : null;
+        // 没有时间线的记录（如首启示例数据）不提前 return：setCurrentMilestoneDone 会合成一条后再打勾
+        const next = typeof force === 'boolean' ? force : !(cur && cur.done);
+        const apply = on => {
+          setCurrentMilestoneDone(record, on);
+          saveRecords();
+          render();
+          flashRow(record.id);
+          if (drawerRecordId === record.id) renderDrawer();
+        };
+        apply(next);
+        showToast(next ? `已标记「${record.stage}」完成（不推进，可随时取消）` : `已取消「${record.stage}」的完成标记`, {
+          actionLabel: '撤销',
+          duration: 6000,
+          onAction: () => apply(!next)
+        });
+      }
+
       // ---- 表格 / 看板 切换 ----
       function setRecordsView(mode) {
         uiPrefs.recordsView = mode === 'board' ? 'board' : 'table';
@@ -4555,6 +4662,10 @@
         const terminal = ['Offer', '已结束'].includes(record.stage);
         const schedule = parseLocal(record.scheduleAt);
         const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
+        // 完成态（v4.18.0）：当前阶段已标记完成、却还没推进。卡片留在原列，
+        // 用一枚 chip 说明「这一步做完了、球在对方」，与「停滞」明确区分。
+        const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
+        const curDone = !!(curMilestone && curMilestone.done);
         const chips = [];
         // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
         // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
@@ -4564,10 +4675,12 @@
         // 待投递/Offer/已结束，所以这里是**第二道防线**：万一将来 isActive 放宽，
         // 终态卡片也不会长出"停滞 N 天"（已结束还催你跟进是荒谬的）。
         if (stalled && !terminal) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
+        // 已完成：findStalled 已排除末条完成的记录，所以这枚 chip 不会和「停滞」同时出现
+        if (curDone && !terminal) chips.push('<span class="board-chip done">已完成 · 待推进</span>');
         // 意向度点**只在 Offer 上显示**：那是你自己打的排序信号，比较 Offer 时才有决策价值；
         // 在「已投递 / 测评」这些列上它不指向任何下一步动作，只是每卡多一个元素。
         const dots = record.stage === 'Offer' ? intentDotsHtml(record.intent) : '';
-        return `<button class="board-card${stalled ? ' is-stalled' : ''}" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
+        return `<button class="board-card${stalled ? ' is-stalled' : ''}${curDone && !terminal ? ' is-done' : ''}" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
           <div class="board-card-company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="board-card-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}</div>
           <div class="board-card-position">${escapeHtml(record.position || '—')}</div>
           <div class="board-card-meta">${dots}${companyTypeChipHtml(record.companyType)}${chips.join('')}</div>
@@ -4715,7 +4828,8 @@
         if (next && next.focus) next.focus();
       }
 
-      // 时间线步骤条：每个里程碑一个节点，显示日期、备注与「距上一步 N 天」
+      // 时间线步骤条：每个里程碑一个节点，显示日期、备注与「距上一步 N 天」。
+      // 完成态（v4.18.0）：已完成的里程碑打勾并标出完成日期——它仍是当前阶段，只是这一步做完了。
       function stepsHtml(record) {
         const timeline = Array.isArray(record.timeline) ? record.timeline : [];
         if (!timeline.length) return '<div class="insight-empty">还没有里程碑</div>';
@@ -4725,10 +4839,11 @@
           const date = parseDay(milestone.at);
           const gap = prev && date ? Math.round((date - prev) / 86400000) : null;
           if (date) prev = date;
-          return `<div class="step" data-stage="${escapeHtml(stage)}">
+          const done = !!milestone.done;
+          return `<div class="step${done ? ' is-done' : ''}" data-stage="${escapeHtml(stage)}">
             <div class="step-rail"><span class="step-dot"></span></div>
             <div class="step-main">
-              <div class="step-top"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span><span class="step-date">${escapeHtml(milestone.at ? formatDate(String(milestone.at).slice(0, 10)) : '未填日期')}</span>${gap != null && gap >= 0 ? `<span class="step-gap">距上一步 ${gap} 天</span>` : ''}</div>
+              <div class="step-top"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span>${done ? '<span class="step-done">✓ 已完成</span>' : ''}<span class="step-date">${escapeHtml(milestone.at ? formatDate(String(milestone.at).slice(0, 10)) : '未填日期')}</span>${gap != null && gap >= 0 ? `<span class="step-gap">距上一步 ${gap} 天</span>` : ''}${done && milestone.doneAt ? `<span class="step-done-at">${escapeHtml(formatDate(String(milestone.doneAt).slice(0, 10)))} 完成</span>` : ''}</div>
               ${milestone.note ? `<div class="step-note">${escapeHtml(milestone.note)}</div>` : ''}
             </div>
           </div>`;
@@ -4789,7 +4904,13 @@
               <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(positionWithUnit(item.position || '未填岗位', item.orgUnit))}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
         }
         if (actions) {
+          // 完成态（v4.18.0）与「推进阶段」并列：完成只给当前阶段打勾、不推进，两者互不替代。
+          const drawerTl = Array.isArray(record.timeline) ? record.timeline : [];
+          const drawerCur = drawerTl.length ? drawerTl[drawerTl.length - 1] : null;
+          const drawerDone = !!(drawerCur && drawerCur.done);
+          const drawerCanDone = !['Offer', '已结束'].includes(record.stage) || drawerDone;
           actions.innerHTML = `
+            ${drawerCanDone ? `<button class="btn btn-small${drawerDone ? ' is-on' : ''}" type="button" data-drawer="toggle-done">${drawerDone ? '取消完成' : '标记本阶段完成'}</button>` : ''}
             <button class="btn btn-small btn-primary" type="button" data-drawer="advance">推进阶段</button>
             <button class="btn btn-small" type="button" data-drawer="edit">编辑</button>
             <button class="btn btn-small" type="button" data-drawer="ics">导出到日历</button>
@@ -5717,10 +5838,13 @@
 
       // ================= 阶段时间线编辑器（记录弹窗内）=================
       function timelineRowHtml(m) {
+        // 完成勾选（v4.18.0）：一个阶段是否已做完，与它是不是当前阶段无关。
+        // 类名刻意不叫 tl-row-*，否则会污染测试里按 "tl-row" 计数行的断言。
         return `<div class="tl-row">
           <input class="control tl-stage" list="stagePresets" maxlength="20" placeholder="阶段" value="${escapeHtml(m && m.stage || '')}">
           <input class="control tl-date" type="date" value="${escapeHtml(m && m.at || '')}" aria-label="阶段日期">
           <input class="control tl-note" maxlength="60" placeholder="备注（可选）" value="${escapeHtml(m && m.note || '')}">
+          <label class="tl-done" title="标记这一步已完成（不推进到下一阶段）"><input type="checkbox" class="tl-done-check"${m && m.done ? ' checked' : ''}><span>完成</span></label>
           <button class="tl-del" type="button" title="删除该阶段" aria-label="删除该阶段">✕</button>
         </div>`;
       }
@@ -5740,11 +5864,19 @@
         $('#timelineEditor').innerHTML = tl.map(timelineRowHtml).join('');
       }
       function collectTimeline() {
-        return [...document.querySelectorAll('#timelineEditor .tl-row')].map(row => ({
-          stage: row.querySelector('.tl-stage').value.trim(),
-          at: row.querySelector('.tl-date').value,
-          note: row.querySelector('.tl-note').value.trim()
-        })).filter(m => m.stage);
+        return [...document.querySelectorAll('#timelineEditor .tl-row')].map(row => {
+          const at = row.querySelector('.tl-date').value;
+          const doneBox = row.querySelector('.tl-done-check');
+          const done = !!(doneBox && doneBox.checked);
+          return {
+            stage: row.querySelector('.tl-stage').value.trim(),
+            at,
+            note: row.querySelector('.tl-note').value.trim(),
+            done,
+            // 完成日期没有单独输入框：沿用该阶段的日期，空则回落到今天
+            doneAt: done ? (at || localDateInput(new Date())) : ''
+          };
+        }).filter(m => m.stage);
       }
       function addTimelineRow() {
         const ed = $('#timelineEditor');
@@ -6002,6 +6134,7 @@
         if (!record) return;
         if (button.dataset.action === 'edit') return openDialog(record);
         if (button.dataset.action === 'delete') return requestDeleteRecord(record);
+        if (button.dataset.action === 'toggle-done') return toggleStageDone(record);
         if (button.dataset.action === 'advance') {
           openAdvanceDialog(record);
         }
@@ -6508,6 +6641,7 @@
         if (!record) return;
         const action = button.dataset.drawer;
         if (action === 'advance') return openAdvanceDialog(record);
+        if (action === 'toggle-done') return toggleStageDone(record);
         if (action === 'edit') { closeRecordDrawer(); return openDialog(record); }
         if (action === 'ics') return exportIcs(record.id);
         if (action === 'delete') return requestDeleteRecord(record);

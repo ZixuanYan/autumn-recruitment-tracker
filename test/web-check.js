@@ -419,7 +419,7 @@ const core = new Function(
    return {
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
-     computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
+     computeDailyApplications, sparklinePath, findStalled, findAwaitingAdvance, findUpcomingDeadlines, collectAlerts,
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
    };`
@@ -744,6 +744,66 @@ check('collectAlerts danger 优先且受 limit 约束', () => {
   assert.ok(alerts.some(a => a.level === 'warn' && a.text.includes('停在「一面」')));
   assert.ok(alerts.every(a => a.id), '每条都要带 recordId 以便点击跳转');
   assert.strictEqual(core.collectAlerts(recs, NOW, 1).length, 1);
+});
+
+// ---- v4.18.0 阶段「完成」：完成与推进是两个独立动作 ----
+check('normalizeRecord 保留里程碑 done/doneAt，且未完成时清空 doneAt', () => {
+  const rec = core.normalizeRecord({
+    id: 'd1', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01',
+    timeline: [
+      { stage: '已投递', at: '2026-09-01', note: '' },
+      { stage: '测评', at: '2026-09-05', note: '', done: true, doneAt: '2026-09-06' }
+    ]
+  });
+  assert.strictEqual(rec.timeline[1].done, true);
+  assert.strictEqual(rec.timeline[1].doneAt, '2026-09-06');
+  assert.strictEqual(rec.timeline[0].done, false, '未标记的里程碑 done 应被规范化成 false，而不是 undefined');
+  assert.strictEqual(rec.timeline[0].doneAt, '');
+  // 取消完成后 doneAt 必须清空：残留日期会让「待推进 N 天」从一个过期时间点起算
+  const cleared = core.normalizeRecord({
+    id: 'd2', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01',
+    timeline: [{ stage: '测评', at: '2026-09-05', done: false, doneAt: '2026-09-06' }]
+  });
+  assert.strictEqual(cleared.timeline[0].doneAt, '', 'done=false 时 doneAt 必须被清空');
+});
+
+check('findStalled 排除当前阶段已完成的记录（球在对方手里，不该按「停滞」催办）', () => {
+  const recs = [
+    { id: 'open', company: 'A', position: 'p', stage: '测评', applicationDate: dayOffset(-20, NOW), timeline: [{ stage: '测评', at: dayOffset(-20, NOW) }] },
+    { id: 'done', company: 'B', position: 'p', stage: '测评', applicationDate: dayOffset(-20, NOW), timeline: [{ stage: '测评', at: dayOffset(-20, NOW), done: true, doneAt: dayOffset(-20, NOW) }] }
+  ];
+  const ids = core.findStalled(recs, NOW, 14).map(x => x.record.id);
+  assert.deepStrictEqual(ids, ['open'], '已完成的当前阶段不计入停滞');
+});
+
+check('findAwaitingAdvance：已完成且超过阈值才提示「待推进」，与 findStalled 互斥', () => {
+  const recs = [
+    { id: 'old', company: 'A', position: 'p', stage: '测评', applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '测评', at: dayOffset(-13, NOW), done: true, doneAt: dayOffset(-13, NOW) }] },
+    { id: 'fresh', company: 'B', position: 'p', stage: '测评', applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '测评', at: dayOffset(-1, NOW), done: true, doneAt: dayOffset(-1, NOW) }] },
+    { id: 'open', company: 'C', position: 'p', stage: '测评', applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '测评', at: dayOffset(-13, NOW) }] }
+  ];
+  assert.deepStrictEqual(core.findAwaitingAdvance(recs, NOW, 7).map(x => x.record.id), ['old'], '只有「已完成且超 7 天」进待推进');
+  assert.ok(!core.findStalled(recs, NOW, 7).some(x => x.record.id === 'old'), '同一记录不得同时是停滞与待推进');
+  assert.ok(core.collectAlerts(recs, NOW, 10).some(a => a.text.includes('考虑推进到下一步')), '待推进要进「需要关注」');
+});
+
+check('完成态贯通：记录行 / 看板 / 步骤条 / 表单勾选 / 抽屉动作都接上', () => {
+  // 数据层：只改时间线末条，绝不追加里程碑 —— 追加就等于推进，正是要避免的语义混淆
+  const m = html.match(/function setCurrentMilestoneDone\(rec, done, at\)\s*\{[\s\S]*?\n {6}\}/);
+  assert.ok(m, '找不到 setCurrentMilestoneDone');
+  assert.ok(/const last = tl\.length - 1;/.test(m[0]) && /tl\[last\] = Object\.assign/.test(m[0]), '必须只改最后一条里程碑');
+  assert.ok(!/\.push\(/.test(m[0]), '完成不得追加里程碑（那是推进）');
+  // 规范化必须携带 done/doneAt，否则 load / 云同步时被静默丢弃
+  assert.ok(/doneAt: done \? String\(m && m\.doneAt \|\| ''\)\.trim\(\) : ''/.test(html), 'sanitizeTimeline 必须携带 done/doneAt（未完成时清空）');
+  // UI 四处呈现
+  assert.ok(/data-action="toggle-done"/.test(html), '记录行要有「标记完成」动作');
+  assert.ok(html.includes('stage-done-chip'), '当前阶段旁要有「已完成」标记');
+  assert.ok(html.includes('已完成 · 待推进'), '看板卡片要显示「已完成 · 待推进」（与「停滞」区分）');
+  assert.ok(html.includes('step-done') && /class="step\$\{done \? ' is-done' : ''\}"/.test(html), '步骤条要标出已完成节点');
+  assert.ok(html.includes('data-drawer="toggle-done"'), '抽屉要有「标记本阶段完成」动作');
+  assert.ok(html.includes('tl-done-check'), '时间线编辑器每行要有完成勾选');
+  // 只画按钮不接线是静默失效：表格与抽屉两个入口都必须真的调到 toggleStageDone
+  assert.strictEqual((html.match(/'toggle-done'\) return toggleStageDone\(record\)/g) || []).length, 2, '表格与抽屉两处入口都要接到 toggleStageDone');
 });
 
 check('findDuplicateRecord：同链接判重', () => {
@@ -2386,6 +2446,12 @@ check('用户文档与当前行为一致（看板横带 / 邮箱多服务商 / �
   assert.ok(tut.includes('就地改了再应用'), '安装教程应说明字段可就地编辑（v4.16.0）');
   assert.ok(tut.includes('收信日兜底'),
     '安装教程应解释来源标注的三种颜色，否则用户看不懂那枚橙色标签、也不知道它是编造值');
+
+  // ④ 完成态（v4.18.0）：完成与推进解耦——文档不讲，用户仍会用「推进」表达「这一步做完了」
+  assert.ok(tut.includes('标记完成'), '安装教程应说明阶段可单独「标记完成」（v4.18.0）');
+  assert.ok(/也不换列|不推进/.test(tut), '安装教程应说清「完成」不会推进阶段，否则等于没讲');
+  assert.ok(qs.includes('标记完成') && qs.includes('「完成」与「推进」是两件事'),
+    '快速上手指南应给出与安装教程一致的口径');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

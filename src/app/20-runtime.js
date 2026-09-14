@@ -566,10 +566,13 @@
 
       // ================= 阶段时间线编辑器（记录弹窗内）=================
       function timelineRowHtml(m) {
+        // 完成勾选（v4.18.0）：一个阶段是否已做完，与它是不是当前阶段无关。
+        // 类名刻意不叫 tl-row-*，否则会污染测试里按 "tl-row" 计数行的断言。
         return `<div class="tl-row">
           <input class="control tl-stage" list="stagePresets" maxlength="20" placeholder="阶段" value="${escapeHtml(m && m.stage || '')}">
           <input class="control tl-date" type="date" value="${escapeHtml(m && m.at || '')}" aria-label="阶段日期">
           <input class="control tl-note" maxlength="60" placeholder="备注（可选）" value="${escapeHtml(m && m.note || '')}">
+          <label class="tl-done" title="标记这一步已完成（不推进到下一阶段）"><input type="checkbox" class="tl-done-check"${m && m.done ? ' checked' : ''}><span>完成</span></label>
           <button class="tl-del" type="button" title="删除该阶段" aria-label="删除该阶段">✕</button>
         </div>`;
       }
@@ -589,11 +592,19 @@
         $('#timelineEditor').innerHTML = tl.map(timelineRowHtml).join('');
       }
       function collectTimeline() {
-        return [...document.querySelectorAll('#timelineEditor .tl-row')].map(row => ({
-          stage: row.querySelector('.tl-stage').value.trim(),
-          at: row.querySelector('.tl-date').value,
-          note: row.querySelector('.tl-note').value.trim()
-        })).filter(m => m.stage);
+        return [...document.querySelectorAll('#timelineEditor .tl-row')].map(row => {
+          const at = row.querySelector('.tl-date').value;
+          const doneBox = row.querySelector('.tl-done-check');
+          const done = !!(doneBox && doneBox.checked);
+          return {
+            stage: row.querySelector('.tl-stage').value.trim(),
+            at,
+            note: row.querySelector('.tl-note').value.trim(),
+            done,
+            // 完成日期没有单独输入框：沿用该阶段的日期，空则回落到今天
+            doneAt: done ? (at || localDateInput(new Date())) : ''
+          };
+        }).filter(m => m.stage);
       }
       function addTimelineRow() {
         const ed = $('#timelineEditor');
@@ -851,6 +862,7 @@
         if (!record) return;
         if (button.dataset.action === 'edit') return openDialog(record);
         if (button.dataset.action === 'delete') return requestDeleteRecord(record);
+        if (button.dataset.action === 'toggle-done') return toggleStageDone(record);
         if (button.dataset.action === 'advance') {
           openAdvanceDialog(record);
         }
@@ -1357,6 +1369,7 @@
         if (!record) return;
         const action = button.dataset.drawer;
         if (action === 'advance') return openAdvanceDialog(record);
+        if (action === 'toggle-done') return toggleStageDone(record);
         if (action === 'edit') { closeRecordDrawer(); return openDialog(record); }
         if (action === 'ics') return exportIcs(record.id);
         if (action === 'delete') return requestDeleteRecord(record);

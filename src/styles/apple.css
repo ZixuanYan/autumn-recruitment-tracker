@@ -598,6 +598,17 @@
     .step-date { color: var(--muted); font-family: var(--font-sans); font-size: 12px; font-variant-numeric: tabular-nums; }
     .step-gap { margin-left: auto; color: var(--muted); font-size: 11.5px; }
     .step-note { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
+    /* 完成态（v4.18.0）：阶段「做完了但还没推进」。绿色走「已达成」语义，
+       与停滞(warn) / 截止(danger) 明确分开，避免两种状态被看成一回事。 */
+    .step.is-done .step-dot { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+    .step-done { padding: 1px 7px; border-radius: var(--r-pill); background: var(--ok-soft); color: var(--ok); font-size: 11px; font-weight: 650; }
+    .step-done-at { color: var(--ok); font-size: 11.5px; }
+    .tl-done { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--muted); font-size: 12px; white-space: nowrap; cursor: pointer; }
+    .tl-done input { margin: 0; }
+    .stage-done-chip { margin-left: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--ok-soft); color: var(--ok); font-size: 11px; font-weight: 650; white-space: nowrap; }
+    .board-card.is-done { opacity: .9; }
+    .board-chip.done { background: var(--ok-soft); color: var(--ok); box-shadow: none; }
+    .text-button.is-on, .btn.is-on { background: var(--ok-soft); color: var(--ok); }
     .note-list { display: grid; gap: 8px; }
     .note-item { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
     .note-item-head { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 11.5px; }

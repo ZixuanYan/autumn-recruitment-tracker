@@ -120,6 +120,30 @@
         return true;
       }
 
+      // 标记 / 取消「当前阶段」的完成态（v4.18.0）。与 advanceRecordTo 刻意分开：
+      // 完成只给时间线末条打勾，不追加里程碑、不改变当前阶段，因此卡片不会换列。
+      // 完成后给 6 秒撤销——「标记完成」是一次会写库的状态改动，误点后不该只能手动逆转。
+      function toggleStageDone(record, force) {
+        if (!record) return;
+        const tl = Array.isArray(record.timeline) ? record.timeline : [];
+        const cur = tl.length ? tl[tl.length - 1] : null;
+        // 没有时间线的记录（如首启示例数据）不提前 return：setCurrentMilestoneDone 会合成一条后再打勾
+        const next = typeof force === 'boolean' ? force : !(cur && cur.done);
+        const apply = on => {
+          setCurrentMilestoneDone(record, on);
+          saveRecords();
+          render();
+          flashRow(record.id);
+          if (drawerRecordId === record.id) renderDrawer();
+        };
+        apply(next);
+        showToast(next ? `已标记「${record.stage}」完成（不推进，可随时取消）` : `已取消「${record.stage}」的完成标记`, {
+          actionLabel: '撤销',
+          duration: 6000,
+          onAction: () => apply(!next)
+        });
+      }
+
       // ---- 表格 / 看板 切换 ----
       function setRecordsView(mode) {
         uiPrefs.recordsView = mode === 'board' ? 'board' : 'table';
@@ -231,6 +255,10 @@
         const terminal = ['Offer', '已结束'].includes(record.stage);
         const schedule = parseLocal(record.scheduleAt);
         const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
+        // 完成态（v4.18.0）：当前阶段已标记完成、却还没推进。卡片留在原列，
+        // 用一枚 chip 说明「这一步做完了、球在对方」，与「停滞」明确区分。
+        const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
+        const curDone = !!(curMilestone && curMilestone.done);
         const chips = [];
         // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
         // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
@@ -240,10 +268,12 @@
         // 待投递/Offer/已结束，所以这里是**第二道防线**：万一将来 isActive 放宽，
         // 终态卡片也不会长出"停滞 N 天"（已结束还催你跟进是荒谬的）。
         if (stalled && !terminal) chips.push(`<span class="board-chip stalled">停滞 ${stalled} 天</span>`);
+        // 已完成：findStalled 已排除末条完成的记录，所以这枚 chip 不会和「停滞」同时出现
+        if (curDone && !terminal) chips.push('<span class="board-chip done">已完成 · 待推进</span>');
         // 意向度点**只在 Offer 上显示**：那是你自己打的排序信号，比较 Offer 时才有决策价值；
         // 在「已投递 / 测评」这些列上它不指向任何下一步动作，只是每卡多一个元素。
         const dots = record.stage === 'Offer' ? intentDotsHtml(record.intent) : '';
-        return `<button class="board-card${stalled ? ' is-stalled' : ''}" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
+        return `<button class="board-card${stalled ? ' is-stalled' : ''}${curDone && !terminal ? ' is-done' : ''}" type="button" draggable="true" data-id="${escapeHtml(record.id)}" style="--company-color:${companyColor(key)}" title="${escapeHtml(record.company)} · ${escapeHtml(record.position)}">
           <div class="board-card-company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="board-card-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}</div>
           <div class="board-card-position">${escapeHtml(record.position || '—')}</div>
           <div class="board-card-meta">${dots}${companyTypeChipHtml(record.companyType)}${chips.join('')}</div>
@@ -391,7 +421,8 @@
         if (next && next.focus) next.focus();
       }
 
-      // 时间线步骤条：每个里程碑一个节点，显示日期、备注与「距上一步 N 天」
+      // 时间线步骤条：每个里程碑一个节点，显示日期、备注与「距上一步 N 天」。
+      // 完成态（v4.18.0）：已完成的里程碑打勾并标出完成日期——它仍是当前阶段，只是这一步做完了。
       function stepsHtml(record) {
         const timeline = Array.isArray(record.timeline) ? record.timeline : [];
         if (!timeline.length) return '<div class="insight-empty">还没有里程碑</div>';
@@ -401,10 +432,11 @@
           const date = parseDay(milestone.at);
           const gap = prev && date ? Math.round((date - prev) / 86400000) : null;
           if (date) prev = date;
-          return `<div class="step" data-stage="${escapeHtml(stage)}">
+          const done = !!milestone.done;
+          return `<div class="step${done ? ' is-done' : ''}" data-stage="${escapeHtml(stage)}">
             <div class="step-rail"><span class="step-dot"></span></div>
             <div class="step-main">
-              <div class="step-top"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span><span class="step-date">${escapeHtml(milestone.at ? formatDate(String(milestone.at).slice(0, 10)) : '未填日期')}</span>${gap != null && gap >= 0 ? `<span class="step-gap">距上一步 ${gap} 天</span>` : ''}</div>
+              <div class="step-top"><span class="badge badge-sm" data-stage="${escapeHtml(stage)}">${escapeHtml(stage)}</span>${done ? '<span class="step-done">✓ 已完成</span>' : ''}<span class="step-date">${escapeHtml(milestone.at ? formatDate(String(milestone.at).slice(0, 10)) : '未填日期')}</span>${gap != null && gap >= 0 ? `<span class="step-gap">距上一步 ${gap} 天</span>` : ''}${done && milestone.doneAt ? `<span class="step-done-at">${escapeHtml(formatDate(String(milestone.doneAt).slice(0, 10)))} 完成</span>` : ''}</div>
               ${milestone.note ? `<div class="step-note">${escapeHtml(milestone.note)}</div>` : ''}
             </div>
           </div>`;
@@ -465,7 +497,13 @@
               <button class="sibling-item" type="button" data-sibling="${escapeHtml(item.id)}"><span>${escapeHtml(positionWithUnit(item.position || '未填岗位', item.orgUnit))}</span><span class="badge badge-sm" data-stage="${escapeHtml(item.stage)}">${escapeHtml(item.stage)}</span></button>`).join('')}</div></div>` : ''}`;
         }
         if (actions) {
+          // 完成态（v4.18.0）与「推进阶段」并列：完成只给当前阶段打勾、不推进，两者互不替代。
+          const drawerTl = Array.isArray(record.timeline) ? record.timeline : [];
+          const drawerCur = drawerTl.length ? drawerTl[drawerTl.length - 1] : null;
+          const drawerDone = !!(drawerCur && drawerCur.done);
+          const drawerCanDone = !['Offer', '已结束'].includes(record.stage) || drawerDone;
           actions.innerHTML = `
+            ${drawerCanDone ? `<button class="btn btn-small${drawerDone ? ' is-on' : ''}" type="button" data-drawer="toggle-done">${drawerDone ? '取消完成' : '标记本阶段完成'}</button>` : ''}
             <button class="btn btn-small btn-primary" type="button" data-drawer="advance">推进阶段</button>
             <button class="btn btn-small" type="button" data-drawer="edit">编辑</button>
             <button class="btn btn-small" type="button" data-drawer="ics">导出到日历</button>

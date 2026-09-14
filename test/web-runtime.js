@@ -605,7 +605,10 @@ const V45_START = '      // ================= 查重统一处置（v4.5.0）====
 const v45Section = extractBlock(html, V45_START, V44_START);
 // normalizeRecord 必须是真实现：它是「老数据补默认值 + 新字段透传 + 写回」这条链的核心，
 // 桩成恒等函数会让 loadRecords 的写回永远不触发（测的是桩而不是应用）。
-const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId']
+// setCurrentMilestoneDone（v4.18.0）与 normalizeRecord 同段、依赖相同（sanitizeTimeline / setTimeline /
+// localDateInput 都已在本沙箱里），因此一并抽真实现来做行为断言——它「没有时间线时要合成一条」
+// 这条分支静态断言覆盖不到，而那正是示例数据点「标记完成」静默无动作的成因。
+const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId', 'setCurrentMilestoneDone']
   .map(name => extractFunction(html, name));
 
 for (const [label, src] of [['CORE 纯函数块', coreBlock], ['邮件纯函数块', mailPureBlock], ['洞察/台账渲染段', insightSection], ['台账视图增强段', v44Section], ['getVisibleRecords', getVisibleRecordsSrc], ['查重统一处置段(v4.5.0)', v45Section], ...timelineEditorSrc.map((src, i) => [[ 'timelineRowHtml', 'renderTimelineEditor' ][i], src])]) {
@@ -1881,6 +1884,50 @@ check('编辑与带 stage 的 seed 仍按来源回填，不被新默认值覆盖
   sandbox2.$('#applicationDate').value = '';
   sandbox2.renderTimelineEditor(null);
   assert.ok(/value="\d{4}-\d{2}-\d{2}"/.test(sandbox2.$('#timelineEditor').innerHTML), '日期兜底为今天');
+});
+
+section('\nv4.18.0 阶段「完成」：时间线编辑器的完成勾选');
+
+check('时间线编辑器：已完成里程碑带勾选态，且不改变行数', () => {
+  sandbox2.$('#applicationDate').value = '2026-09-01';
+  sandbox2.renderTimelineEditor({ applicationDate: '2026-09-01', timeline: [
+    { stage: '测评', at: '2026-09-05', note: '', done: true, doneAt: '2026-09-06' },
+    { stage: '一面', at: '2026-09-08', note: '' }
+  ] });
+  const h = sandbox2.$('#timelineEditor').innerHTML;
+  assert.strictEqual((h.match(/tl-row/g) || []).length, 2, '新增勾选框不得改变行数');
+  assert.strictEqual((h.match(/tl-done-check[^>]*checked/g) || []).length, 1, '只有已完成的里程碑被勾上');
+  assert.ok(h.includes('value="测评"') && h.includes('value="一面"'), '两个阶段都还在');
+  // 选中态必须由里程碑的 done 决定，不能因为「它是最后一条」就默认勾上
+  sandbox2.renderTimelineEditor({ applicationDate: '2026-09-01', timeline: [
+    { stage: '测评', at: '2026-09-05', note: '' },
+    { stage: '一面', at: '2026-09-08', note: '' }
+  ] });
+  assert.ok(!/tl-done-check[^>]*checked/.test(sandbox2.$('#timelineEditor').innerHTML), '未标记的里程碑默认不勾');
+});
+
+check('setCurrentMilestoneDone：只动末条、不改当前阶段；没有时间线时合成一条（示例数据不留静默死角）', () => {
+  // 首启播种的示例数据是 exampleRecords() 原样写入的：山岚智能等四条**没有 timeline 字段**。
+  // 若这里直接 return，「标记完成」按钮点了没反应也不报错——这条用例专门钉住那个分支。
+  const bare = { id: 'x', company: 'A', position: 'p', city: 'c', stage: '笔试', applicationDate: '2026-09-01' };
+  sandbox2.setCurrentMilestoneDone(bare, true, '2026-09-10');
+  assert.strictEqual(bare.stage, '笔试', '完成不改变当前阶段（没有推进）');
+  assert.strictEqual(bare.timeline.length, 1, '没有时间线时必须合成一条，而不是静默无动作');
+  assert.strictEqual(bare.timeline[0].stage, '笔试', '合成的里程碑用当前阶段');
+  assert.strictEqual(bare.timeline[0].done, true);
+  assert.strictEqual(bare.timeline[0].doneAt, '2026-09-10');
+
+  const rec = { id: 'y', company: 'B', position: 'p', city: 'c', stage: '一面', applicationDate: '2026-09-01',
+    timeline: [{ stage: '已投递', at: '2026-09-01', note: '' }, { stage: '一面', at: '2026-09-05', note: '' }] };
+  sandbox2.setCurrentMilestoneDone(rec, true);
+  assert.strictEqual(rec.timeline.length, 2, '完成不得追加里程碑（那是推进）');
+  assert.strictEqual(rec.timeline[0].done, false, '只动最后一条');
+  assert.strictEqual(rec.timeline[1].done, true);
+  assert.strictEqual(rec.stage, '一面', '当前阶段不变');
+  // 取消完成：doneAt 必须清空，否则「待推进 N 天」会从一个过期时间点起算
+  sandbox2.setCurrentMilestoneDone(rec, false);
+  assert.strictEqual(rec.timeline[1].done, false);
+  assert.strictEqual(rec.timeline[1].doneAt, '');
 });
 
 // ============================================================================

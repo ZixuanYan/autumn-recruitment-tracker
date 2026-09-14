@@ -24,11 +24,23 @@
         const i = STAGE_PRESETS.indexOf(stage);
         return i === -1 ? 9000 : i;
       }
-      // 清洗时间线：仅保留有阶段名的里程碑，规范字段，按日期升序（同日期保持插入序）
+      // 清洗时间线：仅保留有阶段名的里程碑，规范字段，按日期升序（同日期保持插入序）。
+      // done/doneAt（v4.18.0）：里程碑的「完成」标记。它**不是**阶段——完成只表示这一步做完了，
+      // 不推进、不改变当前阶段，所以必须在这里显式携带，否则每次 load / 云同步都会被静默丢弃。
       function sanitizeTimeline(list) {
         if (!Array.isArray(list)) return [];
         return list
-          .map(m => ({ stage: String(m && m.stage || '').trim(), at: String(m && m.at || '').trim(), note: String(m && m.note || '').trim() }))
+          .map(m => {
+            const done = !!(m && m.done);
+            return {
+              stage: String(m && m.stage || '').trim(),
+              at: String(m && m.at || '').trim(),
+              note: String(m && m.note || '').trim(),
+              done,
+              // 取消完成时一并清空 doneAt，避免残留一个过期日期误导「待推进 N 天」的算法
+              doneAt: done ? String(m && m.doneAt || '').trim() : ''
+            };
+          })
           .filter(m => m.stage)
           .map((m, i) => ({ m, i }))
           .sort((a, b) => (a.m.at || '9999-99-99').localeCompare(b.m.at || '9999-99-99') || a.i - b.i)
@@ -46,6 +58,29 @@
         rec.updatedAt = Date.now();
         return rec;
       }
+      // 标记 / 取消「当前阶段」（时间线末条）的完成态（v4.18.0）。
+      // 刻意只改最后一条里程碑：不追加、不删除、不改变 deriveStage，所以看板位置与当前阶段都不变——
+      // 「完成」与「推进」是两个独立动作，完成了一步不等于要进入下一步（测评做完仍等结果）。
+      // 没有时间线时按 normalizeRecord 的同款迁移合成一条再打勾。为什么不能直接 return：
+      // 内存里的记录未必都过了 normalizeRecord —— 首启播种的示例数据就是 exampleRecords() 原样写入的
+      // （山岚智能等四条都没有 timeline 字段）。直接 return 会让「标记完成」按钮点了没反应、
+      // 也不报错，正是本项目最忌讳的静默失效。
+      function setCurrentMilestoneDone(rec, done, at) {
+        let tl = sanitizeTimeline(rec.timeline);
+        if (!tl.length) {
+          tl = sanitizeTimeline([{
+            stage: String(rec.stage || '').trim() || '待投递',
+            at: String(rec.applicationDate || '').trim() || localDateInput(new Date()),
+            note: ''
+          }]);
+        }
+        const last = tl.length - 1;
+        tl[last] = Object.assign({}, tl[last], {
+          done: !!done,
+          doneAt: done ? (at || localDateInput(new Date())) : ''
+        });
+        return setTimeline(rec, tl);
+      }
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
       const RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
@@ -60,7 +95,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.17.0';
+      const APP_VERSION = '4.18.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -199,10 +234,15 @@
       }
 
       function normalizeRecord(item) {
-        // 时间线迁移：有时间线则清洗；否则由旧的单一 stage 合成一条里程碑（老数据零丢失，自定义阶段不再被打回）
-        const timeline = Array.isArray(item.timeline) && item.timeline.length
-          ? sanitizeTimeline(item.timeline)
-          : [{ stage: String(item.stage || '').trim() || '待投递', at: String(item.applicationDate || '').trim() || localDateInput(new Date()), note: '' }];
+        // 时间线迁移：有时间线则清洗；否则由旧的单一 stage 合成一条里程碑（老数据零丢失，自定义阶段不再被打回）。
+        // 两条路径都必须过 sanitizeTimeline —— 它负责补齐 done/doneAt 这类规范字段。
+        // 只清洗「已有时间线」那一支的话，第一次写回的是**缺** done/doneAt 的结构，第二次 load 才补齐，
+        // 于是每次加载都被判定为"结构变了"而重复写盘（loadRecords 的幂等守卫会红）。
+        const timeline = sanitizeTimeline(
+          Array.isArray(item.timeline) && item.timeline.length
+            ? item.timeline
+            : [{ stage: String(item.stage || '').trim() || '待投递', at: String(item.applicationDate || '').trim() || localDateInput(new Date()), note: '' }]
+        );
         const rec = {
           id: String(item.id || cryptoId()),
           company: String(item.company || ''), position: String(item.position || ''), city: String(item.city || ''),
@@ -1804,6 +1844,10 @@
         const scheduleDate = parseLocal(record.scheduleAt);
         const overdue = scheduleDate && scheduleDate < new Date() && !['Offer', '已结束'].includes(record.stage);
         const canAdvance = record.stage !== '已结束';
+        // 完成态（v4.18.0）：当前阶段（时间线末条）是否已标记完成。终态若已被标记，也允许取消。
+        const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
+        const curDone = !!(curMilestone && curMilestone.done);
+        const canMarkDone = !['Offer', '已结束'].includes(record.stage) || curDone;
         const dl = deadlineInfo(record.deadline);
         const dlHtml = dl && !['Offer', '已结束'].includes(record.stage)
           ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
@@ -1822,11 +1866,12 @@
           <td data-label="公司 / 岗位"><div class="company">${companyHtml}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}</div></td>
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
-          <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span></td>
+          <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.done ? '（已完成）' : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span>${curDone ? '<span class="stage-done-chip" title="当前阶段已标记完成，尚未推进">已完成</span>' : ''}</td>
           <td class="schedule" data-label="最近安排"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(formatDateTime(record.scheduleAt))}${overdue ? ' · 已到期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
           <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
           <td data-label="操作"><div class="row-actions">
             ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
+            ${canMarkDone ? `<button class="text-button${curDone ? ' is-on' : ''}" data-action="toggle-done" data-id="${escapeHtml(record.id)}" type="button" title="${curDone ? '取消完成标记（不改变当前阶段）' : '只标记这一步完成，不推进到下一阶段'}">${curDone ? '取消完成' : '标记完成'}</button>` : ''}
             <button class="text-button" data-action="edit" data-id="${escapeHtml(record.id)}" type="button">编辑</button>
             <button class="text-button danger" data-action="delete" data-id="${escapeHtml(record.id)}" type="button">删除</button>
           </div></td>
