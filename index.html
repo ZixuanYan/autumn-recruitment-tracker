@@ -1020,7 +1020,7 @@
     .mail-ref-body { margin-top: 5px; }
     .mail-ref-body > summary { cursor: pointer; color: var(--accent-ink); font-size: 12px; }
     .mail-ref-body > pre { margin: 6px 0 0; padding: 8px 10px; max-height: 260px; overflow: auto; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-    /* 正文快照缺失（多半是没设同步口令，按隐私规则不存正文）——如实说明，不假装能打开 */
+    /* 正文快照缺失（旧建议文件没带回正文）——如实说明怎么补，不假装能打开 */
     .mail-ref-nobody { margin-top: 5px; color: var(--muted); font-size: 11.5px; }
     .note-list { display: grid; gap: 8px; }
     .note-item { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
@@ -1768,10 +1768,12 @@
       <div class="form-grid">
         <div class="field full"><label for="syncTokenInput">GitHub 访问令牌 <span class="required">*</span></label><input class="control" id="syncTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_… 或 github_pat_…" maxlength="255"><div class="hint">令牌只保存在本机浏览器，不会发给 GitHub 以外的任何服务；生成方法见下方说明。</div></div>
         <div class="field full"><label for="syncPassphraseInput">同步口令（推荐设置）</label><input class="control" id="syncPassphraseInput" type="password" autocomplete="off" placeholder="加密口令，所有设备需一致" maxlength="100"><div class="hint">设置后云端只保存密文；不同口令是独立数据空间，换口令不会覆盖原有数据。</div></div>
+        <div class="field full"><label for="syncMailKeyInput">邮件解密密钥（MAIL_ENC_KEY，可选）</label><div class="mail-key-row"><input class="control" id="syncMailKeyInput" type="password" autocomplete="off" spellcheck="false" maxlength="200" placeholder="留空 = 跟随同步口令"><button class="btn btn-small" id="syncMailKeyGenBtn" type="button">生成</button></div><div class="hint">只在 autumn-mail-sync 配了 <code>MAIL_ENC_KEY</code>（邮件建议文件在 Gist 里是密文）时才需要填。读取时依次尝试<strong>本机密钥 → 同步口令</strong>，所以把 Action 的 <code>MAIL_ENC_KEY</code> 设成与口令同一串，这里留空即可——换设备只用填一次口令。只存本机 localStorage，不上传 Gist。</div></div>
       </div>
       <div class="safety-summary">
         <div class="safety-row"><div><div class="safety-label">同步状态</div><div class="safety-detail" id="syncStateDetail">未开启</div></div><div class="safety-state warning" id="syncStateBadge">未配置</div></div>
         <div class="safety-row"><div><div class="safety-label">同步方式</div><div class="safety-detail">按记录合并，改动保留较新版本；不同口令是独立数据空间，可切换且互不覆盖</div></div><div class="safety-state">自动</div></div>
+        <div class="safety-row"><div><div class="safety-label">云端存储</div><div class="safety-detail" id="syncStorageDetail">未设置同步口令时是明文——Gist 凭链接即可读取，其中包含邮件正文</div></div><div class="safety-state warning" id="syncStorageBadge">明文</div></div>
       </div>
       <div class="capture-status" id="syncStatus" role="status" aria-live="polite">填写令牌后点击“保存并同步”即可开启。</div>
       <details class="sync-fallback">
@@ -1797,7 +1799,7 @@
       <!-- 刻意在这里讲清"行为参数 vs 连接参数"的边界：换邮箱的人第一反应会到这个弹窗里找
        邮箱设置，找不到就会以为不支持。授权码不进 Gist 是安全决定，不是没做完——
        Gist 凭 URL 可被明文读取（本项目既有教训），把邮箱钥匙挂在那里风险面大一个量级。 -->
-      <p class="capture-note">这些设置保存在你自己的私有 Gist（<code>mail-config.json</code>），随云同步跨设备生效，autumn-mail-sync 的 Action 下次运行时读取。<strong>这里配的是「行为」，不是「连哪个邮箱」</strong>：邮箱地址、授权码、IMAP 主机与端口都在 Action 仓库的 Secrets / Variables 里（QQ / 163 / 126 均可，换邮箱的步骤见该仓库 README），刻意不放到网页端——授权码进 Gist 等于把邮箱钥匙挂在一个凭 URL 就能读到的地方。<br>密钥类（邮箱授权码 / AI Key / GIST_PAT）不在此上传；「邮件解密密钥」也只存本机。</p>
+      <p class="capture-note">这些设置保存在你自己的私有 Gist（<code>mail-config.json</code>），随云同步跨设备生效，autumn-mail-sync 的 Action 下次运行时读取。<strong>这里配的是「行为」，不是「连哪个邮箱」</strong>：邮箱地址、授权码、IMAP 主机与端口都在 Action 仓库的 Secrets / Variables 里（QQ / 163 / 126 均可，换邮箱的步骤见该仓库 README），刻意不放到网页端——授权码进 Gist 等于把邮箱钥匙挂在一个凭 URL 就能读到的地方。<br>密钥类（邮箱授权码 / AI Key / GIST_PAT）不在此上传；「邮件解密密钥」已移到「云同步」弹窗（它解密的是云端建议文件，与同步口令同属一类，放一起才好找），同样只存本机。</p>
       <div class="form-grid">
         <div class="field full"><label for="mailCfgKeywords">预筛关键词（用 | 分隔）</label><input class="control" id="mailCfgKeywords" type="text" maxlength="2000" placeholder="面试|笔试|校招|录用…"><div class="hint">只有命中关键词且非噪声（退订/营销等）的邮件才会发给 AI，收紧可省 token。</div></div>
         <div class="field"><label for="mailCfgMinConf">置信度阈值</label><input class="control" id="mailCfgMinConf" type="number" step="0.05" min="0" max="1"><div class="hint">低于此值的建议丢弃（0~1）</div></div>
@@ -1818,7 +1820,6 @@
             <div class="hint" id="mailPromptSnapshotNote"></div>
           </details>
         </div>
-        <div class="field full"><label for="mailCfgEncKey">邮件解密密钥（MAIL_ENC_KEY，可选）</label><div class="mail-key-row"><input class="control" id="mailCfgEncKey" type="password" autocomplete="off" spellcheck="false" maxlength="200" placeholder="留空=邮件建议不加密"><button class="btn btn-small" id="mailGenEncKeyBtn" type="button">生成</button></div><div class="hint">若 Action 配了 MAIL_ENC_KEY 加密邮件建议，这里填<strong>完全相同</strong>的密钥才能解密查看；只存本机 localStorage，不上传 Gist。</div></div>
       </div>
       <div class="capture-status" id="mailCfgStatus" role="status" aria-live="polite"></div>
     </div>
@@ -2059,9 +2060,9 @@
       // ===== 邮件归档（v4.22.0）=====
       // 记录上的 mailRefs 只存「引用 + 展示快照」；邮件**正文**单独存在这里，按 mailId 索引。
       // 为什么要分开：一封邮件可能被应用到多条记录（一次测评通知覆盖同公司多个岗位），正文只存一份。
-      // 隐私：正文只在**设了同步口令**（云端存的是密文）时才归档——否则邮件正文会以明文进
-      // "凭 URL 就能读"的 Gist，那比主题敏感得多（本项目为此拒绝把授权码放 Gist）。
-      // 没口令时只留 AI 摘要（记录详情里仍能看清"这封邮件说了什么"）。
+      // 隐私（v4.23.0 起）：正文**无条件归档**——设了同步口令就随整包一起加密，没设就是明文。
+      // 此前那条"没口令就不存正文"的规则实测把「看原文」变成了要先配密钥、且每台设备各配一次的事，
+      // 代价大于收益；现在改为在设置面板里如实标注当前是明文还是密文，把选择权交给用户。
       const MAIL_ARCHIVE_MAX_CHARS = 100000;
       function sanitizeMailArchiveEntry(mailId, entry) {
         const id = String(mailId || '').trim();
@@ -2130,15 +2131,17 @@
         }
         return set;
       }
-      // 把一封建议写进归档。withBody=false（没设同步口令）时只留摘要与元信息，不存正文。
-      function archiveSuggestionMail(archive, suggestion, withBody) {
+      // 把一封建议写进归档（v4.23.0：正文无条件归档）。
+      // 此前是"设了同步口令才存正文"——那让"看原文"变成一件要先配密钥、且每台设备各配一次的事。
+      // 现在不设门槛：设了口令则整包密文，没设就是明文（Gist 凭 URL 可读，设置面板里会如实标注）。
+      function archiveSuggestionMail(archive, suggestion) {
         const s = suggestion && typeof suggestion === 'object' ? suggestion : {};
         const mailId = mailIdOf(s);
         if (!mailId) return archive;
         const entry = sanitizeMailArchiveEntry(mailId, {
           subject: s.subject, from: s.from, receivedAt: s.receivedAt, emailType: s.emailType,
           summary: s.summary,
-          textBody: withBody ? s.textBody : '',
+          textBody: s.textBody,
           archivedAt: new Date().toISOString()
         });
         if (!entry) return archive;
@@ -2164,7 +2167,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.22.1';
+      const APP_VERSION = '4.23.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2512,6 +2515,15 @@
         return passphrase ? `vault-${await passphraseFingerprint(passphrase)}.json` : 'vault-plain.json';
       }
 
+      // 邮件建议文件的解密候选（v4.23.0）：本机「邮件解密密钥」优先，其次同步口令。
+      // 有这一条回落，Action 侧把 MAIL_ENC_KEY 设成与口令同一串就只需记一把钥匙：
+      // 换设备时把口令填上即可，不必在每台设备再手输一次邮件密钥（两把都空 = 文件本来就是明文，
+      // 返回空数组，调用方会直接判为"读不了"并提示去设置）。
+      function mailKeyCandidates() {
+        const list = [String(mailState.encKey || '').trim(), String(syncConfig.passphrase || '').trim()];
+        return [...new Set(list.filter(Boolean))];
+      }
+
       function isTrackerGist(gist) {
         return Object.keys(gist?.files || {}).some(name => name === GIST_FILENAME || /^vault-/.test(name));
       }
@@ -2650,20 +2662,23 @@
             mailConfig = cfgFile && cfgFile.content ? JSON.parse(cfgFile.content) : null;
           } catch (_) { mailConfig = null; }
           // 邮件建议：独立于 vault 解密读取，不受同步口令影响；缺失/损坏静默跳过，绝不影响 vault 同步。
-          // 若 Action 配了 MAIL_ENC_KEY，文件是加密信封，用本机 mailState.encKey 解密；未填/填错则提示去设置里填。
+          // 若 Action 配了 MAIL_ENC_KEY，文件是加密信封，用本机密钥或同步口令解密（见 mailKeyCandidates）；
+          // 两把都不对则提示去「云同步」填密钥。
           mailNeedKey = false;
           try {
             const mailFile = gist.files[MAIL_SUGGEST_FILENAME];
             if (!mailFile || !mailFile.content) {
               applyMailPayload(null);
             } else {
-              let parsedMail = JSON.parse(mailFile.content);
+              const parsedMail = JSON.parse(mailFile.content);
               if (parsedMail && parsedMail.enc) {
-                if (!mailState.encKey) { mailNeedKey = true; applyMailPayload(null); }
-                else {
-                  try { applyMailPayload(JSON.parse(await decryptSyncText(parsedMail, mailState.encKey))); }
-                  catch (_) { mailNeedKey = true; applyMailPayload(null); } // 密钥不正确
+                let opened = null;
+                for (const key of mailKeyCandidates()) {
+                  try { opened = JSON.parse(await decryptSyncText(parsedMail, key)); break; }
+                  catch (_) { /* 这把不对，换下一把（AES-GCM 认证失败即返回） */ }
                 }
+                if (opened) applyMailPayload(opened);
+                else { mailNeedKey = true; applyMailPayload(null); }
               } else {
                 applyMailPayload(parsedMail);
               }
@@ -2772,6 +2787,9 @@
       function openSyncDialog() {
         $('#syncTokenInput').value = syncConfig.token;
         $('#syncPassphraseInput').value = syncConfig.passphrase;
+        const mailKey = $('#syncMailKeyInput');
+        mailKey.value = mailState.encKey || '';
+        mailKey.type = 'password'; // 上次点过「生成」会把它改成明文，重开时收回去
         renderSyncStatus();
         $('#syncDialog').showModal();
       }
@@ -2780,6 +2798,18 @@
         renderToolCards(); // 同步状态变化时同步刷新工具页卡片徽标（fire-and-forget，覆盖下方所有分支）
         const badge = $('#syncStateBadge');
         const detail = $('#syncStateDetail');
+        // 云端存储：如实标注当前是密文还是明文。没设口令时 Gist 里连邮件正文都是明文
+        // （v4.23.0 起正文无条件归档），用户有权在这里一眼看到自己处在哪一档。
+        const storageBadge = $('#syncStorageBadge');
+        const storageDetail = $('#syncStorageDetail');
+        if (storageBadge && storageDetail) {
+          const encrypted = !!syncConfig.passphrase;
+          storageBadge.textContent = encrypted ? '密文' : '明文';
+          storageBadge.className = encrypted ? 'safety-state' : 'safety-state warning';
+          storageDetail.textContent = encrypted
+            ? '记录与邮件正文都先在本机加密再上传，GitHub 只保存密文'
+            : '未设置同步口令时是明文——Gist 凭链接即可读取，其中包含邮件正文';
+        }
         if (!badge || !detail) return;
         const status = $('#syncStatus');
         const notice = $('#sideDataNotice');
@@ -2827,9 +2857,13 @@
         }
         syncConfig.passphrase = passphrase;
         saveSyncConfig();
+        // 邮件解密密钥（v4.23.0 从「邮件提醒设置」搬到本弹窗）：留空 = 读取时回落到同步口令。
+        // 仅本机 localStorage，不进 envelope（信封里只同步 appliedIds/dismissedIds）。
+        mailState.encKey = String($('#syncMailKeyInput').value || '').trim();
+        saveMailState();
         renderSyncStatus();
         showToast('设置已保存，开始同步');
-        await syncNow('manual');
+        await syncNow('manual'); // 密钥/口令变化都影响能否解密邮件建议：立即重拉一次
       }
 
       async function disconnectSync() {
@@ -3251,7 +3285,7 @@
           resumeSavedAt,
           // 邮件已应用/已忽略状态跨设备同步（只同步这两个 ID 列表；encKey/lastReadAt 仅本机，不上传）
           mailState: { appliedIds: mailState.appliedIds.slice(), dismissedIds: mailState.dismissedIds.slice() },
-          // v4.22.0：邮件正文归档随信封一起加密同步（未设口令时不含正文，见 archiveSuggestionMail）
+          // v4.22.0：邮件正文归档随信封一起同步（有口令就是密文，没口令就是明文——见 archiveSuggestionMail）
           mailArchive: { ...mailArchive }
         };
       }
@@ -4145,6 +4179,35 @@
         const past = list.sort((a, b) => b.at - a.at);
         return { event: past[0].ev, at: past[0].at, future: false };
       }
+      // 事件是否已被「了结」（v4.23.0）：只服务「未来安排」与「需要关注」这两个**前瞻**清单——
+      // 已经做完的事不该再以"逾期"的姿态催办（用户实测：把 AI面试 标记完成之后，
+      // 那条 9/12 的安排仍以"逾期"置顶挂在总览上）。
+      // 判定 = 时间线里存在里程碑 m 满足其一：
+      //   ① m 已标记完成，且完成日 ≥ 事件日 —— 完成动作覆盖了这次安排（对截止也适用）；
+      //   ② m 的日期**严格晚于**事件日 —— 流程已经走到这次安排之后。
+      // ② 只对「安排」（面试/笔试测评/其他）生效，不看截止：截止是硬期限，逾期本身就是要看的信号，
+      // 不会因为后来推进了阶段就变得不需要知道。
+      // ② 必须严格大于：当前阶段的里程碑日期等于事件当天时（"今天 9:00 的面试、还没标记完成"）
+      // 那正是该提醒的逾期项，用 ≥ 会被自己的规则吞掉。
+      function isEventSettled(record, event) {
+        const evDate = parseDay(String((event && event.at) || '').slice(0, 10));
+        if (!evDate) return false;
+        const deadline = event && event.type === TIME_EVENT_DEADLINE;
+        for (const m of (Array.isArray(record && record.timeline) ? record.timeline : [])) {
+          if (!m) continue;
+          if (m.done) {
+            const done = parseDay(m.doneAt || m.at);
+            // daysUntil(a, b) = a − b（天）。要的是「完成日 ≥ 事件日」，所以事件日是**第二个**参数
+            //（这里踩过一次：写成 daysUntil(evDate, done) 就等于断言"完成日 ≤ 事件日"，整条规则反了）
+            if (done && daysUntil(done, evDate) >= 0) return true;
+          }
+          if (!deadline) {
+            const at = parseDay(m.at);
+            if (at && daysUntil(at, evDate) > 0) return true;
+          }
+        }
+        return false;
+      }
       // 最近的截止事件（未来的优先）。存在性判定与倒计时都用它，口径只有这一处。
       function nearestDeadlineEvent(events, now = new Date()) {
         return nextTimeEvent((Array.isArray(events) ? events : []).filter(e => e && e.type === TIME_EVENT_DEADLINE), now);
@@ -4152,12 +4215,14 @@
       // 把记录的关键时间合成统一事件流（v4.19.0：来源由单一 scheduleAt/deadline 改为 events[]）。
       // 逾期未处理项置顶（按时间倒序），其余按时间升序，最后截断 limit 条。
       // 语义与旧版保持：终态（Offer / 已结束）不再列截止；已发生的"安排"若已终态也不再列。
+      // v4.23.0：已被了结的事件（标记完成覆盖 / 流程已走到它之后）一律不再出现——见 isEventSettled。
       function collectScheduleEvents(records, now = new Date(), limit = 6) {
         const out = [];
         for (const r of (Array.isArray(records) ? records : [])) {
           const closed = ['Offer', '已结束'].includes(r.stage);
           for (const ev of (Array.isArray(r.events) ? r.events : [])) {
             if (!ev) continue;
+            if (isEventSettled(r, ev)) continue;
             const isDeadline = ev.type === TIME_EVENT_DEADLINE;
             const at = ev.allDay ? parseDay(ev.at) : parseLocal(ev.at);
             if (!at) continue;
@@ -4483,7 +4548,9 @@
           if (['Offer', '已结束'].includes(r.stage)) continue;
           // v4.19.0：一条记录可能有多条截止事件，取最近的一条参与临期判定
           //（"取哪一条"的口径由 nearestDeadlineEvent 统一，不再各处自己挑）
-          const hit = nearestDeadlineEvent(r.events, now);
+          // v4.23.0：先滤掉已被了结的截止——同一封邮件给出的测评截止，测评做完翻篇就不该再倒计时
+          const evs = Array.isArray(r.events) ? r.events : [];
+          const hit = nearestDeadlineEvent(evs.filter(ev => !isEventSettled(r, ev)), now);
           if (!hit) continue;
           const info = deadlineInfo(String(hit.event.at).slice(0, 10), now);
           if (!info) continue;
@@ -4503,8 +4570,10 @@
           if (['Offer', '已结束'].includes(r.stage)) continue;
           // v4.19.0：改看 events[] 里已过期的「非截止」事件（面试 / 笔试测评 / 其他）。
           // 截止类的逾期由上一条 findUpcomingDeadlines 负责，这里不重复报。
+          // v4.23.0：已标记完成/流程已越过的安排不再报——否则"做完了的事"会一直以逾期姿态催办
           for (const ev of (Array.isArray(r.events) ? r.events : [])) {
             if (!ev || ev.allDay || ev.type === TIME_EVENT_DEADLINE) continue;
+            if (isEventSettled(r, ev)) continue;
             const s = parseLocal(ev.at);
             if (s && s < now) alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：${ev.type}时间已过（${formatDateTime(ev.at)}）但阶段仍是「${r.stage}」` });
           }
@@ -5235,7 +5304,7 @@
                 ${ref.summary ? `<div class="mail-ref-summary">${escapeHtml(ref.summary)}</div>` : ''}
                 ${body
                   ? `<details class="mail-ref-body"><summary>查看邮件原文（${body.length} 字）</summary><pre>${escapeHtml(body)}</pre></details>`
-                  : `<div class="mail-ref-nobody">邮件正文快照缺失${syncConfig.passphrase ? '' : '（未设置同步口令时不保存正文，只留上面的摘要）'}</div>`}
+                  : `<div class="mail-ref-nobody">这封邮件没有正文快照（多半是 v4.23.0 之前生成的旧建议文件）。重新运行一次 Action 的 mail-sync 再应用即可补上。</div>`}
               </div>`;
             }).join('')}</div></div>` : ''}
             <div class="drawer-section"><h3>下一步行动</h3><div class="note-text">${escapeHtml(record.nextAction || '—')}</div></div>
@@ -5861,7 +5930,7 @@
         }
         if (mailNeedKey) {
           bar.className = 'mail-statusbar warning';
-          bar.innerHTML = '<strong>邮件建议已加密</strong>本机未填写「邮件解密密钥」或密钥不正确，无法读取。点右上「设置」填入与 Action 的 MAIL_ENC_KEY 完全相同的密钥，保存后会自动重新读取。';
+          bar.innerHTML = '<strong>邮件建议已加密</strong>当前「邮件解密密钥」与同步口令都解不开这个文件。到「工具 → 云同步」填入与 Action 的 <code>MAIL_ENC_KEY</code> 完全相同的密钥即可（把 Action 的 <code>MAIL_ENC_KEY</code> 设成与同步口令同一串，这里留空也行）。保存后会自动重新读取。';
           list.innerHTML = '';
           return;
         }
@@ -5966,9 +6035,8 @@
         saveRecords(targets.length > 1
           ? `已按邮件更新 ${targets.length} 条台账：${targets[0].company}`
           : `已按邮件更新：${targets[0].company}`);
-        // v4.22.0：把邮件正文归档（同一封只存一份，多目标共享）。正文只在设了同步口令时才存——
-        // 否则会以明文进"凭 URL 可读"的 Gist，那比主题敏感得多。
-        mailArchive = archiveSuggestionMail(mailArchive, s, !!syncConfig.passphrase);
+        // v4.22.0：把邮件正文归档（同一封只存一份，多目标共享）。v4.23.0 起无条件归档正文。
+        mailArchive = archiveSuggestionMail(mailArchive, s);
         markMailApplied(id);
         mailDrafts.delete(String(id));   // 已应用，草稿作废（否则下次这封邮件再出现会带着旧改动）
         render();
@@ -6072,19 +6140,21 @@
         $('#mailCfgPrompt').value = c.promptExtra;
         $('#mailCfgPromptOverride').value = c.promptOverride;
         renderPromptSnapshot();
-        $('#mailCfgEncKey').value = mailState.encKey || '';
         const st = $('#mailCfgStatus');
         st.className = 'capture-status';
         st.textContent = mailConfig ? '已加载云端配置（mail-config.json）。' : '尚未保存过配置，当前为默认值。';
         $('#mailSettingsDialog').showModal();
       }
 
+      // 生成一把随机密钥填进「云同步」弹窗的邮件解密密钥框（v4.23.0 从邮件设置搬过来）
       function generateMailEncKey() {
         const bytes = crypto.getRandomValues(new Uint8Array(24));
-        $('#mailCfgEncKey').value = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
-        const st = $('#mailCfgStatus');
+        const value = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+        $('#syncMailKeyInput').value = value;
+        $('#syncMailKeyInput').type = 'text'; // 刚生成的要能看见、能复制到 Action 的 Secret
+        const st = $('#syncStatus');
         st.className = 'capture-status';
-        st.textContent = '已生成密钥。保存后请把这串密钥同样填进 autumn-mail-sync 仓库的 MAIL_ENC_KEY Secret（两端必须完全一致才能解密）。';
+        st.textContent = '已生成密钥。请把这串密钥填进 autumn-mail-sync 仓库的 MAIL_ENC_KEY Secret（两端必须完全一致才能解密），或改为把它当作同步口令、这里留空。';
       }
 
       async function saveMailSettings() {
@@ -6103,9 +6173,7 @@
           promptOverride: String($('#mailCfgPromptOverride').value || '').trim().slice(0, 4000),
           updatedAt: new Date().toISOString()
         };
-        // 解密密钥只存本机 localStorage，绝不写进 mail-config.json（它明文存在 Gist）
-        const newEncKey = String($('#mailCfgEncKey').value || '').trim();
-        const encKeyChanged = newEncKey !== (mailState.encKey || '');
+        // 解密密钥不在这里（v4.23.0 起在「云同步」弹窗，与同步口令同页）；它只存本机，也绝不写进 mail-config.json
         st.className = 'capture-status';
         st.textContent = '正在保存到你的私有 Gist…';
         try {
@@ -6116,13 +6184,10 @@
             body: JSON.stringify({ files: { [MAIL_CONFIG_FILENAME]: { content: JSON.stringify(cfgObj, null, 2) } } })
           });
           mailConfig = cfgObj;
-          mailState.encKey = newEncKey;
-          saveMailState();
           st.className = 'capture-status success';
           st.textContent = '已保存。Action 下次运行按新配置执行。';
           showToast('邮件设置已保存');
           $('#mailSettingsDialog').close();
-          if (encKeyChanged) await syncNow('manual'); // 密钥变化影响能否解密邮件建议：立即重拉一次
         } catch (error) {
           st.className = 'capture-status error';
           st.textContent = `保存失败：${error.message || error}`;
@@ -6577,12 +6642,12 @@
           records.unshift(normalized);
           saveRecords(`已新增并自动保存${sameCompanyHint}`);
           // 由「邮件提醒 → 新建记录」交接而来：保存成功后才把该建议标记为已应用（取消则不标记），
-          // 并顺手归档正文（与「应用所选」同一条规则：只在设了同步口令时存正文）
+          // 并顺手归档正文（与「应用所选」同一条规则：v4.23.0 起无条件归档）
           if (pendingMailSeedId) {
             const seedId = pendingMailSeedId;
             pendingMailSeedId = null;
             const seedSug = mailRawSuggestions.find(x => String(x.id) === String(seedId));
-            if (seedSug) mailArchive = archiveSuggestionMail(mailArchive, seedSug, !!syncConfig.passphrase);
+            if (seedSug) mailArchive = archiveSuggestionMail(mailArchive, seedSug);
             markMailApplied(seedId);
             renderMailView();
             updateMailBadge();
@@ -7339,7 +7404,7 @@
         syncNow('manual');
       });
       $('#mailSettingsBtn').addEventListener('click', openMailSettings);
-      $('#mailGenEncKeyBtn').addEventListener('click', generateMailEncKey);
+      $('#syncMailKeyGenBtn').addEventListener('click', generateMailEncKey);
       $('#saveMailSettingsBtn').addEventListener('click', saveMailSettings);
       $('#closeMailSettingsDialog').addEventListener('click', () => $('#mailSettingsDialog').close());
       $('#cancelMailSettingsDialog').addEventListener('click', () => $('#mailSettingsDialog').close());

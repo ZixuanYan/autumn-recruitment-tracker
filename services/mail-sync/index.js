@@ -154,10 +154,7 @@ async function run() {
       incoming.push(buildSuggestion(mail, result, {
         // v4.22.0：稳定标识的后半段（Message-ID 缺失时网页端用它回落）
         uidValidity: Number(mailbox && mailbox.uidValidity) || 0,
-        mailbox: String((mailbox && mailbox.path) || 'INBOX'),
-        // v4.22.1：正文只在建议文件**本身加密**时才带。没配 MAIL_ENC_KEY 时该文件是明文、
-        // 而 Gist 凭 URL 可读——把邮件原文写进去等于把正文公开（网页端的归档遵守同一规则）。
-        withBody: Boolean(cfg.mailEncKey)
+        mailbox: String((mailbox && mailbox.path) || 'INBOX')
       }));
     }
   } finally {

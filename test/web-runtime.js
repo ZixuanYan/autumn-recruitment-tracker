@@ -1147,7 +1147,7 @@ check('抽屉「相关邮件」：按 mailId 从归档展开正文；取不到�
   assert.ok(h.includes('相关邮件（2）'), '两条引用都列出来');
   assert.ok(h.includes('查看邮件原文'), '有归档的条目要能展开原文');
   assert.ok(h.includes('请在 9 月 18 日前完成在线测评'), '展开的是归档里的正文');
-  assert.ok(h.includes('邮件正文快照缺失'), '没有归档的条目如实提示，而不是假装能打开');
+  assert.ok(h.includes('正文快照'), '没有归档的条目如实提示怎么补，而不是假装能打开');
   assert.ok(!h.includes('data-mail-ref'), 'v4.22.0 起不再有"跳待复核列表"的入口');
   // 清理，避免影响后续用例
   sandbox2.records[0].mailRefs = [];

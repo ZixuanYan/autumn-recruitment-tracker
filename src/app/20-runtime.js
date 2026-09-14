@@ -223,7 +223,7 @@
         }
         if (mailNeedKey) {
           bar.className = 'mail-statusbar warning';
-          bar.innerHTML = '<strong>邮件建议已加密</strong>本机未填写「邮件解密密钥」或密钥不正确，无法读取。点右上「设置」填入与 Action 的 MAIL_ENC_KEY 完全相同的密钥，保存后会自动重新读取。';
+          bar.innerHTML = '<strong>邮件建议已加密</strong>当前「邮件解密密钥」与同步口令都解不开这个文件。到「工具 → 云同步」填入与 Action 的 <code>MAIL_ENC_KEY</code> 完全相同的密钥即可（把 Action 的 <code>MAIL_ENC_KEY</code> 设成与同步口令同一串，这里留空也行）。保存后会自动重新读取。';
           list.innerHTML = '';
           return;
         }
@@ -328,9 +328,8 @@
         saveRecords(targets.length > 1
           ? `已按邮件更新 ${targets.length} 条台账：${targets[0].company}`
           : `已按邮件更新：${targets[0].company}`);
-        // v4.22.0：把邮件正文归档（同一封只存一份，多目标共享）。正文只在设了同步口令时才存——
-        // 否则会以明文进"凭 URL 可读"的 Gist，那比主题敏感得多。
-        mailArchive = archiveSuggestionMail(mailArchive, s, !!syncConfig.passphrase);
+        // v4.22.0：把邮件正文归档（同一封只存一份，多目标共享）。v4.23.0 起无条件归档正文。
+        mailArchive = archiveSuggestionMail(mailArchive, s);
         markMailApplied(id);
         mailDrafts.delete(String(id));   // 已应用，草稿作废（否则下次这封邮件再出现会带着旧改动）
         render();
@@ -434,19 +433,21 @@
         $('#mailCfgPrompt').value = c.promptExtra;
         $('#mailCfgPromptOverride').value = c.promptOverride;
         renderPromptSnapshot();
-        $('#mailCfgEncKey').value = mailState.encKey || '';
         const st = $('#mailCfgStatus');
         st.className = 'capture-status';
         st.textContent = mailConfig ? '已加载云端配置（mail-config.json）。' : '尚未保存过配置，当前为默认值。';
         $('#mailSettingsDialog').showModal();
       }
 
+      // 生成一把随机密钥填进「云同步」弹窗的邮件解密密钥框（v4.23.0 从邮件设置搬过来）
       function generateMailEncKey() {
         const bytes = crypto.getRandomValues(new Uint8Array(24));
-        $('#mailCfgEncKey').value = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
-        const st = $('#mailCfgStatus');
+        const value = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+        $('#syncMailKeyInput').value = value;
+        $('#syncMailKeyInput').type = 'text'; // 刚生成的要能看见、能复制到 Action 的 Secret
+        const st = $('#syncStatus');
         st.className = 'capture-status';
-        st.textContent = '已生成密钥。保存后请把这串密钥同样填进 autumn-mail-sync 仓库的 MAIL_ENC_KEY Secret（两端必须完全一致才能解密）。';
+        st.textContent = '已生成密钥。请把这串密钥填进 autumn-mail-sync 仓库的 MAIL_ENC_KEY Secret（两端必须完全一致才能解密），或改为把它当作同步口令、这里留空。';
       }
 
       async function saveMailSettings() {
@@ -465,9 +466,7 @@
           promptOverride: String($('#mailCfgPromptOverride').value || '').trim().slice(0, 4000),
           updatedAt: new Date().toISOString()
         };
-        // 解密密钥只存本机 localStorage，绝不写进 mail-config.json（它明文存在 Gist）
-        const newEncKey = String($('#mailCfgEncKey').value || '').trim();
-        const encKeyChanged = newEncKey !== (mailState.encKey || '');
+        // 解密密钥不在这里（v4.23.0 起在「云同步」弹窗，与同步口令同页）；它只存本机，也绝不写进 mail-config.json
         st.className = 'capture-status';
         st.textContent = '正在保存到你的私有 Gist…';
         try {
@@ -478,13 +477,10 @@
             body: JSON.stringify({ files: { [MAIL_CONFIG_FILENAME]: { content: JSON.stringify(cfgObj, null, 2) } } })
           });
           mailConfig = cfgObj;
-          mailState.encKey = newEncKey;
-          saveMailState();
           st.className = 'capture-status success';
           st.textContent = '已保存。Action 下次运行按新配置执行。';
           showToast('邮件设置已保存');
           $('#mailSettingsDialog').close();
-          if (encKeyChanged) await syncNow('manual'); // 密钥变化影响能否解密邮件建议：立即重拉一次
         } catch (error) {
           st.className = 'capture-status error';
           st.textContent = `保存失败：${error.message || error}`;
@@ -939,12 +935,12 @@
           records.unshift(normalized);
           saveRecords(`已新增并自动保存${sameCompanyHint}`);
           // 由「邮件提醒 → 新建记录」交接而来：保存成功后才把该建议标记为已应用（取消则不标记），
-          // 并顺手归档正文（与「应用所选」同一条规则：只在设了同步口令时存正文）
+          // 并顺手归档正文（与「应用所选」同一条规则：v4.23.0 起无条件归档）
           if (pendingMailSeedId) {
             const seedId = pendingMailSeedId;
             pendingMailSeedId = null;
             const seedSug = mailRawSuggestions.find(x => String(x.id) === String(seedId));
-            if (seedSug) mailArchive = archiveSuggestionMail(mailArchive, seedSug, !!syncConfig.passphrase);
+            if (seedSug) mailArchive = archiveSuggestionMail(mailArchive, seedSug);
             markMailApplied(seedId);
             renderMailView();
             updateMailBadge();
@@ -1701,7 +1697,7 @@
         syncNow('manual');
       });
       $('#mailSettingsBtn').addEventListener('click', openMailSettings);
-      $('#mailGenEncKeyBtn').addEventListener('click', generateMailEncKey);
+      $('#syncMailKeyGenBtn').addEventListener('click', generateMailEncKey);
       $('#saveMailSettingsBtn').addEventListener('click', saveMailSettings);
       $('#closeMailSettingsDialog').addEventListener('click', () => $('#mailSettingsDialog').close());
       $('#cancelMailSettingsDialog').addEventListener('click', () => $('#mailSettingsDialog').close());

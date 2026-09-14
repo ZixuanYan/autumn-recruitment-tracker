@@ -131,7 +131,9 @@
           if (['Offer', '已结束'].includes(r.stage)) continue;
           // v4.19.0：一条记录可能有多条截止事件，取最近的一条参与临期判定
           //（"取哪一条"的口径由 nearestDeadlineEvent 统一，不再各处自己挑）
-          const hit = nearestDeadlineEvent(r.events, now);
+          // v4.23.0：先滤掉已被了结的截止——同一封邮件给出的测评截止，测评做完翻篇就不该再倒计时
+          const evs = Array.isArray(r.events) ? r.events : [];
+          const hit = nearestDeadlineEvent(evs.filter(ev => !isEventSettled(r, ev)), now);
           if (!hit) continue;
           const info = deadlineInfo(String(hit.event.at).slice(0, 10), now);
           if (!info) continue;
@@ -151,8 +153,10 @@
           if (['Offer', '已结束'].includes(r.stage)) continue;
           // v4.19.0：改看 events[] 里已过期的「非截止」事件（面试 / 笔试测评 / 其他）。
           // 截止类的逾期由上一条 findUpcomingDeadlines 负责，这里不重复报。
+          // v4.23.0：已标记完成/流程已越过的安排不再报——否则"做完了的事"会一直以逾期姿态催办
           for (const ev of (Array.isArray(r.events) ? r.events : [])) {
             if (!ev || ev.allDay || ev.type === TIME_EVENT_DEADLINE) continue;
+            if (isEventSettled(r, ev)) continue;
             const s = parseLocal(ev.at);
             if (s && s < now) alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：${ev.type}时间已过（${formatDateTime(ev.at)}）但阶段仍是「${r.stage}」` });
           }

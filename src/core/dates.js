@@ -46,6 +46,35 @@
         const past = list.sort((a, b) => b.at - a.at);
         return { event: past[0].ev, at: past[0].at, future: false };
       }
+      // 事件是否已被「了结」（v4.23.0）：只服务「未来安排」与「需要关注」这两个**前瞻**清单——
+      // 已经做完的事不该再以"逾期"的姿态催办（用户实测：把 AI面试 标记完成之后，
+      // 那条 9/12 的安排仍以"逾期"置顶挂在总览上）。
+      // 判定 = 时间线里存在里程碑 m 满足其一：
+      //   ① m 已标记完成，且完成日 ≥ 事件日 —— 完成动作覆盖了这次安排（对截止也适用）；
+      //   ② m 的日期**严格晚于**事件日 —— 流程已经走到这次安排之后。
+      // ② 只对「安排」（面试/笔试测评/其他）生效，不看截止：截止是硬期限，逾期本身就是要看的信号，
+      // 不会因为后来推进了阶段就变得不需要知道。
+      // ② 必须严格大于：当前阶段的里程碑日期等于事件当天时（"今天 9:00 的面试、还没标记完成"）
+      // 那正是该提醒的逾期项，用 ≥ 会被自己的规则吞掉。
+      function isEventSettled(record, event) {
+        const evDate = parseDay(String((event && event.at) || '').slice(0, 10));
+        if (!evDate) return false;
+        const deadline = event && event.type === TIME_EVENT_DEADLINE;
+        for (const m of (Array.isArray(record && record.timeline) ? record.timeline : [])) {
+          if (!m) continue;
+          if (m.done) {
+            const done = parseDay(m.doneAt || m.at);
+            // daysUntil(a, b) = a − b（天）。要的是「完成日 ≥ 事件日」，所以事件日是**第二个**参数
+            //（这里踩过一次：写成 daysUntil(evDate, done) 就等于断言"完成日 ≤ 事件日"，整条规则反了）
+            if (done && daysUntil(done, evDate) >= 0) return true;
+          }
+          if (!deadline) {
+            const at = parseDay(m.at);
+            if (at && daysUntil(at, evDate) > 0) return true;
+          }
+        }
+        return false;
+      }
       // 最近的截止事件（未来的优先）。存在性判定与倒计时都用它，口径只有这一处。
       function nearestDeadlineEvent(events, now = new Date()) {
         return nextTimeEvent((Array.isArray(events) ? events : []).filter(e => e && e.type === TIME_EVENT_DEADLINE), now);
@@ -53,12 +82,14 @@
       // 把记录的关键时间合成统一事件流（v4.19.0：来源由单一 scheduleAt/deadline 改为 events[]）。
       // 逾期未处理项置顶（按时间倒序），其余按时间升序，最后截断 limit 条。
       // 语义与旧版保持：终态（Offer / 已结束）不再列截止；已发生的"安排"若已终态也不再列。
+      // v4.23.0：已被了结的事件（标记完成覆盖 / 流程已走到它之后）一律不再出现——见 isEventSettled。
       function collectScheduleEvents(records, now = new Date(), limit = 6) {
         const out = [];
         for (const r of (Array.isArray(records) ? records : [])) {
           const closed = ['Offer', '已结束'].includes(r.stage);
           for (const ev of (Array.isArray(r.events) ? r.events : [])) {
             if (!ev) continue;
+            if (isEventSettled(r, ev)) continue;
             const isDeadline = ev.type === TIME_EVENT_DEADLINE;
             const at = ev.allDay ? parseDay(ev.at) : parseLocal(ev.at);
             if (!at) continue;

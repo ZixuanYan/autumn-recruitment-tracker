@@ -48,7 +48,7 @@ M0 目的：在投入真实联调前，验证最脆弱的假设——**QQ 授权
    | `AI_MODEL` | 模型名 | `deepseek-chat`（百炼填 `qwen-plus`） |
    | `GIST_ID` | 现有同步 Gist 的 ID | `a1b2c3…` |
    | `GIST_PAT` | 有 gist 权限的 PAT | `ghp_…` |
-   | `MAIL_ENC_KEY` | （可选）加密 `mail-suggestions.json` 的密钥；网页端「设置」填**完全相同**的密钥才能解密。留空=明文 | 随机长串（网页可「生成」）|
+   | `MAIL_ENC_KEY` | （可选）加密 `mail-suggestions.json`（含邮件正文快照）的密钥；留空=明文。**配不配都不影响网页端看原文** | 随机长串，或直接填成与网页「同步口令」同一串（见下）|
 
    **旧名字仍然可用**：代码按 `MAIL_USER → QQ_EMAIL`、`MAIL_PASS → QQ_AUTHCODE` 的顺序双读，
    所以已经配好 `QQ_EMAIL` / `QQ_AUTHCODE` 的部署**一个 Secret 都不用改**。
@@ -240,13 +240,21 @@ npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ t
 
 ## 邮件建议加密（MAIL_ENC_KEY）
 
-GitHub 的 **secret gist 并非真私有**——凭 URL 即可访问。为避免 `mail-suggestions.json`（明文含发件人/主题/摘要）被凭 Gist ID 读到，可启用加密：
+GitHub 的 **secret gist 并非真私有**——凭 URL 即可访问。为避免 `mail-suggestions.json`（明文含发件人 / 主题 / 摘要 / **邮件正文快照**）被凭 Gist ID 读到，可启用加密：
 
-1. 网页「设置 → 邮件解密密钥」点「生成」得到一串密钥；
+1. 网页「工具 → 云同步」弹窗的「邮件解密密钥」点「生成」得到一串密钥；
 2. 把**同一串**填进本仓库 `MAIL_ENC_KEY` Secret，并在网页保存；
 3. 之后 Action 用 AES-GCM-PBKDF2（与网页 vault 同款算法/格式，见 `src/crypto.js`）加密写入，网页用同一把密钥解密查看。
 
+**更省事的做法（v4.23.0）**：把 `MAIL_ENC_KEY` 直接设成与网页「同步口令」**同一串**，
+网页端「邮件解密密钥」**留空**即可 —— 网页端读取时按「本机密钥 → 同步口令」依次尝试。
+这样换设备只需要填一次口令，不必在每台设备再手输一次邮件密钥。
+
 留空 `MAIL_ENC_KEY` = 明文（向后兼容）。密钥只存仓库 Secret 与网页本机 localStorage，**绝不写进 Gist**。
+
+> 注意区分这两件事：**「能不能看邮件原文」与 `MAIL_ENC_KEY` 无关** —— 正文快照一律随建议带回
+> （v4.23.0 起），归档也不再看同步口令。`MAIL_ENC_KEY` 只决定这个建议文件在 Gist 里是密文还是明文；
+> 没配时文件是明文，其中包含正文，而 Gist 凭 URL 可读。在意就配一把（或设网页同步口令保护 vault 里的归档正文）。
 
 ## 作为模板供他人自托管（BYO）
 
@@ -273,5 +281,6 @@ GitHub 的 **secret gist 并非真私有**——凭 URL 即可访问。为避免
 
 ## 隐私
 
-- 邮件正文只发往**你自己配置**的 AI 端点（`AI_BASE_URL`）用于解析；建议结果明文存于**你的私有 Gist**（不加密，避免把同步口令放进 CI）。
+- 邮件正文只发往**你自己配置**的 AI 端点（`AI_BASE_URL`）用于解析；建议结果（含 ≤2000 字的正文快照）写入**你的私有 Gist**。
+  默认是**明文**（secret gist 凭 URL 可读），配 `MAIL_ENC_KEY` 后整份文件为密文——**想要密文就配这个 Secret**，网页端的同步口令只保护 vault，不会自动保护邮件建议文件。
 - 本仓库永不读取或写入网页端的 vault 文件；两者按文件分别 PATCH 同一 Gist，互不覆盖。

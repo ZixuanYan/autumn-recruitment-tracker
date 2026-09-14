@@ -439,7 +439,7 @@ const core = new Function(
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findAwaitingAdvance, findUpcomingDeadlines, collectAlerts,
-     nextTimeEvent, nearestDeadlineEvent, isEventPast,
+     nextTimeEvent, nearestDeadlineEvent, isEventPast, isEventSettled,
      sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs, mailIdOf,
      sanitizeMailArchive, unionMailArchive, pruneMailArchive, referencedMailIds, archiveSuggestionMail,
      MAIL_ARCHIVE_MAX_CHARS,
@@ -1341,7 +1341,7 @@ check('邮件关联 UI 贯通：应用即挂引用 / 新建记录也带 / 抽屉
   const drawer = extractFunction(html, 'renderDrawer').replace(/\/\/[^\n]*/g, '');
   assert.ok(/相关邮件/.test(drawer) && /mail-ref-body/.test(drawer), '抽屉要能展开邮件正文');
   assert.ok(/mailArchiveEntry\(/.test(drawer), '正文必须按 mailId 从归档取（同一封只存一份）');
-  assert.ok(/邮件正文快照缺失/.test(drawer), '取不到正文时要如实说明快照缺失，而不是假装能打开');
+  assert.ok(/正文快照/.test(drawer), '取不到正文时要如实说明怎么补，而不是假装能打开');
   // v4.22.0：不再把用户甩回「邮件提醒」的待复核列表 —— 已应用的邮件本来就不在那里
   assert.ok(!/data-mail-ref=/.test(html) && !/function openMailRef\(/.test(html), '不应再有跳待复核列表的入口');
   const merge = extractFunction(html, 'mergeSyncState').replace(/\/\/[^\n]*/g, '');
@@ -1380,14 +1380,75 @@ check('邮件归档：正文 2000 字上限 / 并集取更完整的一份 / 裁�
   assert.deepStrictEqual(core.referencedMailIds([{ mailRefs: [{ mailId: 'mid:a' }, { mailId: '' }] }, {}]), new Set(['mid:a']));
 });
 
-check('archiveSuggestionMail：只在允许时才存正文（未设同步口令不存 —— 免得明文进 Gist）', () => {
+// ---- v4.23.0：原文默认可见 + 前瞻清单认「已完成」 ----
+// 这两件事的共同教训：把「安全」做成默认门槛，用户就永远得不到那个功能；而把已经做完的事
+// 继续挂在「需要关注」上，用户就会开始忽略整个面板。
+check('archiveSuggestionMail：正文无条件归档（v4.23.0 起不再看同步口令）', () => {
   const sug = { messageId: 'm@x', sourceUid: 3, uidValidity: 5, mailbox: 'INBOX', subject: 's', from: 'a@x', receivedAt: '2026-09-10T01:00:00.000Z', emailType: '测评', summary: '摘要', textBody: '正文内容' };
-  const withBody = core.archiveSuggestionMail({}, sug, true);
-  assert.strictEqual(withBody['mid:m@x'].textBody, '正文内容');
-  const noBody = core.archiveSuggestionMail({}, sug, false);
-  assert.strictEqual(noBody['mid:m@x'].textBody, '', '不允许时只留摘要，不存正文');
-  assert.strictEqual(noBody['mid:m@x'].summary, '摘要', '摘要仍要保留（详情里还能看清说了什么）');
-  assert.deepStrictEqual(core.archiveSuggestionMail({}, { subject: '无标识' }, true), {}, '连 mailId 都算不出来时不写归档（不编 id）');
+  const arch = core.archiveSuggestionMail({}, sug);
+  assert.strictEqual(arch['mid:m@x'].textBody, '正文内容', '正文必须存下来——用户要的是"点开就能看原文"');
+  assert.strictEqual(arch['mid:m@x'].summary, '摘要', '摘要照旧保留');
+  assert.deepStrictEqual(core.archiveSuggestionMail({}, { subject: '无标识' }), {}, '连 mailId 都算不出来时不写归档（不编 id）');
+});
+
+check('原文默认可见：归档与 Action 都不再按「是否加密」决定带不带正文（v4.23.0）', () => {
+  const apply = extractFunction(html, 'applyMailSuggestion').replace(/\/\/[^\n]*/g, '');
+  assert.ok(/archiveSuggestionMail\(mailArchive, s\)/.test(apply), '应用邮件时无条件归档正文');
+  const seedPath = extractFunction(html, 'submitForm').replace(/\/\/[^\n]*/g, '');
+  assert.ok(/archiveSuggestionMail\(mailArchive, seedSug\)/.test(seedPath), '新建记录那条路径（submitForm 里的 pendingMailSeedId 分支）同样无条件归档');
+  assert.ok(!/withBody/.test(html), 'index.html 里不得再出现 withBody 门槛');
+  const actionState = fs.readFileSync(path.resolve(__dirname, '../services/mail-sync/src/state.js'), 'utf8');
+  assert.ok(!/withBody/.test(actionState), 'Action 侧同样不得再按密钥开关正文');
+  assert.ok(/textBody: truncateForArchive\(mail\.textBody\)/.test(actionState), 'Action 一律带回正文快照');
+});
+
+check('邮件解密密钥挪到云同步弹窗，留空时回落到同步口令（v4.23.0）', () => {
+  assert.ok(html.includes('id="syncMailKeyInput"'), '密钥输入框必须在「云同步」弹窗里（和口令同页才找得到）');
+  assert.ok(!html.includes('id="mailCfgEncKey"'), '邮件提醒设置里不得再留一份（两个入口会各说各话）');
+  assert.ok(html.includes('id="syncStorageBadge"'), '要能一眼看到云端存的是密文还是明文');
+  const cand = extractFunction(html, 'mailKeyCandidates').replace(/\/\/[^\n]*/g, '');
+  assert.ok(/mailState\.encKey/.test(cand) && /syncConfig\.passphrase/.test(cand), '候选顺序：本机密钥 → 同步口令');
+  const sync = extractFunction(html, 'syncNow');
+  assert.ok(/for \(const key of mailKeyCandidates\(\)\)/.test(sync),
+    '读文件时两把都要试：只试本机密钥的话，「MAIL_ENC_KEY 与口令同一串」这个推荐配法会直接失效');
+});
+
+check('isEventSettled：完成动作 / 更晚的里程碑都算了结；未完成的当天安排仍要提醒（v4.23.0）', () => {
+  const dl = evt(DL, dayOffset(-3, NOW));
+  const itv = evt('面试', `${dayOffset(-3, NOW)}T09:00`);
+  // ① 完成动作覆盖（完成日 ≥ 事件日）——面试当天忘了标、次日补标，一样算了结
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: 'AI面试', at: dayOffset(-3, NOW), done: true, doneAt: dayOffset(-1, NOW) }] }, itv), true);
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '测评', at: dayOffset(-3, NOW), done: true, doneAt: dayOffset(-3, NOW) }] }, dl), true, '截止同样适用');
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '投递', at: dayOffset(-9, NOW), done: true, doneAt: dayOffset(-9, NOW) }] }, itv), false,
+    '完成日早于事件日 → 那次完成不是冲它来的，仍要提醒');
+  // ② 流程走到更晚的里程碑（用户没点过「标记完成」时的老习惯）
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: 'AI面试', at: dayOffset(-3, NOW) }, { stage: '二面', at: dayOffset(1, NOW) }] }, itv), true);
+  // ② 刻意不管截止：硬期限的逾期不因"后来推进了"而变成不需要知道
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '测评', at: dayOffset(2, NOW) }] }, dl), false);
+  // 边界：里程碑日期 = 事件当天（今天 9:00 的面试、还没标记完成）→ 那正是该提醒的，不能被吞掉
+  const todayItv = evt('面试', `${dayOffset(0, NOW)}T09:00`);
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '一面', at: dayOffset(0, NOW) }] }, todayItv), false, '严格大于：同一天不算被越过');
+  assert.strictEqual(core.isEventSettled({ timeline: [] }, itv), false);
+  assert.strictEqual(core.isEventSettled({}, { at: '' }), false, '缺事件日期不做判断');
+});
+
+check('未来安排 / 需要关注：已了结的事件不再出现，未了结的照旧提醒（v4.23.0）', () => {
+  const recs = [
+    { id: 'done', company: '招商银行', position: '数字金融岗', stage: 'AI面试', events: [evt('面试', `${dayOffset(-3, NOW)}T09:00`)], timeline: [{ stage: 'AI面试', at: dayOffset(-3, NOW), done: true, doneAt: dayOffset(-2, NOW) }] },
+    { id: 'open', company: 'A', position: 'p', stage: 'AI面试', events: [evt('面试', `${dayOffset(-3, NOW)}T09:00`)], timeline: [{ stage: 'AI面试', at: dayOffset(-3, NOW) }] }
+  ];
+  assert.deepStrictEqual(core.collectScheduleEvents(recs, NOW, 6).map(e => e.record.id), ['open'], '标记完成的面试退出「未来安排」');
+  const alerts = core.collectAlerts(recs, NOW, 10);
+  assert.ok(alerts.some(a => a.id === 'open'), '未完成的逾期面试仍要进「需要关注」');
+  assert.ok(!alerts.some(a => a.id === 'done'), '已完成的不得再进「需要关注」（否则面板会被做掉的事占满）');
+});
+
+check('findUpcomingDeadlines：测评做完之后，那封邮件给的截止不再倒计时（v4.23.0）', () => {
+  const recs = [
+    { id: 'settled', company: 'A', position: 'p', stage: '测评', events: [evt(DL, dayOffset(-1, NOW))], timeline: [{ stage: '测评', at: dayOffset(-1, NOW), done: true, doneAt: dayOffset(0, NOW) }] },
+    { id: 'live', company: 'B', position: 'p', stage: '测评', events: [evt(DL, dayOffset(-1, NOW))], timeline: [{ stage: '测评', at: dayOffset(-1, NOW) }] }
+  ];
+  assert.deepStrictEqual(core.findUpcomingDeadlines(recs, NOW, 3).map(h => h.record.id), ['live']);
 });
 
 check('normalizeRecord companyType：白名单校验，老数据与非法值一律归「未设置」', () => {
@@ -2701,6 +2762,20 @@ check('用户文档与当前行为一致（看板横带 / 邮箱多服务商 / �
   // ⑥ 邮件关联（v4.20.0）：应用后能在记录里回看来源邮件
   assert.ok(tut.includes('相关邮件'), '安装教程应说明记录详情里有「相关邮件」（v4.20.0）');
   assert.ok(qs.includes('相关邮件'), '快速上手指南也应提到相关邮件');
+
+  // ⑦ 原文无需密钥 + 已了结的退出前瞻清单（v4.23.0）：这两条都是"用户按老文档做会白折腾"的类型——
+  // 文档若继续教「要先配 MAIL_ENC_KEY 才看得到原文」，用户就会去配一把根本不需要的密钥；
+  // 若不讲"做完的事会退出清单"，用户会以为面板坏了。
+  for (const [name, doc] of [['安装教程', tut], ['快速上手', qs]]) {
+    assert.ok(/看邮件原文|看原文/.test(doc) && /不需要(配|任何密钥)|配不配都不影响/.test(doc),
+      `${name} 应写明看邮件原文不再需要密钥（v4.23.0）`);
+    assert.ok(/密文还是明文|密文 \/ 明文|明文还是密文/.test(doc),
+      `${name} 应提示云同步弹窗会标注密文 / 明文，否则用户无从判断自己的正文是否明文躺在 Gist 里`);
+  }
+  assert.ok(/留空即?跟随口令|回落到用同步口令/.test(tut), '安装教程应说明密钥留空会回落到同步口令（这是"换设备只填一次"的关键）');
+  assert.ok(tut.includes('已被了结') || tut.includes('不再出现在「未来安排」'),
+    '安装教程应说明已了结的安排会退出「未来安排」/「需要关注」（v4.23.0）');
+  assert.ok(qs.includes('做完的事不再催你'), '快速上手指南应给出与安装教程一致的口径');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

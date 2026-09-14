@@ -503,7 +503,7 @@
                 ${ref.summary ? `<div class="mail-ref-summary">${escapeHtml(ref.summary)}</div>` : ''}
                 ${body
                   ? `<details class="mail-ref-body"><summary>查看邮件原文（${body.length} 字）</summary><pre>${escapeHtml(body)}</pre></details>`
-                  : `<div class="mail-ref-nobody">邮件正文快照缺失${syncConfig.passphrase ? '' : '（未设置同步口令时不保存正文，只留上面的摘要）'}</div>`}
+                  : `<div class="mail-ref-nobody">这封邮件没有正文快照（多半是 v4.23.0 之前生成的旧建议文件）。重新运行一次 Action 的 mail-sync 再应用即可补上。</div>`}
               </div>`;
             }).join('')}</div></div>` : ''}
             <div class="drawer-section"><h3>下一步行动</h3><div class="note-text">${escapeHtml(record.nextAction || '—')}</div></div>

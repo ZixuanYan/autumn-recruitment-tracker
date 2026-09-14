@@ -104,10 +104,11 @@ function buildSuggestion(mail, result, ctx) {
     round: r.round || '',
     summary: r.summary || '',
     // 正文快照（≤2000 字）：网页端把它归档进记录，供详情里回看邮件原文。
-    // ⚠️ 只在 **withBody**（Action 配了 MAIL_ENC_KEY、建议文件在 Gist 里是密文）时才带 ——
-    // 没配时 mail-suggestions.json 是**明文**，而 Gist 凭 URL 就能读；邮件正文含薪资 / offer 细节 /
-    // 个人信息，比主题敏感得多，绝不能明文落在那里（网页端的归档也遵守同一条规则）。
-    textBody: c.withBody ? truncateForArchive(mail.textBody) : '',
+    // v4.23.0：**无条件带回**。此前只有在配了 MAIL_ENC_KEY（建议文件本身是密文）时才带，
+    // 结果是"没配密钥就永远看不到原文"——每台设备还要各填一次密钥，代价远大于收益。
+    // 现在密钥只管"整个建议文件是否加密"这一件事：不配 = 明文文件（正文也在里面），
+    // 配了 = 密文文件（正文一并受保护）。
+    textBody: truncateForArchive(mail.textBody),
     confidence: Number.isFinite(Number(r.confidence)) ? Number(r.confidence) : 0,
     proposed: r.proposed || { milestone: { stage: '', at: '', note: '' }, scheduleAt: '', recentSchedule: '', nextAction: '' }
   };
