@@ -25,6 +25,15 @@
         if (diff <= 3) return { text: `截止 · 还剩 ${diff} 天`, level: 'warn', days: diff };
         return { text: `截止 · 还剩 ${diff} 天`, level: '', days: diff };
       }
+      // 事件是否已经过去（v4.21.0 修正）。**全天事件必须按日历日比较**：
+      // 它的 at 是当天本地零点，用时间戳比会把「今天到期」判成已过期（00:00 < 现在）。
+      // 定时事件（面试/笔试测评/其他）有具体时刻，就按时刻比——今天 14:00 的面试在 15:00 确实已过。
+      function isEventPast(at, allDay, now = new Date()) {
+        if (!at) return false;
+        if (!allDay) return at < now;
+        const d = daysUntil(at, now);
+        return d != null && d < 0;
+      }
       // 取事件列表里「最该显示」的一条：优先最近的未来事件，其次最近的过去事件。
       // 台账「最近时间」列与看板 chip 都用它，避免两处各写一套"取哪一条"的规则。
       function nextTimeEvent(events, now = new Date()) {
@@ -32,7 +41,7 @@
           .map(ev => ({ ev, at: ev && ev.allDay ? parseDay(ev.at) : parseLocal(ev && ev.at) }))
           .filter(x => x.ev && x.at);
         if (!list.length) return null;
-        const future = list.filter(x => x.at >= now).sort((a, b) => a.at - b.at);
+        const future = list.filter(x => !isEventPast(x.at, x.ev.allDay, now)).sort((a, b) => a.at - b.at);
         if (future.length) return { event: future[0].ev, at: future[0].at, future: true };
         const past = list.sort((a, b) => b.at - a.at);
         return { event: past[0].ev, at: past[0].at, future: false };
@@ -54,9 +63,9 @@
             const at = ev.allDay ? parseDay(ev.at) : parseLocal(ev.at);
             if (!at) continue;
             if (isDeadline) {
-              if (!closed) out.push({ type: ev.type, at, allDay: true, record: r, event: ev, overdue: at < now });
+              if (!closed) out.push({ type: ev.type, at, allDay: true, record: r, event: ev, overdue: isEventPast(at, true, now) });
             } else if (!closed || at >= now) {
-              out.push({ type: ev.type, at, allDay: false, record: r, event: ev, overdue: at < now && !closed });
+              out.push({ type: ev.type, at, allDay: false, record: r, event: ev, overdue: isEventPast(at, false, now) && !closed });
             }
           }
         }

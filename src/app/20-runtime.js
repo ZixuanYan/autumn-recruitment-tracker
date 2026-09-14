@@ -598,7 +598,8 @@
       function timelineRowHtml(m) {
         // 完成勾选（v4.18.0）：一个阶段是否已做完，与它是不是当前阶段无关。
         // 类名刻意不叫 tl-row-*，否则会污染测试里按 "tl-row" 计数行的断言。
-        return `<div class="tl-row">
+        // data-done-at（v4.21.0）：把已有的完成日期带在行上，改阶段发生日期时不会把它冲掉。
+        return `<div class="tl-row" data-done-at="${escapeHtml(m && m.doneAt || '')}">
           <input class="control tl-stage" list="stagePresets" maxlength="20" placeholder="阶段" value="${escapeHtml(m && m.stage || '')}">
           <input class="control tl-date" type="date" value="${escapeHtml(m && m.at || '')}" aria-label="阶段日期">
           <input class="control tl-note" maxlength="60" placeholder="备注（可选）" value="${escapeHtml(m && m.note || '')}">
@@ -626,13 +627,15 @@
           const at = row.querySelector('.tl-date').value;
           const doneBox = row.querySelector('.tl-done-check');
           const done = !!(doneBox && doneBox.checked);
+          // 完成日期只在「本次才勾上」时新写（今天），已在的沿用行上的值：
+          // 改阶段发生日期不该顺手改掉"哪天完成的"（v4.21.0，此前 doneAt 直接取 at）。
+          const prevDoneAt = String(row.dataset.doneAt || '');
           return {
             stage: row.querySelector('.tl-stage').value.trim(),
             at,
             note: row.querySelector('.tl-note').value.trim(),
             done,
-            // 完成日期没有单独输入框：沿用该阶段的日期，空则回落到今天
-            doneAt: done ? (at || localDateInput(new Date())) : ''
+            doneAt: done ? (prevDoneAt || localDateInput(new Date())) : ''
           };
         }).filter(m => m.stage);
       }

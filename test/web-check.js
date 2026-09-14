@@ -436,7 +436,7 @@ const core = new Function(
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findAwaitingAdvance, findUpcomingDeadlines, collectAlerts,
-     nextTimeEvent, nearestDeadlineEvent,
+     nextTimeEvent, nearestDeadlineEvent, isEventPast,
      sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs,
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
@@ -821,8 +821,9 @@ check('完成态贯通：记录行 / 看板 / 步骤条 / 表单勾选 / 抽屉�
   assert.ok(m, '找不到 setCurrentMilestoneDone');
   assert.ok(/const last = tl\.length - 1;/.test(m[0]) && /tl\[last\] = Object\.assign/.test(m[0]), '必须只改最后一条里程碑');
   assert.ok(!/\.push\(/.test(m[0]), '完成不得追加里程碑（那是推进）');
-  // 规范化必须携带 done/doneAt，否则 load / 云同步时被静默丢弃
-  assert.ok(/doneAt: done \? String\(m && m\.doneAt \|\| ''\)\.trim\(\) : ''/.test(html), 'sanitizeTimeline 必须携带 done/doneAt（未完成时清空）');
+  // 规范化必须携带 done/doneAt，否则 load / 云同步时被静默丢弃；v4.21.0 起还要严格校验
+  assert.ok(html.includes('const done = (m && m.done) === true;'), 'done 必须是严格布尔真（字符串 "false" 不得被判成已完成）');
+  assert.ok(html.includes("doneAt: done && /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDoneAt) ? rawDoneAt : ''"), 'doneAt 必须校验 YYYY-MM-DD，非法值不得持久化');
   // UI 四处呈现
   assert.ok(/data-action="toggle-done"/.test(html), '记录行要有「标记完成」动作');
   assert.ok(html.includes('stage-done-chip'), '当前阶段旁要有「已完成」标记');
@@ -832,6 +833,42 @@ check('完成态贯通：记录行 / 看板 / 步骤条 / 表单勾选 / 抽屉�
   assert.ok(html.includes('tl-done-check'), '时间线编辑器每行要有完成勾选');
   // 只画按钮不接线是静默失效：表格与抽屉两个入口都必须真的调到 toggleStageDone
   assert.strictEqual((html.match(/'toggle-done'\) return toggleStageDone\(record\)/g) || []).length, 2, '表格与抽屉两处入口都要接到 toggleStageDone');
+});
+
+// ---- v4.21.0 全天截止按日历日判定 + done/doneAt 严格校验 ----
+check('全天截止：今天不算逾期、昨天算逾期（按时间戳比会把「今天到期」误判成已过期）', () => {
+  const today = evt(DL, dayOffset(0, NOW));
+  const yesterday = evt(DL, dayOffset(-1, NOW));
+  assert.strictEqual(core.nextTimeEvent([today], NOW).future, true, '今天到期的截止不得被判为已过去');
+  assert.strictEqual(core.nextTimeEvent([yesterday], NOW).future, false, '昨天到期的截止应判为已过去');
+  // overdue 决定「未来安排」是否置顶并显示已过期，口径必须一致
+  const [evToday] = core.collectScheduleEvents([{ id: 'a', company: 'A', position: 'p', stage: '已投递', events: [today] }], NOW, 6);
+  assert.strictEqual(evToday.overdue, false, '今天截止不得进「已过期」');
+  const [evYest] = core.collectScheduleEvents([{ id: 'b', company: 'B', position: 'p', stage: '已投递', events: [yesterday] }], NOW, 6);
+  assert.strictEqual(evYest.overdue, true);
+  assert.strictEqual(core.isEventPast(core.parseDay(dayOffset(0, NOW)), true, NOW), false);
+  // 定时事件仍按时刻比：今天 14:00 的面试在 12:00 是未来、在 15:00 已过
+  const interview = evt('面试', `${dayOffset(0, NOW)}T14:00`);
+  assert.strictEqual(core.nextTimeEvent([interview], NOW).future, true);
+  assert.strictEqual(core.nextTimeEvent([interview], new Date('2026-09-06T15:00:00')).future, false);
+});
+
+check('done/doneAt 严格校验：脏值按未完成、非法日期清空但不抹掉完成标记', () => {
+  const rec = core.normalizeRecord({
+    id: 'd1', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01',
+    timeline: [
+      { stage: '测评', at: '2026-09-05', done: 'false', doneAt: '2026-09-06' }, // 字符串 → 未完成
+      { stage: '笔试', at: '2026-09-05', done: 1, doneAt: '2026-09-06' },        // 数字 → 未完成
+      { stage: '面试', at: '2026-09-05', done: true, doneAt: '2026/09/06' },     // 日期非法 → 清日期、留完成
+      { stage: '机试', at: '2026-09-05', done: true, doneAt: '2026-09-06' }
+    ]
+  });
+  const byStage = name => rec.timeline.find(m => m.stage === name);
+  assert.strictEqual(byStage('测评').done, false, '字符串 "false" 必须按未完成');
+  assert.strictEqual(byStage('笔试').done, false, '数字 1 必须按未完成');
+  assert.strictEqual(byStage('面试').done, true, '日期脏不该抹掉"已完成"这个事实（否则用户会被重新催停滞）');
+  assert.strictEqual(byStage('面试').doneAt, '', '非法日期不得持久化');
+  assert.strictEqual(byStage('机试').doneAt, '2026-09-06');
 });
 
 check('findDuplicateRecord：同链接判重', () => {

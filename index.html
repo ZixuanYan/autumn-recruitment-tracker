@@ -1900,14 +1900,19 @@
         if (!Array.isArray(list)) return [];
         return list
           .map(m => {
-            const done = !!(m && m.done);
+            // done 只接受布尔 true（v4.21.0）：字符串 "false"、数字 1 这类脏值一律按未完成。
+            // 用 `!!value` 判会把 "false" 判成 true —— 手改过 JSON 或第三方写入时最容易踩。
+            const done = (m && m.done) === true;
+            const rawDoneAt = String(m && m.doneAt || '').trim();
             return {
               stage: String(m && m.stage || '').trim(),
               at: String(m && m.at || '').trim(),
               note: String(m && m.note || '').trim(),
               done,
-              // 取消完成时一并清空 doneAt，避免残留一个过期日期误导「待推进 N 天」的算法
-              doneAt: done ? String(m && m.doneAt || '').trim() : ''
+              // doneAt 必须是合法 YYYY-MM-DD，否则清空（非法值绝不进持久化）。
+              // 只清日期、不清 done：「完成了但日期脏」保留"已完成"这个事实更安全
+              // （findAwaitingAdvance 会回落到里程碑日期起算），否则用户的完成记录会被静默抹掉。
+              doneAt: done && /^\d{4}-\d{2}-\d{2}$/.test(rawDoneAt) ? rawDoneAt : ''
             };
           })
           .filter(m => m.stage)
@@ -2052,7 +2057,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.20.0';
+      const APP_VERSION = '4.21.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -3998,6 +4003,15 @@
         if (diff <= 3) return { text: `截止 · 还剩 ${diff} 天`, level: 'warn', days: diff };
         return { text: `截止 · 还剩 ${diff} 天`, level: '', days: diff };
       }
+      // 事件是否已经过去（v4.21.0 修正）。**全天事件必须按日历日比较**：
+      // 它的 at 是当天本地零点，用时间戳比会把「今天到期」判成已过期（00:00 < 现在）。
+      // 定时事件（面试/笔试测评/其他）有具体时刻，就按时刻比——今天 14:00 的面试在 15:00 确实已过。
+      function isEventPast(at, allDay, now = new Date()) {
+        if (!at) return false;
+        if (!allDay) return at < now;
+        const d = daysUntil(at, now);
+        return d != null && d < 0;
+      }
       // 取事件列表里「最该显示」的一条：优先最近的未来事件，其次最近的过去事件。
       // 台账「最近时间」列与看板 chip 都用它，避免两处各写一套"取哪一条"的规则。
       function nextTimeEvent(events, now = new Date()) {
@@ -4005,7 +4019,7 @@
           .map(ev => ({ ev, at: ev && ev.allDay ? parseDay(ev.at) : parseLocal(ev && ev.at) }))
           .filter(x => x.ev && x.at);
         if (!list.length) return null;
-        const future = list.filter(x => x.at >= now).sort((a, b) => a.at - b.at);
+        const future = list.filter(x => !isEventPast(x.at, x.ev.allDay, now)).sort((a, b) => a.at - b.at);
         if (future.length) return { event: future[0].ev, at: future[0].at, future: true };
         const past = list.sort((a, b) => b.at - a.at);
         return { event: past[0].ev, at: past[0].at, future: false };
@@ -4027,9 +4041,9 @@
             const at = ev.allDay ? parseDay(ev.at) : parseLocal(ev.at);
             if (!at) continue;
             if (isDeadline) {
-              if (!closed) out.push({ type: ev.type, at, allDay: true, record: r, event: ev, overdue: at < now });
+              if (!closed) out.push({ type: ev.type, at, allDay: true, record: r, event: ev, overdue: isEventPast(at, true, now) });
             } else if (!closed || at >= now) {
-              out.push({ type: ev.type, at, allDay: false, record: r, event: ev, overdue: at < now && !closed });
+              out.push({ type: ev.type, at, allDay: false, record: r, event: ev, overdue: isEventPast(at, false, now) && !closed });
             }
           }
         }
@@ -6079,7 +6093,8 @@
       function timelineRowHtml(m) {
         // 完成勾选（v4.18.0）：一个阶段是否已做完，与它是不是当前阶段无关。
         // 类名刻意不叫 tl-row-*，否则会污染测试里按 "tl-row" 计数行的断言。
-        return `<div class="tl-row">
+        // data-done-at（v4.21.0）：把已有的完成日期带在行上，改阶段发生日期时不会把它冲掉。
+        return `<div class="tl-row" data-done-at="${escapeHtml(m && m.doneAt || '')}">
           <input class="control tl-stage" list="stagePresets" maxlength="20" placeholder="阶段" value="${escapeHtml(m && m.stage || '')}">
           <input class="control tl-date" type="date" value="${escapeHtml(m && m.at || '')}" aria-label="阶段日期">
           <input class="control tl-note" maxlength="60" placeholder="备注（可选）" value="${escapeHtml(m && m.note || '')}">
@@ -6107,13 +6122,15 @@
           const at = row.querySelector('.tl-date').value;
           const doneBox = row.querySelector('.tl-done-check');
           const done = !!(doneBox && doneBox.checked);
+          // 完成日期只在「本次才勾上」时新写（今天），已在的沿用行上的值：
+          // 改阶段发生日期不该顺手改掉"哪天完成的"（v4.21.0，此前 doneAt 直接取 at）。
+          const prevDoneAt = String(row.dataset.doneAt || '');
           return {
             stage: row.querySelector('.tl-stage').value.trim(),
             at,
             note: row.querySelector('.tl-note').value.trim(),
             done,
-            // 完成日期没有单独输入框：沿用该阶段的日期，空则回落到今天
-            doneAt: done ? (at || localDateInput(new Date())) : ''
+            doneAt: done ? (prevDoneAt || localDateInput(new Date())) : ''
           };
         }).filter(m => m.stage);
       }

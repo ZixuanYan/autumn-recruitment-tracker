@@ -36,14 +36,19 @@
         if (!Array.isArray(list)) return [];
         return list
           .map(m => {
-            const done = !!(m && m.done);
+            // done 只接受布尔 true（v4.21.0）：字符串 "false"、数字 1 这类脏值一律按未完成。
+            // 用 `!!value` 判会把 "false" 判成 true —— 手改过 JSON 或第三方写入时最容易踩。
+            const done = (m && m.done) === true;
+            const rawDoneAt = String(m && m.doneAt || '').trim();
             return {
               stage: String(m && m.stage || '').trim(),
               at: String(m && m.at || '').trim(),
               note: String(m && m.note || '').trim(),
               done,
-              // 取消完成时一并清空 doneAt，避免残留一个过期日期误导「待推进 N 天」的算法
-              doneAt: done ? String(m && m.doneAt || '').trim() : ''
+              // doneAt 必须是合法 YYYY-MM-DD，否则清空（非法值绝不进持久化）。
+              // 只清日期、不清 done：「完成了但日期脏」保留"已完成"这个事实更安全
+              // （findAwaitingAdvance 会回落到里程碑日期起算），否则用户的完成记录会被静默抹掉。
+              doneAt: done && /^\d{4}-\d{2}-\d{2}$/.test(rawDoneAt) ? rawDoneAt : ''
             };
           })
           .filter(m => m.stage)
@@ -188,7 +193,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.20.0';
+      const APP_VERSION = '4.21.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';

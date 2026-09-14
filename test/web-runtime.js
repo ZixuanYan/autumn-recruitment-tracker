@@ -1953,6 +1953,18 @@ check('setCurrentMilestoneDone：只动末条、不改当前阶段；没有时�
   assert.strictEqual(rec.timeline[1].doneAt, '');
 });
 
+check('时间线编辑器：完成日期带在行上，改阶段发生日期不会冲掉它（v4.21.0）', () => {
+  sandbox2.$('#applicationDate').value = '2026-09-07';
+  sandbox2.renderTimelineEditor({ applicationDate: '2026-09-01', timeline: [
+    { stage: '测评', at: '2026-09-05', note: '', done: true, doneAt: '2026-09-06' }
+  ] });
+  assert.ok(sandbox2.$('#timelineEditor').innerHTML.includes('data-done-at="2026-09-06"'),
+    '行上要带已有的完成日期，否则表单没法把它原样带回去');
+  // collectTimeline 需要真实 DOM 才能跑，这里按本仓惯例做静态断言（沙箱里没有可驱动的表单）
+  assert.ok(/prevDoneAt \|\| localDateInput\(new Date\(\)\)/.test(html),
+    'collectTimeline 必须先沿用行上的 doneAt，再回落到今天——否则改阶段日期会连带改掉完成日期');
+});
+
 // ============================================================================
 // v4.8.0：看板推进投放区 + P1 增强（停滞标记 / 列头筛选 / 备注 / 工具条信息）
 // 这些函数都在被抽取的 v4.4.0 台账视图增强段里，直接用 sandbox2 真实执行。
