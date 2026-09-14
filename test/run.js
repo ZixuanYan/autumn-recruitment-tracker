@@ -244,7 +244,7 @@ test('buildSuggestion:带上稳定标识与正文快照（缺 ctx/缺 messageId 
     sourceUid: 42, messageId: 'mid@x.com', receivedAt: '2026-09-10T01:00:00.000Z',
     from: 'hr@x.com', subject: '测评通知', textBody: '请在 9 月 18 日前完成测评'
   };
-  const s = state.buildSuggestion(mail, { emailType: '测评', stage: '测评', confidence: 0.9 }, { uidValidity: 777, mailbox: 'INBOX' });
+  const s = state.buildSuggestion(mail, { emailType: '测评', stage: '测评', confidence: 0.9 }, { uidValidity: 777, mailbox: 'INBOX', withBody: true });
   assert.strictEqual(s.messageId, 'mid@x.com');
   assert.strictEqual(s.uidValidity, 777);
   assert.strictEqual(s.mailbox, 'INBOX');
@@ -253,10 +253,21 @@ test('buildSuggestion:带上稳定标识与正文快照（缺 ctx/缺 messageId 
   const legacy = state.buildSuggestion(mail, { emailType: '测评' });
   assert.strictEqual(legacy.uidValidity, 0);
   assert.strictEqual(legacy.mailbox, '');
+  assert.strictEqual(legacy.textBody, '', 'v4.22.1：未声明 withBody 时不带正文（默认安全）');
   const noMid = state.buildSuggestion({ sourceUid: 7, subject: 's' }, {});
   assert.strictEqual(noMid.messageId, '');
   assert.strictEqual(noMid.textBody, ''); // 无正文 → 空串而不是 undefined
   assert.ok(String(noMid.id).startsWith('uid-'), 'id 仍是 uid-<sourceUid>（appliedIds 依赖它稳定）');
+});
+
+test('buildSuggestion:正文只在建议文件加密时才带（没配 MAIL_ENC_KEY 时 Gist 是明文，正文不得落进去）', () => {
+  const mail = { sourceUid: 5, subject: 's', textBody: '薪资 25k×16，offer 细节…' };
+  const plain = state.buildSuggestion(mail, { emailType: 'Offer' }, { uidValidity: 1, mailbox: 'INBOX', withBody: false });
+  assert.strictEqual(plain.textBody, '', '明文文件绝不能带邮件原文');
+  const encrypted = state.buildSuggestion(mail, { emailType: 'Offer' }, { uidValidity: 1, mailbox: 'INBOX', withBody: true });
+  assert.strictEqual(encrypted.textBody, '薪资 25k×16，offer 细节…');
+  // 元信息仍要保留（详情里还能看清"这封邮件是什么"）
+  assert.strictEqual(plain.subject, 's');
 });
 
 test('computeWatermark 推进到已抓取最大 UID（含非候选）', () => {

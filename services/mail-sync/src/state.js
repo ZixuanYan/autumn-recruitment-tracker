@@ -104,9 +104,10 @@ function buildSuggestion(mail, result, ctx) {
     round: r.round || '',
     summary: r.summary || '',
     // 正文快照（≤2000 字）：网页端把它归档进记录，供详情里回看邮件原文。
-    // **是否真正落盘由网页端决定** —— 没设同步口令时不归档正文，免得把邮件正文
-    // 以明文写进"凭 URL 就能读"的 Gist。
-    textBody: truncateForArchive(mail.textBody),
+    // ⚠️ 只在 **withBody**（Action 配了 MAIL_ENC_KEY、建议文件在 Gist 里是密文）时才带 ——
+    // 没配时 mail-suggestions.json 是**明文**，而 Gist 凭 URL 就能读；邮件正文含薪资 / offer 细节 /
+    // 个人信息，比主题敏感得多，绝不能明文落在那里（网页端的归档也遵守同一条规则）。
+    textBody: c.withBody ? truncateForArchive(mail.textBody) : '',
     confidence: Number.isFinite(Number(r.confidence)) ? Number(r.confidence) : 0,
     proposed: r.proposed || { milestone: { stage: '', at: '', note: '' }, scheduleAt: '', recentSchedule: '', nextAction: '' }
   };
