@@ -48,15 +48,29 @@
         if (/笔试|测评|机试/.test(t)) return '笔试测评';
         return '其他';
       }
-      // 往记录里追加一个关键时间。同一「类型 + 时间」视为同一条：重复应用同一封邮件
-      //（或一封邮件应用到多条台账后再点一次）不会堆出重复条目。
-      function upsertEvent(rec, type, at) {
+      // 事件的稳定来源标识：同一封邮件在同一类型上只该有一条事件（改期即替换）。
+      // 邮件没有稳定 id（mailId 为空）时返回空串，此时退化为「类型 + 时间」去重。
+      function eventSourceId(s, kind) {
+        const mailId = mailIdOf(s);
+        return mailId ? `${mailId}#${kind}` : '';
+      }
+      // 往记录里追加一个关键时间。去重/替换规则（v4.22.0）：
+      //   · 有 sourceId（来自邮件）→ 按 sourceId **替换**：改期后重投同一封邮件时旧时间必须消失，
+      //     否则记录会同时挂着"旧面试时间"和"新面试时间"。
+      //   · 无 sourceId（手工添加）→ 按「类型 + 时间」去重，重复点不会堆叠。
+      function upsertEvent(rec, type, at, sourceId, mailId) {
         const kind = normalizeTimeEventType(type);
         const allDay = isTimeEventAllDay(kind);
         const value = allDay ? String(at || '').slice(0, 10) : String(at || '');
         if (!value) return;
-        const list = (Array.isArray(rec.events) ? rec.events : []).filter(ev => !(ev && ev.type === kind && ev.at === value));
-        list.push({ id: cryptoId(), type: kind, at: value, allDay });
+        const src = String(sourceId || '').trim();
+        const mid = String(mailId || '').trim();
+        const list = (Array.isArray(rec.events) ? rec.events : []).filter(ev => {
+          if (!ev) return false;
+          if (src && String(ev.sourceId || '') === src) return false;
+          return !(!src && ev.type === kind && ev.at === value);
+        });
+        list.push({ id: cryptoId(), type: kind, at: value, allDay, sourceId: src, mailId: mid });
         rec.events = sanitizeEvents(list);
       }
 
@@ -294,8 +308,12 @@
             setTimeline(rec, [...(rec.timeline || []), { stage: edStage, at: edAt, note: readEd('milestone.note') || mile.note || '邮件' }]);
             milestoneApplied = true;
           }
-          if (checked.has('scheduleAt') && readEd('scheduleAt')) upsertEvent(rec, mailScheduleType(s), readEd('scheduleAt'));
-          if (checked.has('deadline') && readEd('deadline')) upsertEvent(rec, TIME_EVENT_DEADLINE, readEd('deadline'));
+          if (checked.has('scheduleAt') && readEd('scheduleAt')) {
+            upsertEvent(rec, mailScheduleType(s), readEd('scheduleAt'), eventSourceId(s, mailScheduleType(s)), mailIdOf(s));
+          }
+          if (checked.has('deadline') && readEd('deadline')) {
+            upsertEvent(rec, TIME_EVENT_DEADLINE, readEd('deadline'), eventSourceId(s, TIME_EVENT_DEADLINE), mailIdOf(s));
+          }
           if (checked.has('recentSchedule') && readEd('recentSchedule')) rec.recentSchedule = readEd('recentSchedule');
           if (checked.has('nextAction') && readEd('nextAction')) rec.nextAction = readEd('nextAction');
           // v4.20.0：把邮件本身挂到记录上（不只是它的字段）。应用后建议卡片会被 appliedIds
@@ -310,6 +328,9 @@
         saveRecords(targets.length > 1
           ? `已按邮件更新 ${targets.length} 条台账：${targets[0].company}`
           : `已按邮件更新：${targets[0].company}`);
+        // v4.22.0：把邮件正文归档（同一封只存一份，多目标共享）。正文只在设了同步口令时才存——
+        // 否则会以明文进"凭 URL 可读"的 Gist，那比主题敏感得多。
+        mailArchive = archiveSuggestionMail(mailArchive, s, !!syncConfig.passphrase);
         markMailApplied(id);
         mailDrafts.delete(String(id));   // 已应用，草稿作废（否则下次这封邮件再出现会带着旧改动）
         render();
@@ -346,8 +367,12 @@
           recentSchedule: p.recentSchedule || '',
           nextAction: p.nextAction || '',
           stage: mile.stage || '已投递',
-          // v4.20.0：新建记录同样把邮件挂上（保存成功后才真正落库，见 submitForm 的 pendingMailSeedId 分支）
-          mailRefs: [{ uid: s.sourceUid, subject: s.subject, from: s.from, receivedAt: s.receivedAt, emailType: s.emailType, summary: s.summary, linkedAt: new Date().toISOString() }],
+          // v4.22.0：新建记录同样把邮件挂上（带 mailId），保存成功后才真正落库 + 归档正文
+          mailRefs: [{
+            mailId: mailIdOf(s), uid: s.sourceUid, subject: s.subject, from: s.from,
+            receivedAt: s.receivedAt, emailType: s.emailType, summary: s.summary,
+            linkedAt: new Date().toISOString()
+          }],
           timeline: mile.stage ? [{ stage: mile.stage, at: mile.at || today, note: mile.note || '邮件' }] : undefined
         });
         pendingMailSeedId = String(id);
@@ -654,7 +679,9 @@
         const type = normalizeTimeEventType(e && e.type);
         const allDay = isTimeEventAllDay(type);
         const at = String(e && e.at || '');
-        return `<div class="ev-row" data-ev-id="${escapeHtml(String(e && e.id || ''))}">
+        // data-source-id / data-mail-id：把来源标识带在行上，用户手工改时间后不会丢掉
+        // 「这条来自哪封邮件」——否则改期替换就再也认不出旧事件（v4.22.0）。
+        return `<div class="ev-row" data-ev-id="${escapeHtml(String(e && e.id || ''))}" data-source-id="${escapeHtml(String(e && e.sourceId || ''))}" data-mail-id="${escapeHtml(String(e && e.mailId || ''))}">
           <select class="control ev-type">${TIME_EVENT_TYPES.map(t => `<option value="${escapeHtml(t)}"${t === type ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>
           <input class="control ev-at" type="${allDay ? 'date' : 'datetime-local'}" value="${escapeHtml(allDay ? at.slice(0, 10) : at)}" aria-label="时间">
           <button class="tl-del" type="button" title="删除该时间" aria-label="删除该时间">✕</button>
@@ -674,7 +701,10 @@
             id: row.dataset.evId || cryptoId(),
             type,
             at: allDay ? raw.slice(0, 10) : raw,
-            allDay
+            allDay,
+            // 来源标识原样带回去（用户只改时间时，改期替换的依据不能丢）
+            sourceId: String(row.dataset.sourceId || ''),
+            mailId: String(row.dataset.mailId || '')
           };
         }).filter(e => e.at);
       }
@@ -880,29 +910,6 @@
           return;
         }
       }
-      function openMailRef(uid) {
-        const target = Number(uid) || 0;
-        const hit = mailRawSuggestions.find(x => Number(x.sourceUid) === target);
-        if (!hit) {
-          // 建议只保留 30 天 / 100 条，过期后被清理；抽屉里已经是关联时保存的快照
-          showToast('这封邮件已不在建议队列里（建议只保留 30 天），上面显示的摘要来自关联时的记录');
-          return;
-        }
-        closeRecordDrawer();
-        location.hash = '#/mail';
-        // 渲染在 hash 变化之后才发生，所以下一帧再找卡片
-        requestAnimationFrame(() => {
-          const card = document.querySelector(`.mail-card[data-mail-id="${CSS.escape(String(hit.id))}"]`);
-          if (!card) {
-            showToast('这封邮件已复核过（已应用或已忽略），不在待复核列表里');
-            return;
-          }
-          card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          card.classList.add('is-flash');
-          setTimeout(() => card.classList.remove('is-flash'), 1600);
-        });
-      }
-
       function closeDialog() {
         els.dialog.close();
         editingId = null;
@@ -931,8 +938,17 @@
         } else {
           records.unshift(normalized);
           saveRecords(`已新增并自动保存${sameCompanyHint}`);
-          // 由「邮件提醒 → 新建记录」交接而来：保存成功后才把该建议标记为已应用（取消则不标记）
-          if (pendingMailSeedId) { const mid = pendingMailSeedId; pendingMailSeedId = null; markMailApplied(mid); renderMailView(); updateMailBadge(); }
+          // 由「邮件提醒 → 新建记录」交接而来：保存成功后才把该建议标记为已应用（取消则不标记），
+          // 并顺手归档正文（与「应用所选」同一条规则：只在设了同步口令时存正文）
+          if (pendingMailSeedId) {
+            const seedId = pendingMailSeedId;
+            pendingMailSeedId = null;
+            const seedSug = mailRawSuggestions.find(x => String(x.id) === String(seedId));
+            if (seedSug) mailArchive = archiveSuggestionMail(mailArchive, seedSug, !!syncConfig.passphrase);
+            markMailApplied(seedId);
+            renderMailView();
+            updateMailBadge();
+          }
         }
         closeDialog();
         render();
@@ -1448,8 +1464,6 @@
         if (noteDel) { deleteDrawerNote(noteDel.dataset.noteDel); return; }
         const sibling = event.target.closest('button[data-sibling]');
         if (sibling) { openRecordDrawer(sibling.dataset.sibling); return; }
-        const mailRef = event.target.closest('button[data-mail-ref]');
-        if (mailRef) { openMailRef(mailRef.dataset.mailRef); return; }
         if (event.target.closest('#drawerNoteAddBtn')) {
           const input = $('#drawerNoteInput');
           addDrawerNote(input ? input.value : '');

@@ -218,6 +218,47 @@ test('truncateBody 截断到 MAX_BODY 并加省略号（断言用常量，避免
   assert.ok(parse.MAX_BODY >= 8000, 'MAX_BODY 应已提到 8000（长邮件底部的测评截止时间不再被截断）');
 });
 
+test('truncateForArchive:归档正文按 MAX_ARCHIVE_BODY 截断（它比 MAX_BODY 小，为的是不把建议文件撑到 Gist 的 1MB 截断线）', () => {
+  const long = 'a'.repeat(parse.MAX_ARCHIVE_BODY + 500);
+  assert.ok(parse.truncateForArchive(long).length <= parse.MAX_ARCHIVE_BODY + 1);
+  assert.ok(parse.truncateForArchive('短').length === 1);
+  assert.ok(parse.MAX_ARCHIVE_BODY < parse.MAX_BODY, '归档上限必须小于 AI 用的正文上限');
+  // 与 truncateBody 同源：只压缩「换行前」的空白（行尾空格），不去动行首缩进
+  assert.strictEqual(parse.truncateForArchive('a  \n b'), 'a\n b');
+  assert.strictEqual(parse.truncateForArchive('\n\n  x  '), 'x');
+});
+
+test('normalizeMessageId:剥尖括号、形状不对返回空串（坏 ID 会让网页端关联到错误的邮件）', () => {
+  assert.strictEqual(parse.normalizeMessageId('<abc@x.com>'), 'abc@x.com');
+  assert.strictEqual(parse.normalizeMessageId('  abc@x.com  '), 'abc@x.com');
+  assert.strictEqual(parse.normalizeMessageId('<a.b+c@sub.example.org>'), 'a.b+c@sub.example.org');
+  // 缺失/畸形一律空串：调用方据此回落到 mailbox+uidValidity+uid
+  assert.strictEqual(parse.normalizeMessageId(''), '');
+  assert.strictEqual(parse.normalizeMessageId('no-at-sign'), '');
+  assert.strictEqual(parse.normalizeMessageId('<a b@x.com>'), '');
+  assert.strictEqual(parse.normalizeMessageId(undefined), '');
+});
+
+test('buildSuggestion:带上稳定标识与正文快照（缺 ctx/缺 messageId 时不得报错或写 undefined）', () => {
+  const mail = {
+    sourceUid: 42, messageId: 'mid@x.com', receivedAt: '2026-09-10T01:00:00.000Z',
+    from: 'hr@x.com', subject: '测评通知', textBody: '请在 9 月 18 日前完成测评'
+  };
+  const s = state.buildSuggestion(mail, { emailType: '测评', stage: '测评', confidence: 0.9 }, { uidValidity: 777, mailbox: 'INBOX' });
+  assert.strictEqual(s.messageId, 'mid@x.com');
+  assert.strictEqual(s.uidValidity, 777);
+  assert.strictEqual(s.mailbox, 'INBOX');
+  assert.strictEqual(s.textBody, '请在 9 月 18 日前完成测评');
+  // 旧调用方式（不传 ctx）与缺 messageId 的邮件都必须安全降级
+  const legacy = state.buildSuggestion(mail, { emailType: '测评' });
+  assert.strictEqual(legacy.uidValidity, 0);
+  assert.strictEqual(legacy.mailbox, '');
+  const noMid = state.buildSuggestion({ sourceUid: 7, subject: 's' }, {});
+  assert.strictEqual(noMid.messageId, '');
+  assert.strictEqual(noMid.textBody, ''); // 无正文 → 空串而不是 undefined
+  assert.ok(String(noMid.id).startsWith('uid-'), 'id 仍是 uid-<sourceUid>（appliedIds 依赖它稳定）');
+});
+
 test('computeWatermark 推进到已抓取最大 UID（含非候选）', () => {
   const w = state.computeWatermark({ uidValidity: 999 }, [10, 12, 11], { lastUid: 8, lastUidValidity: 999 });
   assert.strictEqual(w.lastUid, 12);

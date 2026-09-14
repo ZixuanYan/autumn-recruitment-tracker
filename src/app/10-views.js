@@ -492,13 +492,20 @@
           body.innerHTML = `
             <div class="drawer-section"><h3>里程碑时间线</h3>${stepsHtml(record)}</div>
             <div class="drawer-section"><h3>关键信息</h3><dl class="drawer-facts">${facts.map(fact => `<div class="drawer-fact"><dt>${escapeHtml(fact.label)}</dt><dd>${HTML_FACT_LABELS.includes(fact.label) ? fact.value : escapeHtml(fact.value)}</dd></div>`).join('')}</dl></div>
-            ${mailRefs.length ? `<div class="drawer-section"><h3>相关邮件（${mailRefs.length}）</h3><div class="mail-ref-list">${mailRefs.slice().reverse().map(ref => `
-              <div class="mail-ref-item">
+            ${mailRefs.length ? `<div class="drawer-section"><h3>相关邮件（${mailRefs.length}）</h3><div class="mail-ref-list">${mailRefs.slice().reverse().map(ref => {
+              // v4.22.0：正文从归档里按 mailId 取（同一封只存一份）；取不到就如实说快照缺失，
+              // 不再把用户甩回「邮件提醒」的待复核列表（那条路对已应用的邮件本来也走不通）。
+              const archived = mailArchiveEntry(ref.mailId);
+              const body = archived ? String(archived.textBody || '') : '';
+              return `<div class="mail-ref-item">
                 <div class="mail-ref-top">${ref.emailType ? `<span class="mail-type" data-type="${escapeHtml(ref.emailType)}">${escapeHtml(ref.emailType)}</span>` : ''}<span class="mail-ref-subject">${escapeHtml(ref.subject || '（无主题）')}</span></div>
                 <div class="mail-ref-meta">${escapeHtml(ref.from || '（无发件人）')}${ref.receivedAt ? ` · ${escapeHtml(formatClock(ref.receivedAt) || '')}` : ''}</div>
                 ${ref.summary ? `<div class="mail-ref-summary">${escapeHtml(ref.summary)}</div>` : ''}
-                ${ref.uid ? `<button class="text-button" type="button" data-mail-ref="${escapeHtml(String(ref.uid))}">在邮件提醒中查看</button>` : ''}
-              </div>`).join('')}</div></div>` : ''}
+                ${body
+                  ? `<details class="mail-ref-body"><summary>查看邮件原文（${body.length} 字）</summary><pre>${escapeHtml(body)}</pre></details>`
+                  : `<div class="mail-ref-nobody">邮件正文快照缺失${syncConfig.passphrase ? '' : '（未设置同步口令时不保存正文，只留上面的摘要）'}</div>`}
+              </div>`;
+            }).join('')}</div></div>` : ''}
             <div class="drawer-section"><h3>下一步行动</h3><div class="note-text">${escapeHtml(record.nextAction || '—')}</div></div>
             <div class="drawer-section">
               <h3>笔记 / 面经（${notes.length}）</h3>

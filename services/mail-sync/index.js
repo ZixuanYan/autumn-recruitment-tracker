@@ -151,7 +151,11 @@ async function run() {
         }
         continue;
       }
-      incoming.push(buildSuggestion(mail, result));
+      incoming.push(buildSuggestion(mail, result, {
+        // v4.22.0：稳定标识的后半段（Message-ID 缺失时网页端用它回落）
+        uidValidity: Number(mailbox && mailbox.uidValidity) || 0,
+        mailbox: String((mailbox && mailbox.path) || 'INBOX')
+      }));
     }
   } finally {
     await closeInbox(client, lock);

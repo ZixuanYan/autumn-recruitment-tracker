@@ -617,9 +617,12 @@
     .mail-ref-meta { margin-top: 2px; color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
     .mail-ref-summary { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
     .mail-ref-item .text-button { margin-top: 4px; padding-left: 0; }
-    /* 从记录跳回邮件提醒时闪一下目标卡片，否则用户不知道被带到了哪一条 */
-    .mail-card.is-flash { animation: mailFlash 1.6s ease-out; }
-    @keyframes mailFlash { 0%, 60% { box-shadow: 0 0 0 3px var(--accent-border); } 100% { box-shadow: none; } }
+    /* 邮件正文（v4.22.0）：默认折起，点了才展开——正文可能有上千字，直接铺开会淹没抽屉 */
+    .mail-ref-body { margin-top: 5px; }
+    .mail-ref-body > summary { cursor: pointer; color: var(--accent-ink); font-size: 12px; }
+    .mail-ref-body > pre { margin: 6px 0 0; padding: 8px 10px; max-height: 260px; overflow: auto; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* 正文快照缺失（多半是没设同步口令，按隐私规则不存正文）——如实说明，不假装能打开 */
+    .mail-ref-nobody { margin-top: 5px; color: var(--muted); font-size: 11.5px; }
     .note-list { display: grid; gap: 8px; }
     .note-item { padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; }
     .note-item-head { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 11.5px; }

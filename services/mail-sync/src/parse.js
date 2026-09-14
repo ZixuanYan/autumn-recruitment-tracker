@@ -9,6 +9,10 @@
 // 招聘邮件的关键信息常在正文靠后位置——长邮件底部的「请于 X 日前完成测评」「点击链接确认参加面试」
 // 在 4000 字截断下会丢失，导致 AI 解析不出 scheduleAt。8000 字对 token 成本影响很小。
 const MAX_BODY = 8000;
+// 写进建议里的正文上限（v4.22.0）：建议要落进 Gist 的 mail-suggestions.json，
+// 而 Gist 单文件超过 ~1MB 会被截断读取。按 8000 字存，100 条建议就是 ~800KB，太接近上限；
+// 归档只用来回看，2000 字足够看清"这封邮件说了什么"。AI 用的仍是 8000 字的全文，不受影响。
+const MAX_ARCHIVE_BODY = 2000;
 
 let _simpleParser = null;
 function getSimpleParser() {
@@ -43,6 +47,20 @@ function truncateBody(text) {
   return s.length > MAX_BODY ? `${s.slice(0, MAX_BODY)}…` : s;
 }
 
+// 归档用的短正文：与 truncateBody 同源（先规范化空白），再按更小的上限截断。
+function truncateForArchive(text) {
+  const s = String(text || '').replace(/\s+\n/g, '\n').trim();
+  return s.length > MAX_ARCHIVE_BODY ? `${s.slice(0, MAX_ARCHIVE_BODY)}…` : s;
+}
+
+// Message-ID 归一：剥掉尖括号，形状不对就返回空串（宁空勿假 —— 一个坏 ID 会让网页端关联到错误的邮件）。
+// ⚠️ Message-ID **不保证存在**（部分营销/系统邮件没有），所以它只是"优先标识"，
+// 缺失时由调用方回落到 mailbox + uidValidity + uid 的组合。
+function normalizeMessageId(value) {
+  const s = String(value || '').trim().replace(/^</, '').replace(/>$/, '');
+  return /^[^<>\s]+@[^<>\s]+$/.test(s) ? s : '';
+}
+
 // 收取时间：优先 parsed.date，回退 internalDate / envelope.date，最后当前时间；统一 ISO
 function pickReceivedAt(parsedDate, internalDate, envelopeDate) {
   const cand = parsedDate || internalDate || envelopeDate;
@@ -70,6 +88,8 @@ async function parseMessage(msg) {
 
   return {
     sourceUid: Number(msg.uid) || 0,
+    // v4.22.0：稳定标识（换邮箱/换服务器后 UID 会变，Message-ID 不会）
+    messageId: normalizeMessageId(parsed.messageId || env.messageId),
     receivedAt: pickReceivedAt(parsed.date, msg.internalDate, env.date),
     from: fromAddr,
     fromName,
@@ -78,4 +98,4 @@ async function parseMessage(msg) {
   };
 }
 
-module.exports = { parseMessage, htmlToText, truncateBody, pickReceivedAt, MAX_BODY };
+module.exports = { parseMessage, htmlToText, truncateBody, truncateForArchive, normalizeMessageId, pickReceivedAt, MAX_BODY, MAX_ARCHIVE_BODY };

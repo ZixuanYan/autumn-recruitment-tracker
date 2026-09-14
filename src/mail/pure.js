@@ -80,6 +80,21 @@
         const applied = new Set((appliedIds || []).map(String)), dismissed = new Set((dismissedIds || []).map(String));
         return (Array.isArray(suggestions) ? suggestions : []).filter(s => s && s.id && !applied.has(String(s.id)) && !dismissed.has(String(s.id)));
       }
+      // 邮件的稳定标识（v4.22.0）。取值优先级：
+      //   ① Message-ID —— 换邮箱/换服务器后 UID 会变，Message-ID 不会；但服务器不保证给（营销/系统邮件常缺）。
+      //   ② mailbox + uidValidity + sourceUid —— UID 只在同一个 UIDVALIDITY 下才有意义
+      //      （邮箱重开过、UIDVALIDITY 变了，旧 UID 可能指向**另一封**邮件），所以必须三者一起。
+      // 都拿不到时返回空串：调用方据此退化成"只有主题/摘要"的弱引用，而不是编一个 id 出来。
+      function mailIdOf(suggestion) {
+        const s = suggestion && typeof suggestion === 'object' ? suggestion : {};
+        const mid = String(s.messageId || '').trim();
+        if (mid) return `mid:${mid}`;
+        const uid = Number(s.sourceUid) || 0;
+        if (!uid) return '';
+        const mailbox = String(s.mailbox || '').trim() || 'INBOX';
+        const uidValidity = Number(s.uidValidity) || 0;
+        return `uid:${mailbox}|${uidValidity}|${uid}`;
+      }
       // ID 列表并集去重，cap 最近 500 条防膨胀（applied/dismissed 只增不减，membership 语义，顺序无关）
       function unionIdList(a, b, cap) {
         const limit = Number(cap) > 0 ? Number(cap) : 500;

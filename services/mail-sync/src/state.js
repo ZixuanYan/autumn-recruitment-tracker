@@ -7,6 +7,11 @@
 const PRUNE_DAYS = 30;
 const PRUNE_MAX = 100;
 
+// v4.22.0：正文快照的上限与截断实现都在 parse.js（与 AI 用的 8000 字上限分开——建议文件要落进
+// Gist，正文太大会逼近单文件 1MB 的截断线）。parse.js 对 mailparser 是惰性 require，
+// 所以这里顶层 require 它是安全的：只跑纯函数单测时不会去加载 mailparser。
+const { truncateForArchive } = require('./parse');
+
 // ===== 丢弃可观测性（v4.6.1）=====
 // 修复前 index.js 是 `if (!isCandidate(mail, kw)) continue;` —— 无日志、无计数、meta 不记录。
 // 实测某次运行「抓取 17 封 → 候选 3」，那 14 封为什么被丢、发件人是谁，用户完全无从查证，
@@ -71,11 +76,18 @@ function computeWatermark(mailbox, fetchedUids, prevMeta) {
 }
 
 // 由邮件 + AI/占位结果组装一条建议（契约见计划文件「建议文件契约」）
-function buildSuggestion(mail, result) {
+// ctx（v4.22.0）：{ uidValidity, mailbox } —— 稳定标识的后半段，来自当前打开的邮箱。
+function buildSuggestion(mail, result, ctx) {
   const r = result || {};
+  const c = ctx || {};
   return {
     id: `uid-${mail.sourceUid}`,
     sourceUid: Number(mail.sourceUid) || 0,
+    // v4.22.0 稳定标识：Message-ID 优先（换邮箱/换服务器后 UID 会变，它不会）；
+    // 缺失时网页端回落到 mailbox + uidValidity + sourceUid —— 三者一起才唯一。
+    messageId: String(mail.messageId || ''),
+    uidValidity: Number(c.uidValidity) || 0,
+    mailbox: String(c.mailbox || ''),
     receivedAt: mail.receivedAt || '',
     from: mail.from || '',
     subject: mail.subject || '',
@@ -91,6 +103,10 @@ function buildSuggestion(mail, result) {
     location: r.location || '',
     round: r.round || '',
     summary: r.summary || '',
+    // 正文快照（≤2000 字）：网页端把它归档进记录，供详情里回看邮件原文。
+    // **是否真正落盘由网页端决定** —— 没设同步口令时不归档正文，免得把邮件正文
+    // 以明文写进"凭 URL 就能读"的 Gist。
+    textBody: truncateForArchive(mail.textBody),
     confidence: Number.isFinite(Number(r.confidence)) ? Number(r.confidence) : 0,
     proposed: r.proposed || { milestone: { stage: '', at: '', note: '' }, scheduleAt: '', recentSchedule: '', nextAction: '' }
   };

@@ -357,9 +357,10 @@ function extractConstLine(src, name) {
   const line = src.split('\n').find(l => l.includes(`const ${name} =`));
   return line ? line.trim() : '';
 }
-// v4.20.0 邮件关联助手：不参与 core 计算，但要和 core 在同一沙箱里做行为断言
+// v4.20.0 邮件关联助手 + v4.22.0 邮件归档：不参与 core 计算，但要和 core 在同一沙箱里做行为断言
 //（normalizeRecord 也要用 sanitizeMailRefs，所以这几个必须一起注入）。
-const MAIL_REF_FN_NAMES = ['sanitizeMailRef', 'sanitizeMailRefs', 'linkMailToRecord', 'unionMailRefs'];
+const MAIL_REF_FN_NAMES = ['sanitizeMailRef', 'sanitizeMailRefs', 'linkMailToRecord', 'unionMailRefs',
+  'sanitizeMailArchiveEntry', 'sanitizeMailArchive', 'unionMailArchive', 'pruneMailArchive', 'referencedMailIds', 'archiveSuggestionMail'];
 const mailRefFns = MAIL_REF_FN_NAMES.map(name => extractFunction(html, name));
 check('邮件关联助手全部从 index.html 抽取到', () => {
   assert.deepStrictEqual(MAIL_REF_FN_NAMES.filter((name, idx) => !mailRefFns[idx]), []);
@@ -367,7 +368,9 @@ check('邮件关联助手全部从 index.html 抽取到', () => {
 
 const CORE_CONST_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET', 'COMPANY_TYPE_ALIASES',
   // v4.19.0 关键时间类型（events[] 用）：core 的 dates/insights/ics 都读它们
-  'TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'isTimeEventAllDay', 'normalizeTimeEventType'];
+  'TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'isTimeEventAllDay', 'normalizeTimeEventType',
+  // v4.22.0 归档体积预算：pruneMailArchive 读它
+  'MAIL_ARCHIVE_MAX_CHARS'];
 const coreConsts = CORE_CONST_NAMES.map(name => extractConstLine(html, name));
 check('CORE 依赖的顶层常量全部从 index.html 抽取到', () => {
   const missing = CORE_CONST_NAMES.filter((name, idx) => !coreConsts[idx]);
@@ -437,7 +440,9 @@ const core = new Function(
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findAwaitingAdvance, findUpcomingDeadlines, collectAlerts,
      nextTimeEvent, nearestDeadlineEvent, isEventPast,
-     sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs,
+     sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs, mailIdOf,
+     sanitizeMailArchive, unionMailArchive, pruneMailArchive, referencedMailIds, archiveSuggestionMail,
+     MAIL_ARCHIVE_MAX_CHARS,
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
    };`
@@ -1328,16 +1333,61 @@ check('unionMailRefs：跨设备合并取并集（只增不改的事实不该被
   assert.strictEqual(u[0].subject, 'A', '冲突时先出现（本地）优先');
 });
 
-check('邮件关联 UI 贯通：应用即挂引用 / 新建记录也带 / 抽屉可跳回 / 合并取并集', () => {
+check('邮件关联 UI 贯通：应用即挂引用 / 新建记录也带 / 抽屉可展开正文 / 合并取并集', () => {
   const apply = extractFunction(html, 'applyMailSuggestion').replace(/\/\/[^\n]*/g, '');
   assert.ok(/linkMailToRecord\(rec, s\)/.test(apply), 'apply 必须把邮件挂到目标记录上（否则应用后邮件与记录再无关联）');
   const seed = extractFunction(html, 'openMailSeedDialog').replace(/\/\/[^\n]*/g, '');
   assert.ok(/mailRefs:/.test(seed), '「新建记录」路径也要带上邮件引用');
   const drawer = extractFunction(html, 'renderDrawer').replace(/\/\/[^\n]*/g, '');
-  assert.ok(/相关邮件/.test(drawer) && /data-mail-ref=/.test(drawer), '抽屉要有「相关邮件」区与跳转入口');
-  assert.ok(/function openMailRef\(/.test(html) && /button\[data-mail-ref\]/.test(html), '要有跳回邮件提醒的实现与事件绑定');
+  assert.ok(/相关邮件/.test(drawer) && /mail-ref-body/.test(drawer), '抽屉要能展开邮件正文');
+  assert.ok(/mailArchiveEntry\(/.test(drawer), '正文必须按 mailId 从归档取（同一封只存一份）');
+  assert.ok(/邮件正文快照缺失/.test(drawer), '取不到正文时要如实说明快照缺失，而不是假装能打开');
+  // v4.22.0：不再把用户甩回「邮件提醒」的待复核列表 —— 已应用的邮件本来就不在那里
+  assert.ok(!/data-mail-ref=/.test(html) && !/function openMailRef\(/.test(html), '不应再有跳待复核列表的入口');
   const merge = extractFunction(html, 'mergeSyncState').replace(/\/\/[^\n]*/g, '');
   assert.ok(/unionMailRefs\(/.test(merge), 'mergeSyncState 必须对 mailRefs 取并集');
+  assert.ok(/unionMailArchive\(/.test(html), '邮件归档同样要并集合并（只增不改的事实）');
+  assert.ok(/mailArchive/.test(extractFunction(html, 'createEnvelope')), '归档要随加密信封同步');
+});
+
+// ---- v4.22.0 邮件正文归档与稳定标识 ----
+check('mailIdOf：Message-ID 优先；缺失时用 mailbox+uidValidity+uid（UIDVALIDITY 变了就不是同一封）', () => {
+  assert.strictEqual(core.mailIdOf({ messageId: 'a@x', sourceUid: 1, uidValidity: 2, mailbox: 'INBOX' }), 'mid:a@x');
+  assert.strictEqual(core.mailIdOf({ sourceUid: 7, uidValidity: 9, mailbox: 'INBOX' }), 'uid:INBOX|9|7');
+  assert.strictEqual(core.mailIdOf({ sourceUid: 7, uidValidity: 9 }), 'uid:INBOX|9|7', '缺 mailbox 时按 INBOX');
+  assert.notStrictEqual(
+    core.mailIdOf({ sourceUid: 7, uidValidity: 10, mailbox: 'INBOX' }),
+    core.mailIdOf({ sourceUid: 7, uidValidity: 9, mailbox: 'INBOX' }),
+    'UIDVALIDITY 变了就不是同一封 —— 这是必须把三者一起用的原因');
+  assert.strictEqual(core.mailIdOf({ sourceUid: 7 }), 'uid:INBOX|0|7', '旧版 Action 没有 uidValidity 时仍给出稳定（同邮箱内）标识');
+  assert.strictEqual(core.mailIdOf({}), '', '什么标识都没有 → 空串（退化为弱引用，而不是编一个 id）');
+});
+
+check('邮件归档：正文 2000 字上限 / 并集取更完整的一份 / 裁剪只淘汰未被引用的条目', () => {
+  const entry = (id, body, at) => ({ mailId: id, subject: 's', textBody: body, archivedAt: at || '2026-09-14T00:00:00.000Z' });
+  const long = core.sanitizeMailArchive({ 'mid:a': entry('mid:a', 'x'.repeat(3000)) });
+  assert.strictEqual(long['mid:a'].textBody.length, 2000, '归档正文上限 2000（单条）');
+  const u = core.unionMailArchive({ 'mid:a': entry('mid:a', 'short') }, { 'mid:a': entry('mid:a', 'a much longer body') });
+  assert.strictEqual(u['mid:a'].textBody, 'a much longer body', '同一封两边都有时取更完整的那份');
+  // 60 条 × 2000 字 = 120000 > 100000 预算 → 必须裁掉未被引用的最旧条目
+  const big = {};
+  for (let i = 0; i < 60; i += 1) big[`mid:${i}`] = entry(`mid:${i}`, 'y'.repeat(2000), `2026-09-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`);
+  const pruned = core.pruneMailArchive(big, new Set(['mid:0']));
+  const total = Object.values(pruned).reduce((s, e) => s + e.textBody.length, 0);
+  assert.ok(total <= core.MAIL_ARCHIVE_MAX_CHARS || total === 2000, `裁剪后应落到预算内（实际 ${total}）`);
+  assert.ok(pruned['mid:0'], '被引用的条目必须保留（哪怕它是最旧的）');
+  assert.ok(!pruned['mid:1'], '未被引用的最旧条目先被淘汰');
+  assert.deepStrictEqual(core.referencedMailIds([{ mailRefs: [{ mailId: 'mid:a' }, { mailId: '' }] }, {}]), new Set(['mid:a']));
+});
+
+check('archiveSuggestionMail：只在允许时才存正文（未设同步口令不存 —— 免得明文进 Gist）', () => {
+  const sug = { messageId: 'm@x', sourceUid: 3, uidValidity: 5, mailbox: 'INBOX', subject: 's', from: 'a@x', receivedAt: '2026-09-10T01:00:00.000Z', emailType: '测评', summary: '摘要', textBody: '正文内容' };
+  const withBody = core.archiveSuggestionMail({}, sug, true);
+  assert.strictEqual(withBody['mid:m@x'].textBody, '正文内容');
+  const noBody = core.archiveSuggestionMail({}, sug, false);
+  assert.strictEqual(noBody['mid:m@x'].textBody, '', '不允许时只留摘要，不存正文');
+  assert.strictEqual(noBody['mid:m@x'].summary, '摘要', '摘要仍要保留（详情里还能看清说了什么）');
+  assert.deepStrictEqual(core.archiveSuggestionMail({}, { subject: '无标识' }, true), {}, '连 mailId 都算不出来时不写归档（不编 id）');
 });
 
 check('normalizeRecord companyType：白名单校验，老数据与非法值一律归「未设置」', () => {
@@ -2456,10 +2506,10 @@ check('deadline 贯通网页端：卡片有编辑器、apply 会写成「截止�
   assert.ok(/data-mail-edit="deadline"/.test(cardSrc), '邮件卡片应有 deadline 的编辑器');
   assert.ok(/data-mail-edit="scheduleAt"/.test(cardSrc), '邮件卡片应有 scheduleAt 的编辑器');
   const apply = extractFunction(html, 'applyMailSuggestion').replace(/\/\/[^\n]*/g, '');
-  assert.ok(/upsertEvent\(rec, TIME_EVENT_DEADLINE, readEd\('deadline'\)\)/.test(apply),
-    'apply 必须把 deadline 写成「截止」关键时间，否则 AI 侧接住了也白接');
-  assert.ok(/upsertEvent\(rec, mailScheduleType\(s\), readEd\('scheduleAt'\)\)/.test(apply),
-    'apply 必须把 scheduleAt 按邮件类型写成事件（面试 / 笔试测评）');
+  assert.ok(/upsertEvent\(rec, TIME_EVENT_DEADLINE, readEd\('deadline'\), eventSourceId\(/.test(apply),
+    'apply 必须把 deadline 写成「截止」关键时间（并带上 sourceId 以便改期替换）');
+  assert.ok(/upsertEvent\(rec, mailScheduleType\(s\), readEd\('scheduleAt'\), eventSourceId\(/.test(apply),
+    'apply 必须把 scheduleAt 按邮件类型写成事件（面试 / 笔试测评）并带 sourceId');
   // 来源三态都要有对应的视觉标记：兜底值必须显眼，否则用户会以为它是邮件里读出来的
   for (const cls of ['is-fallback', 'is-email', 'is-unknown']) {
     assert.ok(cardSrc.includes(cls), `mailCardHtml 缺 atSource 的 ${cls} 分支`);

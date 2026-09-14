@@ -90,8 +90,11 @@ sandbox.cryptoId = (() => { let n = 0; return () => `ev-${(n += 1)}`; })();
 // applyMailSuggestion 用 linkMailToRecord → sanitizeMailRef(s)）。
 // 注意 extractFunction 返回的是**源码文本**，必须拼进 vm 上下文执行；直接赋给 sandbox 属性
 // 只会得到一个字符串（调用时报 "xxx is not a function"）。
-const MAIL_REF_HELPERS = ['upsertEvent', 'sanitizeEvents', 'linkMailToRecord', 'sanitizeMailRef', 'sanitizeMailRefs']
+const MAIL_REF_HELPERS = ['upsertEvent', 'sanitizeEvents', 'linkMailToRecord', 'sanitizeMailRef', 'sanitizeMailRefs',
+  'sanitizeMailArchiveEntry', 'archiveSuggestionMail']
   .map(n => extractFunction(html, n)).join('\n');
+// 归档变量：applyMailSuggestion 会 `mailArchive = archiveSuggestionMail(mailArchive, ...)`
+sandbox.mailArchive = {};
 vm.createContext(sandbox);
 vm.runInContext(extractFunction(loadSrc.coreSrc, 'positionWithUnit'), sandbox, { filename: 'core-positionWithUnit.js' });
 vm.runInContext(`${MAIL_REF_HELPERS}\n${sectionSrc}`, sandbox, { filename: 'mail-section.js' });
@@ -622,7 +625,7 @@ const v45Section = extractBlock(html, V45_START, V44_START);
 // setCurrentMilestoneDone（v4.18.0）与 normalizeRecord 同段、依赖相同（sanitizeTimeline / setTimeline /
 // localDateInput 都已在本沙箱里），因此一并抽真实现来做行为断言——它「没有时间线时要合成一条」
 // 这条分支静态断言覆盖不到，而那正是示例数据点「标记完成」静默无动作的成因。
-const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId', 'setCurrentMilestoneDone', 'sanitizeEvents', 'migrateLegacyEvents', 'sanitizeMailRef', 'sanitizeMailRefs']
+const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId', 'setCurrentMilestoneDone', 'sanitizeEvents', 'migrateLegacyEvents', 'sanitizeMailRef', 'sanitizeMailRefs', 'mailArchiveEntry']
   .map(name => extractFunction(html, name));
 // v4.19.0 关键时间类型的转发别名。它们在 index.html 里位于 bootstrap 段（不在被抽取的块内），
 // 而 sanitizeEvents / coreBlock 的 dates·insights·ics 都要用，所以按同样的转发形态在这里补齐。
@@ -714,6 +717,8 @@ const sandbox2 = {
   escapeHtml: v => String(v == null ? '' : v).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c])),
   formatDate: v => (v ? `D(${String(v).slice(5, 10)})` : '—'),
   formatDateTime: v => (v ? `DT(${v})` : '暂未安排'),
+  // v4.22.0：抽屉的「相关邮件」要显示收信时间，renderDrawer 因此用到 formatClock
+  formatClock: v => (v ? 'CLK' : ''),
   parseLocal: v => { if (!v) return null; const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d; },
   localDateInput: d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
   stageOrder: s => { const i = STAGE_PRESETS_LIVE.indexOf(s); return i === -1 ? 9000 : i; },
@@ -727,6 +732,8 @@ const sandbox2 = {
   syncConfig: { token: 'tok' },
   records: [],
   sampleDataMode: false,
+  // v4.22.0：邮件正文归档（renderDrawer 的「相关邮件」按 mailId 从这里取正文）
+  mailArchive: {},
   parseRoute: () => 'overview',
   exampleRecords: () => [{ id: 'demo1', company: '星海科技', position: '产品', stage: '一面' }],
   // normalizeRecord / sanitizeTimeline / deriveStage / cryptoId 用真实现（见下方注入），不在此打桩
@@ -1126,6 +1133,47 @@ check('openRecordDrawer 渲染步骤条（含距上一步天数）/ 笔记 / 同
   assert.ok(h.includes('data-sibling="r2"'));
   assert.ok(els2['#drawerActions'].innerHTML.includes('data-drawer="advance"'));
   assert.strictEqual(els2['#drawerTitle'].textContent, '腾讯 · 后端');
+});
+
+check('抽屉「相关邮件」：按 mailId 从归档展开正文；取不到时如实说快照缺失（v4.22.0）', () => {
+  seedRecords();
+  sandbox2.records[0].mailRefs = [
+    { mailId: 'mid:a@x', uid: 11, subject: '在线测评通知', from: 'hr@x.com', receivedAt: '2026-09-10T01:00:00.000Z', emailType: '测评', summary: '请在 9 月 18 日前完成' },
+    { mailId: 'mid:b@x', uid: 12, subject: '投递成功', from: 'noreply@x.com', receivedAt: '2026-09-01T01:00:00.000Z', emailType: '投递成功', summary: '简历已投递' }
+  ];
+  sandbox2.mailArchive['mid:a@x'] = { mailId: 'mid:a@x', textBody: '请在 9 月 18 日前完成在线测评', archivedAt: '2026-09-14T00:00:00.000Z' };
+  sandbox2.openRecordDrawer('r1');
+  const h = els2['#drawerBody'].innerHTML;
+  assert.ok(h.includes('相关邮件（2）'), '两条引用都列出来');
+  assert.ok(h.includes('查看邮件原文'), '有归档的条目要能展开原文');
+  assert.ok(h.includes('请在 9 月 18 日前完成在线测评'), '展开的是归档里的正文');
+  assert.ok(h.includes('邮件正文快照缺失'), '没有归档的条目如实提示，而不是假装能打开');
+  assert.ok(!h.includes('data-mail-ref'), 'v4.22.0 起不再有"跳待复核列表"的入口');
+  // 清理，避免影响后续用例
+  sandbox2.records[0].mailRefs = [];
+  delete sandbox2.mailArchive['mid:a@x'];
+});
+
+check('upsertEvent：带 sourceId 时改期"替换"旧事件；不带时按类型+时间去重（v4.22.0）', () => {
+  const rec = { id: 'r', events: [] };
+  sandbox.upsertEvent(rec, '面试', '2026-09-20T14:00', 'mid:a@x#面试', 'mid:a@x');
+  assert.strictEqual(rec.events.length, 1);
+  assert.strictEqual(rec.events[0].sourceId, 'mid:a@x#面试');
+  assert.strictEqual(rec.events[0].mailId, 'mid:a@x');
+  // 同一封邮件改期后重投：旧时间必须消失，否则会同时挂着旧面试时间与新面试时间
+  sandbox.upsertEvent(rec, '面试', '2026-09-22T10:00', 'mid:a@x#面试', 'mid:a@x');
+  assert.strictEqual(rec.events.length, 1, '改期必须替换而不是并排留两条');
+  assert.strictEqual(rec.events[0].at, '2026-09-22T10:00');
+  // 手工添加（无 sourceId）：同一类型同一时间不堆叠，不同时间各自保留
+  sandbox.upsertEvent(rec, '其他', '2026-09-25T09:00');
+  sandbox.upsertEvent(rec, '其他', '2026-09-25T09:00');
+  assert.strictEqual(rec.events.length, 2, '无来源时按「类型+时间」去重');
+  sandbox.upsertEvent(rec, '其他', '2026-09-26T09:00');
+  assert.strictEqual(rec.events.length, 3);
+  // 同一封邮件的两类事件互不替换
+  sandbox.upsertEvent(rec, '截止', '2026-09-30', 'mid:a@x#截止', 'mid:a@x');
+  assert.strictEqual(rec.events.length, 4);
+  assert.strictEqual(rec.events.filter(e => String(e.mailId) === 'mid:a@x').length, 2, '同一封的面试与截止事件并存');
 });
 
 check('未知 id 打开抽屉是安全的空操作（不会把已打开的抽屉甩关上）', () => {

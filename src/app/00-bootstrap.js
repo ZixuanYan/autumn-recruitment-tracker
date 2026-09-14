@@ -107,7 +107,11 @@
             id: String(e.id || cryptoId()),
             type,
             at: allDay ? at.slice(0, 10) : at, // 全天事件只保留日期，避免存成"带时刻的全天"半吊子
-            allDay
+            allDay,
+            // v4.22.0 来源标识：sourceId 让「同一封邮件改期」能**替换**旧事件而不是并排留两条；
+            // mailId 指向邮件归档，详情里可以从事件回看邮件。
+            sourceId: String(e.sourceId || '').trim().slice(0, 120),
+            mailId: String(e.mailId || '').trim().slice(0, 120)
           };
         }).filter(Boolean);
       }
@@ -134,8 +138,10 @@
         if (!ref || typeof ref !== 'object') return null;
         const uid = Number(ref.uid) || 0;
         const subject = String(ref.subject || '').trim().slice(0, 200);
-        if (!uid && !subject) return null; // 既无 uid 又无主题的引用没有检索价值
+        const mailId = String(ref.mailId || '').trim();
+        if (!uid && !subject && !mailId) return null; // 三者都没有的引用没有检索价值
         return {
+          mailId,
           uid,
           subject,
           from: String(ref.from || '').trim().slice(0, 120),
@@ -145,14 +151,14 @@
           linkedAt: String(ref.linkedAt || '')
         };
       }
-      // 去重（uid 优先，退化为主题）+ 上限 50 条防膨胀；先出现者胜
+      // 去重（mailId 优先，其次 uid，退化为主题）+ 上限 50 条防膨胀；先出现者胜
       function sanitizeMailRefs(list) {
         const out = [];
         const seen = new Set();
         for (const ref of (Array.isArray(list) ? list : [])) {
           const clean = sanitizeMailRef(ref);
           if (!clean) continue;
-          const key = clean.uid ? `u${clean.uid}` : `s${clean.subject}`;
+          const key = clean.mailId ? `m${clean.mailId}` : (clean.uid ? `u${clean.uid}` : `s${clean.subject}`);
           if (seen.has(key)) continue;
           seen.add(key);
           out.push(clean);
@@ -163,21 +169,119 @@
       function unionMailRefs(a, b) {
         return sanitizeMailRefs([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]);
       }
-      // 把一封邮件建议挂到记录上：同一 uid 只留一条（重复应用同一封不会堆叠），新值覆盖旧值
+      // 把一封邮件建议挂到记录上：同一封只留一条（重复应用不会堆叠），新值覆盖旧值。
+      // v4.22.0：带上 mailId（稳定标识），正文不进这里（在 mailArchive 里按 mailId 存一份）。
       function linkMailToRecord(rec, suggestion) {
         if (!rec || !suggestion) return;
+        const s = suggestion;
+        const mailId = mailIdOf(s);
         const ref = sanitizeMailRef({
-          uid: suggestion.sourceUid,
-          subject: suggestion.subject,
-          from: suggestion.from,
-          receivedAt: suggestion.receivedAt,
-          emailType: suggestion.emailType,
-          summary: suggestion.summary,
+          mailId,
+          uid: s.sourceUid,
+          subject: s.subject,
+          from: s.from,
+          receivedAt: s.receivedAt,
+          emailType: s.emailType,
+          summary: s.summary,
           linkedAt: new Date().toISOString()
         });
         if (!ref) return;
-        const kept = (Array.isArray(rec.mailRefs) ? rec.mailRefs : []).filter(x => !(ref.uid && Number(x.uid) === ref.uid));
-        rec.mailRefs = sanitizeMailRefs([...kept, ref]);
+        const sameRef = x => (mailId ? String(x.mailId) === mailId : Number(x.uid) > 0 && Number(x.uid) === ref.uid);
+        rec.mailRefs = sanitizeMailRefs([...(Array.isArray(rec.mailRefs) ? rec.mailRefs : []).filter(x => !sameRef(x)), ref]);
+      }
+      // ===== 邮件归档（v4.22.0）=====
+      // 记录上的 mailRefs 只存「引用 + 展示快照」；邮件**正文**单独存在这里，按 mailId 索引。
+      // 为什么要分开：一封邮件可能被应用到多条记录（一次测评通知覆盖同公司多个岗位），正文只存一份。
+      // 隐私：正文只在**设了同步口令**（云端存的是密文）时才归档——否则邮件正文会以明文进
+      // "凭 URL 就能读"的 Gist，那比主题敏感得多（本项目为此拒绝把授权码放 Gist）。
+      // 没口令时只留 AI 摘要（记录详情里仍能看清"这封邮件说了什么"）。
+      const MAIL_ARCHIVE_MAX_CHARS = 100000;
+      function sanitizeMailArchiveEntry(mailId, entry) {
+        const id = String(mailId || '').trim();
+        if (!id || !entry || typeof entry !== 'object') return null;
+        return {
+          mailId: id,
+          subject: String(entry.subject || '').slice(0, 200),
+          from: String(entry.from || '').slice(0, 120),
+          receivedAt: String(entry.receivedAt || ''),
+          emailType: String(entry.emailType || '').slice(0, 20),
+          summary: String(entry.summary || '').slice(0, 300),
+          textBody: String(entry.textBody || '').slice(0, 2000),
+          archivedAt: String(entry.archivedAt || '')
+        };
+      }
+      function sanitizeMailArchive(map) {
+        const out = {};
+        if (!map || typeof map !== 'object' || Array.isArray(map)) return out;
+        for (const key of Object.keys(map)) {
+          const entry = sanitizeMailArchiveEntry(key, map[key]);
+          if (entry) out[key] = entry;
+        }
+        return out;
+      }
+      function mailArchiveSignature(map) {
+        const clean = sanitizeMailArchive(map);
+        return JSON.stringify(Object.keys(clean).sort().map(k => [k, clean[k]]));
+      }
+      function sameMailArchive(a, b) {
+        return mailArchiveSignature(a) === mailArchiveSignature(b);
+      }
+      function unionMailArchive(a, b) {
+        const out = sanitizeMailArchive(a);
+        for (const [key, entry] of Object.entries(sanitizeMailArchive(b))) {
+          const prev = out[key];
+          if (!prev) { out[key] = entry; continue; }
+          // 同一封两边都有：取「正文更长」的那份（一端可能是截断版），等长时取归档更晚的
+          const better = entry.textBody.length > prev.textBody.length
+            || (entry.textBody.length === prev.textBody.length && String(entry.archivedAt) > String(prev.archivedAt));
+          if (better) out[key] = entry;
+        }
+        return out;
+      }
+      // 体积预算：超上限时**只淘汰没有被任何记录引用的**条目（从最久未归档的开始）。
+      // 被引用的正文永不淘汰 —— 那会让记录详情突然看不到原文，而用户已经点过「应用」。
+      function pruneMailArchive(archive, referencedIds) {
+        const refs = referencedIds instanceof Set ? referencedIds : new Set(referencedIds || []);
+        const entries = Object.values(sanitizeMailArchive(archive));
+        let total = entries.reduce((sum, e) => sum + e.textBody.length, 0);
+        const out = { ...sanitizeMailArchive(archive) };
+        if (total <= MAIL_ARCHIVE_MAX_CHARS) return out;
+        for (const entry of entries.filter(e => !refs.has(e.mailId)).sort((a, b) => String(a.archivedAt).localeCompare(String(b.archivedAt)))) {
+          if (total <= MAIL_ARCHIVE_MAX_CHARS) break;
+          delete out[entry.mailId];
+          total -= entry.textBody.length;
+        }
+        return out;
+      }
+      // 所有记录引用到的 mailId（裁剪时的保护名单）
+      function referencedMailIds(list) {
+        const set = new Set();
+        for (const rec of (Array.isArray(list) ? list : [])) {
+          for (const ref of (Array.isArray(rec && rec.mailRefs) ? rec.mailRefs : [])) {
+            if (ref && ref.mailId) set.add(String(ref.mailId));
+          }
+        }
+        return set;
+      }
+      // 把一封建议写进归档。withBody=false（没设同步口令）时只留摘要与元信息，不存正文。
+      function archiveSuggestionMail(archive, suggestion, withBody) {
+        const s = suggestion && typeof suggestion === 'object' ? suggestion : {};
+        const mailId = mailIdOf(s);
+        if (!mailId) return archive;
+        const entry = sanitizeMailArchiveEntry(mailId, {
+          subject: s.subject, from: s.from, receivedAt: s.receivedAt, emailType: s.emailType,
+          summary: s.summary,
+          textBody: withBody ? s.textBody : '',
+          archivedAt: new Date().toISOString()
+        });
+        if (!entry) return archive;
+        return { ...archive, [mailId]: entry };
+      }
+      // 按 mailId 取归档条目（记录详情里回看邮件正文用）；没有则返回 null，
+      // 调用方据此给出「快照缺失」提示，而不是假装能打开。
+      function mailArchiveEntry(mailId) {
+        const id = String(mailId || '');
+        return id && mailArchive[id] ? mailArchive[id] : null;
       }
       // 永久兼容约定：后续版本不得更改或复用此键；字段升级统一通过 normalizeRecord 迁移。
       const STORAGE_KEY = 'autumnRecruitmentTracker.records.v1';
@@ -193,7 +297,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.21.0';
+      const APP_VERSION = '4.22.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -265,6 +369,8 @@
       let mailConfig = null;       // Gist 里的 mail-config.json（内存态，供设置面板回填）
       let mailNeedKey = false;     // 邮件文件已加密但本机未填解密密钥
       let pendingMailSeedId = null; // 「新建记录」交接到弹窗，保存成功后才标记该建议为已应用
+      // 邮件正文归档（v4.22.0）：按 mailId 索引、随加密信封同步，供记录详情回看邮件原文
+      let mailArchive = {};
 
       function dateOffset(days, hour = 10, minute = 0) {
         const d = new Date();
@@ -749,13 +855,19 @@
             saveRecords();
             render();
           }
+          // v4.22.0：邮件归档取并集（只增不改的事实），再按体积预算裁剪未被引用的条目。
+          // 放在 records 合并之后 —— 保护名单要按**合并后**的记录来算。
+          const archiveBefore = mailArchiveSignature(mailArchive);
+          if (remote && remote.mailArchive) mailArchive = unionMailArchive(mailArchive, remote.mailArchive);
+          mailArchive = pruneMailArchive(mailArchive, referencedMailIds(records));
+          const archiveChanged = mailArchiveSignature(mailArchive) !== archiveBefore;
           // 本地简历更新（或云端无简历而本地非空）时随下次推送上传
           const resumeNeedsPush = !isResumeEmpty(resume) && resumeSavedAt > Number(remote?.resumeSavedAt || 0);
           // 邮件已应用/已忽略状态：本地(并集合并后)与云端不一致就必须回推，
           // 否则仅改 mailState（忽略/应用）时 remoteChanged 恒为 false → 永不上传 → 别的设备看不到（同"只推不拉"陷阱）
           const remoteMail = remote && remote.mailState ? remote.mailState : null;
           const mailStateNeedsPush = !sameIdSet(mailState.appliedIds, remoteMail && remoteMail.appliedIds) || !sameIdSet(mailState.dismissedIds, remoteMail && remoteMail.dismissedIds);
-          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones) || resumeNeedsPush || mailStateNeedsPush;
+          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones) || resumeNeedsPush || mailStateNeedsPush || archiveChanged;
           if (remoteChanged) await pushSyncState(migrateLegacy);
           syncConfig.lastSyncAt = new Date().toISOString();
           saveSyncConfig();
@@ -1271,7 +1383,9 @@
           resume: JSON.parse(JSON.stringify(resume)),
           resumeSavedAt,
           // 邮件已应用/已忽略状态跨设备同步（只同步这两个 ID 列表；encKey/lastReadAt 仅本机，不上传）
-          mailState: { appliedIds: mailState.appliedIds.slice(), dismissedIds: mailState.dismissedIds.slice() }
+          mailState: { appliedIds: mailState.appliedIds.slice(), dismissedIds: mailState.dismissedIds.slice() },
+          // v4.22.0：邮件正文归档随信封一起加密同步（未设口令时不含正文，见 archiveSuggestionMail）
+          mailArchive: { ...mailArchive }
         };
       }
 
@@ -1504,6 +1618,10 @@
             localStorage.setItem(RESUME_META_KEY, JSON.stringify({ savedAt: resumeSavedAt }));
             renderResumeEditor();
             pushResumeToPlugin();
+          }
+          // v4.22.0：备份里的邮件正文归档一并恢复（整体替换，与记录的"替换"语义一致）
+          if (parsed && parsed.mailArchive && typeof parsed.mailArchive === 'object') {
+            mailArchive = pruneMailArchive(sanitizeMailArchive(parsed.mailArchive), referencedMailIds(records));
           }
           saveRecords(`已导入并保护 ${records.length} 条记录`);
           render();
