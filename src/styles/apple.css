@@ -393,12 +393,14 @@
     .insight-grid .alert-item { padding: 7px 10px; border-left-width: 2px; font-size: 12px; line-height: 1.45; }
     /* 顶层那张 grid 把较宽的一列给「需要关注」（第二列）：它的条目是会折行的文本，
        而转化漏斗是一排紧凑色块，对宽度没那么敏感。
-       刻意用 .insights-body > 直接子选择器限定——#insightDetails 里还有三张 .insight-grid
-       （城市|企业性质、节奏|停留、多岗位|Offer 对比），它们的「第一列更宽」是原本就调好的，
-       全局改比例会把那三张一起翻过来。 */
+       刻意用 .insights-body > 直接子选择器限定——#insightDetails 里的两张 .insight-grid
+       （城市|企业性质、节奏|停留）的「第一列更宽」是原本就调好的，
+       全局改比例会把那两张一起翻过来。 */
     .insights-body > .insight-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
     .offer-matrix { min-width: 620px; }
-    .multi-company-list { display: grid; gap: 8px; }
+    /* 企业组头卡片（v4.25.0）。样式源自已删除的洞察「多岗位公司」栏目，现在是
+       同企业收纳组头的唯一形态：左侧公司色条 + 可折叠头部 + 岗位胶囊（悬浮明细、点击开抽屉）。
+       洞察侧的清单容器已随栏目删除，这组类名现在只服务台账组头（companyGroupRowHtml）。 */
     .multi-company { padding: 10px 12px 10px 14px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; position: relative; }
     .multi-company::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--company-color, var(--accent)); }
     .multi-company-head { display: flex; align-items: baseline; gap: 9px; }
@@ -670,13 +672,18 @@
     .same-company-item { display: inline-block; margin: 3px 5px 0 0; padding: 1px 8px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; border: 0; color: var(--ink-2); font-size: 11.5px; font-weight: 620; }
     .same-company-item.is-similar { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
     .same-company-more { margin-left: 2px; color: var(--muted); font-size: 11.5px; }
-    .company-group-row > td { padding: 6px 12px 4px; background: transparent; border-top: 0; }
+    /* 收纳组头所在 td（v4.25.0 起装的是 .multi-company 卡片）：
+       上下留白收窄，卡片自身的圆角与底色负责分段感，td 不再另加底色。 */
+    .company-group-row > td { padding: 3px 2px; background: transparent; border-top: 0; }
     .company-group-row:not(:first-child) > td { padding-top: 14px; }
-    .group-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 10px; border: 0; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; font-size: 12.5px; font-weight: 600; color: var(--ink); text-align: left; }
-    .group-toggle:hover { background: var(--accent-soft); color: var(--accent-ink); }
+    /* 折叠开关 = 卡片头部。v4.25.0 起它住在 .multi-company 里，不再自带胶囊底色——
+       卡片已有 surface-2，再叠一层就是色中色；hover 只给文字反馈，不动盒模型（padding 恒为 0）。 */
+    .group-toggle { display: flex; align-items: baseline; gap: 9px; width: 100%; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: left; }
+    .group-toggle:hover { background: transparent; color: var(--accent-ink); }
+    .group-toggle:hover .group-caret { color: var(--accent-ink); }
     .group-caret { color: var(--muted); font-size: 11px; }
-    .group-label { border-left: 3px solid var(--company-color, var(--accent)); padding-left: 8px; }
-    .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-sans); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    /* 公司色条已由卡片的 ::before 承担，label 不再画第二根（两根色条会错位显得脏）。 */
+    .group-label { overflow-wrap: anywhere; }
     /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽 */
     .group-switch { justify-self: start; align-self: center; }
     .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--sh-card); }

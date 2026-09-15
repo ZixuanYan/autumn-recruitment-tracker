@@ -321,7 +321,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.24.0';
+      const APP_VERSION = '4.25.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1909,7 +1909,6 @@
         renderCityStats();
         renderCompanyTypeStats();
         renderOfferMatrix();
-        renderMultiCompanies();
       }
 
       // 城市分布：行式条形（城市 | 双色条 | 投递 N | Offer M），Offer 段用 Offer 绿。
@@ -1992,7 +1991,7 @@
         if (button) {
           button.textContent = compact ? '完整' : '精简';
           button.title = compact
-            ? '展开完整洞察：城市分布 / 企业性质 / 投递节奏 / 各阶段停留 / 多岗位公司 / Offer 对比'
+            ? '展开完整洞察：城市分布 / 企业性质 / 投递节奏 / 各阶段停留 / Offer 对比'
             : '精简模式只保留概览、需要关注与转化漏斗，把明细折起来';
         }
       }
@@ -2081,27 +2080,6 @@
               <td data-label="最新备注"><div class="next-action">${escapeHtml(lastNote)}</div></td>
             </tr>`;
           }).join('')}</tbody>`;
-      }
-
-      // 多岗位公司清单：一家公司投了 ≥2 个岗位时列出，每个岗位可直接点开详情抽屉。
-      // 回答「这家公司我投了哪几个岗、各自到哪一步」——只有计数不够，得能看到明细。
-      function renderMultiCompanies() {
-        const wrap = $('#multiCompanyWrap'), list = $('#multiCompanyList'), note = $('#multiCompanyNote');
-        if (!wrap || !list) return;
-        const multi = groupRecordsByCompany(records).filter(group => group.records.length > 1);
-        if (!multi.length) { wrap.hidden = true; list.innerHTML = ''; return; }
-        wrap.hidden = false;
-        if (note) note.textContent = `${multi.length} 家公司投了多个岗位`;
-        list.innerHTML = multi.map(group => {
-          const items = group.records.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-          return `<div class="multi-company" style="--company-color:${companyColor(group.key)}">
-            <div class="multi-company-head"><strong>${escapeHtml(group.label)}</strong><span class="multi-company-count">${group.records.length} 个岗位</span></div>
-            <div class="multi-company-items">${items.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" data-tip-kind="record" data-tip-key="${escapeHtml(record.id)}" aria-label="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}，悬浮看详情，点击打开抽屉">
-              <span class="multi-company-pos">${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit))}</span>
-              <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
-            </button>`).join('')}</div>
-          </div>`;
-        }).join('');
       }
 
       // 空状态三态：首启（价值主张 + 双 CTA）/ 筛选无结果（回显条件 + 清除）/ 有数据（隐藏）
@@ -2209,14 +2187,27 @@
         return [...buckets.values()].flat();
       }
 
-      // 企业组头行。colspan=8 与表头列数一致，改列数要同步改这里（漏改会让组头只占一列宽）。
-      function companyGroupRowHtml(key, company, count, isCollapsed) {
+      // 企业组头行（v4.25.0 起卡片化）。样式即原洞察「多岗位公司」的 .multi-company 卡片——
+      // 那个洞察栏目已删除（同样的信息在这里看得更全），样式整体搬了过来：
+      //   · 头部按钮 = 折叠开关（caret + 公司名 + 数量），整根可点；
+      //   · 胶囊 = 该组**当前可见**的每条投递（岗位 + 阶段徽章），点击开抽屉、悬浮看明细。
+      // 胶囊刻意与下方明细行同源（同一个桶），筛选时两者永远一一对应；
+      // 「这家全公司投了几个岗」由行内 +N 岗位 chip（按全量台账统计）回答，不在这里重复。
+      // 胶囊在折叠时也渲染——它就是折叠态的全部内容：不用展开也能扫读各岗位走到哪一步。
+      function companyGroupRowHtml(key, groupRecords, isCollapsed) {
+        const pills = groupRecords.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" data-tip-kind="record" data-tip-key="${escapeHtml(record.id)}" aria-label="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}，悬浮看详情，点击打开抽屉">
+              <span class="multi-company-pos">${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit))}</span>
+              <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
+            </button>`).join('');
         return `<tr class="company-group-row" data-group="${escapeHtml(key)}"><td colspan="8">
-          <button class="group-toggle" type="button" data-group-toggle="${escapeHtml(key)}" aria-expanded="${String(!isCollapsed)}">
-            <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
-            <span class="group-label" style="--company-color:${companyColor(key)}">${escapeHtml(company)}</span>
-            <span class="group-count">${count} 个岗位</span>
-          </button>
+          <div class="multi-company" style="--company-color:${companyColor(key)}">
+            <button class="group-toggle multi-company-head" type="button" data-group-toggle="${escapeHtml(key)}" aria-expanded="${String(!isCollapsed)}" title="${isCollapsed ? '展开' : '折叠'}该企业的投递明细">
+              <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
+              <strong class="group-label">${escapeHtml(groupRecords[0] ? groupRecords[0].company : key)}</strong>
+              <span class="multi-company-count">${groupRecords.length} 个岗位</span>
+            </button>
+            <div class="multi-company-items">${pills}</div>
+          </div>
         </td></tr>`;
       }
 
@@ -2246,16 +2237,24 @@
         const ordered = grouped ? clusterByCompanyGroup(visible, groupKeyById) : visible;
         const collapsed = new Set(uiPrefs.collapsedGroups);
         const rows = [];
-        let lastKey = null;
-        for (const record of ordered) {
-          const key = groupKeyById.get(record.id) || companyGroupKey(record);
-          if (grouped && key !== lastKey) {
-            lastKey = key;
-            const siblings = companyIndex.get(key) || [];
-            rows.push(companyGroupRowHtml(key, record.company, siblings.length, collapsed.has(key)));
+        if (!grouped) {
+          for (const record of ordered) rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
+        } else {
+          // clusterByCompanyGroup 已保证同企业相邻，所以按「连续相同 key」切桶就是完整的组。
+          // 桶里的记录 = 该企业**当前可见**的全部投递，组头胶囊与下方明细行同源（v4.25.0）。
+          let bucket = null;
+          const buckets = [];
+          for (const record of ordered) {
+            const key = groupKeyById.get(record.id) || companyGroupKey(record);
+            if (!bucket || bucket.key !== key) { bucket = { key, records: [] }; buckets.push(bucket); }
+            bucket.records.push(record);
           }
-          if (grouped && collapsed.has(key)) continue;   // 该企业已折叠：跳过它的全部明细行
-          rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
+          for (const group of buckets) {
+            rows.push(companyGroupRowHtml(group.key, group.records, collapsed.has(group.key)));
+            if (!collapsed.has(group.key)) {
+              for (const record of group.records) rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
+            }
+          }
         }
         els.body.innerHTML = rows.join('');
         els.empty.hidden = visible.length !== 0;

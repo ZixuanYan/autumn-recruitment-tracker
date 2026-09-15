@@ -1003,7 +1003,10 @@ check('toggleCompanyGroup 折叠态持久化，且收纳开启时折叠组不渲
   let h = sandbox2.els.body.innerHTML;
   assert.ok(h.includes('company-group-row'), '聚合排序应有组头行');
   assert.ok(h.includes('个岗位'));
-  assert.ok(h.includes('data-id="r1"') && h.includes('data-id="r2"'), '未折叠时明细行都在');
+  // v4.25.0 起组头卡片里的胶囊也带 data-id——判断「明细行在不在」必须认 <tr data-id，
+  // 裸查 data-id 会被胶囊误判成"行还在"（这正是本条用例要抓的假绿形状）。
+  assert.ok(h.includes('<tr data-id="r1"') && h.includes('<tr data-id="r2"'), '未折叠时明细行都在');
+  assert.ok(h.includes('multi-company-item'), '组头卡片应有岗位胶囊');
   // 折叠「腾讯」这一组（zh-CN 排序下「阿里」在前，不能直接取第一个组头）
   const tencentKey = sandbox2.companyGroupIndex(sandbox2.records).get('r1');
   assert.ok(tencentKey, '应能取到腾讯的规范组键');
@@ -1012,10 +1015,12 @@ check('toggleCompanyGroup 折叠态持久化，且收纳开启时折叠组不渲
   assert.ok(JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).collapsedGroups.includes(tencentKey));
   h = sandbox2.els.body.innerHTML;
   assert.ok(h.includes(`data-group="${tencentKey}"`), '组头仍在（只是折叠）');
-  assert.ok(!h.includes('data-id="r1"') && !h.includes('data-id="r2"'), '折叠后该公司的明细行被跳过');
-  assert.ok(h.includes('data-id="r3"'), '其它公司不受影响');
+  // 折叠 = 胶囊扫描视图：明细行消失，但胶囊（折叠态的全部内容）必须在
+  assert.ok(!h.includes('<tr data-id="r1"') && !h.includes('<tr data-id="r2"'), '折叠后该公司的明细行被跳过');
+  assert.ok(h.includes('data-id="r1"') && h.includes('data-id="r2"'), '折叠后胶囊仍在（岗位 + 阶段一排看完）');
+  assert.ok(h.includes('<tr data-id="r3"'), '其它公司不受影响');
   sandbox2.toggleCompanyGroup(tencentKey); // 复原
-  assert.ok(sandbox2.els.body.innerHTML.includes('data-id="r1"'), '再次点击展开');
+  assert.ok(sandbox2.els.body.innerHTML.includes('<tr data-id="r1"'), '再次点击展开');
 });
 
 // 机构层与聚拢测试共用的记录工厂。字段清单照 seedRecords 的形态给全 ——
@@ -1043,23 +1048,28 @@ check('同企业收纳：只有企业级组头，机构作为每行的一个标�
   sandbox2.renderRecordsView();
   let h = sandbox2.els.body.innerHTML;
   assert.strictEqual(countClass(h, 'company-group-row'), 2, '招商银行与阿里各一个企业组头');
+  // v4.25.0：单岗位公司（阿里）同样套卡片——卡片是收纳组头的唯一形态，
+  // 两套形态并存时「有卡片 = 有多岗位」的扫读语义就没了。
+  assert.strictEqual((h.match(/class="multi-company"/g) || []).length, 2, '每家公司一张组头卡片');
+  // 注意别用裸子串 multi-company-item 计数——容器的 multi-company-items 会把它算进去
+  assert.strictEqual((h.match(/class="multi-company-item"/g) || []).length, 5, '五条可见投递各一枚胶囊（与明细行一一对应）');
   // 机构层已删：每行的公司名后面本来就带着机构名，再套一层折叠组头信息量为零。
   // 这三条是**反向**断言，钉住它不会被顺手加回来（加回来的症状只是台账多一层缩进，不报错）。
   assert.strictEqual(countClass(h, 'company-unit-row'), 0, '不该再渲染机构子组头');
   assert.ok(!h.includes('data-unit-toggle'), '机构折叠按钮应一并消失');
   assert.strictEqual((h.match(/class="company-unit"/g) || []).length, 3,
     '三条填了机构的记录各自在行内显示机构名（这才是机构该有的呈现方式）');
-  assert.ok(h.includes('data-id="b1"') && h.includes('data-id="b4"'), '企业展开时四条明细行都在');
+  assert.ok(h.includes('<tr data-id="b1"') && h.includes('<tr data-id="b4"'), '企业展开时四条明细行都在');
 
   const bankKey = sandbox2.companyGroupIndex(sandbox2.records).get('b1');
   sandbox2.toggleCompanyGroup(bankKey);
   assert.ok(JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).collapsedGroups.includes(bankKey),
     '企业折叠态持久化');
   h = sandbox2.els.body.innerHTML;
-  assert.ok(!h.includes('data-id="b1"') && !h.includes('data-id="b4"'), '折叠后该企业的明细行全部跳过');
-  assert.ok(h.includes('data-id="c1"'), '其它企业不受影响');
+  assert.ok(!h.includes('<tr data-id="b1"') && !h.includes('<tr data-id="b4"'), '折叠后该企业的明细行全部跳过');
+  assert.ok(h.includes('<tr data-id="c1"'), '其它企业不受影响');
   sandbox2.toggleCompanyGroup(bankKey); // 复原
-  assert.ok(sandbox2.els.body.innerHTML.includes('data-id="b1"'), '再次点击展开');
+  assert.ok(sandbox2.els.body.innerHTML.includes('<tr data-id="b1"'), '再次点击展开');
 });
 
 check('收纳开启时先聚拢同企业记录：非公司类排序下不会插出重复组头', () => {
@@ -1479,22 +1489,18 @@ check('Offer 对比矩阵：<2 个隐藏，≥2 个按意向度降序显示', ()
   assert.ok(h.includes('offer-row'));
 });
 
-check('多岗位公司清单：每家一个岗位时隐藏，有多岗位时列出明细', () => {
-  seedRecords(); // r1 腾讯/后端、r2 腾讯科技有限公司/前端、r3 阿里/算法 → 腾讯 2 个岗位
-  sandbox2.renderMultiCompanies();
-  assert.strictEqual(els2['#multiCompanyWrap'].hidden, false, '存在多岗位公司时应显示');
-  const h = els2['#multiCompanyList'].innerHTML;
-  assert.ok(h.includes('multi-company'), '有清单容器');
-  assert.ok(h.includes('2 个岗位'), '标出岗位数');
-  assert.ok(h.includes('data-id="r1"') && h.includes('data-id="r2"'), '两个岗位都可点开');
-  assert.ok(h.includes('云计算事业部'), '带机构');
-  assert.ok(h.includes('--company-color:#'), '带公司标识色');
-  assert.strictEqual(els2['#multiCompanyNote'].textContent, '1 家公司投了多个岗位');
-  // 只剩互不相同的公司时应隐藏
-  sandbox2.records = [sandbox2.records[2]];
-  sandbox2.renderMultiCompanies();
-  assert.strictEqual(els2['#multiCompanyWrap'].hidden, true);
-  assert.strictEqual(els2['#multiCompanyList'].innerHTML, '');
+check('收纳组头卡片：胶囊带机构、公司色与悬浮钩子（原洞察「多岗位公司」栏目的形态，v4.25.0 迁到这里）', () => {
+  seedRecords(); // r1 腾讯/后端、r2 腾讯科技有限公司/前端（云计算事业部）、r3 阿里/算法
+  vm.runInContext('uiPrefs.groupByCompany = true', sandbox2);
+  sandbox2.renderRecordsView();
+  const h = sandbox2.els.body.innerHTML;
+  assert.ok(h.includes('2 个岗位'), '多岗位公司标出岗位数');
+  assert.ok(h.includes('1 个岗位'), '单岗位公司也套卡片（卡片是组头的唯一形态）');
+  assert.ok(h.includes('data-id="r1"') && h.includes('data-id="r2"'), '两个岗位都可点开抽屉');
+  assert.ok(h.includes('云计算事业部'), '胶囊岗位名带机构');
+  assert.ok(h.includes('--company-color:#'), '卡片带公司标识色');
+  assert.ok(h.includes('data-tip-kind="record"'), '被省略号截断的岗位名可悬浮看全');
+  assert.ok(!h.includes('title="悬浮'), '岗位信息走自绘浮层而不是原生 title（title 只留给折叠开关的操作提示）');
 });
 
 check('空状态三态：首启 / 筛选无结果 / 有数据隐藏', () => {
@@ -1972,7 +1978,7 @@ check('触屏降级：无 hover 时用点击切换，matchMedia 缺失也不抛�
   sandbox2.window.matchMedia = () => ({ matches: false });
 });
 
-check('洞察里可悬浮的元素都挂了 data-tip-kind（指标卡 / 城市行 / 企业性质段 / 多岗位条目）', () => {
+check('洞察里可悬浮的元素都挂了 data-tip-kind（指标卡 / 城市行 / 企业性质段）', () => {
   seedRecords();
   sandbox2.renderInsights();
   const metrics = sandbox2.$('#insightMetrics').innerHTML;
@@ -1983,8 +1989,6 @@ check('洞察里可悬浮的元素都挂了 data-tip-kind（指标卡 / 城市�
   }
   assert.ok((sandbox2.$('#cityList').innerHTML.match(/data-tip-kind="city"/g) || []).length >= 2, '每个城市行都有');
   assert.ok(sandbox2.$('#ctypeBar').innerHTML.includes('data-tip-kind="ctype"'), '比例条每段都有');
-  assert.ok(sandbox2.$('#multiCompanyList').innerHTML.includes('data-tip-kind="record"'), '被省略号截断的岗位名可悬浮看全');
-  assert.ok(!sandbox2.$('#multiCompanyList').innerHTML.includes('title="'), '改用自绘浮层后不再留原生 title');
 });
 
 section('v4.6.0 新增表单的默认阶段');

@@ -1007,9 +1007,13 @@
       let lastDeleted = null; // 仅最近一次删除可撤销
 
       async function handleTableAction(event) {
-        // 公司分组折叠开关（只在「按公司聚合」排序时出现）
+        // 公司分组折叠开关（收纳开启时出现在组头卡片上）
         const groupToggle = event.target.closest('button[data-group-toggle]');
         if (groupToggle) { toggleCompanyGroup(groupToggle.dataset.groupToggle); return; }
+        // 组头卡片里的岗位胶囊（v4.25.0）：点开抽屉。必须排在通用兜底之前——
+        // 胶囊在 td 外面（组头行没有 data-id 行），走不到下面的行点击分支。
+        const pill = event.target.closest('.multi-company-item[data-id]');
+        if (pill) { openRecordFocus(pill.dataset.id); return; }
         const button = event.target.closest('button[data-action]');
         if (!button) {
           // 点公司 / 岗位单元格 → 打开详情抽屉；点链接仍走原生跳转（不打断）
@@ -1409,31 +1413,39 @@
       $('#insightsCompactBtn').addEventListener('click', toggleInsightsCompact);
       // 悬浮明细：事件委托。mouseenter/mouseleave 不冒泡，所以用 mouseover/mouseout + relatedTarget 判定，
       // 否则在触发元素内部子节点之间移动时会反复闪烁。
-      const insightsHost = $('#insightsBody');
-      insightsHost.addEventListener('mouseover', event => {
-        const target = event.target.closest('[data-tip-kind]');
-        if (!target || target === tipTarget) return;
-        showTipFor(target);
-      });
-      insightsHost.addEventListener('mouseout', event => {
-        const target = event.target.closest('[data-tip-kind]');
-        if (!target) return;
-        if (event.relatedTarget && target.contains && target.contains(event.relatedTarget)) return;
-        hideTip();
-      });
-      // 键盘用户同样能读到明细：城市行 / 指标卡 / 比例条分段都带 tabindex="0"
-      insightsHost.addEventListener('focusin', event => {
-        const target = event.target.closest('[data-tip-kind]');
-        if (target) showTipFor(target);
-      });
-      insightsHost.addEventListener('focusout', () => hideTip());
-      insightsHost.addEventListener('click', event => {
-        if (!isCoarsePointer()) return; // 有 hover 的设备交给 mouseover，点击留给「打开抽屉」等原有动作
-        const target = event.target.closest('[data-tip-kind]');
-        if (!target) return;
-        if (target === tipTarget) { hideTip(); return; }
-        showTipFor(target);
-      });
+      // v4.25.0 起台账收纳组头的岗位胶囊（.multi-company-item）也带 data-tip-kind，
+      // 委托抽成 bindTipDelegation 在洞察面板与台账表格两个宿主上各绑一份——
+      // 两个宿主都是**静态容器**（innerHTML 重写不换掉容器本身），委托才能在重渲染后继续生效。
+      function bindTipDelegation(host) {
+        if (!host || host.__tipBound) return;
+        host.__tipBound = true;
+        host.addEventListener('mouseover', event => {
+          const target = event.target.closest('[data-tip-kind]');
+          if (!target || target === tipTarget) return;
+          showTipFor(target);
+        });
+        host.addEventListener('mouseout', event => {
+          const target = event.target.closest('[data-tip-kind]');
+          if (!target) return;
+          if (event.relatedTarget && target.contains && target.contains(event.relatedTarget)) return;
+          hideTip();
+        });
+        // 键盘用户同样能读到明细：城市行 / 指标卡 / 比例条分段 / 岗位胶囊都带 tabindex 或本身可聚焦
+        host.addEventListener('focusin', event => {
+          const target = event.target.closest('[data-tip-kind]');
+          if (target) showTipFor(target);
+        });
+        host.addEventListener('focusout', () => hideTip());
+        host.addEventListener('click', event => {
+          if (!isCoarsePointer()) return; // 有 hover 的设备交给 mouseover，点击留给「打开抽屉」等原有动作
+          const target = event.target.closest('[data-tip-kind]');
+          if (!target) return;
+          if (target === tipTarget) { hideTip(); return; }
+          showTipFor(target);
+        });
+      }
+      bindTipDelegation($('#insightsBody'));
+      bindTipDelegation($('#recordsTableScroll'));
       // 滚动后浮层位置就不再贴着触发元素了：直接隐藏，比跟着重算更省事也更不容易错位。
       // capture=true 才能收到面板内部滚动容器（.table-scroll 等）的 scroll 事件。
       window.addEventListener('scroll', () => { if (tipTarget) hideTip(); }, true);
@@ -1590,11 +1602,6 @@
       $('#offerMatrix').addEventListener('click', event => {
         const row = event.target.closest('tr[data-id]');
         if (row) openRecordFocus(row.dataset.id);
-      });
-      // 多岗位公司清单：点某个岗位打开详情抽屉
-      $('#multiCompanyList').addEventListener('click', event => {
-        const item = event.target.closest('.multi-company-item[data-id]');
-        if (item) openRecordFocus(item.dataset.id);
       });
       // 未来安排卡片可点击/可键盘激活（role=button + tabindex=0）
       els.upcoming.addEventListener('click', event => {

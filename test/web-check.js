@@ -1028,7 +1028,8 @@ check('洞察面板信息层级：概览 → 行动 → 转化 → 明细（重�
   assert.ok(panel.length > 500, '未定位到洞察面板 HTML');
   // v4.11.0 换位：阶段分布提到整宽第 2 位（14 个色阶块在半宽的一半里每块只有 ~44px，
   // 灰→蓝→绿的递进看不清），需要关注移进 grid 与漏斗并排。常驻区仍是这四块，精简模式不变。
-  const order = ['insightMetrics', 'stageGrid', 'funnelRow', 'alertList', 'insightDetails', 'cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'multiCompanyWrap', 'offerMatrixWrap'];
+  // v4.25.0：「多岗位公司」栏目删除（同样的信息改由台账收纳组头的卡片承载），只剩 Offer 对比收尾。
+  const order = ['insightMetrics', 'stageGrid', 'funnelRow', 'alertList', 'insightDetails', 'cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'offerMatrixWrap'];
   const positions = order.map(id => panel.indexOf(`id="${id}"`));
   assert.ok(positions.every(p => p > 0), `有块缺失：${order.filter((id, i) => positions[i] < 0).join(', ')}`);
   for (let i = 1; i < positions.length; i += 1) {
@@ -1036,7 +1037,7 @@ check('洞察面板信息层级：概览 → 行动 → 转化 → 明细（重�
   }
   // 明细块必须都在 insightDetails 容器内，精简模式才能整块折叠
   const detailsStart = panel.indexOf('id="insightDetails"');
-  for (const id of ['cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'multiCompanyWrap', 'offerMatrixWrap']) {
+  for (const id of ['cityList', 'ctypeBar', 'sparkSvg', 'dwellList', 'offerMatrixWrap']) {
     assert.ok(panel.indexOf(`id="${id}"`) > detailsStart, `${id} 必须在 #insightDetails 内`);
   }
   // 概览、行动、转化漏斗与阶段分布都是常驻区，不能被折进明细容器（否则精简模式会把它们一起藏掉）
@@ -1948,6 +1949,34 @@ check('同企业收纳是独立开关、与排序解耦（排序下拉不得再�
   assert.ok(/class="company-unit"/.test(html), '每行公司名后面的机构标注必须保留');
 });
 
+check('收纳组头是卡片形态，胶囊可点开抽屉（v4.25.0，洞察「多岗位公司」栏目已并入这里）', () => {
+  // 洞察栏目整体删除——同名信息在台账里看得更全（折叠时胶囊就是扫描视图，展开还有明细行）。
+  // 半截复活（模板删了但渲染函数还在、或反之）都会留下没人读的代码，一并钉死。
+  assert.ok(!/multiCompanyList|multiCompanyWrap|multiCompanyNote/.test(html),
+    '洞察侧的多岗位公司容器必须删干净（renderMultiCompanies 一并删）');
+  assert.ok(!/function renderMultiCompanies/.test(html), 'renderMultiCompanies 应已删除');
+  // 组头卡片：头部按钮（折叠开关）+ 胶囊容器 + 胶囊本身，三件套缺一不可
+  const head = extractFunction(html, 'companyGroupRowHtml');
+  assert.ok(/class="multi-company"/.test(head) && /data-group-toggle=/.test(head) && /multi-company-items/.test(head),
+    'companyGroupRowHtml 必须渲染 .multi-company 卡片（头部折叠开关 + 胶囊容器）');
+  assert.ok(/multi-company-item" type="button" data-id=/.test(head),
+    '每条投递一枚胶囊按钮，点击开抽屉（点击处理在 handleTableAction 的胶囊分支）');
+  assert.ok(/data-tip-kind="record" data-tip-key=/.test(head),
+    '胶囊必须带悬浮明细钩子（岗位名有省略号截断，悬浮看全量信息）');
+  // 胶囊与明细行同源：groupRecords 由 renderTable 的可见桶传入，不允许再从全量索引里另取一份
+  assert.ok(/function companyGroupRowHtml\(key, groupRecords, isCollapsed\)/.test(html),
+    '组头接收的是可见桶，保证筛选时胶囊与下方行一一对应');
+  assert.ok(!/class="group-count"/.test(html) && !/\.group-count\s*\{/.test(html),
+    '旧的光杆计数样式 .group-count 应随旧组头一起删除（计数由 .multi-company-count 承担）');
+  // 悬浮明细委托必须覆盖台账：胶囊的 data-tip-kind 依赖它才有浮层
+  const tipBind = extractFunction(html, 'bindTipDelegation');
+  assert.ok(tipBind.includes('mouseover') && tipBind.includes('focusin'),
+    '悬浮明细委托应抽成 bindTipDelegation（台账与洞察两个宿主各绑一份）');
+  assert.ok(/bindTipDelegation\(\$\('#insightsBody'\)\)/.test(html)
+    && /bindTipDelegation\(\$\('#recordsTableScroll'\)\)/.test(html),
+    '洞察面板与台账表格都要绑悬浮委托——少了台账这份，收纳胶囊的悬浮就是死的');
+});
+
 check('orgUnit 全链路：normalizeRecord 携带、表单可填、编辑能回填、查重纳入判定', () => {
   assert.ok(/orgUnit: String\(item\.orgUnit \|\| ''\)\.trim\(\)\.slice\(0, 60\)/.test(html),
     'normalizeRecord 必须显式携带 orgUnit——它是白名单式重建，漏写就会在每次 load/sync 静默丢失');
@@ -2093,7 +2122,7 @@ check('等宽字体只给代码与元数据位，业务数字一律 display/正�
   }
   // 数据位反向断言：这些选择器一旦出现等宽字体就是回归
   const NUMERIC = ['.stat-number', '.record-no', '.funnel-value', '.insight-metric-value', '.city-num',
-    '.ctype-num', '.board-col-count', '.group-count', '.step-date', '.multi-company-count',
+    '.ctype-num', '.board-col-count', '.step-date', '.multi-company-count',
     '.dwell-days', '.spark-axis', '.drop-meta', '.drop-counts b', '.page-kicker', '.guide-no'];
   const bad = NUMERIC.filter(sel => {
     const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2107,7 +2136,7 @@ check('会变动的数字都启用 tabular-nums（否则值一变整行宽度就
   // 规范：「数字全局使用 tabular-nums，让表格与仪表数据稳如实体表盘」。
   // 这里只钉**会变**的那些：计数、日期、百分比、统计值。静态标签不需要。
   const NUMERIC = ['.stat-number', '.record-no', '.funnel-value', '.insight-metric-value', '.city-num',
-    '.ctype-num', '.board-col-count', '.group-count', '.step-date', '.multi-company-count',
+    '.ctype-num', '.board-col-count', '.step-date', '.multi-company-count',
     '.dwell-days', '.spark-axis', '.drop-meta', '.drop-counts b', '.resume-progress-value', '.resume-block-count'];
   const missing = NUMERIC.filter(sel => {
     const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

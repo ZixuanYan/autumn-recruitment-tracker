@@ -795,12 +795,14 @@
     .insight-grid .alert-item { padding: 7px 10px; border-left-width: 2px; font-size: 12px; line-height: 1.45; }
     /* 顶层那张 grid 把较宽的一列给「需要关注」（第二列）：它的条目是会折行的文本，
        而转化漏斗是一排紧凑色块，对宽度没那么敏感。
-       刻意用 .insights-body > 直接子选择器限定——#insightDetails 里还有三张 .insight-grid
-       （城市|企业性质、节奏|停留、多岗位|Offer 对比），它们的「第一列更宽」是原本就调好的，
-       全局改比例会把那三张一起翻过来。 */
+       刻意用 .insights-body > 直接子选择器限定——#insightDetails 里的两张 .insight-grid
+       （城市|企业性质、节奏|停留）的「第一列更宽」是原本就调好的，
+       全局改比例会把那两张一起翻过来。 */
     .insights-body > .insight-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
     .offer-matrix { min-width: 620px; }
-    .multi-company-list { display: grid; gap: 8px; }
+    /* 企业组头卡片（v4.25.0）。样式源自已删除的洞察「多岗位公司」栏目，现在是
+       同企业收纳组头的唯一形态：左侧公司色条 + 可折叠头部 + 岗位胶囊（悬浮明细、点击开抽屉）。
+       洞察侧的清单容器已随栏目删除，这组类名现在只服务台账组头（companyGroupRowHtml）。 */
     .multi-company { padding: 10px 12px 10px 14px; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; border: 0; position: relative; }
     .multi-company::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--company-color, var(--accent)); }
     .multi-company-head { display: flex; align-items: baseline; gap: 9px; }
@@ -1072,13 +1074,18 @@
     .same-company-item { display: inline-block; margin: 3px 5px 0 0; padding: 1px 8px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; border: 0; color: var(--ink-2); font-size: 11.5px; font-weight: 620; }
     .same-company-item.is-similar { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
     .same-company-more { margin-left: 2px; color: var(--muted); font-size: 11.5px; }
-    .company-group-row > td { padding: 6px 12px 4px; background: transparent; border-top: 0; }
+    /* 收纳组头所在 td（v4.25.0 起装的是 .multi-company 卡片）：
+       上下留白收窄，卡片自身的圆角与底色负责分段感，td 不再另加底色。 */
+    .company-group-row > td { padding: 3px 2px; background: transparent; border-top: 0; }
     .company-group-row:not(:first-child) > td { padding-top: 14px; }
-    .group-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 10px; border: 0; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; font-size: 12.5px; font-weight: 600; color: var(--ink); text-align: left; }
-    .group-toggle:hover { background: var(--accent-soft); color: var(--accent-ink); }
+    /* 折叠开关 = 卡片头部。v4.25.0 起它住在 .multi-company 里，不再自带胶囊底色——
+       卡片已有 surface-2，再叠一层就是色中色；hover 只给文字反馈，不动盒模型（padding 恒为 0）。 */
+    .group-toggle { display: flex; align-items: baseline; gap: 9px; width: 100%; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: left; }
+    .group-toggle:hover { background: transparent; color: var(--accent-ink); }
+    .group-toggle:hover .group-caret { color: var(--accent-ink); }
     .group-caret { color: var(--muted); font-size: 11px; }
-    .group-label { border-left: 3px solid var(--company-color, var(--accent)); padding-left: 8px; }
-    .group-count { margin-left: auto; color: var(--muted); font-family: var(--font-sans); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    /* 公司色条已由卡片的 ::before 承担，label 不再画第二根（两根色条会错位显得脏）。 */
+    .group-label { overflow-wrap: anywhere; }
     /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽 */
     .group-switch { justify-self: start; align-self: center; }
     .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--sh-card); }
@@ -1457,10 +1464,6 @@
               <div class="insight-block-head"><h3>各阶段平均停留</h3><span class="insight-note">相邻里程碑日期差</span></div>
               <div class="dwell-list" id="dwellList"></div>
             </div>
-          </div>
-          <div class="insight-block" id="multiCompanyWrap" hidden>
-            <div class="insight-block-head"><h3>多岗位公司</h3><span class="insight-note" id="multiCompanyNote"></span></div>
-            <div class="multi-company-list" id="multiCompanyList"></div>
           </div>
           <div class="insight-block" id="offerMatrixWrap" hidden>
             <div class="insight-block-head"><h3>Offer 对比</h3><span class="insight-note">按意向度排序</span></div>
@@ -2200,7 +2203,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.24.0';
+      const APP_VERSION = '4.25.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -3788,7 +3791,6 @@
         renderCityStats();
         renderCompanyTypeStats();
         renderOfferMatrix();
-        renderMultiCompanies();
       }
 
       // 城市分布：行式条形（城市 | 双色条 | 投递 N | Offer M），Offer 段用 Offer 绿。
@@ -3871,7 +3873,7 @@
         if (button) {
           button.textContent = compact ? '完整' : '精简';
           button.title = compact
-            ? '展开完整洞察：城市分布 / 企业性质 / 投递节奏 / 各阶段停留 / 多岗位公司 / Offer 对比'
+            ? '展开完整洞察：城市分布 / 企业性质 / 投递节奏 / 各阶段停留 / Offer 对比'
             : '精简模式只保留概览、需要关注与转化漏斗，把明细折起来';
         }
       }
@@ -3960,27 +3962,6 @@
               <td data-label="最新备注"><div class="next-action">${escapeHtml(lastNote)}</div></td>
             </tr>`;
           }).join('')}</tbody>`;
-      }
-
-      // 多岗位公司清单：一家公司投了 ≥2 个岗位时列出，每个岗位可直接点开详情抽屉。
-      // 回答「这家公司我投了哪几个岗、各自到哪一步」——只有计数不够，得能看到明细。
-      function renderMultiCompanies() {
-        const wrap = $('#multiCompanyWrap'), list = $('#multiCompanyList'), note = $('#multiCompanyNote');
-        if (!wrap || !list) return;
-        const multi = groupRecordsByCompany(records).filter(group => group.records.length > 1);
-        if (!multi.length) { wrap.hidden = true; list.innerHTML = ''; return; }
-        wrap.hidden = false;
-        if (note) note.textContent = `${multi.length} 家公司投了多个岗位`;
-        list.innerHTML = multi.map(group => {
-          const items = group.records.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-          return `<div class="multi-company" style="--company-color:${companyColor(group.key)}">
-            <div class="multi-company-head"><strong>${escapeHtml(group.label)}</strong><span class="multi-company-count">${group.records.length} 个岗位</span></div>
-            <div class="multi-company-items">${items.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" data-tip-kind="record" data-tip-key="${escapeHtml(record.id)}" aria-label="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}，悬浮看详情，点击打开抽屉">
-              <span class="multi-company-pos">${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit))}</span>
-              <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
-            </button>`).join('')}</div>
-          </div>`;
-        }).join('');
       }
 
       // 空状态三态：首启（价值主张 + 双 CTA）/ 筛选无结果（回显条件 + 清除）/ 有数据（隐藏）
@@ -4088,14 +4069,27 @@
         return [...buckets.values()].flat();
       }
 
-      // 企业组头行。colspan=8 与表头列数一致，改列数要同步改这里（漏改会让组头只占一列宽）。
-      function companyGroupRowHtml(key, company, count, isCollapsed) {
+      // 企业组头行（v4.25.0 起卡片化）。样式即原洞察「多岗位公司」的 .multi-company 卡片——
+      // 那个洞察栏目已删除（同样的信息在这里看得更全），样式整体搬了过来：
+      //   · 头部按钮 = 折叠开关（caret + 公司名 + 数量），整根可点；
+      //   · 胶囊 = 该组**当前可见**的每条投递（岗位 + 阶段徽章），点击开抽屉、悬浮看明细。
+      // 胶囊刻意与下方明细行同源（同一个桶），筛选时两者永远一一对应；
+      // 「这家全公司投了几个岗」由行内 +N 岗位 chip（按全量台账统计）回答，不在这里重复。
+      // 胶囊在折叠时也渲染——它就是折叠态的全部内容：不用展开也能扫读各岗位走到哪一步。
+      function companyGroupRowHtml(key, groupRecords, isCollapsed) {
+        const pills = groupRecords.map(record => `<button class="multi-company-item" type="button" data-id="${escapeHtml(record.id)}" data-tip-kind="record" data-tip-key="${escapeHtml(record.id)}" aria-label="${escapeHtml(record.company)} · ${escapeHtml(record.position || '未填岗位')}，悬浮看详情，点击打开抽屉">
+              <span class="multi-company-pos">${escapeHtml(positionWithUnit(record.position || '未填岗位', record.orgUnit))}</span>
+              <span class="badge badge-sm" data-stage="${escapeHtml(record.stage)}">${escapeHtml(record.stage)}</span>
+            </button>`).join('');
         return `<tr class="company-group-row" data-group="${escapeHtml(key)}"><td colspan="8">
-          <button class="group-toggle" type="button" data-group-toggle="${escapeHtml(key)}" aria-expanded="${String(!isCollapsed)}">
-            <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
-            <span class="group-label" style="--company-color:${companyColor(key)}">${escapeHtml(company)}</span>
-            <span class="group-count">${count} 个岗位</span>
-          </button>
+          <div class="multi-company" style="--company-color:${companyColor(key)}">
+            <button class="group-toggle multi-company-head" type="button" data-group-toggle="${escapeHtml(key)}" aria-expanded="${String(!isCollapsed)}" title="${isCollapsed ? '展开' : '折叠'}该企业的投递明细">
+              <span class="group-caret" aria-hidden="true">${isCollapsed ? '▸' : '▾'}</span>
+              <strong class="group-label">${escapeHtml(groupRecords[0] ? groupRecords[0].company : key)}</strong>
+              <span class="multi-company-count">${groupRecords.length} 个岗位</span>
+            </button>
+            <div class="multi-company-items">${pills}</div>
+          </div>
         </td></tr>`;
       }
 
@@ -4125,16 +4119,24 @@
         const ordered = grouped ? clusterByCompanyGroup(visible, groupKeyById) : visible;
         const collapsed = new Set(uiPrefs.collapsedGroups);
         const rows = [];
-        let lastKey = null;
-        for (const record of ordered) {
-          const key = groupKeyById.get(record.id) || companyGroupKey(record);
-          if (grouped && key !== lastKey) {
-            lastKey = key;
-            const siblings = companyIndex.get(key) || [];
-            rows.push(companyGroupRowHtml(key, record.company, siblings.length, collapsed.has(key)));
+        if (!grouped) {
+          for (const record of ordered) rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
+        } else {
+          // clusterByCompanyGroup 已保证同企业相邻，所以按「连续相同 key」切桶就是完整的组。
+          // 桶里的记录 = 该企业**当前可见**的全部投递，组头胶囊与下方明细行同源（v4.25.0）。
+          let bucket = null;
+          const buckets = [];
+          for (const record of ordered) {
+            const key = groupKeyById.get(record.id) || companyGroupKey(record);
+            if (!bucket || bucket.key !== key) { bucket = { key, records: [] }; buckets.push(bucket); }
+            bucket.records.push(record);
           }
-          if (grouped && collapsed.has(key)) continue;   // 该企业已折叠：跳过它的全部明细行
-          rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
+          for (const group of buckets) {
+            rows.push(companyGroupRowHtml(group.key, group.records, collapsed.has(group.key)));
+            if (!collapsed.has(group.key)) {
+              for (const record of group.records) rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
+            }
+          }
         }
         els.body.innerHTML = rows.join('');
         els.empty.hidden = visible.length !== 0;
@@ -6797,9 +6799,13 @@
       let lastDeleted = null; // 仅最近一次删除可撤销
 
       async function handleTableAction(event) {
-        // 公司分组折叠开关（只在「按公司聚合」排序时出现）
+        // 公司分组折叠开关（收纳开启时出现在组头卡片上）
         const groupToggle = event.target.closest('button[data-group-toggle]');
         if (groupToggle) { toggleCompanyGroup(groupToggle.dataset.groupToggle); return; }
+        // 组头卡片里的岗位胶囊（v4.25.0）：点开抽屉。必须排在通用兜底之前——
+        // 胶囊在 td 外面（组头行没有 data-id 行），走不到下面的行点击分支。
+        const pill = event.target.closest('.multi-company-item[data-id]');
+        if (pill) { openRecordFocus(pill.dataset.id); return; }
         const button = event.target.closest('button[data-action]');
         if (!button) {
           // 点公司 / 岗位单元格 → 打开详情抽屉；点链接仍走原生跳转（不打断）
@@ -7199,31 +7205,39 @@
       $('#insightsCompactBtn').addEventListener('click', toggleInsightsCompact);
       // 悬浮明细：事件委托。mouseenter/mouseleave 不冒泡，所以用 mouseover/mouseout + relatedTarget 判定，
       // 否则在触发元素内部子节点之间移动时会反复闪烁。
-      const insightsHost = $('#insightsBody');
-      insightsHost.addEventListener('mouseover', event => {
-        const target = event.target.closest('[data-tip-kind]');
-        if (!target || target === tipTarget) return;
-        showTipFor(target);
-      });
-      insightsHost.addEventListener('mouseout', event => {
-        const target = event.target.closest('[data-tip-kind]');
-        if (!target) return;
-        if (event.relatedTarget && target.contains && target.contains(event.relatedTarget)) return;
-        hideTip();
-      });
-      // 键盘用户同样能读到明细：城市行 / 指标卡 / 比例条分段都带 tabindex="0"
-      insightsHost.addEventListener('focusin', event => {
-        const target = event.target.closest('[data-tip-kind]');
-        if (target) showTipFor(target);
-      });
-      insightsHost.addEventListener('focusout', () => hideTip());
-      insightsHost.addEventListener('click', event => {
-        if (!isCoarsePointer()) return; // 有 hover 的设备交给 mouseover，点击留给「打开抽屉」等原有动作
-        const target = event.target.closest('[data-tip-kind]');
-        if (!target) return;
-        if (target === tipTarget) { hideTip(); return; }
-        showTipFor(target);
-      });
+      // v4.25.0 起台账收纳组头的岗位胶囊（.multi-company-item）也带 data-tip-kind，
+      // 委托抽成 bindTipDelegation 在洞察面板与台账表格两个宿主上各绑一份——
+      // 两个宿主都是**静态容器**（innerHTML 重写不换掉容器本身），委托才能在重渲染后继续生效。
+      function bindTipDelegation(host) {
+        if (!host || host.__tipBound) return;
+        host.__tipBound = true;
+        host.addEventListener('mouseover', event => {
+          const target = event.target.closest('[data-tip-kind]');
+          if (!target || target === tipTarget) return;
+          showTipFor(target);
+        });
+        host.addEventListener('mouseout', event => {
+          const target = event.target.closest('[data-tip-kind]');
+          if (!target) return;
+          if (event.relatedTarget && target.contains && target.contains(event.relatedTarget)) return;
+          hideTip();
+        });
+        // 键盘用户同样能读到明细：城市行 / 指标卡 / 比例条分段 / 岗位胶囊都带 tabindex 或本身可聚焦
+        host.addEventListener('focusin', event => {
+          const target = event.target.closest('[data-tip-kind]');
+          if (target) showTipFor(target);
+        });
+        host.addEventListener('focusout', () => hideTip());
+        host.addEventListener('click', event => {
+          if (!isCoarsePointer()) return; // 有 hover 的设备交给 mouseover，点击留给「打开抽屉」等原有动作
+          const target = event.target.closest('[data-tip-kind]');
+          if (!target) return;
+          if (target === tipTarget) { hideTip(); return; }
+          showTipFor(target);
+        });
+      }
+      bindTipDelegation($('#insightsBody'));
+      bindTipDelegation($('#recordsTableScroll'));
       // 滚动后浮层位置就不再贴着触发元素了：直接隐藏，比跟着重算更省事也更不容易错位。
       // capture=true 才能收到面板内部滚动容器（.table-scroll 等）的 scroll 事件。
       window.addEventListener('scroll', () => { if (tipTarget) hideTip(); }, true);
@@ -7380,11 +7394,6 @@
       $('#offerMatrix').addEventListener('click', event => {
         const row = event.target.closest('tr[data-id]');
         if (row) openRecordFocus(row.dataset.id);
-      });
-      // 多岗位公司清单：点某个岗位打开详情抽屉
-      $('#multiCompanyList').addEventListener('click', event => {
-        const item = event.target.closest('.multi-company-item[data-id]');
-        if (item) openRecordFocus(item.dataset.id);
       });
       // 未来安排卡片可点击/可键盘激活（role=button + tabindex=0）
       els.upcoming.addEventListener('click', event => {
