@@ -166,6 +166,33 @@
         saveUiPrefs();
         renderRecordsView();
       }
+      // 一键全部折叠 / 全部展开（v4.26.0）：作用于**当前可见**的组（与组头、胶囊同一份集合），
+      // 所以先筛后折叠能得到预期结果——把筛选结果全收起来，而不是把整个台账的组都改一遍。
+      // 全部展开 = 直接清掉这些键，不做"记住上次各组的折叠态再恢复"：折叠态是本机偏好而非
+      // 用户资产，多一层记忆只会让「一键展开」的结果变得难以预测。
+      function toggleAllCompanyGroups() {
+        const keys = visibleGroupKeys;
+        if (!keys.length) return;
+        const set = new Set(uiPrefs.collapsedGroups);
+        const allCollapsed = keys.every(key => set.has(key));
+        for (const key of keys) {
+          if (allCollapsed) set.delete(key); else set.add(key);
+        }
+        uiPrefs.collapsedGroups = [...set].slice(-100);
+        saveUiPrefs();
+        renderRecordsView();
+      }
+      // 按钮态（可见性 + 文案）在渲染末尾统一回填，理由同上面的收纳开关：刷新、云同步、
+      // 筛选变化都会走到这里，只有一条回填路径才不会漏掉某一次。
+      function syncGroupExpandBtn(isBoard) {
+        const btn = $('#groupExpandToggle');
+        if (!btn) return;
+        const allCollapsed = visibleGroupKeys.length > 0
+          && visibleGroupKeys.every(key => uiPrefs.collapsedGroups.includes(key));
+        // 看板视图不分组（分组只存在于表格），此时按钮没有作用对象
+        btn.hidden = !uiPrefs.groupByCompany || isBoard || visibleGroupKeys.length === 0;
+        btn.textContent = allCollapsed ? '全部展开' : '全部折叠';
+      }
       // 列头点击联动阶段筛选（v4.8.0）：把 #stageFilter 设为该阶段并切到表格视图，查看该阶段的全部明细。
       // 看板列都来自「出现过的阶段 + Offer/已结束」，这些值一定在 refreshStageFilter 生成的选项里，不会落空。
       function applyBoardColFilter(stage) {
@@ -205,6 +232,8 @@
         if (board) board.hidden = !isBoard;
         if (scroll) scroll.hidden = isBoard;
         if (isBoard) renderBoard(); else renderTable();
+        // 一键折叠按钮的可见性与文案（要在 renderTable 之后：它才知道这次有多少个可见的组）
+        syncGroupExpandBtn(isBoard);
         // 空状态只在表格视图显示（看板自带列与「拖到这里」占位）；三态渲染见 renderEmptyState
         const visibleCount = getVisibleRecords().length;
         updateResultCaption(visibleCount);
@@ -503,12 +532,16 @@
               // 不再把用户甩回「邮件提醒」的待复核列表（那条路对已应用的邮件本来也走不通）。
               const archived = mailArchiveEntry(ref.mailId);
               const body = archived ? String(archived.textBody || '') : '';
+              // v4.26.0：邮件里的链接单独成一条（由 Action 从 <a href> 机械抽出）。
+              // 这一节才是「不用回邮箱翻」的关键——用户要的就是那条开始测评的地址。
+              const links = sanitizeMailLinks(archived && archived.links);
               return `<div class="mail-ref-item">
                 <div class="mail-ref-top">${ref.emailType ? `<span class="mail-type" data-type="${escapeHtml(ref.emailType)}">${escapeHtml(ref.emailType)}</span>` : ''}<span class="mail-ref-subject">${escapeHtml(ref.subject || '（无主题）')}</span></div>
                 <div class="mail-ref-meta">${escapeHtml(ref.from || '（无发件人）')}${ref.receivedAt ? ` · ${escapeHtml(formatClock(ref.receivedAt) || '')}` : ''}</div>
                 ${ref.summary ? `<div class="mail-ref-summary">${escapeHtml(ref.summary)}</div>` : ''}
+                ${links.length ? `<div class="mail-ref-links">${links.map(link => `<a class="mail-link" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(link.url)}">${escapeHtml(link.text || link.url)} ↗</a>`).join('')}</div>` : ''}
                 ${body
-                  ? `<details class="mail-ref-body"><summary>查看邮件原文（${body.length} 字）</summary><pre>${escapeHtml(body)}</pre></details>`
+                  ? `<details class="mail-ref-body"><summary>查看邮件原文（${body.length} 字）</summary><pre>${linkifyText(body)}</pre></details>`
                   : `<div class="mail-ref-nobody">这封邮件还没有正文快照（应用它的时候 Action 还没带回正文）。只要它还在云端候选里，重跑一次 Action 的 mail-sync 后本机同步时会自动补上；已被清理的旧邮件补不回来了。</div>`}
               </div>`;
             }).join('')}</div></div>` : ''}

@@ -335,13 +335,13 @@ function extractFunction(src, name) {
   }
   return '';
 }
-// extractBlock 已删除：CORE_PURE 拆成 src/core/ 六个文件后，本文件不再需要从产物里
+// extractBlock 已删除：CORE_PURE 拆成 src/core/ 多个文件后，本文件不再需要从产物里
 // 按标记抠块（web-runtime.js 还在用它抽洞察段与台账段，那两处本轮不动）。
 
 console.log('v4.4.0 核心纯函数单测（截止日 / 日程事件 / ICS / 公司分组 / 漏斗 / 停留 / 卡点 / 查重）');
 const coreSrc = loadSrc.coreSrc;
-check('CORE 纯函数模块已按清单加载（6 个文件，531 行）', () => {
-  assert.strictEqual(loadSrc.moduleFiles('core').length, 6, 'src/core/ 应为 6 个文件');
+check('CORE 纯函数模块已按清单加载（7 个文件）', () => {
+  assert.strictEqual(loadSrc.moduleFiles('core').length, 7, 'src/core/ 应为 7 个文件（v4.26.0 加了 text.js）');
   assert.ok(coreSrc.length > 500, `CORE 块过短或未读到：${coreSrc.length}`);
 });
 
@@ -361,7 +361,9 @@ function extractConstLine(src, name) {
 //（normalizeRecord 也要用 sanitizeMailRefs，所以这几个必须一起注入）。
 const MAIL_REF_FN_NAMES = ['sanitizeMailRef', 'sanitizeMailRefs', 'linkMailToRecord', 'unionMailRefs',
   'sanitizeMailArchiveEntry', 'sanitizeMailArchive', 'unionMailArchive', 'pruneMailArchive', 'referencedMailIds',
-  'archiveSuggestionMail', 'backfillMailArchive'];
+  'archiveSuggestionMail', 'backfillMailArchive',
+  // v4.26.0：归档条目的 links 白名单 + 体积预算要算链接（sanitizeMailArchiveEntry / prune 都用它）
+  'sanitizeMailLinks', 'mailArchiveEntrySize'];
 const mailRefFns = MAIL_REF_FN_NAMES.map(name => extractFunction(html, name));
 check('邮件关联助手全部从 index.html 抽取到', () => {
   assert.deepStrictEqual(MAIL_REF_FN_NAMES.filter((name, idx) => !mailRefFns[idx]), []);
@@ -371,7 +373,9 @@ const CORE_CONST_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET'
   // v4.19.0 关键时间类型（events[] 用）：core 的 dates/insights/ics 都读它们
   'TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'timeEventKind', 'normalizeTimeEventType',
   // v4.22.0 归档体积预算：pruneMailArchive 读它
-  'MAIL_ARCHIVE_MAX_CHARS'];
+  'MAIL_ARCHIVE_MAX_CHARS',
+  // v4.26.0 归档里每条邮件最多留几个链接
+  'MAIL_LINK_MAX'];
 const coreConsts = CORE_CONST_NAMES.map(name => extractConstLine(html, name));
 check('CORE 依赖的顶层常量全部从 index.html 抽取到', () => {
   const missing = CORE_CONST_NAMES.filter((name, idx) => !coreConsts[idx]);
@@ -443,7 +447,9 @@ const core = new Function(
      nextTimeEvent, nearestDeadlineEvent, isEventPast, isEventSettled,
      sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs, mailIdOf,
      sanitizeMailArchive, unionMailArchive, pruneMailArchive, referencedMailIds, archiveSuggestionMail, backfillMailArchive,
-     MAIL_ARCHIVE_MAX_CHARS,
+     sanitizeMailArchiveEntry, sanitizeMailLinks, mailArchiveEntrySize,
+     MAIL_ARCHIVE_MAX_CHARS, MAIL_LINK_MAX,
+     linkifyText, trimLinkTail,
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
      normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
    };`
@@ -1447,6 +1453,73 @@ check('邮件归档：正文 2000 字上限 / 并集取更完整的一份 / 裁�
   assert.deepStrictEqual(core.referencedMailIds([{ mailRefs: [{ mailId: 'mid:a' }, { mailId: '' }] }, {}]), new Set(['mid:a']));
 });
 
+// ---- v4.26.0：邮件里的链接（「开始测评」那个地址）----
+// 用户诉求：看到记录就能跳去测评，不必回邮箱翻。三道墙各自足以让地址失联——HTML→文本剥掉 href、
+// 归档正文只 2000 字常在末尾截掉、正文渲染成纯文本不可点。所以链接**单独成字段**，不赌正文存活。
+check('sanitizeMailLinks：只认 http/https、去重、限量——注入面与脏值的唯一入口', () => {
+  const urls = list => list.map(l => `${l.text}|${l.url}`).join('  ');
+  const links = core.sanitizeMailLinks([
+    { text: '开始测评', url: 'https://exam.example.com/s/1' },
+    { text: '重复的同一个地址', url: 'https://exam.example.com/s/1' },
+    { text: '脚本', url: 'javascript:alert(1)' },
+    { text: '内联文档', url: 'data:text/html,<script>alert(1)</script>' },
+    { text: '相对地址', url: '/local/path' },
+    { text: '空', url: '' },
+    null, 'not-an-object'
+  ]);
+  assert.strictEqual(urls(links), '开始测评|https://exam.example.com/s/1',
+    `只留 http/https 的绝对地址并去重，实得：${urls(links)}`);
+  const many = core.sanitizeMailLinks(Array.from({ length: core.MAIL_LINK_MAX + 6 }, (_, i) => ({ url: `https://x.com/${i}` })));
+  assert.strictEqual(many.length, core.MAIL_LINK_MAX, '超出上限的丢弃（一封邮件不该塞进几十个地址）');
+});
+
+check('归档并集与回填都带上链接：链接独立于正文，不能被「正文更长者胜」吞掉', () => {
+  const withLinks = { mailId: 'mid:a', subject: 's', textBody: 'short', links: [{ text: '开始测评', url: 'https://exam.example.com/s/1' }], archivedAt: '2026-09-14T00:00:00.000Z' };
+  const noLinks = { mailId: 'mid:a', subject: 's', textBody: 'a much longer body', links: [], archivedAt: '2026-09-14T00:00:00.000Z' };
+  const u = core.unionMailArchive({ 'mid:a': withLinks }, { 'mid:a': noLinks });
+  assert.strictEqual(u['mid:a'].textBody, 'a much longer body', '正文照旧取更完整的那份');
+  assert.strictEqual(u['mid:a'].links.length, 1, '链接另取并集——老归档（无该字段）不该把新端的链接盖掉');
+  // 回填：v4.26.0 之前归档的邮件即使有正文也没有 links，重跑一次 Action 后同步时补上
+  const archId = core.mailIdOf({ messageId: 'a@x' });
+  const prev = { [archId]: { mailId: archId, subject: 's', textBody: '已有正文', links: [], archivedAt: '2026-09-01T00:00:00.000Z' } };
+  const filled = core.backfillMailArchive(prev, [{ messageId: 'a@x', textBody: '新正文不该覆盖旧的', links: [{ url: 'https://exam.example.com/s/2' }] }]);
+  assert.strictEqual(filled[archId].textBody, '已有正文', '正文仍然只补空，不覆盖');
+  assert.strictEqual(filled[archId].links.length, 1, '但链接要补上（这正是这条路存在的意义）');
+  // 体积预算把链接算进去，否则 8 条 × 400 字地址 × 100 封会悄悄顶到同步载荷上
+  const heavy = { 'mid:z': { mailId: 'mid:z', textBody: 'x', links: Array.from({ length: core.MAIL_LINK_MAX }, (_, i) => ({ url: `https://x.com/${i}/${'y'.repeat(390)}` })) } };
+  assert.ok(core.mailArchiveEntrySize(heavy['mid:z']) > 3000, `链接要计入条目体积（实得 ${core.mailArchiveEntrySize(heavy['mid:z'])}）`);
+});
+
+check('linkifyText：地址变可点，其余字符一律转义（这是 XSS 边界）', () => {
+  const out = core.linkifyText('测评入口：https://exam.example.com/s/1。请在 3 日内完成');
+  assert.ok(out.includes('<a class="text-link" href="https://exam.example.com/s/1" target="_blank" rel="noopener noreferrer">https://exam.example.com/s/1</a>'),
+    `地址应渲染成可点链接，实得：${out}`);
+  assert.ok(out.includes('。请在 3 日内完成'), '地址后面的句号属于正文，不能被吞进链接');
+  // 只认 http/https：javascript: 只是普通文字，永远不该出现在 href 里
+  assert.ok(!/href="javascript/.test(core.linkifyText('javascript:alert(1)')), 'javascript: 不得进 href');
+  // 其余字符一律转义——「想让它可点」不是放松转义的理由
+  const evil = core.linkifyText('<img src=x onerror=alert(1)>');
+  assert.ok(!evil.includes('<img') && evil.includes('&lt;img'), `尖括号必须转义，实得：${evil}`);
+  assert.ok(!core.linkifyText('<a href="https://x.com">x</a>').includes('<a href="https://x.com">'),
+    '正文里的原始标签是文本，不能被当 HTML 放行');
+});
+
+check('记录详情：邮件链接是可点胶囊、正文里的地址自动可点（v4.26.0）', () => {
+  const drawer = extractFunction(html, 'renderDrawer').replace(/\/\/[^\n]*/g, '');
+  assert.ok(/sanitizeMailLinks\(archived && archived\.links\)/.test(drawer), '归档里的链接必须过白名单再渲染');
+  assert.ok(/<a class="mail-link" href="\$\{escapeHtml\(link\.url\)\}" target="_blank" rel="noopener noreferrer"/.test(drawer),
+    '链接胶囊要带 target/rel（外链必须隔离 window.opener）');
+  assert.ok(/<pre>\$\{linkifyText\(body\)\}<\/pre>/.test(drawer),
+    '正文不再整块 escapeHtml——否则地址还是死文本，用户照样得回邮箱复制');
+  // Action 侧：抽取必须来自锚点（扫 HTML 源码会把追踪像素、src= 一起捞进来）
+  const parseSrc = fs.readFileSync(path.resolve(__dirname, '../services/mail-sync/src/parse.js'), 'utf8');
+  assert.ok(/function extractLinks\(/.test(parseSrc), 'Action 要抽出链接');
+  assert.ok(/<a\\b\[\^>\]\*href/.test(parseSrc), '只从 <a href> 取，不扫 HTML 源码');
+  assert.ok(/links: extractLinks\(html, parsed\.text \|\| ''\)/.test(parseSrc), 'parseMessage 要带回 links');
+  const stateSrc = fs.readFileSync(path.resolve(__dirname, '../services/mail-sync/src/state.js'), 'utf8');
+  assert.ok(/links: \(Array\.isArray\(mail\.links\)/.test(stateSrc), 'buildSuggestion 要把链接写进建议文件');
+});
+
 // ---- v4.23.0：原文默认可见 + 前瞻清单认「已完成」 ----
 // 这两件事的共同教训：把「安全」做成默认门槛，用户就永远得不到那个功能；而把已经做完的事
 // 继续挂在「需要关注」上，用户就会开始忽略整个面板。
@@ -1947,6 +2020,35 @@ check('同企业收纳是独立开关、与排序解耦（排序下拉不得再�
   assert.ok(!/collapsedUnits/.test(html), '机构折叠态偏好应已删除（留着就是没人读的僵尸键）');
   // 但 orgUnit 的**行内展示**必须留着：删机构层不等于删机构
   assert.ok(/class="company-unit"/.test(html), '每行公司名后面的机构标注必须保留');
+});
+
+check('一键全部折叠 / 全部展开：独立动作按钮，不进分段控件（v4.26.0）', () => {
+  // 按钮存在、初始 hidden（收纳没开时没有组可折叠，摆在那里点了没反应）
+  assert.ok(/<button class="text-button" id="groupExpandToggle"[^>]*hidden/.test(html),
+    '一键折叠应是独立按钮且默认隐藏');
+  // 它必须与「同企业收纳」**同处 .group-switch**，但不能混进 .view-switch（分段控件表达二选一：
+  // 表格|看板。动作按钮混进去会被读成第三种视图，且分段控件的选中态样式会跟它抢）
+  const switchStart = html.indexOf('class="group-switch"');
+  assert.ok(switchStart > 0, '应存在 .group-switch 容器');
+  const slice = html.slice(switchStart, html.indexOf('id="recordsTableScroll"'));
+  assert.ok(slice.includes('id="groupToggle"') && slice.includes('id="groupExpandToggle"'),
+    '两个控件应在同一格（.filters 的第 4 列）里');
+  const segStart = slice.indexOf('class="view-switch"');
+  const segEnd = slice.indexOf('</div>', segStart);
+  assert.ok(segStart > 0 && !slice.slice(segStart, segEnd).includes('groupExpandToggle'),
+    '一键折叠必须在分段控件外面');
+  // 事件与状态回填都要在：只有按钮、没有监听 = 点了没反应（静默失效）
+  assert.ok(/\$\('#groupExpandToggle'\)\.addEventListener\('click', toggleAllCompanyGroups\)/.test(html),
+    '必须绑上点击事件');
+  assert.ok(/function toggleAllCompanyGroups\(\)/.test(html) && /function syncGroupExpandBtn\(/.test(html),
+    '折叠动作与按钮态回填各有一个函数');
+  assert.ok(/visibleGroupKeys = buckets\.map\(group => group\.key\)/.test(html),
+    '可见组键必须来自本次渲染的桶——按钮文案与折叠对象都靠它，写死成全量台账会与筛选后所见不符');
+  assert.ok(/btn\.hidden = !uiPrefs\.groupByCompany \|\| isBoard \|\| visibleGroupKeys\.length === 0/.test(html),
+    '收纳关闭 / 看板视图 / 无组时都要隐藏');
+  // 两个按钮并排靠 .group-switch 的 flex（这一格不是分段控件本身了）
+  assert.ok(/\.group-switch \{ display: inline-flex;[^}]*gap: 6px/.test(html),
+    '.group-switch 应是 flex 容器，否则两个控件会竖着堆或被拉满整列宽');
 });
 
 check('收纳组头是卡片形态，胶囊可点开抽屉（v4.25.0，洞察「多岗位公司」栏目已并入这里）', () => {
@@ -2958,6 +3060,24 @@ check('用户文档与当前行为一致（看板横带 / 邮箱多服务商 / �
     '安装教程应给出相对期限换算用的时区变量名，否则不在 +08:00 的用户无从下手');
   assert.ok(tut.includes('48 小时内') || tut.includes('3 日内'),
     '安装教程应举出相对表达的实际例子（「3 日内」「48 小时内」），否则用户不知道这条规则什么时候生效');
+
+  // ⑨ 邮件链接 + 逾期红字口径 + 一键折叠（v4.26.0）。三条都是"功能在，但用户不知道它存在/会误解"的类型：
+  // ① 链接胶囊只在记录详情里，不讲就没人会去点开找那条测评地址（而这正是本轮要解决的问题）；
+  // ② 旧的逾期红字口径是"过去就报红"，文档不改，用户看到灰显会以为状态丢了；
+  // ③ 一键折叠按钮只在收纳打开时才出现，不讲就永远发现不了。
+  for (const [name, doc] of [['安装教程', tut], ['快速上手', qs]]) {
+    assert.ok(/测评链接|点击这里开始测评|点击开始测评/.test(doc),
+      `${name} 应说明邮件里的测评链接可以直接点（v4.26.0）`);
+    assert.ok(/相关邮件/.test(doc) && /链接/.test(doc),
+      `${name} 应指明链接在「相关邮件」里，否则用户不知道该去哪儿点`);
+    assert.ok(/旧邮件补不回来|早已越过水位线|不会再解析它/.test(doc),
+      `${name} 应说明已归档的旧邮件不会自动长出链接（不然用户会以为功能坏了）`);
+  }
+  assert.ok(tut.includes('一键') && /全部折叠/.test(tut) && /全部展开/.test(tut),
+    '安装教程应说明企业组可一键全部折叠 / 展开（v4.26.0）');
+  assert.ok(qs.includes('全部折叠'), '快速上手指南也应提到一键折叠');
+  assert.ok(tut.includes('标记完成') && /不算“走过它”|不算「走过它」/.test(tut),
+    '安装教程应写明「同一天推进不算走过它」这个边界，否则用户会觉得逾期没消掉是 bug');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

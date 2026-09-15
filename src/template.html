@@ -179,8 +179,14 @@
              原先它是第 5 个排序选项，于是「分组」与「排序」互斥——想按公司收纳就用不了
              「最近安排优先」。现在是正交的两件事：排序决定顺序，开关决定要不要插组头。
              删掉那个选项**零迁移成本**：排序选择从来不持久化（uiPrefs 里没有 sort 键）。 -->
-        <div class="view-switch group-switch" role="group" aria-label="同企业收纳">
-          <button class="view-switch-btn" id="groupToggle" type="button" aria-pressed="false" title="把同一家企业的多条投递收进一个可折叠的组；同企业内填了不同「机构」时再分一层">同企业收纳</button>
+        <div class="group-switch">
+          <div class="view-switch" role="group" aria-label="同企业收纳">
+            <button class="view-switch-btn" id="groupToggle" type="button" aria-pressed="false" title="把同一家企业的多条投递收进一个可折叠的组；同企业内填了不同「机构」时再分一层">同企业收纳</button>
+          </div>
+          <!-- 一键折叠（v4.26.0）：分组一多，"逐个点组头收起"就成了体力活。
+               刻意放在分段控件**外面**——分段控件表达的是「二选一」（表格|看板），
+               而这是一个动作按钮，混进去会被读成第三种视图。 -->
+          <button class="text-button" id="groupExpandToggle" type="button" hidden title="把当前台账里的企业组一次全部折叠；再点一次全部展开">全部折叠</button>
         </div>
       </div>
       <div class="table-scroll" id="recordsTableScroll">

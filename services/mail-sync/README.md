@@ -164,6 +164,10 @@ npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ t
     "company": "", "position": "", "stage": "(STAGE_PRESETS 之一或空)",
     "scheduleAt": "YYYY-MM-DDTHH:mm|空", "location": "", "round": "",
     "summary": "(≤60)", "confidence": 0,
+    // 邮件里的链接（v0.5.0）：由 extractLinks 从 HTML 的 <a href> 机械抽出（不经 AI），
+    // 网页端在记录详情里给成可点胶囊——「开始测评」那个地址不该逼用户回邮箱翻。
+    // 只认 http/https 绝对地址，退订/隐私政策这类模板链接丢掉，上限 8 条。
+    "links": [{ "text": "点击开始测评", "url": "https://exam.example.com/s/abc?token=..." }],
     "proposed": {
       // note 会被用户勾选后永久写进台账时间线，所以必须有信息量：
       // emailType 为「其它」时用 AI 写的 summary（截到 48 字），其余用简短类型名。

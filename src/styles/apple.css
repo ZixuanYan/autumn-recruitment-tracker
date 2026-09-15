@@ -619,10 +619,17 @@
     .mail-ref-meta { margin-top: 2px; color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
     .mail-ref-summary { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
     .mail-ref-item .text-button { margin-top: 4px; padding-left: 0; }
+    /* 邮件里的链接（v4.26.0）：「开始测评」这类地址此前只能靠用户回邮箱翻，现在直接给成可点胶囊。
+       地址本身很长（常带一长串 token），所以限宽 + 省略号，完整地址在 title 里。 */
+    .mail-ref-links { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .mail-link { display: inline-flex; align-items: center; max-width: 100%; padding: 3px 9px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--accent-ink); font-size: 12px; font-weight: 550; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mail-link:hover { background: var(--accent-soft); border-color: var(--accent); }
     /* 邮件正文（v4.22.0）：默认折起，点了才展开——正文可能有上千字，直接铺开会淹没抽屉 */
     .mail-ref-body { margin-top: 5px; }
     .mail-ref-body > summary { cursor: pointer; color: var(--accent-ink); font-size: 12px; }
     .mail-ref-body > pre { margin: 6px 0 0; padding: 8px 10px; max-height: 260px; overflow: auto; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* 正文里自动识别的地址（linkifyText）：正文是 <pre>，链接要看得出来可点，否则跟普通文字没区别 */
+    .mail-ref-body > pre .text-link { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
     /* 正文快照缺失（旧建议文件没带回正文）——如实说明怎么补，不假装能打开 */
     .mail-ref-nobody { margin-top: 5px; color: var(--muted); font-size: 11.5px; }
     .note-list { display: grid; gap: 8px; }
@@ -684,8 +691,10 @@
     .group-caret { color: var(--muted); font-size: 11px; }
     /* 公司色条已由卡片的 ::before 承担，label 不再画第二根（两根色条会错位显得脏）。 */
     .group-label { overflow-wrap: anywhere; }
-    /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽 */
-    .group-switch { justify-self: start; align-self: center; }
+    /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽。
+       v4.26.0：这一格现在是「分段开关 + 一键折叠动作按钮」两个元素（见 template 的说明），
+       所以它是 flex 容器，而不再是分段控件本身。 */
+    .group-switch { display: inline-flex; align-items: center; gap: 6px; justify-self: start; align-self: center; }
     .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--sh-card); }
     /* 机构名在公司名 / 看板卡里都是次要信息：降一档字号与颜色，不与主体争视觉重量 */
     .company-unit, .board-card-unit { color: var(--muted); font-size: 12px; font-weight: 500; }

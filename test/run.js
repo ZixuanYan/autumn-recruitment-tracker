@@ -208,6 +208,59 @@ test('htmlToText 剥标签/解实体/去脚本', () => {
   assert.ok(!t.includes('var a'));
   assert.ok(!t.includes('<'));
 });
+
+// v4.26.0：测评/笔试邮件里最有用的是那条地址，而此前 href 会被剥标签规则整个吃掉
+// （实测：HTML-only 的测评邮件里「点击这里开始测评」后面什么都不剩），归档正文里的地址彻底失联。
+test('htmlToText 保留锚点地址（v4.26.0）：href 不再凭空消失', () => {
+  const t = parse.htmlToText('<p>请在 9 月 17 日前完成测评</p><p><a href="https://exam.example.com/s/abc?k=1&amp;t=2">点击开始测评</a></p>');
+  assert.ok(t.includes('点击开始测评'), '锚文本要留着');
+  assert.ok(t.includes('https://exam.example.com/s/abc?k=1&t=2'), '地址也要留着，且实体已解码（&amp; 不解码会直接打不开）');
+  assert.ok(!t.includes('<') && !t.includes('>'), '方括号包裹，地址不会被自己的剥标签规则吃掉');
+  // 非 http/https 的锚点只留文字，不把 javascript: / mailto: 带进归档
+  const bad = parse.htmlToText('<a href="javascript:alert(1)">点我</a>');
+  assert.ok(bad.includes('点我') && !bad.includes('javascript:'), '不认识的协议只留锚文本');
+});
+
+test('extractLinks 抽绝对链接：只认 http/https、去退订类噪声、去重、限量（v4.26.0）', () => {
+  const html = [
+    '<p><a href="https://exam.example.com/start?token=abc">点击开始测评</a></p>',
+    '<p><a href="https://exam.example.com/start?token=abc">重复的同一个地址</a></p>',
+    '<p><a href="https://x.com/unsubscribe?id=9">退订</a></p>',
+    '<p><a href="/relative/path">相对地址</a></p>',
+    '<p><a href="javascript:alert(1)">脚本</a></p>'
+  ].join('');
+  const links = parse.extractLinks(html, '');
+  assert.deepStrictEqual(links.map(l => l.url), ['https://exam.example.com/start?token=abc'],
+    '同一个地址只留一次；退订 / 相对地址 / javascript: 一律不进');
+  assert.strictEqual(links[0].text, '点击开始测评', '锚文本作为标签（详情里的按钮文案）');
+  // 纯文本邮件（或正文里直接贴着地址）也要抽得到，且末尾的中文句号 / 逗号不算地址的一部分
+  const plain = parse.extractLinks('', '测评入口：https://exam.example.com/start?a=1。请在 3 日内完成');
+  assert.deepStrictEqual(plain.map(l => l.url), ['https://exam.example.com/start?a=1'], '中文标点不粘连');
+  assert.strictEqual(plain[0].text, '', '没有锚文本时留空，网页端回落到显示地址本身');
+  // HTML 源码里的 src= / 追踪像素不是"链接"（扫源码就会把它们捞进来）
+  assert.deepStrictEqual(parse.extractLinks('<img src="https://cdn.example.com/pixel.gif">', ''), [],
+    '不扫 HTML 源码：只有 <a href> 才算');
+  // 上限：一封邮件最多 LINK_MAX 条
+  const many = Array.from({ length: parse.LINK_MAX + 5 }, (_, i) => `<a href="https://x.com/${i}">链接${i}</a>`).join('');
+  assert.strictEqual(parse.extractLinks(many, '').length, parse.LINK_MAX, '超出上限的丢弃（不是报错）');
+  // 换行包裹的长地址（纯文本邮件常见）：末尾的换行不算地址的一部分
+  assert.deepStrictEqual(parse.extractLinks('', 'https://x.com/a?b=1\n下一行').map(l => l.url), ['https://x.com/a?b=1']);
+});
+
+test('buildSuggestion 带回邮件链接（独立字段，不靠归档正文——正文只 2000 字，链接常在末尾被截掉）', () => {
+  const s = state.buildSuggestion(
+    { sourceUid: 7, textBody: '正文', links: [{ text: '开始测评', url: 'https://exam.example.com/s/1' }] },
+    { emailType: '笔试', company: '星海科技' }, { uidValidity: 1, mailbox: 'INBOX' });
+  assert.strictEqual(s.links.length, 1);
+  assert.strictEqual(s.links[0].url, 'https://exam.example.com/s/1');
+  // 没有链接（或老调用方不传）时是空数组，不是 undefined —— 网页端的白名单会照单收下
+  assert.deepStrictEqual(state.buildSuggestion({ sourceUid: 8 }, {}, {}).links, []);
+  const capped = state.buildSuggestion(
+    { sourceUid: 9, links: Array.from({ length: parse.LINK_MAX + 3 }, (_, i) => ({ text: '', url: `https://x.com/${i}` })) },
+    {}, {});
+  assert.strictEqual(capped.links.length, parse.LINK_MAX, '超过上限的截掉');
+});
+
 test('truncateBody 截断到 MAX_BODY 并加省略号（断言用常量，避免上限调整后测试与实现漂移）', () => {
   const long = 'a'.repeat(parse.MAX_BODY + 1000);
   const out = parse.truncateBody(long);

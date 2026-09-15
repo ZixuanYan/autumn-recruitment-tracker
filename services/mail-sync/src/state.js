@@ -10,7 +10,7 @@ const PRUNE_MAX = 100;
 // v4.22.0：正文快照的上限与截断实现都在 parse.js（与 AI 用的 8000 字上限分开——建议文件要落进
 // Gist，正文太大会逼近单文件 1MB 的截断线）。parse.js 对 mailparser 是惰性 require，
 // 所以这里顶层 require 它是安全的：只跑纯函数单测时不会去加载 mailparser。
-const { truncateForArchive } = require('./parse');
+const { truncateForArchive, LINK_MAX } = require('./parse');
 
 // ===== 丢弃可观测性（v4.6.1）=====
 // 修复前 index.js 是 `if (!isCandidate(mail, kw)) continue;` —— 无日志、无计数、meta 不记录。
@@ -109,6 +109,10 @@ function buildSuggestion(mail, result, ctx) {
     // 现在密钥只管"整个建议文件是否加密"这一件事：不配 = 明文文件（正文也在里面），
     // 配了 = 密文文件（正文一并受保护）。
     textBody: truncateForArchive(mail.textBody),
+    // 邮件里的链接（v4.26.0）：网页端在记录详情里直接给出可点入口（「开始测评」那个地址），
+    // 不必为了跳转再翻一次邮箱。抽取与白名单都在 parse.js（extractLinks，只认 http/https 绝对地址），
+    // 这里只截断数量——它是**独立字段**而不是正文的一部分：归档正文只有 2000 字，链接常在末尾被截掉。
+    links: (Array.isArray(mail.links) ? mail.links : []).slice(0, LINK_MAX),
     confidence: Number.isFinite(Number(r.confidence)) ? Number(r.confidence) : 0,
     proposed: r.proposed || { milestone: { stage: '', at: '', note: '' }, scheduleAt: '', deadline: '', deadlineExpr: '', deadlineSource: '', recentSchedule: '', nextAction: '' }
   };

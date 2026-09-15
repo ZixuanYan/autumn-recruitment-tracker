@@ -1458,6 +1458,8 @@
       $('#viewBoardBtn').addEventListener('click', () => setRecordsView('board'));
       // 同企业收纳开关（v4.11.0）：视觉态由 renderRecordsView 统一回填，这里只翻偏好
       $('#groupToggle').addEventListener('click', () => setGroupByCompany(!uiPrefs.groupByCompany));
+      // 一键全部折叠 / 全部展开（v4.26.0）：文案与方向都由 toggleAllCompanyGroups 自己判断
+      $('#groupExpandToggle').addEventListener('click', toggleAllCompanyGroups);
       // 公司名失焦时给「拆成企业 + 机构」的建议；建议按钮是动态生成的，所以走容器委托
       $('#company').addEventListener('blur', updateOrgSplitHint);
       $('#orgUnit').addEventListener('input', updateOrgSplitHint);

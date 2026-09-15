@@ -37,7 +37,7 @@ const stripModuleMarkers = (text) => text.replace(/^\/\*__MODULE:[a-z0-9]+__\*\/
 
 module.exports = {
   ROOT, SRC, BUNDLE, read, moduleFiles, joinFiles,
-  /** CORE_PURE 那 531 行（6 个文件），含首尾的 __CORE_PURE_START__/END__ 标记行（都是注释，沙箱执行无害） */
+  /** CORE_PURE 全部纯函数文件（src/core/），含首尾的 __CORE_PURE_START__/END__ 标记行（都是注释，沙箱执行无害） */
   coreSrc: joinFiles(moduleFiles('core')),
   /** MAIL_PURE 那 140 行，完全自洽（10 个函数只调用彼此与内置方法） */
   mailSrc: joinFiles(moduleFiles('mail')),

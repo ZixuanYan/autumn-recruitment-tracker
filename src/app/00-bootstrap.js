@@ -201,6 +201,32 @@
       // 此前那条"没口令就不存正文"的规则实测把「看原文」变成了要先配密钥、且每台设备各配一次的事，
       // 代价大于收益；现在改为在设置面板里如实标注当前是明文还是密文，把选择权交给用户。
       const MAIL_ARCHIVE_MAX_CHARS = 100000;
+      // 邮件里的链接（v4.26.0）：由 Action 侧从 HTML 的 <a href> 里机械抽出（不经 AI），
+      // 网页端在记录详情里直接给出可点入口——「开始测评」那个地址不该逼用户回邮箱翻。
+      // 白名单只认 http/https：这一条既挡 javascript:/data: 这类注入面，也挡下 Action 传来的脏值。
+      // 为什么单独成字段而不是靠归档正文：正文只留 2000 字，链接常在邮件末尾被截掉；
+      // 且 v4.26.0 之前 HTML→文本会把 href 整个剥掉（只有纯文本部分写了地址的邮件才留得下）。
+      const MAIL_LINK_MAX = 8;
+      function sanitizeMailLinks(list) {
+        const out = [];
+        const seen = new Set();
+        for (const item of (Array.isArray(list) ? list : [])) {
+          if (!item || typeof item !== 'object') continue;
+          const url = String(item.url || '').trim().slice(0, 400);
+          if (!/^https?:\/\//i.test(url)) continue;
+          if (seen.has(url) || out.length >= MAIL_LINK_MAX) continue;
+          seen.add(url);
+          out.push({ url, text: String(item.text || '').trim().slice(0, 80) });
+        }
+        return out;
+      }
+      // 归档条目的体积 = 正文 + 链接。链接是独立字段，不把它算进去的话预算就漏了一块
+      //（8 条 × 400 字的地址 × 100 封会悄悄顶到同步载荷上）。
+      function mailArchiveEntrySize(entry) {
+        const links = sanitizeMailLinks(entry && entry.links);
+        return String((entry && entry.textBody) || '').length
+          + links.reduce((sum, link) => sum + link.url.length + link.text.length, 0);
+      }
       function sanitizeMailArchiveEntry(mailId, entry) {
         const id = String(mailId || '').trim();
         if (!id || !entry || typeof entry !== 'object') return null;
@@ -212,6 +238,7 @@
           emailType: String(entry.emailType || '').slice(0, 20),
           summary: String(entry.summary || '').slice(0, 300),
           textBody: String(entry.textBody || '').slice(0, 2000),
+          links: sanitizeMailLinks(entry.links),
           archivedAt: String(entry.archivedAt || '')
         };
       }
@@ -239,7 +266,9 @@
           // 同一封两边都有：取「正文更长」的那份（一端可能是截断版），等长时取归档更晚的
           const better = entry.textBody.length > prev.textBody.length
             || (entry.textBody.length === prev.textBody.length && String(entry.archivedAt) > String(prev.archivedAt));
-          if (better) out[key] = entry;
+          // 链接是**独立于正文**的另一条信息（老归档可能没有这个字段），所以正文挑完之后再取一次并集——
+          // 否则"这台设备归档过（无链接）、那台归档过（有链接）"会被上面这条规则整个吞掉。
+          out[key] = { ...(better ? entry : prev), links: sanitizeMailLinks([...(entry.links || []), ...(prev.links || [])]) };
         }
         return out;
       }
@@ -248,13 +277,13 @@
       function pruneMailArchive(archive, referencedIds) {
         const refs = referencedIds instanceof Set ? referencedIds : new Set(referencedIds || []);
         const entries = Object.values(sanitizeMailArchive(archive));
-        let total = entries.reduce((sum, e) => sum + e.textBody.length, 0);
+        let total = entries.reduce((sum, e) => sum + mailArchiveEntrySize(e), 0);
         const out = { ...sanitizeMailArchive(archive) };
         if (total <= MAIL_ARCHIVE_MAX_CHARS) return out;
         for (const entry of entries.filter(e => !refs.has(e.mailId)).sort((a, b) => String(a.archivedAt).localeCompare(String(b.archivedAt)))) {
           if (total <= MAIL_ARCHIVE_MAX_CHARS) break;
           delete out[entry.mailId];
-          total -= entry.textBody.length;
+          total -= mailArchiveEntrySize(entry);
         }
         return out;
       }
@@ -279,6 +308,8 @@
           subject: s.subject, from: s.from, receivedAt: s.receivedAt, emailType: s.emailType,
           summary: s.summary,
           textBody: s.textBody,
+          // v4.26.0：邮件里的链接（「开始测评」的地址）随归档一起存，详情里直接可点
+          links: s.links,
           archivedAt: new Date().toISOString()
         });
         if (!entry) return archive;
@@ -295,15 +326,21 @@
       // （该部署当时没配 MAIL_ENC_KEY），于是那些归档条目正文为空。而它们早已被 appliedIds 过滤、
       // 不会再回到待复核队列——"重新应用一次"这条路走不通，只能靠同步时回填。
       // 只补空正文，绝不覆盖已有正文（同一封两边都有内容时取更完整的那份由 unionMailArchive 负责）。
+      // v4.26.0：链接同理补一次——v4.26.0 之前归档的邮件没有这个字段（即使它带了正文），
+      // 而"重新应用一次"这条路对已应用的邮件走不通（它们早被 appliedIds 过滤掉了）。
       function backfillMailArchive(archive, suggestions) {
         const out = sanitizeMailArchive(archive);
         for (const s of (Array.isArray(suggestions) ? suggestions : [])) {
           const mailId = mailIdOf(s);
+          const prev = mailId ? out[mailId] : null;
+          if (!prev) continue; // 只补已存在的条目，绝不凭空建档
           const body = String((s && s.textBody) || '');
-          if (!mailId || !body) continue;
-          const prev = out[mailId];
-          if (!prev || String(prev.textBody || '')) continue;
-          out[mailId] = sanitizeMailArchiveEntry(mailId, { ...prev, textBody: body });
+          const links = sanitizeMailLinks(s && s.links);
+          const patch = {};
+          if (body && !String(prev.textBody || '')) patch.textBody = body;
+          if (links.length && !prev.links.length) patch.links = links;
+          if (!Object.keys(patch).length) continue;
+          out[mailId] = sanitizeMailArchiveEntry(mailId, { ...prev, ...patch });
         }
         return out;
       }
@@ -321,7 +358,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.25.0';
+      const APP_VERSION = '4.26.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -368,6 +405,10 @@
       let resume = loadResumeData();
       let resumeSavedAt = loadResumeMeta();
       let editingId = null;
+      // 「全部折叠 / 全部展开」（v4.26.0）要作用的组：renderTable 每次渲染时写入**当前可见**的组键，
+      // 工具条上的按钮据此决定文案（全折叠好了就显示「全部展开」）。放在模块级是因为
+      // 渲染在 renderTable（本文件）、按钮态在 renderRecordsView（10-views）——两者必须看同一份。
+      let visibleGroupKeys = [];
       let toastTimer;
       let safetyDbPromise;
       let backupFileHandle = null;
@@ -2133,18 +2174,24 @@
         const now = new Date();
         // v4.19.0：表格「最近时间」与截止倒计时都从 events[] 派生
         const nextEv = nextTimeEvent(record.events, now);
-        const overdue = !!(nextEv && !nextEv.future) && !['Offer', '已结束'].includes(record.stage);
+        const terminal = ['Offer', '已结束'].includes(record.stage);
+        // v4.26.0：过去的时间要分两种——**已经了结**的（流程已走过它 / 已标记完成覆盖）与
+        // **没人处理**的逾期。此前只看「是不是过去了」，于是推进完的阶段仍挂着红字「已过期」，
+        // 天天亮红灯，真逾期反而被淹没（用户实测反馈）。
+        // 已了结的**仍然显示**（列名就叫「最近时间」，历史该看得到），只是转灰、不再报警号。
+        const settledPast = !!(nextEv && !nextEv.future) && isEventSettled(record, nextEv.event);
+        const overdue = !!(nextEv && !nextEv.future) && !settledPast && !terminal;
         const canAdvance = record.stage !== '已结束';
         // 完成态（v4.18.0）：当前阶段（时间线末条）是否已标记完成。终态若已被标记，也允许取消。
         const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
         const curDone = !!(curMilestone && curMilestone.done);
-        const canMarkDone = !['Offer', '已结束'].includes(record.stage) || curDone;
+        const canMarkDone = !terminal || curDone;
         const dlHit = nearestDeadlineEvent(record.events, now);
         // v4.24.0：传完整 at —— 带时刻的截止（`2026-09-17T18:00`）截成 10 位就丢掉小时级倒计时
         const dl = dlHit ? deadlineInfo(dlHit.event.at, now) : null;
         // 注意：即使「最近时间」本身就是这条截止，也**保留**倒计时提示——它带黄/红的紧急色，
         // 去掉它等于把"还剩 2 天 / 已过期"这个信号藏了；日期重复出现只是外观小瑕疵。
-        const dlHtml = dl && !['Offer', '已结束'].includes(record.stage)
+        const dlHtml = dl && !terminal
           ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
         const companyHtml = record.applicationUrl
           ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
@@ -2162,7 +2209,7 @@
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.done ? '（已完成）' : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span>${curDone ? '<span class="stage-done-chip" title="当前阶段已标记完成，尚未推进">已完成</span>' : ''}</td>
-          <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
+          <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}${settledPast && !terminal ? ' is-settled' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
           <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
           <td data-label="操作"><div class="row-actions">
             ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
@@ -2237,6 +2284,8 @@
         const ordered = grouped ? clusterByCompanyGroup(visible, groupKeyById) : visible;
         const collapsed = new Set(uiPrefs.collapsedGroups);
         const rows = [];
+        // 未分组时没有「组」可折叠，工具条上的按钮也随之隐藏（见 renderRecordsView）
+        visibleGroupKeys = [];
         if (!grouped) {
           for (const record of ordered) rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
         } else {
@@ -2249,6 +2298,7 @@
             if (!bucket || bucket.key !== key) { bucket = { key, records: [] }; buckets.push(bucket); }
             bucket.records.push(record);
           }
+          visibleGroupKeys = buckets.map(group => group.key);
           for (const group of buckets) {
             rows.push(companyGroupRowHtml(group.key, group.records, collapsed.has(group.key)));
             if (!collapsed.has(group.key)) {

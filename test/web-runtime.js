@@ -656,12 +656,15 @@ function extractConst(src, name) {
   return new Function('AJA', `${line.trim()}\nreturn ${name};`)(AJA_SHARED);
 }
 
+// v4.26.0：renderDrawer 的「相关邮件」要过链接白名单，而 sanitizeMailLinks 读这个顶层常量
+// （声明在 bootstrap 段，不在被抽取的块里）。照 extractConst 的规矩现场求值，不复制字面量。
+const MAIL_LINK_MAX_LIVE = extractConst(html, 'MAIL_LINK_MAX');
 // CORE_START 仍然要留着：下面的 insightSection 用它当**结束边界**（洞察段 = INSIGHT_START
 // 一直到 CORE 块之前）。CORE_END 随 coreBlock 改造成了死代码，删掉。
 const CORE_START = '/*__CORE_PURE_START__*/';
 const INSIGHT_START = '      // ===== 洞察面板（v4.4.0）：漏斗 / 节奏 / 停留 / 指标 / 卡点，全部由 records+timeline 派生 =====';
 const V44_START = '      // ================= 台账视图增强（v4.4.0）：UI 偏好 / 看板 / 详情抽屉 / ⌘K 命令面板 =================';
-// 阶段 3：这两块已拆成 src/core/（6 个文件）与 src/mail/pure.js，按 bundle.js 清单加载，
+// 阶段 3：这两块已拆成 src/core/ 与 src/mail/pure.js，按 bundle.js 清单加载，
 // 不再靠标记文本从 6892 行产物里抠（标记名拼错或那行注释被改，就会静默抠出空串，
 // 然后沙箱里几十个符号全成 undefined，报错信息离真实原因非常远）。
 // 加载结果含首尾的标记行，它们都是注释，沙箱执行无害。
@@ -685,7 +688,7 @@ const v45Section = extractBlock(html, V45_START, V44_START);
 // setCurrentMilestoneDone（v4.18.0）与 normalizeRecord 同段、依赖相同（sanitizeTimeline / setTimeline /
 // localDateInput 都已在本沙箱里），因此一并抽真实现来做行为断言——它「没有时间线时要合成一条」
 // 这条分支静态断言覆盖不到，而那正是示例数据点「标记完成」静默无动作的成因。
-const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId', 'setCurrentMilestoneDone', 'sanitizeEvents', 'migrateLegacyEvents', 'sanitizeMailRef', 'sanitizeMailRefs', 'mailArchiveEntry']
+const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage', 'cryptoId', 'setCurrentMilestoneDone', 'sanitizeEvents', 'migrateLegacyEvents', 'sanitizeMailRef', 'sanitizeMailRefs', 'mailArchiveEntry', 'sanitizeMailLinks']
   .map(name => extractFunction(html, name));
 // v4.19.0 关键时间类型的转发别名。它们在 index.html 里位于 bootstrap 段（不在被抽取的块内），
 // 而 sanitizeEvents / coreBlock 的 dates·insights·ics 都要用，所以按同样的转发形态在这里补齐。
@@ -819,6 +822,11 @@ const sandbox2 = {
   STORAGE_KEY: 'test.records.v1',
   primaryLoadState: 'unknown',
   editingId: null,
+  // v4.26.0：renderTable 把本次可见的企业组键写进这个顶层 let（声明在 00-bootstrap，
+  // 不在被抽取的 v44 区段里，所以只能按 records / editingId 那样注入）。一键折叠按钮读它。
+  visibleGroupKeys: [],
+  // 同上：sanitizeMailLinks 的上限常量
+  MAIL_LINK_MAX: MAIL_LINK_MAX_LIVE,
   pendingMailSeedId: null,
   collectTimeline: () => [{ stage: '已投递', at: '2026-09-06', note: '' }],
   // v4.19.0：submitForm 现在还会收集「关键时间」。这些用例只关心查重与新增，输入固定为空，
@@ -1072,6 +1080,49 @@ check('同企业收纳：只有企业级组头，机构作为每行的一个标�
   assert.ok(sandbox2.els.body.innerHTML.includes('<tr data-id="b1"'), '再次点击展开');
 });
 
+check('一键全部折叠 / 全部展开：只作用于当前可见的组，文案随态翻转（v4.26.0）', () => {
+  // seedRecords 给的是腾讯(2 条) + 阿里(1 条) = 2 个企业组
+  seedRecords();
+  const btn = sandbox2.$('#groupExpandToggle');
+  sandbox2.renderRecordsView();
+  assert.strictEqual(btn.hidden, true, '收纳关闭时按钮隐藏——没有组可折叠，摆着点了没反应');
+  vm.runInContext('uiPrefs.groupByCompany = true; uiPrefs.collapsedGroups = []', sandbox2);
+  sandbox2.renderRecordsView();
+  assert.strictEqual(btn.hidden, false, '收纳打开且有组时按钮出现');
+  assert.strictEqual(btn.textContent, '全部折叠', '还有展开的组 → 显示「全部折叠」');
+
+  sandbox2.toggleAllCompanyGroups();
+  let saved = JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).collapsedGroups;
+  assert.strictEqual(saved.length, 2, '两个企业组都进折叠态');
+  assert.strictEqual(btn.textContent, '全部展开', '全折叠后文案翻转');
+  const h = sandbox2.els.body.innerHTML;
+  assert.ok(!h.includes('<tr data-id="r1"') && !h.includes('<tr data-id="r3"'), '折叠后明细行全部收起');
+  assert.strictEqual((h.match(/class="multi-company-item"/g) || []).length, 3,
+    '组头卡片与岗位胶囊仍在（折叠态就是扫描视图，这是它存在的意义）');
+
+  sandbox2.toggleAllCompanyGroups();
+  saved = JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).collapsedGroups;
+  assert.strictEqual(saved.length, 0, '再点一次全部展开');
+  assert.strictEqual(btn.textContent, '全部折叠', '文案回到「全部折叠」');
+  assert.ok(sandbox2.els.body.innerHTML.includes('<tr data-id="r1"'), '明细行回来了');
+
+  // 只折叠**可见**的组：筛掉的企业不能被顺手改掉折叠态（否则清筛选后会发现别的组莫名收起了）
+  sandbox2.els.filter.value = 'Offer';
+  sandbox2.renderRecordsView();
+  sandbox2.toggleAllCompanyGroups();
+  saved = JSON.parse(sandbox2.localStorage.getItem('test.ui.v1')).collapsedGroups;
+  assert.strictEqual(saved.length, 1, '只折叠当前可见的那一个组');
+
+  sandbox2.els.filter.value = 'all';
+  vm.runInContext('uiPrefs.recordsView = "board"', sandbox2);
+  sandbox2.renderRecordsView();
+  assert.strictEqual(btn.hidden, true, '看板视图不分组，按钮一并隐藏');
+
+  vm.runInContext('uiPrefs.recordsView = "table"; uiPrefs.groupByCompany = false; uiPrefs.collapsedGroups = []', sandbox2);
+  seedRecords();
+  sandbox2.renderRecordsView();
+});
+
 check('收纳开启时先聚拢同企业记录：非公司类排序下不会插出重复组头', () => {
   seedRecords();
   // 这个数据在「投递日期从新到旧」下，腾讯的两条被阿里隔开 —— 不聚拢就会插出 3 个组头
@@ -1117,6 +1168,44 @@ check('公司名拆分建议：贪婪切分 + 含法人后缀时不建议（精�
   // 建议是预览式的（按钮文本把两段都写出来）且点完两个框都能改，所以这种一眼看得出不对的
   // 拆分不构成静默错位。将来若改进正则，这条断言会提示行为变了 —— 那正是它存在的意义。
   assert.deepStrictEqual(parts('工商银行北京市分行'), ['工商银行北', '京市分行'], '已知不完美，见上面的说明');
+});
+
+check('台账「最近时间」：已了结的安排灰显不报红，真逾期仍报红（v4.26.0）', () => {
+  // 用户实测反馈：一面早就推进到下一阶段了，行里还挂着红字「已过期」，天天亮红灯。
+  // 过去的时间要分两种——**流程已走过它**（历史）与**没人处理**（真逾期），红字只留给后者。
+  seedRecords();
+  const day = off => {
+    const d = new Date(Date.now() - off * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const groups = sandbox2.groupRecordsByCompany(sandbox2.records);
+  const index = new Map(groups.map(g => [g.key, g.records]));
+  const groupKeyById = sandbox2.companyGroupIndex(sandbox2.records);
+  const rowNo = new Map(sandbox2.records.map((r, i) => [r.id, String(i + 1).padStart(4, '0')]));
+  // 三天前的面试；r1 的时间线在**两天前**走到「一面」→ 流程已走过这次安排
+  const past = `${day(3)}T09:00`;
+  sandbox2.records[0].events = [{ id: 'ev-i', type: '面试', at: past, allDay: false }];
+  sandbox2.records[0].timeline = [
+    { stage: '已投递', at: day(9), note: '' },
+    { stage: '一面', at: day(2), note: '' }
+  ];
+  const settledRow = sandbox2.recordRowHtml(sandbox2.records[0], rowNo, index, groupKeyById);
+  assert.ok(settledRow.includes('is-settled'), '已了结的安排要转灰（仍然显示，历史该看得到）');
+  assert.ok(!settledRow.includes('overdue'), '不得再带 overdue 红字样式');
+  assert.ok(!settledRow.includes('已过期'), '已推进过去的安排不该报「已过期」');
+  assert.ok(settledRow.includes('面试 · '), '但日期本身仍要显示出来');
+  // r2 的时间线停在一周前（早于这次安排）→ 没人处理，才是真逾期
+  sandbox2.records[1].events = [{ id: 'ev-i2', type: '面试', at: past, allDay: false }];
+  sandbox2.records[1].timeline = [{ stage: '已投递', at: day(7), note: '' }];
+  const overdueRow = sandbox2.recordRowHtml(sandbox2.records[1], rowNo, index, groupKeyById);
+  assert.ok(overdueRow.includes('overdue'), '真逾期仍要报红');
+  assert.ok(overdueRow.includes('已过期'), '真逾期文案不变');
+  assert.ok(!overdueRow.includes('is-settled'), '两者不可同时成立');
+  // 终态行（r3 = Offer）本来就不报红，别被这次改动带上灰
+  sandbox2.records[2].events = [{ id: 'ev-i3', type: '面试', at: past, allDay: false }];
+  const offerRow = sandbox2.recordRowHtml(sandbox2.records[2], rowNo, index, groupKeyById);
+  assert.ok(!offerRow.includes('is-settled') && !offerRow.includes('overdue'), '终态行不受影响');
+  sandbox2.records[0].events = []; sandbox2.records[1].events = []; sandbox2.records[2].events = [];
 });
 
 check('recordRowHtml：同公司 +N 岗位 chip、机构、截止倒计时分级', () => {
@@ -1220,6 +1309,35 @@ check('抽屉「相关邮件」：按 mailId 从归档展开正文；取不到�
   assert.ok(h.includes('正文快照'), '没有归档的条目如实提示怎么补，而不是假装能打开');
   assert.ok(!h.includes('data-mail-ref'), 'v4.22.0 起不再有"跳待复核列表"的入口');
   // 清理，避免影响后续用例
+  sandbox2.records[0].mailRefs = [];
+  delete sandbox2.mailArchive['mid:a@x'];
+});
+
+check('抽屉「相关邮件」：归档里的链接给成可点胶囊，正文里的地址自动可点（v4.26.0）', () => {
+  // 用户诉求：看到记录就能跳去测评，不必回邮箱翻。链接是**独立字段**（不靠正文，正文只 2000 字）
+  seedRecords();
+  sandbox2.records[0].mailRefs = [
+    { mailId: 'mid:a@x', uid: 11, subject: '在线测评通知', from: 'hr@x.com', receivedAt: '2026-09-10T01:00:00.000Z', emailType: '测评', summary: '请于 3 日内完成' }
+  ];
+  sandbox2.mailArchive['mid:a@x'] = {
+    mailId: 'mid:a@x',
+    textBody: '请在 9 月 18 日前完成在线测评：https://exam.example.com/s/9',
+    links: [{ text: '开始测评', url: 'https://exam.example.com/s/9' }],
+    archivedAt: '2026-09-14T00:00:00.000Z'
+  };
+  sandbox2.openRecordDrawer('r1');
+  const h = els2['#drawerBody'].innerHTML;
+  assert.ok(h.includes('class="mail-link"'), '归档里的链接渲染成胶囊');
+  assert.ok(h.includes('href="https://exam.example.com/s/9"') && h.includes('target="_blank"') && h.includes('rel="noopener noreferrer"'),
+    '外链必须带 target/rel（否则 window.opener 被下游页面拿到）');
+  assert.ok(h.includes('>开始测评 ↗</a>'), '胶囊文案用锚文本，没有锚文本才回落到地址');
+  assert.ok(h.includes('<a class="text-link" href="https://exam.example.com/s/9"'), '正文里的同一地址也要可点');
+  // 白名单在渲染路径上：脏值不进 href（Action 传来的值同样要过这一关）
+  sandbox2.mailArchive['mid:a@x'].links = [{ text: '脚本', url: 'javascript:alert(1)' }];
+  sandbox2.openRecordDrawer('r1');
+  const dirty = els2['#drawerBody'].innerHTML;
+  assert.ok(!dirty.includes('javascript:alert(1)'), 'javascript: 不得进 href');
+  assert.ok(!dirty.includes('class="mail-link"'), '白名单过滤后没有可点的胶囊');
   sandbox2.records[0].mailRefs = [];
   delete sandbox2.mailArchive['mid:a@x'];
 });

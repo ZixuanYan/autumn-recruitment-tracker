@@ -145,6 +145,10 @@
     .schedule-time { font-weight: 650; }
     .schedule-text, .next-action { color: var(--muted); font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
     .overdue { color: var(--red); }
+    /* v4.26.0：已了结的安排（流程已走过它 / 已标记完成覆盖）不再报红——事情做完了，剩下的只是历史。
+       红字留给真正没人处理的逾期项，否则这一列天天亮红灯，真逾期反而被淹没。
+       仍按正常字重显示日期，只是退到次要色，与「暂未安排」的观感区分开。 */
+    .schedule-time.is-settled { color: var(--muted); font-weight: 500; }
     .badge {
       display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 1px 8px;
       border: 1px solid var(--stage-border, var(--line-strong)); border-radius: 6px;
@@ -1021,10 +1025,17 @@
     .mail-ref-meta { margin-top: 2px; color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
     .mail-ref-summary { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
     .mail-ref-item .text-button { margin-top: 4px; padding-left: 0; }
+    /* 邮件里的链接（v4.26.0）：「开始测评」这类地址此前只能靠用户回邮箱翻，现在直接给成可点胶囊。
+       地址本身很长（常带一长串 token），所以限宽 + 省略号，完整地址在 title 里。 */
+    .mail-ref-links { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .mail-link { display: inline-flex; align-items: center; max-width: 100%; padding: 3px 9px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--accent-ink); font-size: 12px; font-weight: 550; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mail-link:hover { background: var(--accent-soft); border-color: var(--accent); }
     /* 邮件正文（v4.22.0）：默认折起，点了才展开——正文可能有上千字，直接铺开会淹没抽屉 */
     .mail-ref-body { margin-top: 5px; }
     .mail-ref-body > summary { cursor: pointer; color: var(--accent-ink); font-size: 12px; }
     .mail-ref-body > pre { margin: 6px 0 0; padding: 8px 10px; max-height: 260px; overflow: auto; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* 正文里自动识别的地址（linkifyText）：正文是 <pre>，链接要看得出来可点，否则跟普通文字没区别 */
+    .mail-ref-body > pre .text-link { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
     /* 正文快照缺失（旧建议文件没带回正文）——如实说明怎么补，不假装能打开 */
     .mail-ref-nobody { margin-top: 5px; color: var(--muted); font-size: 11.5px; }
     .note-list { display: grid; gap: 8px; }
@@ -1086,8 +1097,10 @@
     .group-caret { color: var(--muted); font-size: 11px; }
     /* 公司色条已由卡片的 ::before 承担，label 不再画第二根（两根色条会错位显得脏）。 */
     .group-label { overflow-wrap: anywhere; }
-    /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽 */
-    .group-switch { justify-self: start; align-self: center; }
+    /* 「同企业收纳」开关落在 .filters 的 grid 里：不限制 justify-self 会被拉满整列宽。
+       v4.26.0：这一格现在是「分段开关 + 一键折叠动作按钮」两个元素（见 template 的说明），
+       所以它是 flex 容器，而不再是分段控件本身。 */
+    .group-switch { display: inline-flex; align-items: center; gap: 6px; justify-self: start; align-self: center; }
     .group-switch .view-switch-btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--sh-card); }
     /* 机构名在公司名 / 看板卡里都是次要信息：降一档字号与颜色，不与主体争视觉重量 */
     .company-unit, .board-card-unit { color: var(--muted); font-size: 12px; font-weight: 500; }
@@ -1503,8 +1516,14 @@
              原先它是第 5 个排序选项，于是「分组」与「排序」互斥——想按公司收纳就用不了
              「最近安排优先」。现在是正交的两件事：排序决定顺序，开关决定要不要插组头。
              删掉那个选项**零迁移成本**：排序选择从来不持久化（uiPrefs 里没有 sort 键）。 -->
-        <div class="view-switch group-switch" role="group" aria-label="同企业收纳">
-          <button class="view-switch-btn" id="groupToggle" type="button" aria-pressed="false" title="把同一家企业的多条投递收进一个可折叠的组；同企业内填了不同「机构」时再分一层">同企业收纳</button>
+        <div class="group-switch">
+          <div class="view-switch" role="group" aria-label="同企业收纳">
+            <button class="view-switch-btn" id="groupToggle" type="button" aria-pressed="false" title="把同一家企业的多条投递收进一个可折叠的组；同企业内填了不同「机构」时再分一层">同企业收纳</button>
+          </div>
+          <!-- 一键折叠（v4.26.0）：分组一多，"逐个点组头收起"就成了体力活。
+               刻意放在分段控件**外面**——分段控件表达的是「二选一」（表格|看板），
+               而这是一个动作按钮，混进去会被读成第三种视图。 -->
+          <button class="text-button" id="groupExpandToggle" type="button" hidden title="把当前台账里的企业组一次全部折叠；再点一次全部展开">全部折叠</button>
         </div>
       </div>
       <div class="table-scroll" id="recordsTableScroll">
@@ -2083,6 +2102,32 @@
       // 此前那条"没口令就不存正文"的规则实测把「看原文」变成了要先配密钥、且每台设备各配一次的事，
       // 代价大于收益；现在改为在设置面板里如实标注当前是明文还是密文，把选择权交给用户。
       const MAIL_ARCHIVE_MAX_CHARS = 100000;
+      // 邮件里的链接（v4.26.0）：由 Action 侧从 HTML 的 <a href> 里机械抽出（不经 AI），
+      // 网页端在记录详情里直接给出可点入口——「开始测评」那个地址不该逼用户回邮箱翻。
+      // 白名单只认 http/https：这一条既挡 javascript:/data: 这类注入面，也挡下 Action 传来的脏值。
+      // 为什么单独成字段而不是靠归档正文：正文只留 2000 字，链接常在邮件末尾被截掉；
+      // 且 v4.26.0 之前 HTML→文本会把 href 整个剥掉（只有纯文本部分写了地址的邮件才留得下）。
+      const MAIL_LINK_MAX = 8;
+      function sanitizeMailLinks(list) {
+        const out = [];
+        const seen = new Set();
+        for (const item of (Array.isArray(list) ? list : [])) {
+          if (!item || typeof item !== 'object') continue;
+          const url = String(item.url || '').trim().slice(0, 400);
+          if (!/^https?:\/\//i.test(url)) continue;
+          if (seen.has(url) || out.length >= MAIL_LINK_MAX) continue;
+          seen.add(url);
+          out.push({ url, text: String(item.text || '').trim().slice(0, 80) });
+        }
+        return out;
+      }
+      // 归档条目的体积 = 正文 + 链接。链接是独立字段，不把它算进去的话预算就漏了一块
+      //（8 条 × 400 字的地址 × 100 封会悄悄顶到同步载荷上）。
+      function mailArchiveEntrySize(entry) {
+        const links = sanitizeMailLinks(entry && entry.links);
+        return String((entry && entry.textBody) || '').length
+          + links.reduce((sum, link) => sum + link.url.length + link.text.length, 0);
+      }
       function sanitizeMailArchiveEntry(mailId, entry) {
         const id = String(mailId || '').trim();
         if (!id || !entry || typeof entry !== 'object') return null;
@@ -2094,6 +2139,7 @@
           emailType: String(entry.emailType || '').slice(0, 20),
           summary: String(entry.summary || '').slice(0, 300),
           textBody: String(entry.textBody || '').slice(0, 2000),
+          links: sanitizeMailLinks(entry.links),
           archivedAt: String(entry.archivedAt || '')
         };
       }
@@ -2121,7 +2167,9 @@
           // 同一封两边都有：取「正文更长」的那份（一端可能是截断版），等长时取归档更晚的
           const better = entry.textBody.length > prev.textBody.length
             || (entry.textBody.length === prev.textBody.length && String(entry.archivedAt) > String(prev.archivedAt));
-          if (better) out[key] = entry;
+          // 链接是**独立于正文**的另一条信息（老归档可能没有这个字段），所以正文挑完之后再取一次并集——
+          // 否则"这台设备归档过（无链接）、那台归档过（有链接）"会被上面这条规则整个吞掉。
+          out[key] = { ...(better ? entry : prev), links: sanitizeMailLinks([...(entry.links || []), ...(prev.links || [])]) };
         }
         return out;
       }
@@ -2130,13 +2178,13 @@
       function pruneMailArchive(archive, referencedIds) {
         const refs = referencedIds instanceof Set ? referencedIds : new Set(referencedIds || []);
         const entries = Object.values(sanitizeMailArchive(archive));
-        let total = entries.reduce((sum, e) => sum + e.textBody.length, 0);
+        let total = entries.reduce((sum, e) => sum + mailArchiveEntrySize(e), 0);
         const out = { ...sanitizeMailArchive(archive) };
         if (total <= MAIL_ARCHIVE_MAX_CHARS) return out;
         for (const entry of entries.filter(e => !refs.has(e.mailId)).sort((a, b) => String(a.archivedAt).localeCompare(String(b.archivedAt)))) {
           if (total <= MAIL_ARCHIVE_MAX_CHARS) break;
           delete out[entry.mailId];
-          total -= entry.textBody.length;
+          total -= mailArchiveEntrySize(entry);
         }
         return out;
       }
@@ -2161,6 +2209,8 @@
           subject: s.subject, from: s.from, receivedAt: s.receivedAt, emailType: s.emailType,
           summary: s.summary,
           textBody: s.textBody,
+          // v4.26.0：邮件里的链接（「开始测评」的地址）随归档一起存，详情里直接可点
+          links: s.links,
           archivedAt: new Date().toISOString()
         });
         if (!entry) return archive;
@@ -2177,15 +2227,21 @@
       // （该部署当时没配 MAIL_ENC_KEY），于是那些归档条目正文为空。而它们早已被 appliedIds 过滤、
       // 不会再回到待复核队列——"重新应用一次"这条路走不通，只能靠同步时回填。
       // 只补空正文，绝不覆盖已有正文（同一封两边都有内容时取更完整的那份由 unionMailArchive 负责）。
+      // v4.26.0：链接同理补一次——v4.26.0 之前归档的邮件没有这个字段（即使它带了正文），
+      // 而"重新应用一次"这条路对已应用的邮件走不通（它们早被 appliedIds 过滤掉了）。
       function backfillMailArchive(archive, suggestions) {
         const out = sanitizeMailArchive(archive);
         for (const s of (Array.isArray(suggestions) ? suggestions : [])) {
           const mailId = mailIdOf(s);
+          const prev = mailId ? out[mailId] : null;
+          if (!prev) continue; // 只补已存在的条目，绝不凭空建档
           const body = String((s && s.textBody) || '');
-          if (!mailId || !body) continue;
-          const prev = out[mailId];
-          if (!prev || String(prev.textBody || '')) continue;
-          out[mailId] = sanitizeMailArchiveEntry(mailId, { ...prev, textBody: body });
+          const links = sanitizeMailLinks(s && s.links);
+          const patch = {};
+          if (body && !String(prev.textBody || '')) patch.textBody = body;
+          if (links.length && !prev.links.length) patch.links = links;
+          if (!Object.keys(patch).length) continue;
+          out[mailId] = sanitizeMailArchiveEntry(mailId, { ...prev, ...patch });
         }
         return out;
       }
@@ -2203,7 +2259,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.25.0';
+      const APP_VERSION = '4.26.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2250,6 +2306,10 @@
       let resume = loadResumeData();
       let resumeSavedAt = loadResumeMeta();
       let editingId = null;
+      // 「全部折叠 / 全部展开」（v4.26.0）要作用的组：renderTable 每次渲染时写入**当前可见**的组键，
+      // 工具条上的按钮据此决定文案（全折叠好了就显示「全部展开」）。放在模块级是因为
+      // 渲染在 renderTable（本文件）、按钮态在 renderRecordsView（10-views）——两者必须看同一份。
+      let visibleGroupKeys = [];
       let toastTimer;
       let safetyDbPromise;
       let backupFileHandle = null;
@@ -4015,18 +4075,24 @@
         const now = new Date();
         // v4.19.0：表格「最近时间」与截止倒计时都从 events[] 派生
         const nextEv = nextTimeEvent(record.events, now);
-        const overdue = !!(nextEv && !nextEv.future) && !['Offer', '已结束'].includes(record.stage);
+        const terminal = ['Offer', '已结束'].includes(record.stage);
+        // v4.26.0：过去的时间要分两种——**已经了结**的（流程已走过它 / 已标记完成覆盖）与
+        // **没人处理**的逾期。此前只看「是不是过去了」，于是推进完的阶段仍挂着红字「已过期」，
+        // 天天亮红灯，真逾期反而被淹没（用户实测反馈）。
+        // 已了结的**仍然显示**（列名就叫「最近时间」，历史该看得到），只是转灰、不再报警号。
+        const settledPast = !!(nextEv && !nextEv.future) && isEventSettled(record, nextEv.event);
+        const overdue = !!(nextEv && !nextEv.future) && !settledPast && !terminal;
         const canAdvance = record.stage !== '已结束';
         // 完成态（v4.18.0）：当前阶段（时间线末条）是否已标记完成。终态若已被标记，也允许取消。
         const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
         const curDone = !!(curMilestone && curMilestone.done);
-        const canMarkDone = !['Offer', '已结束'].includes(record.stage) || curDone;
+        const canMarkDone = !terminal || curDone;
         const dlHit = nearestDeadlineEvent(record.events, now);
         // v4.24.0：传完整 at —— 带时刻的截止（`2026-09-17T18:00`）截成 10 位就丢掉小时级倒计时
         const dl = dlHit ? deadlineInfo(dlHit.event.at, now) : null;
         // 注意：即使「最近时间」本身就是这条截止，也**保留**倒计时提示——它带黄/红的紧急色，
         // 去掉它等于把"还剩 2 天 / 已过期"这个信号藏了；日期重复出现只是外观小瑕疵。
-        const dlHtml = dl && !['Offer', '已结束'].includes(record.stage)
+        const dlHtml = dl && !terminal
           ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
         const companyHtml = record.applicationUrl
           ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
@@ -4044,7 +4110,7 @@
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.done ? '（已完成）' : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span>${curDone ? '<span class="stage-done-chip" title="当前阶段已标记完成，尚未推进">已完成</span>' : ''}</td>
-          <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
+          <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}${settledPast && !terminal ? ' is-settled' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
           <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
           <td data-label="操作"><div class="row-actions">
             ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
@@ -4119,6 +4185,8 @@
         const ordered = grouped ? clusterByCompanyGroup(visible, groupKeyById) : visible;
         const collapsed = new Set(uiPrefs.collapsedGroups);
         const rows = [];
+        // 未分组时没有「组」可折叠，工具条上的按钮也随之隐藏（见 renderRecordsView）
+        visibleGroupKeys = [];
         if (!grouped) {
           for (const record of ordered) rows.push(recordRowHtml(record, recordNo, companyIndex, groupKeyById));
         } else {
@@ -4131,6 +4199,7 @@
             if (!bucket || bucket.key !== key) { bucket = { key, records: [] }; buckets.push(bucket); }
             bucket.records.push(record);
           }
+          visibleGroupKeys = buckets.map(group => group.key);
           for (const group of buckets) {
             rows.push(companyGroupRowHtml(group.key, group.records, collapsed.has(group.key)));
             if (!collapsed.has(group.key)) {
@@ -4877,6 +4946,36 @@
         }
         return '';
       }
+// ----- 纯文本安全渲染（v4.26.0）-----
+      // 邮件归档正文、AI 摘要都是**纯文本**，里面常写着「点击这里开始测评」的地址。此前一律
+      // escapeHtml 进 <pre>，地址是死的——用户还是得回邮箱复制一遍，而这条链本就是为了不再回邮箱。
+      // 这里把 http/https 地址变成可点链接。
+      // 为什么单独成函数并配单测：这里是 **XSS 边界**。任何"想把用户文本拼进 HTML"的冲动都从这一处
+      // 走，规则只有一条——只认 http/https，其余字符全部转义；绝不为了让地址可点而放松转义。
+      const LINKIFY_URL_RE = /https?:\/\/[^\s<>"'）)】\]，。；、]+/gi;
+      // 末尾的句读不属于地址（「入口：https://x.com/a。」），剥掉再链接。
+      // 刻意**不写进字符类**：把 `.` 加进排除集会把地址中间的句点也切掉（a.b.com → a）。
+      function trimLinkTail(url) {
+        let s = String(url || '');
+        while (s.length && /[.,;:!?、。，；：！？]$/.test(s)) s = s.slice(0, -1);
+        return s;
+      }
+      function linkifyText(text) {
+        const s = String(text == null ? '' : text);
+        let out = '';
+        let last = 0;
+        LINKIFY_URL_RE.lastIndex = 0;
+        let m;
+        while ((m = LINKIFY_URL_RE.exec(s)) !== null) {
+          const url = trimLinkTail(m[0]);
+          if (!url) continue;
+          out += escapeHtml(s.slice(last, m.index));
+          out += `<a class="text-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
+          // 只跳过地址本身：后面被剥掉的句读交给下一轮当普通文本转义输出（跳整个 m[0] 会静默吞掉它）
+          last = m.index + url.length;
+        }
+        return out + escapeHtml(s.slice(last));
+      }
       /*__CORE_PURE_END__*/
 
       // ================= 查重统一处置（v4.5.0）=================
@@ -5046,6 +5145,33 @@
         saveUiPrefs();
         renderRecordsView();
       }
+      // 一键全部折叠 / 全部展开（v4.26.0）：作用于**当前可见**的组（与组头、胶囊同一份集合），
+      // 所以先筛后折叠能得到预期结果——把筛选结果全收起来，而不是把整个台账的组都改一遍。
+      // 全部展开 = 直接清掉这些键，不做"记住上次各组的折叠态再恢复"：折叠态是本机偏好而非
+      // 用户资产，多一层记忆只会让「一键展开」的结果变得难以预测。
+      function toggleAllCompanyGroups() {
+        const keys = visibleGroupKeys;
+        if (!keys.length) return;
+        const set = new Set(uiPrefs.collapsedGroups);
+        const allCollapsed = keys.every(key => set.has(key));
+        for (const key of keys) {
+          if (allCollapsed) set.delete(key); else set.add(key);
+        }
+        uiPrefs.collapsedGroups = [...set].slice(-100);
+        saveUiPrefs();
+        renderRecordsView();
+      }
+      // 按钮态（可见性 + 文案）在渲染末尾统一回填，理由同上面的收纳开关：刷新、云同步、
+      // 筛选变化都会走到这里，只有一条回填路径才不会漏掉某一次。
+      function syncGroupExpandBtn(isBoard) {
+        const btn = $('#groupExpandToggle');
+        if (!btn) return;
+        const allCollapsed = visibleGroupKeys.length > 0
+          && visibleGroupKeys.every(key => uiPrefs.collapsedGroups.includes(key));
+        // 看板视图不分组（分组只存在于表格），此时按钮没有作用对象
+        btn.hidden = !uiPrefs.groupByCompany || isBoard || visibleGroupKeys.length === 0;
+        btn.textContent = allCollapsed ? '全部展开' : '全部折叠';
+      }
       // 列头点击联动阶段筛选（v4.8.0）：把 #stageFilter 设为该阶段并切到表格视图，查看该阶段的全部明细。
       // 看板列都来自「出现过的阶段 + Offer/已结束」，这些值一定在 refreshStageFilter 生成的选项里，不会落空。
       function applyBoardColFilter(stage) {
@@ -5085,6 +5211,8 @@
         if (board) board.hidden = !isBoard;
         if (scroll) scroll.hidden = isBoard;
         if (isBoard) renderBoard(); else renderTable();
+        // 一键折叠按钮的可见性与文案（要在 renderTable 之后：它才知道这次有多少个可见的组）
+        syncGroupExpandBtn(isBoard);
         // 空状态只在表格视图显示（看板自带列与「拖到这里」占位）；三态渲染见 renderEmptyState
         const visibleCount = getVisibleRecords().length;
         updateResultCaption(visibleCount);
@@ -5383,12 +5511,16 @@
               // 不再把用户甩回「邮件提醒」的待复核列表（那条路对已应用的邮件本来也走不通）。
               const archived = mailArchiveEntry(ref.mailId);
               const body = archived ? String(archived.textBody || '') : '';
+              // v4.26.0：邮件里的链接单独成一条（由 Action 从 <a href> 机械抽出）。
+              // 这一节才是「不用回邮箱翻」的关键——用户要的就是那条开始测评的地址。
+              const links = sanitizeMailLinks(archived && archived.links);
               return `<div class="mail-ref-item">
                 <div class="mail-ref-top">${ref.emailType ? `<span class="mail-type" data-type="${escapeHtml(ref.emailType)}">${escapeHtml(ref.emailType)}</span>` : ''}<span class="mail-ref-subject">${escapeHtml(ref.subject || '（无主题）')}</span></div>
                 <div class="mail-ref-meta">${escapeHtml(ref.from || '（无发件人）')}${ref.receivedAt ? ` · ${escapeHtml(formatClock(ref.receivedAt) || '')}` : ''}</div>
                 ${ref.summary ? `<div class="mail-ref-summary">${escapeHtml(ref.summary)}</div>` : ''}
+                ${links.length ? `<div class="mail-ref-links">${links.map(link => `<a class="mail-link" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(link.url)}">${escapeHtml(link.text || link.url)} ↗</a>`).join('')}</div>` : ''}
                 ${body
-                  ? `<details class="mail-ref-body"><summary>查看邮件原文（${body.length} 字）</summary><pre>${escapeHtml(body)}</pre></details>`
+                  ? `<details class="mail-ref-body"><summary>查看邮件原文（${body.length} 字）</summary><pre>${linkifyText(body)}</pre></details>`
                   : `<div class="mail-ref-nobody">这封邮件还没有正文快照（应用它的时候 Action 还没带回正文）。只要它还在云端候选里，重跑一次 Action 的 mail-sync 后本机同步时会自动补上；已被清理的旧邮件补不回来了。</div>`}
               </div>`;
             }).join('')}</div></div>` : ''}
@@ -7250,6 +7382,8 @@
       $('#viewBoardBtn').addEventListener('click', () => setRecordsView('board'));
       // 同企业收纳开关（v4.11.0）：视觉态由 renderRecordsView 统一回填，这里只翻偏好
       $('#groupToggle').addEventListener('click', () => setGroupByCompany(!uiPrefs.groupByCompany));
+      // 一键全部折叠 / 全部展开（v4.26.0）：文案与方向都由 toggleAllCompanyGroups 自己判断
+      $('#groupExpandToggle').addEventListener('click', toggleAllCompanyGroups);
       // 公司名失焦时给「拆成企业 + 机构」的建议；建议按钮是动态生成的，所以走容器委托
       $('#company').addEventListener('blur', updateOrgSplitHint);
       $('#orgUnit').addEventListener('input', updateOrgSplitHint);
