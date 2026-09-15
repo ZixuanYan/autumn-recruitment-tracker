@@ -369,7 +369,7 @@ check('邮件关联助手全部从 index.html 抽取到', () => {
 
 const CORE_CONST_NAMES = ['STAGE_PRESETS', 'COMPANY_TYPES', 'COMPANY_TYPE_UNSET', 'COMPANY_TYPE_ALIASES',
   // v4.19.0 关键时间类型（events[] 用）：core 的 dates/insights/ics 都读它们
-  'TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'isTimeEventAllDay', 'normalizeTimeEventType',
+  'TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'timeEventKind', 'normalizeTimeEventType',
   // v4.22.0 归档体积预算：pruneMailArchive 读它
   'MAIL_ARCHIVE_MAX_CHARS'];
 const coreConsts = CORE_CONST_NAMES.map(name => extractConstLine(html, name));
@@ -402,7 +402,7 @@ const ALIAS_ONLY = {
   // v4.19.0 关键时间类型：同样只能转发，不得在网页端再写一份枚举字面量
   TIME_EVENT_TYPES: /^const TIME_EVENT_TYPES = AJA\.TIME_EVENT_TYPES;$/,
   TIME_EVENT_DEADLINE: /^const TIME_EVENT_DEADLINE = AJA\.TIME_EVENT_DEADLINE;$/,
-  isTimeEventAllDay: /^const isTimeEventAllDay = AJA\.isTimeEventAllDay;$/,
+  timeEventKind: /^const timeEventKind = AJA\.timeEventKind;$/,
   normalizeTimeEventType: /^const normalizeTimeEventType = AJA\.normalizeTimeEventType;$/,
   DEFAULT_RESUME: /^const DEFAULT_RESUME = AJA\.DEFAULT_RESUME;$/,
   companyGroupKey: /^const companyGroupKey = AJA\.companyGroupKey;$/,
@@ -465,11 +465,14 @@ function dayOffset(n, base = new Date('2026-09-06T12:00:00')) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 const NOW = new Date('2026-09-06T12:00:00');
-// v4.19.0：关键时间事件。类型枚举与「是否全天」都取自 shared，测试里不复制字面量，
+// v4.19.0：关键时间事件。类型枚举取自 shared，测试里不复制字面量，
 // 否则将来改类型名（比如「笔试测评」→「笔试」）会出现测试与实现各说各话。
+// v4.24.0：allDay **不再由类型决定**，改由 at 是否带时刻推导——与 sanitizeEvents /
+// joinEventAt 的口径一致。这里刻意手写同一条推导规则（而不是再调 shared 的某个函数），
+// 因为网页端与 Action 端都各自实现了一次，测试跟着其中最朴素的那份写，才有对照价值。
 const DL = AJA_SHARED.TIME_EVENT_DEADLINE;
 function evt(type, at, id) {
-  return { id: id || `ev-${type}-${at}`, type, at, allDay: AJA_SHARED.isTimeEventAllDay(type) };
+  return { id: id || `ev-${type}-${at}`, type, at, allDay: !String(at).includes('T') };
 }
 
 check('parseDay 把 date-only 当本地午夜（避开 new Date(YYYY-MM-DD) 的 UTC 陷阱）', () => {
@@ -493,6 +496,57 @@ check('deadlineInfo 分级：>3天正常 / ≤3天 warn / 今天与逾期 danger
   assert.strictEqual(core.deadlineInfo(dayOffset(-2), NOW).level, 'danger');
   assert.ok(core.deadlineInfo(dayOffset(-2), NOW).text.includes('已过期 2 天'));
   assert.strictEqual(core.deadlineInfo('', NOW), null);
+});
+
+check('deadlineInfo 带时刻：24 小时内按小时播报（v4.24.0）', () => {
+  // 失效时刻本身就是要赶的那一点。若「今天 18:00 截止」在 17:00 仍只显示「截止 · 今天」，
+  // 用户看不出只剩一小时——而这类"链接 X 点失效"的截止，错过就是错过。
+  const t = core.deadlineInfo('2026-09-06T18:00', NOW); // NOW = 2026-09-06 12:00
+  assert.strictEqual(t.days, 0);
+  assert.strictEqual(t.level, 'danger', '当天到期仍是 danger（与只给日期的口径一致）');
+  assert.ok(t.text.includes('18:00'), `同一天要带上具体时刻，实际：${t.text}`);
+  // 次日 06:00 → 只剩 18 小时 → warn + 小时级文案
+  const soon = core.deadlineInfo('2026-09-07T06:00', NOW);
+  assert.strictEqual(soon.level, 'warn');
+  assert.ok(soon.text.includes('还剩 18 小时'), `24 小时内应给小时数，实际：${soon.text}`);
+  // 已过 3 小时（带时刻才知道）→ danger，且给小时而不是"已过期 0 天"
+  const past = core.deadlineInfo('2026-09-06T09:00', NOW);
+  assert.strictEqual(past.level, 'danger');
+  assert.ok(past.text.includes('已过期 3 小时'), `刚过不久应给小时，实际：${past.text}`);
+  // 超过 24 小时仍回到"天"的粒度：4 天前不该显示"96 小时"
+  assert.ok(core.deadlineInfo(dayOffset(-4, NOW) + 'T09:00', NOW).text.includes('已过期 4 天'));
+  // 3 天后的定时截止：>24h 走天数分支，与只给日期的输出保持一致
+  assert.ok(core.deadlineInfo(dayOffset(3, NOW) + 'T18:00', NOW).text.includes('还剩 3 天'));
+  // 只给日期的路径必须与 v4.21.0 逐字一致（存量数据最多的形态）
+  assert.strictEqual(core.deadlineInfo(dayOffset(0), NOW).text, '截止 · 今天');
+  assert.strictEqual(core.deadlineInfo(dayOffset(2), NOW).text, '截止 · 还剩 2 天');
+});
+
+check('collectScheduleEvents：定时截止与全天截止各自按自己的口径判定逾期（v4.24.0）', () => {
+  // NOW = 2026-09-06 12:00。三条截止：
+  //   d1 = 今天 09:00（已过 3 小时）→ 定时口径：逾期
+  //   d2 = 今天 18:00（还没到）    → 定时口径：不算逾期
+  //   d3 = 今天（只有日期）        → 全天口径：今天一整天都不算逾期（v4.21.0 的修正）
+  // 旧代码把三条都写死成全天，于是 d1 要到明天才会被标逾期——当天上午就该催的事，白等一天。
+  const recs = [
+    { id: 'a', company: 'A', position: 'p', stage: '笔试', events: [evt(DL, '2026-09-06T09:00')] },
+    { id: 'b', company: 'B', position: 'p', stage: '笔试', events: [evt(DL, '2026-09-06T18:00')] },
+    { id: 'c', company: 'C', position: 'p', stage: '笔试', events: [evt(DL, '2026-09-06')] }
+  ];
+  const events = core.collectScheduleEvents(recs, NOW, 6);
+  const byId = id => events.find(e => e.record.id === id);
+  assert.strictEqual(byId('a').overdue, true, '今天 09:00 的定时截止在 12:00 已逾期');
+  assert.strictEqual(byId('a').allDay, false);
+  assert.strictEqual(byId('b').overdue, false, '今天 18:00 的定时截止还没到');
+  assert.strictEqual(byId('b').allDay, false);
+  assert.strictEqual(byId('c').overdue, false, '只给日期的截止当天不算逾期（日历日口径）');
+  assert.strictEqual(byId('c').allDay, true);
+  assert.strictEqual(events[0].record.id, 'a', '逾期的定时截止要置顶');
+  // 非截止的全天事件（宣讲会）不该因为"当天零点已过"被判成逾期
+  const allDayStart = core.collectScheduleEvents(
+    [{ id: 'd', company: 'D', position: 'p', stage: '已投递', events: [evt('其他', '2026-09-06')] }], NOW, 6);
+  assert.strictEqual(allDayStart[0].overdue, false, '全天「其他」事件当天不算逾期');
+  assert.strictEqual(allDayStart[0].allDay, true);
 });
 
 check('collectScheduleEvents 逾期置顶 + 已结束不计截止 + limit 生效', () => {
@@ -1230,23 +1284,34 @@ check('normalizeRecord 新字段透传：老数据零迁移、新字段不丢、
 });
 
 // ---- v4.19.0 关键时间：events[] 是唯一事实源 ----
-check('sanitizeEvents（经 normalizeRecord）：非法类型归「其他」、全天由类型决定、无时间的条目被丢弃', () => {
+check('sanitizeEvents（经 normalizeRecord）：非法类型归「其他」、全天由 at 推导、无时间的条目被丢弃', () => {
   const rec = core.normalizeRecord({
     id: 'e1', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01',
     events: [
       { id: 'x1', type: '面试', at: '2026-09-10T14:00' },
       { id: 'x2', type: '不存在的类型', at: '2026-09-11T09:00' }, // 非法 → 其他
-      { id: 'x3', type: DL, at: '2026-09-12T00:00' },            // 全天 → 只留日期
-      { id: 'x4', type: '面试', at: '' },                        // 无时间 → 丢弃
+      { id: 'x3', type: DL, at: '2026-09-12T09:39' },            // v4.24.0：截止带时刻 → 保留时刻、定时事件
+      { id: 'x4', type: DL, at: '2026-09-13' },                  // 只有日期 → 全天
+      { id: 'x5', type: '其他', at: '2026-09-14' },              // 非截止也可能全天（宣讲会）
+      { id: 'x6', type: '面试', at: '' },                        // 无时间 → 丢弃
       null
     ]
   });
   assert.deepStrictEqual(rec.events.map(e => [e.type, e.at, e.allDay]), [
     ['面试', '2026-09-10T14:00', false],
     ['其他', '2026-09-11T09:00', false],
-    [DL, '2026-09-12', true]
+    // 关键：截止的时刻必须留住。丢掉 09:39 会把"当天 00:00 与 09:39 之间还能不能交"
+    // 这个分界抹平，而这正是这类邮件唯一要说的事。
+    [DL, '2026-09-12T09:39', false],
+    [DL, '2026-09-13', true],
+    // 关键：非截止也可能全天。此前 allDay 由**类型**决定，「其他」被强制当定时事件，
+    // 当天零点一过就被判成"已过"（而它其实只是一天的安排）。
+    ['其他', '2026-09-14', true]
   ]);
   assert.ok(rec.events.every(e => e.id), '每条事件都要有 id（ICS 的 UID 依赖它，换 id 会被日历当成新事件）');
+  // 秒与毫秒一律裁掉：台账精度只到分，留着会让同一个时刻有两种字符串表示
+  const secs = core.normalizeRecord({ company: 'A', events: [{ id: 's1', type: '面试', at: '2026-09-10T14:00:33' }] });
+  assert.strictEqual(secs.events[0].at, '2026-09-10T14:00');
 });
 
 check('老数据迁移：scheduleAt 按阶段名推断类型，deadline 归「截止」；已有 events 时不再迁移', () => {
@@ -2588,19 +2653,68 @@ check('deadline 贯通网页端：卡片有编辑器、apply 会写成「截止�
   // 台账的时间模型 v4.19.0 起是 events[]（带类型）。邮件链路仍以 scheduleAt / deadline 两个字段
   // 送来（跨仓库契约不动），网页端按邮件类型把它折成对应事件——截止这条必须真的落到 events 里，
   // 而安排时间要按邮件类型判成「面试」还是「笔试测评」，不能只是丢掉。
+  // v4.24.0：两个字段都是「日期 + 可选时刻」两个控件（截止也能精确到分），所以 apply 里
+  // 先 joinEventAt 合成 at 再写事件——直接读 readEd('deadline') 会拿到光秃秃的日期。
   const cardSrc = extractFunction(html, 'mailCardHtml').replace(/\/\/[^\n]*/g, '');   // 同样先剥行注释
-  assert.ok(/data-mail-edit="deadline"/.test(cardSrc), '邮件卡片应有 deadline 的编辑器');
-  assert.ok(/data-mail-edit="scheduleAt"/.test(cardSrc), '邮件卡片应有 scheduleAt 的编辑器');
+  assert.ok(/data-mail-edit="deadline"/.test(cardSrc), '邮件卡片应有 deadline 的日期编辑器');
+  assert.ok(/data-mail-edit="scheduleAt"/.test(cardSrc), '邮件卡片应有 scheduleAt 的日期编辑器');
+  // 时刻控件的 data-mail-edit 是 `${key}` 插值出来的（源码里看不到字面属性名），
+  // 所以这里断言**调用点传的 key**；渲染产物里的真实属性名由 web-runtime 的用例断言。
+  assert.ok(/timeInput\('deadlineTime'/.test(cardSrc), '截止也要有时刻控件（邮件常写「9/17 18:00 前」）');
+  assert.ok(/timeInput\('scheduleAtTime'/.test(cardSrc), '开始时间也要有时刻控件');
   const apply = extractFunction(html, 'applyMailSuggestion').replace(/\/\/[^\n]*/g, '');
-  assert.ok(/upsertEvent\(rec, TIME_EVENT_DEADLINE, readEd\('deadline'\), eventSourceId\(/.test(apply),
+  assert.ok(/const dlAt = joinEventAt\(readEd\('deadline'\), readEd\('deadlineTime'\)\)/.test(apply),
+    'apply 必须把「日期 + 时刻」合成 at 后再写事件，否则用户的时刻改动不会生效');
+  assert.ok(/upsertEvent\(rec, TIME_EVENT_DEADLINE, dlAt, eventSourceId\(/.test(apply),
     'apply 必须把 deadline 写成「截止」关键时间（并带上 sourceId 以便改期替换）');
-  assert.ok(/upsertEvent\(rec, mailScheduleType\(s\), readEd\('scheduleAt'\), eventSourceId\(/.test(apply),
+  assert.ok(/upsertEvent\(rec, mailScheduleType\(s\), schedAt, eventSourceId\(/.test(apply),
     'apply 必须把 scheduleAt 按邮件类型写成事件（面试 / 笔试测评）并带 sourceId');
   // 来源三态都要有对应的视觉标记：兜底值必须显眼，否则用户会以为它是邮件里读出来的
   for (const cls of ['is-fallback', 'is-email', 'is-unknown']) {
     assert.ok(cardSrc.includes(cls), `mailCardHtml 缺 atSource 的 ${cls} 分支`);
     assert.ok(html.includes(`.mail-ed-src.${cls} {`), `样式里缺 .mail-ed-src.${cls}（只有类名没有样式等于没标）`);
   }
+  // v4.24.0 第四态：相对表达推算出来的截止。它不是 atSource 的那三态（那讲的是"里程碑日期"），
+  // 而是"这个截止是原文写死的、还是 AI 按收信时间算出来的"。推算值看起来和写死的毫无区别时，
+  // 用户不会去核对换算是否合理——所以必须有独立标记，且必须有样式。
+  assert.ok(/is-relative/.test(cardSrc), 'mailCardHtml 缺「按邮件推算」（deadlineSource=relative）的标记分支');
+  assert.ok(html.includes('.mail-ed-src.is-relative {'), '样式里缺 .mail-ed-src.is-relative（只有类名没有样式等于没标）');
+  assert.ok(/deadlineSource/.test(cardSrc) && /deadlineExpr/.test(cardSrc),
+    '该分支必须读 deadlineSource 判定、并把 deadlineExpr（邮件原文表达）放进 title');
+});
+
+check('事件全天与否一律由 at 推导，网页端不得再按类型硬编码 allDay', () => {
+  // v4.24.0 的核心不变量。此前「截止」被写死成全天、其余写死成定时，带来两类错误：
+  // ① 带时刻的截止（"9/17 18:00 前"）被当日历日比较 → 倒计时看不出只剩几小时；
+  // ② 只有日期的「其他」事件（宣讲会）被当定时事件 → 当天零点就判成"已过"。
+  // 这条守卫盯的是"不许有人再退回去按类型判"。isTimeEventAllDay 已随该模型删除，
+  // 任何地方再出现它都说明有人把旧口径搬了回来。
+  assert.ok(!/isTimeEventAllDay|TIME_EVENT_ALL_DAY/.test(html),
+    'index.html 里不该再有 isTimeEventAllDay / TIME_EVENT_ALL_DAY —— allDay 只由 at 推导');
+  const sanitize = extractFunction(html, 'sanitizeEvents');
+  assert.ok(/const timed = at\.includes\('T'\)/.test(sanitize),
+    'sanitizeEvents 必须按 at 是否含 T 推导 timed，而不是看 type');
+  assert.ok(/allDay: !timed/.test(sanitize), 'sanitizeEvents 必须把推导结果写进 allDay');
+  const join = extractFunction(html, 'joinEventAt');
+  assert.ok(/return t \? `\$\{d\}T\$\{t\}` : d;/.test(join),
+    'joinEventAt 必须"有时刻才拼 T"——拼出 "YYYY-MM-DDT" 会被当成定时事件');
+  const collect = extractFunction(html, 'collectEvents');
+  assert.ok(/allDay: !String\(at\)\.includes\('T'\)/.test(collect),
+    'collectEvents 写回事件时也必须按 at 推导 allDay');
+  // 类型下拉按两类分组（截止 / 开始）——这是"类型只是标签"的可见体现
+  const opts = extractFunction(html, 'eventTypeOptions');
+  assert.ok(/timeEventKind\(t\) === 'deadline'/.test(opts) && /timeEventKind\(t\) === 'start'/.test(opts),
+    'eventTypeOptions 必须用 timeEventKind 分成「截止时间 / 开始时间」两档');
+  // 「不是截止」的判定要用**类型**，不能用 !allDay：后者会把只有日期的「其他」事件一起排除
+  const stats = extractFunction(html, 'renderStats');
+  assert.ok(/ev\.type !== TIME_EVENT_DEADLINE/.test(stats),
+    'renderStats 的「七天内安排」必须按类型排除截止，不能用 !allDay 代理');
+  const board = extractFunction(html, 'boardCardHtml');
+  assert.ok(/e\.type !== TIME_EVENT_DEADLINE/.test(board),
+    'boardCardHtml 的「下一个安排」必须按类型排除截止，不能用 !allDay 代理');
+  const events = extractFunction(html, 'collectScheduleEvents');
+  assert.ok(/const allDay = !!ev\.allDay;/.test(events),
+    'collectScheduleEvents 必须读事件自己的 allDay，不得再按类型硬编码 true/false');
 });
 
 check('邮件字段的控件必须显式 width:auto（base.css 的全局 .control 是 width:100%）', () => {
@@ -2801,6 +2915,20 @@ check('用户文档与当前行为一致（看板横带 / 邮箱多服务商 / �
   assert.ok(tut.includes('已被了结') || tut.includes('不再出现在「未来安排」'),
     '安装教程应说明已了结的安排会退出「未来安排」/「需要关注」（v4.23.0）');
   assert.ok(qs.includes('做完的事不再催你'), '快速上手指南应给出与安装教程一致的口径');
+
+  // ⑧ 截止可带时刻 + 相对期限换算（v4.24.0）。两条都不会报错，但用户按老文档理解就会踩空：
+  // ① 文档若仍写「截止只有日期」，用户填了时刻却看到被丢掉时会以为是 bug；
+  // ② 相对期限是"算出来的"这件事必须在文档里出现，否则蓝色「按邮件推算」标记无从解释。
+  for (const [name, doc] of [['安装教程', tut], ['快速上手', qs]]) {
+    assert.ok(/截止也能(精)?精确到分|截止也能填到分钟/.test(doc),
+      `${name} 应写明截止也能精确到分钟（v4.24.0 起全天与否由填不填时刻决定）`);
+    assert.ok(doc.includes('按邮件推算'),
+      `${name} 应解释「按邮件推算」这枚标记，否则用户不知道自己看到的日期是算出来的`);
+  }
+  assert.ok(tut.includes('MAIL_TZ_OFFSET'),
+    '安装教程应给出相对期限换算用的时区变量名，否则不在 +08:00 的用户无从下手');
+  assert.ok(tut.includes('48 小时内') || tut.includes('3 日内'),
+    '安装教程应举出相对表达的实际例子（「3 日内」「48 小时内」），否则用户不知道这条规则什么时候生效');
 });
 
 console.log(`\n${failed ? `存在 ${failed} 个失败` : '网页端校验全部通过'}`);

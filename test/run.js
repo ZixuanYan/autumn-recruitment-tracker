@@ -502,12 +502,14 @@ test('deadline 贯通：截止/失效时间要能被接住，而不是被整条�
   // 没有笔试开始时间。台账一直有 deadline 字段（「签约截止」列 + 倒计时 + 按截止日排序），
   // 但 v4.16.0 之前 AI 契约与 proposed 里都没有它，于是这个最有用的时间被丢掉，
   // 位置还被兜底的收信日占着。
+  // v4.24.0：截止**保留时刻**——失效时刻本身就是要赶的那一点，"09:39 失效"少写 09:39
+  // 等于把最关键的几小时抹掉（当天 00:00 与 09:39 是"还能不能交"的分界）。
   const mail = { receivedAt: '2026-09-10T09:40:00Z' };
   const n = ai.normalizeAiResult({
     isRecruitment: true, emailType: '笔试', company: '宁波银行', stage: '笔试',
     scheduleAt: '', deadline: '2026-09-13 09:39:53', round: '在线笔试', confidence: 0.98
   }, mail);
-  assert.strictEqual(n.proposed.deadline, '2026-09-13', '带时刻的截止时间应归一到 YYYY-MM-DD（台账 deadline 的格式）');
+  assert.strictEqual(n.proposed.deadline, '2026-09-13T09:39', '带时刻的截止要保留到分钟（秒按台账精度裁掉）');
   assert.strictEqual(n.proposed.milestone.atSource, 'received', '开始时间没给 → 里程碑日期仍是收信日兜底，但已标注');
   // 两个时间字段互不顶替：给了开始时间就都用邮件的
   const both = ai.normalizeAiResult({
@@ -515,17 +517,87 @@ test('deadline 贯通：截止/失效时间要能被接住，而不是被整条�
     scheduleAt: '2026-09-12T14:00', deadline: '2026-09-13', confidence: 0.9
   }, mail);
   assert.strictEqual(both.proposed.scheduleAt, '2026-09-12T14:00');
-  assert.strictEqual(both.proposed.deadline, '2026-09-13');
+  assert.strictEqual(both.proposed.deadline, '2026-09-13', '只给日期时仍是纯日期（与旧数据格式一致）');
   assert.strictEqual(both.proposed.milestone.atSource, 'email');
   // 老 payload / AI 没返回该字段 → 必须是空串而不是 undefined（网页端要拿它判存在性）
   const legacy = ai.normalizeAiResult({ isRecruitment: true, emailType: '面试邀请', stage: '一面', scheduleAt: '2026-09-15T10:00', confidence: 0.9 }, mail);
   assert.strictEqual(legacy.proposed.deadline, '');
-  // 提示词契约里必须真的有这个字段，否则 AI 永远不会返回它
+  assert.strictEqual(legacy.proposed.deadlineExpr, '');
+  assert.strictEqual(legacy.proposed.deadlineSource, '');
+  // 提示词契约里必须真的有这些字段，否则 AI 永远不会返回它们
   // buildSystemPrompt(promptExtra, promptOverride) 是两个位置参数（不是选项对象）；
   // 传空即得到「内置解析偏好 + 输出契约」的默认提示词。
   const prompt = ai.buildSystemPrompt('', '');
   assert.ok(prompt.includes('deadline(string)'), '输出契约的字段清单里必须有 deadline(string)');
+  assert.ok(prompt.includes('deadlineExpr(string)') && prompt.includes('deadlineSource(string)'),
+    '相对表达的两个附带字段也必须在契约里，否则 AI 只会给一个日期、网页端无从标注它是算出来的');
   assert.ok(/完成期限|截止时间/.test(prompt), '契约必须讲清 deadline 是"完成期限"而不是"开始时间"，否则 AI 会把失效时间塞进 scheduleAt');
+  assert.ok(/relative/.test(prompt) && /relative/.test(ai.DEFAULT_PROMPT_BODY), '契约与解析偏好都要说明 relative 的用法');
+});
+
+test('相对截止：AI 换算 + deadlineSource 标记（v4.24.0）', () => {
+  // 邮件写「请在 3 日内完成」时，地址是"收信时刻 + 3 天"——日期本身必须由 AI 按基准算出来
+  //（用户已定：不做代码侧重算，避免两处各算一次还互相矛盾）。
+  // 这里只保证"AI 说的算数"以及"它自报了是算出来的"这两件事。
+  const mail = { receivedAt: '2026-09-10T09:40:00Z' };
+  const n = ai.normalizeAiResult({
+    isRecruitment: true, emailType: '测评', company: '华为', stage: '测评',
+    scheduleAt: '', deadline: '2026-09-13T23:59', deadlineExpr: '3 日内', deadlineSource: 'relative',
+    confidence: 0.9
+  }, mail);
+  assert.strictEqual(n.proposed.deadline, '2026-09-13T23:59');
+  assert.strictEqual(n.proposed.deadlineExpr, '3 日内');
+  assert.strictEqual(n.proposed.deadlineSource, 'relative', '必须是 relative，网页端据此打「按邮件推算」标记');
+  // 白名单：AI 乱填的来源一律置空，不许自由文本流到网页端
+  assert.strictEqual(ai.normalizeDeadlineSource('guessed'), '');
+  assert.strictEqual(ai.normalizeDeadlineSource('RELATIVE'), 'relative', '大小写不敏感（模型常写大写）');
+  assert.strictEqual(ai.normalizeDeadlineSource(''), '');
+  // 绝对时间：来源是 email
+  const abs = ai.normalizeAiResult({
+    isRecruitment: true, emailType: 'Offer', deadline: '2026-09-20', deadlineExpr: '9 月 20 日前', deadlineSource: 'email', confidence: 0.9
+  }, mail);
+  assert.strictEqual(abs.proposed.deadlineSource, 'email');
+  assert.strictEqual(abs.proposed.deadlineExpr, '9 月 20 日前');
+  // 原文表达有长度上限（它会被塞进 title 属性，不设限等于让 AI 决定 DOM 大小）
+  const longExpr = ai.normalizeAiResult({ isRecruitment: true, deadlineExpr: '长'.repeat(60), confidence: 0.9 }, mail);
+  assert.strictEqual(longExpr.proposed.deadlineExpr.length, 24);
+});
+
+test('相对期限的换算基准：时区偏移渲染成挂钟字符串（v4.24.0）', () => {
+  // 为什么由代码算而不是让模型算：把 UTC ISO 串丢给模型、指望它自己加 8 小时再加 48 小时，
+  // 是实测最容易出错的一步（漏加偏移、把 48 小时当 2 天、跨月算错）。代码算好挂钟字符串后，
+  // 模型只需要做同格式下的加法。
+  assert.strictEqual(ai.localWallClock('2026-09-10T09:40:00Z', '+08:00'), '2026-09-10 17:40');
+  assert.strictEqual(ai.localWallClock('2026-09-10T09:40:00Z', '+00:00'), '2026-09-10 09:40');
+  // 跨日：UTC 晚上 20:30 在东八区已是次日
+  assert.strictEqual(ai.localWallClock('2026-09-10T20:30:00Z', '+08:00'), '2026-09-11 04:30');
+  // 半小时偏移（印度 +05:30）也要对
+  assert.strictEqual(ai.localWallClock('2026-09-10T09:40:00Z', '+05:30'), '2026-09-10 15:10');
+  // 解析：带冒号与不带冒号都要认；认不出/超出 ±14h 一律回落默认值 +08:00，
+  // 绝不静默按 0 处理（那会让所有相对期限整整偏 8 小时，且没有任何日志）
+  assert.strictEqual(ai.tzOffsetMinutes('+0800'), 480);
+  assert.strictEqual(ai.tzOffsetMinutes('-05:30'), -330);
+  assert.strictEqual(ai.tzOffsetMinutes('+08:00'), ai.tzOffsetMinutes(ai.DEFAULT_TZ_OFFSET));
+  assert.strictEqual(ai.tzOffsetMinutes('随便'), 480);
+  assert.strictEqual(ai.tzOffsetMinutes('+99:00'), 480, '超出现实的偏移（>14h）视为配置错误，回落默认而不是照算');
+  assert.strictEqual(ai.tzOffsetMinutes(''), 480);
+  // 取不到时刻（邮件没给 receivedAt）→ 空串，AI 侧看到空值就知道"没有换算基准"，不会硬算
+  assert.strictEqual(ai.localWallClock('', '+08:00'), '');
+  assert.strictEqual(ai.localWallClock('不是时间', '+08:00'), '');
+});
+
+test('buildUserContent 把时区与两个基准时刻交给 AI，且 receivedAt 仍原样保留', () => {
+  const cfg = config.buildConfig();
+  assert.strictEqual(cfg.tzOffset, '+08:00', '默认 +08:00（校招场景的实际使用时区）');
+  const body = JSON.parse(ai.buildUserContent({ receivedAt: '2026-09-10T09:40:00Z', subject: 's', textBody: 'b' }, cfg));
+  assert.strictEqual(body.timezone, '+08:00');
+  assert.strictEqual(body.email.receivedAtLocal, '2026-09-10 17:40');
+  assert.strictEqual(body.email.receivedAt, '2026-09-10T09:40:00Z', '原始 ISO 串必须保留（调试与其它消费方都靠它）');
+  assert.ok(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(body.nowLocal), `nowLocal 应是挂钟字符串，实际 ${body.nowLocal}`);
+  // 时区是可配的：env 改变就体现在请求体里，而不是写死在提示词里
+  assert.strictEqual(JSON.parse(ai.buildUserContent({ receivedAt: '2026-09-10T09:40:00Z' }, { tzOffset: '+00:00' })).email.receivedAtLocal, '2026-09-10 09:40');
+  // 缺省 cfg（老调用方只传一个参数）也不得抛错——老签名是 buildUserContent(mail)
+  assert.ok(JSON.parse(ai.buildUserContent({})).timezone, '不传 cfg 时用默认时区，不得 undefined');
 });
 
 test('buildProposed 的 milestone.note 走 milestoneNote（两处逻辑不得分叉）', () => {

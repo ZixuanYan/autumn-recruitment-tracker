@@ -15,11 +15,27 @@
         const b = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         return Math.round((a - b) / 86400000);
       }
-      // 截止日倒计时：{ text, level }，level ∈ ''（>3天）| 'warn'（0~3天）| 'danger'（已过期）
+      // 「HH:mm」——只给截止倒计时用（`formatDateTime` 会带上日期与星期，塞进 chip 太长）
+      function clockOf(date) {
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+      }
+      // 截止倒计时：{ text, level }，level ∈ ''（>3天）| 'warn'（0~3天）| 'danger'（已过期/今天）
+      // v4.24.0：截止可以带具体时刻了（`2026-09-17T18:00`），24 小时内改用小时级文案 ——
+      // 否则「今天 18:00 截止」在 17:00 仍显示「今天」，看不出只剩一小时。
+      // 只给日期的（全天截止）走下面第二条分支，行为与 v4.21.0 一字不差。
       function deadlineInfo(deadline, now = new Date()) {
-        const d = parseDay(deadline);
-        if (!d) return null;
-        const diff = daysUntil(d, now);
+        const raw = String(deadline || '').trim();
+        if (!raw) return null;
+        const timed = raw.includes('T');
+        const at = timed ? parseLocal(raw) : parseDay(raw);
+        if (!at) return null;
+        const diff = daysUntil(at, now);
+        if (timed) {
+          const hours = Math.round((at.getTime() - now.getTime()) / 3600000);
+          if (hours < 0) return { text: `截止 · 已过期 ${hours <= -24 ? Math.max(1, -diff) + ' 天' : -hours + ' 小时'}`, level: 'danger', days: diff };
+          if (diff === 0) return { text: `截止 · 今天 ${clockOf(at)}`, level: 'danger', days: 0 };
+          if (hours <= 24) return { text: `截止 · 还剩 ${hours} 小时`, level: 'warn', days: diff };
+        }
         if (diff < 0) return { text: `截止 · 已过期 ${-diff} 天`, level: 'danger', days: diff };
         if (diff === 0) return { text: '截止 · 今天', level: 'danger', days: 0 };
         if (diff <= 3) return { text: `截止 · 还剩 ${diff} 天`, level: 'warn', days: diff };
@@ -91,12 +107,17 @@
             if (!ev) continue;
             if (isEventSettled(r, ev)) continue;
             const isDeadline = ev.type === TIME_EVENT_DEADLINE;
-            const at = ev.allDay ? parseDay(ev.at) : parseLocal(ev.at);
+            // v4.24.0：allDay 一律读事件**自己**的值（由 at 是否带时刻推导），不再按类型硬编码。
+            // 以前「截止」被写死成全天、其余写死成定时，于是带时刻的截止会被当日历日比较
+            //（今天 18:00 的截止在 19:00 才显示逾期，且倒计时算不出剩下几小时），
+            // 而只有日期的「其他」事件又会被当定时事件、按当天零点判定为"已过"。
+            const allDay = !!ev.allDay;
+            const at = allDay ? parseDay(ev.at) : parseLocal(ev.at);
             if (!at) continue;
             if (isDeadline) {
-              if (!closed) out.push({ type: ev.type, at, allDay: true, record: r, event: ev, overdue: isEventPast(at, true, now) });
+              if (!closed) out.push({ type: ev.type, at, allDay, record: r, event: ev, overdue: isEventPast(at, allDay, now) });
             } else if (!closed || at >= now) {
-              out.push({ type: ev.type, at, allDay: false, record: r, event: ev, overdue: isEventPast(at, false, now) && !closed });
+              out.push({ type: ev.type, at, allDay, record: r, event: ev, overdue: isEventPast(at, allDay, now) && !closed });
             }
           }
         }

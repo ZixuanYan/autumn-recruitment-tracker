@@ -135,7 +135,9 @@
           const evs = Array.isArray(r.events) ? r.events : [];
           const hit = nearestDeadlineEvent(evs.filter(ev => !isEventSettled(r, ev)), now);
           if (!hit) continue;
-          const info = deadlineInfo(String(hit.event.at).slice(0, 10), now);
+          // v4.24.0：把**完整** at 交给 deadlineInfo —— 截止现在可能带时刻（`2026-09-17T18:00`），
+          // 截成 10 位会把"今天 18:00 截止"退化成"今天"，24 小时内的紧急度就看不出来了。
+          const info = deadlineInfo(hit.event.at, now);
           if (!info) continue;
           if (info.days < 0 || info.days <= span) out.push({ record: r, info });
         }

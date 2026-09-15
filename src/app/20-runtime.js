@@ -60,18 +60,37 @@
       //   · 无 sourceId（手工添加）→ 按「类型 + 时间」去重，重复点不会堆叠。
       function upsertEvent(rec, type, at, sourceId, mailId) {
         const kind = normalizeTimeEventType(type);
-        const allDay = isTimeEventAllDay(kind);
-        const value = allDay ? String(at || '').slice(0, 10) : String(at || '');
-        if (!value) return;
+        // v4.24.0：全天与否按 at 自身判定（含 'T' = 定时），不再看类型 —— 截止也能有具体时刻
+        const value = splitEventAt(at);
+        if (!value.at) return;
         const src = String(sourceId || '').trim();
         const mid = String(mailId || '').trim();
         const list = (Array.isArray(rec.events) ? rec.events : []).filter(ev => {
           if (!ev) return false;
           if (src && String(ev.sourceId || '') === src) return false;
-          return !(!src && ev.type === kind && ev.at === value);
+          return !(!src && ev.type === kind && ev.at === value.at);
         });
-        list.push({ id: cryptoId(), type: kind, at: value, allDay, sourceId: src, mailId: mid });
+        list.push({ id: cryptoId(), type: kind, at: value.at, allDay: value.allDay, sourceId: src, mailId: mid });
         rec.events = sanitizeEvents(list);
+      }
+      // 「日期 + 可选时刻」两个控件 → 事件里的 at。时刻留空即全天（只有日期）。
+      // 单一入口：编辑器、邮件卡片、seed 预填都走它，免得各处自己拼字符串。
+      function joinEventAt(date, time) {
+        const d = String(date || '').trim().slice(0, 10);
+        if (!d) return '';
+        const t = String(time || '').trim().slice(0, 5);
+        return t ? `${d}T${t}` : d;
+      }
+      // at → { at, allDay }，顺带裁掉多余的秒（事件精度只到分）
+      function splitEventAt(at) {
+        const s = String(at || '').trim();
+        if (!s) return { at: '', allDay: true };
+        return s.includes('T') ? { at: s.slice(0, 16), allDay: false } : { at: s.slice(0, 10), allDay: true };
+      }
+      // at（或草稿值）→ 'HH:mm'；没有时刻就返回空串，供 <input type="time"> 回填
+      function timePartOf(value) {
+        const s = String(value || '');
+        return s.includes('T') ? s.slice(11, 16) : '';
       }
 
       function mailCardHtml(s) {
@@ -153,11 +172,33 @@
         }
         // v4.19.0：邮件里的两个时间字段（AI 契约仍是 scheduleAt / deadline，跨仓库契约不动）
         // 在网页端被归到「关键时间」的对应类型——scheduleAt 按邮件类型判面试还是笔试测评。
+        // v4.24.0：两个字段都改成「日期 + 可用时刻留空」两个控件（与关键时间编辑器同构），
+        // 因为「截止」不再被硬编码成全天，而邮件里两种情况都常见（"9/17 18:00 前" / "9/17 前"）。
         const schedType = mailScheduleType(s);
-        if (p.scheduleAt) fields.push({ key: 'scheduleAt', label: `安排时间（${schedType}）`, editor: `<input class="control mail-ed" type="datetime-local" data-mail-edit="scheduleAt" value="${escapeHtml(ed('scheduleAt', p.scheduleAt))}">` });
+        // 时刻控件的回填：优先用**草稿**（用户已经改过的值），没有草稿才用 AI 值里的时刻。
+        // 注意不能写成 timePartOf(ed(key, '')) —— 草稿里存的本身就是 'HH:mm'，
+        // 再取一次 timePartOf（只在含 'T' 时才返回时刻）会把用户改的时刻清空。
+        const timeInput = (key, label, source) => {
+          const fallback = timePartOf(source);
+          const raw = String(draft[key] != null ? draft[key] : fallback);
+          return `<input class="control mail-ed mail-ed-time" type="time" data-mail-edit="${key}" value="${escapeHtml(raw.slice(0, 5))}" aria-label="${escapeHtml(label)}">`;
+        };
+        if (p.scheduleAt) {
+          const sv = splitEventAt(ed('scheduleAt', p.scheduleAt));
+          fields.push({ key: 'scheduleAt', label: `开始时间（${schedType}）`, editor: `<input class="control mail-ed" type="date" data-mail-edit="scheduleAt" value="${escapeHtml(sv.at.slice(0, 10))}">${timeInput('scheduleAtTime', '时刻，留空表示只知道日期', p.scheduleAt)}` });
+        }
         // 截止时间：笔试/测评邮件里最有用的那个时间（"链接 X 日失效"、"请在 X 日前完成"），
         // v4.16.0 补齐，v4.19.0 起写成一条「截止」类型的关键时间，参与倒计时与排序。
-        if (p.deadline) fields.push({ key: 'deadline', label: '截止时间', editor: `<input class="control mail-ed" type="date" data-mail-edit="deadline" value="${escapeHtml(ed('deadline', p.deadline))}"><span class="mail-ed-hint">写入台账「关键时间 · 截止」，参与倒计时与排序</span>` });
+        // v4.24.0：相对表达（"3 日内"）由 Action 侧换算成绝对时间并回报 deadlineSource=relative，
+        // 这里必须**标出来**——否则一个推算出来的日期看起来和邮件里写死的毫无区别。
+        if (p.deadline) {
+          const dv = splitEventAt(ed('deadline', p.deadline));
+          const relative = String(p.deadlineSource || '') === 'relative';
+          const src = relative
+            ? `<span class="mail-ed-src is-relative" title="${escapeHtml(p.deadlineExpr ? `AI 按收信时间推算出这个时间：邮件原文写的是「${p.deadlineExpr}」` : 'AI 按收信时间推算出来的，邮件里没有写死的日期')}">按邮件推算</span>`
+            : '<span class="mail-ed-hint">写入台账「关键时间 · 截止」，参与倒计时与排序</span>';
+          fields.push({ key: 'deadline', label: '截止时间', editor: `<input class="control mail-ed" type="date" data-mail-edit="deadline" value="${escapeHtml(dv.at.slice(0, 10))}">${timeInput('deadlineTime', '时刻，留空表示只知道日期', p.deadline)}${src}` });
+        }
         if (p.recentSchedule) fields.push({ key: 'recentSchedule', label: '最近安排', editor: `<input class="control mail-ed mail-ed-wide" type="text" maxlength="100" data-mail-edit="recentSchedule" value="${escapeHtml(ed('recentSchedule', p.recentSchedule))}">` });
         if (p.nextAction) fields.push({ key: 'nextAction', label: '下一步行动', editor: `<input class="control mail-ed mail-ed-wide" type="text" maxlength="100" data-mail-edit="nextAction" value="${escapeHtml(ed('nextAction', p.nextAction))}">` });
         const fieldsHtml = fields.length
@@ -308,11 +349,14 @@
             setTimeline(rec, [...(rec.timeline || []), { stage: edStage, at: edAt, note: readEd('milestone.note') || mile.note || '邮件' }]);
             milestoneApplied = true;
           }
-          if (checked.has('scheduleAt') && readEd('scheduleAt')) {
-            upsertEvent(rec, mailScheduleType(s), readEd('scheduleAt'), eventSourceId(s, mailScheduleType(s)), mailIdOf(s));
+          // v4.24.0：开始/截止都是「日期 + 可选时刻」两个控件，先合成 at 再写事件
+          const schedAt = joinEventAt(readEd('scheduleAt'), readEd('scheduleAtTime'));
+          if (checked.has('scheduleAt') && schedAt) {
+            upsertEvent(rec, mailScheduleType(s), schedAt, eventSourceId(s, mailScheduleType(s)), mailIdOf(s));
           }
-          if (checked.has('deadline') && readEd('deadline')) {
-            upsertEvent(rec, TIME_EVENT_DEADLINE, readEd('deadline'), eventSourceId(s, TIME_EVENT_DEADLINE), mailIdOf(s));
+          const dlAt = joinEventAt(readEd('deadline'), readEd('deadlineTime'));
+          if (checked.has('deadline') && dlAt) {
+            upsertEvent(rec, TIME_EVENT_DEADLINE, dlAt, eventSourceId(s, TIME_EVENT_DEADLINE), mailIdOf(s));
           }
           if (checked.has('recentSchedule') && readEd('recentSchedule')) rec.recentSchedule = readEd('recentSchedule');
           if (checked.has('nextAction') && readEd('nextAction')) rec.nextAction = readEd('nextAction');
@@ -360,8 +404,8 @@
           city: '',
           applicationDate: mile.at || today,
           events: [
-            ...(p.scheduleAt ? [{ id: cryptoId(), type: mailScheduleType(s), at: p.scheduleAt, allDay: false }] : []),
-            ...(p.deadline ? [{ id: cryptoId(), type: TIME_EVENT_DEADLINE, at: String(p.deadline).slice(0, 10), allDay: true }] : [])
+            ...(p.scheduleAt ? [splitEventAt(p.scheduleAt)].map(x => ({ id: cryptoId(), type: mailScheduleType(s), at: x.at, allDay: x.allDay })) : []),
+            ...(p.deadline ? [splitEventAt(p.deadline)].map(x => ({ id: cryptoId(), type: TIME_EVENT_DEADLINE, at: x.at, allDay: x.allDay })) : [])
           ],
           recentSchedule: p.recentSchedule || '',
           nextAction: p.nextAction || '',
@@ -668,18 +712,27 @@
       }
 
       // ================= 关键时间编辑器（记录弹窗内，v4.19.0）=================
-      // 一条记录可以有多个时间，且必须分类（截止 / 面试 / 笔试测评 / 其他）。
-      // 「截止」是全天（只有日期），其余精确到分——输入控件类型由类型决定，
-      // 与 ICS 的 DTSTART、倒计时是否显示时分共用 isTimeEventAllDay 这一个判定。
+      // 一条记录可以有多个时间，且必须分类。**类型只是标签**：语义上只有两类（截止 / 开始），
+      // 下拉按两类分组显示；而「全天还是定时」自 v4.24.0 起与类型无关 —— 由时刻填不填决定，
+      // 所以「截止」也能精确到分（邮件里常写「9/17 18:00 前」）。
+      // 这个布尔同时决定 ICS 的 DTSTART 与倒计时显示到天还是到小时。
+      function eventTypeOptions(cur) {
+        const option = t => `<option value="${escapeHtml(t)}"${t === cur ? ' selected' : ''}>${escapeHtml(t)}</option>`;
+        const groups = [
+          ['截止时间', TIME_EVENT_TYPES.filter(t => timeEventKind(t) === 'deadline')],
+          ['开始时间', TIME_EVENT_TYPES.filter(t => timeEventKind(t) === 'start')]
+        ];
+        return groups.map(([label, list]) => `<optgroup label="${label}">${list.map(option).join('')}</optgroup>`).join('');
+      }
       function eventRowHtml(e) {
         const type = normalizeTimeEventType(e && e.type);
-        const allDay = isTimeEventAllDay(type);
         const at = String(e && e.at || '');
         // data-source-id / data-mail-id：把来源标识带在行上，用户手工改时间后不会丢掉
         // 「这条来自哪封邮件」——否则改期替换就再也认不出旧事件（v4.22.0）。
         return `<div class="ev-row" data-ev-id="${escapeHtml(String(e && e.id || ''))}" data-source-id="${escapeHtml(String(e && e.sourceId || ''))}" data-mail-id="${escapeHtml(String(e && e.mailId || ''))}">
-          <select class="control ev-type">${TIME_EVENT_TYPES.map(t => `<option value="${escapeHtml(t)}"${t === type ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>
-          <input class="control ev-at" type="${allDay ? 'date' : 'datetime-local'}" value="${escapeHtml(allDay ? at.slice(0, 10) : at)}" aria-label="时间">
+          <select class="control ev-type">${eventTypeOptions(type)}</select>
+          <input class="control ev-at" type="date" value="${escapeHtml(at.slice(0, 10))}" aria-label="日期">
+          <input class="control ev-time" type="time" value="${escapeHtml(timePartOf(at))}" aria-label="时刻（可留空，留空表示只有日期）">
           <button class="tl-del" type="button" title="删除该时间" aria-label="删除该时间">✕</button>
         </div>`;
       }
@@ -690,14 +743,14 @@
       function collectEvents() {
         return [...document.querySelectorAll('#eventEditor .ev-row')].map(row => {
           const type = normalizeTimeEventType(row.querySelector('.ev-type').value);
-          const raw = String(row.querySelector('.ev-at').value || '');
-          const allDay = isTimeEventAllDay(type);
+          // v4.24.0：日期 + 可选时刻 → at；时刻留空即全天（不再由类型决定）
+          const at = joinEventAt(row.querySelector('.ev-at').value, row.querySelector('.ev-time').value);
           return {
             // 沿用行上的 id：每次保存都换新 id 会让 ICS 的 UID 不稳定（同一事件被日历当成新的）
             id: row.dataset.evId || cryptoId(),
             type,
-            at: allDay ? raw.slice(0, 10) : raw,
-            allDay,
+            at,
+            allDay: !String(at).includes('T'),
             // 来源标识原样带回去（用户只改时间时，改期替换的依据不能丢）
             sourceId: String(row.dataset.sourceId || ''),
             mailId: String(row.dataset.mailId || '')
@@ -1571,23 +1624,9 @@
       $('#position').addEventListener('input', scheduleSameCompanyHint);
       $('#addTimelineBtn').addEventListener('click', addTimelineRow);
       $('#addEventBtn').addEventListener('click', addEventRow);
-      // 时间类型改变时换输入控件：「截止」只要日期，面试/笔试要精确到分。
-      // 只换 .ev-at 这一个元素（保留行内其余状态），并把能沿用的值带过去。
-      $('#eventEditor').addEventListener('change', event => {
-        const sel = event.target.closest('.ev-type');
-        if (!sel) return;
-        const row = sel.closest('.ev-row');
-        const input = row.querySelector('.ev-at');
-        if (!input) return;
-        const allDay = isTimeEventAllDay(sel.value);
-        const old = String(input.value || '');
-        const next = document.createElement('input');
-        next.className = 'control ev-at';
-        next.type = allDay ? 'date' : 'datetime-local';
-        next.value = allDay ? old.slice(0, 10) : old;
-        next.setAttribute('aria-label', '时间');
-        input.replaceWith(next);
-      });
+      // 刻意**没有**「切换类型就换输入控件」的监听（v4.24.0 删掉了）：时间粒度现在由
+      // 「时刻填不填」决定，与类型无关。此前那段逻辑会在把类型改成「截止」时把时刻截成日期，
+      // 等于用户手填的时刻被静默吃掉——正是这次要修的东西。
       $('#timelineEditor').addEventListener('click', event => {
         const del = event.target.closest('.tl-del');
         if (!del) return;

@@ -82,7 +82,9 @@ sandbox.STAGE_PRESETS = AJA_SHARED.STAGE_PRESETS;
 // 于是邮件段新增了对这几样的引用。类型枚举与判定直接取 shared（避免第二份实现），
 // sanitizeEvents 用真实实现抽取，cryptoId 给个稳定桩（邮件用例不断言事件 id）。
 sandbox.normalizeTimeEventType = AJA_SHARED.normalizeTimeEventType;
-sandbox.isTimeEventAllDay = AJA_SHARED.isTimeEventAllDay;
+// v4.24.0：类型下拉按「截止时间 / 开始时间」两档分组（eventTypeOptions → timeEventKind），
+// allDay 改由 at 推导，所以不再注入 isTimeEventAllDay。
+sandbox.timeEventKind = AJA_SHARED.timeEventKind;
 sandbox.TIME_EVENT_TYPES = AJA_SHARED.TIME_EVENT_TYPES;
 sandbox.TIME_EVENT_DEADLINE = AJA_SHARED.TIME_EVENT_DEADLINE;
 sandbox.cryptoId = (() => { let n = 0; return () => `ev-${(n += 1)}`; })();
@@ -346,6 +348,64 @@ check('applyMailSuggestion 多目标：勾选 N 条就写入 N 条，且 saveRec
     sandbox.applyMailSuggestion('uid-1');
     assert.strictEqual(saves.length, 0, '里程碑缺日期时不得写入（时间线是按日期排序的真相源，空日期会打乱它）');
     assert.strictEqual(byId('a').timeline.length, 2, '缺日期时不得往时间线里追加半成品里程碑');
+  } finally {
+    for (const [k, v] of Object.entries(orig)) sandbox[k] = v;
+  }
+});
+check('applyMailSuggestion 截止带时刻：写成定时事件（allDay=false），时刻不再被丢掉', () => {
+  // v4.24.0。此前「截止」被硬编码成全天事件，日期框只有 date、没有时刻——
+  // 邮件里最有用的一句话「请在 9/17 18:00 前完成」到这里就只剩 9/17。
+  // 这条用例从**渲染产物**里读时刻控件的初值、再走一遍 apply，端到端证明时刻进了台账。
+  const orig = {};
+  for (const k of ['saveRecords', 'render', 'flashRow', 'markMailApplied', 'renderMailView', 'updateMailBadge', 'document']) {
+    orig[k] = sandbox[k];
+  }
+  sandbox.saveRecords = () => {};
+  sandbox.render = () => {};
+  sandbox.flashRow = () => {};
+  sandbox.markMailApplied = () => {};
+  sandbox.renderMailView = () => {};
+  sandbox.updateMailBadge = () => {};
+  sandbox.records = [{ id: 'a', company: '宁波银行', position: '测试开发岗', stage: '笔试', timeline: [{ stage: '笔试', at: '2026-09-01', note: '' }] }];
+  sandbox.mailSuggestions = [{
+    id: 'uid-2', company: '宁波银行', confidence: 0.9,
+    proposed: {
+      milestone: { stage: '笔试', at: '2026-09-10', atSource: 'received', note: '邮件·笔试' },
+      scheduleAt: '', deadline: '2026-09-17T18:00', deadlineExpr: '9 月 17 日 18:00 前', deadlineSource: 'relative',
+      recentSchedule: '', nextAction: '按时参加笔试'
+    }
+  }];
+  // 卡片渲染：时刻控件必须带上 AI 给的 18:00，且相对表达要打标记、原文进 title
+  const cardHtml = sandbox.mailCardHtml(sandbox.mailSuggestions[0]);
+  assert.ok(/data-mail-edit="deadlineTime"[^>]*value="18:00"/.test(cardHtml),
+    '截止的时刻控件必须回填 AI 给的 18:00（否则用户看到的"截止时间"凭空少了时刻）');
+  assert.ok(cardHtml.includes('mail-ed-src is-relative'), 'deadlineSource=relative 必须打出「按邮件推算」标记');
+  assert.ok(cardHtml.includes('9 月 17 日 18:00 前'), 'title 里要给出邮件原文表达，用户才能核对换算');
+
+  const edits = { deadline: '2026-09-17', deadlineTime: '18:00' };
+  const card = {
+    querySelectorAll: sel => (sel === '.mail-target-check:checked'
+      ? [{ value: 'a' }]
+      : [{ dataset: { mailField: 'deadline' } }]),
+    querySelector: sel => {
+      const m = /^\[data-mail-edit="([^"]+)"\]$/.exec(sel);
+      return m && Object.prototype.hasOwnProperty.call(edits, m[1]) ? { value: edits[m[1]] } : null;
+    }
+  };
+  sandbox.document = { querySelector: () => card };
+  try {
+    sandbox.applyMailSuggestion('uid-2');
+    const ev = (sandbox.records[0].events || []).find(e => e.type === sandbox.TIME_EVENT_DEADLINE);
+    assert.ok(ev, '截止必须写进 events');
+    assert.strictEqual(ev.at, '2026-09-17T18:00', '日期与时刻要合成一个 at');
+    assert.strictEqual(ev.allDay, false, '带时刻的截止是定时事件——写死 true 会让倒计时只按天算');
+    // 只填日期（时刻留空）：必须仍是全天事件，与 v4.23 以前的行为逐字一致
+    edits.deadlineTime = '';
+    sandbox.records[0].events = [];
+    sandbox.applyMailSuggestion('uid-2');
+    const dayEv = (sandbox.records[0].events || []).find(e => e.type === sandbox.TIME_EVENT_DEADLINE);
+    assert.strictEqual(dayEv.at, '2026-09-17');
+    assert.strictEqual(dayEv.allDay, true, '只给日期时仍是全天事件（这天任何一个时刻都不算逾期）');
   } finally {
     for (const [k, v] of Object.entries(orig)) sandbox[k] = v;
   }
@@ -629,7 +689,7 @@ const normalizeRecordSrc = ['normalizeRecord', 'sanitizeTimeline', 'deriveStage'
   .map(name => extractFunction(html, name));
 // v4.19.0 关键时间类型的转发别名。它们在 index.html 里位于 bootstrap 段（不在被抽取的块内），
 // 而 sanitizeEvents / coreBlock 的 dates·insights·ics 都要用，所以按同样的转发形态在这里补齐。
-const TIME_EVENT_ALIASES = ['TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'isTimeEventAllDay', 'normalizeTimeEventType']
+const TIME_EVENT_ALIASES = ['TIME_EVENT_TYPES', 'TIME_EVENT_DEADLINE', 'timeEventKind', 'normalizeTimeEventType']
   .map(n => `const ${n} = AJA.${n};`).join('\n');
 
 for (const [label, src] of [['CORE 纯函数块', coreBlock], ['邮件纯函数块', mailPureBlock], ['洞察/台账渲染段', insightSection], ['台账视图增强段', v44Section], ['getVisibleRecords', getVisibleRecordsSrc], ['查重统一处置段(v4.5.0)', v45Section], ...timelineEditorSrc.map((src, i) => [[ 'timelineRowHtml', 'renderTimelineEditor' ][i], src])]) {

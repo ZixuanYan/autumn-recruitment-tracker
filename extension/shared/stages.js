@@ -33,24 +33,28 @@
   // 此前只有单一 scheduleAt（安排）+ deadline（签约截止）两个字段，"确定的面试时间"与
   // "截止时间"只能靠字段区分，笔试/面试时间又和"最近安排"混在一处。
   // 现在每个时间是一条事件 { id, type, at, allDay }，type 取这里的枚举：
-  //   截止     = 必须赶的硬期限（全天，只有日期）——网申/测评/笔试/签约截止
-  //   面试     = 已确定的面试时间（精确到分）
-  //   笔试测评 = 已确定的笔试 / 测评 / 机试时间（精确到分）
+  //   截止     = 必须赶的硬期限 —— 网申/测评/笔试/签约截止
+  //   面试     = 已确定的面试
+  //   笔试测评 = 已确定的笔试 / 测评 / 机试
   //   其他     = 宣讲会、资料提交等兜底
+  // type 只是**展示标签**；语义上的两类分界由 timeEventKind 给出（截止 = deadline，其余 = start）。
   const TIME_EVENT_TYPES = ['截止', '面试', '笔试测评', '其他'];
-  // 「截止」在代码里被单独判定（倒计时 / 逾期提醒 / ICS 全天），故给出具名常量，
+  // 「截止」在代码里被单独判定（倒计时 / 逾期提醒 / ICS 标题），故给出具名常量，
   // 免得各处散落 '截止' 字面量——将来改类型名漏改一处，就会静默退化成「其他」。
   const TIME_EVENT_DEADLINE = TIME_EVENT_TYPES[0];
-  // 只有日期、没有时刻的类型。ICS 的 DTSTART 是否带 VALUE=DATE、倒计时是否显示时分都由它决定。
-  const TIME_EVENT_ALL_DAY = ['截止'];
-  function isTimeEventAllDay(type) {
-    return TIME_EVENT_ALL_DAY.includes(String(type || ''));
+  // 两类语义（v4.24.0）：截止 = 必须赶的期限，开始 = 到点要参加的事。界面按它分组显示。
+  function timeEventKind(type) {
+    return String(type || '').trim() === TIME_EVENT_DEADLINE ? 'deadline' : 'start';
   }
+  // v4.24.0：全天与否**不再由类型决定**，而是每条事件自己的数据 —— `at` 含 'T' 是定时
+  //（精确到分），只有日期就是全天。此前「截止」被硬编码成全天（TIME_EVENT_ALL_DAY），
+  // 于是邮件里写清的「9 月 17 日 18:00 前」无处安放、手填的时刻会被静默截掉；
+  // 现在判定只按 at 走（sanitizeEvents / collectEvents 各一处），共享端不再提供按类型的开关。
   // 非法/缺失类型一律归到「其他」，避免自由文本污染分桶（与 companyType 的白名单同源思路）
   function normalizeTimeEventType(type) {
     const t = String(type || '').trim();
     return TIME_EVENT_TYPES.includes(t) ? t : '其他';
   }
 
-  return { STAGE_PRESETS, TIME_EVENT_TYPES, TIME_EVENT_ALL_DAY, TIME_EVENT_DEADLINE, isTimeEventAllDay, normalizeTimeEventType };
+  return { STAGE_PRESETS, TIME_EVENT_TYPES, TIME_EVENT_DEADLINE, timeEventKind, normalizeTimeEventType };
 });

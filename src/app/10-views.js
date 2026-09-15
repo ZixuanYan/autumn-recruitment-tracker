@@ -252,11 +252,15 @@
         const nowBoard = new Date();
         // v4.19.0：截止倒计时与「下一个安排」都从 events[] 派生
         const dlHit = nearestDeadlineEvent(record.events, nowBoard);
-        const dl = dlHit ? deadlineInfo(String(dlHit.event.at).slice(0, 10), nowBoard) : null;
+        // v4.24.0：传完整 at（截止可能带时刻），截成日期会让「今天 18:00 截止」看不到小时级紧急度
+        const dl = dlHit ? deadlineInfo(dlHit.event.at, nowBoard) : null;
         // 终态（Offer / 已结束）：截止日期、最近安排、停滞提醒都不再有意义——
         // 事情已经结束了，继续催跟进只是噪声。
         const terminal = ['Offer', '已结束'].includes(record.stage);
-        const schedule = nextTimeEvent((record.events || []).filter(e => e && !e.allDay), nowBoard);
+        // 「下一个安排」= 非截止的关键时间。判定用**类型**而不是 allDay：
+        // v4.24.0 起 allDay 由 at 是否带时刻推导，只有日期的「其他」事件（宣讲会等）也是全天，
+        // 拿 !allDay 当"非截止"会把这类事件整个漏掉。
+        const schedule = nextTimeEvent((record.events || []).filter(e => e && e.type !== TIME_EVENT_DEADLINE), nowBoard);
         const stalled = Number(stalledDays) > 0 ? Math.round(Number(stalledDays)) : 0;
         // 完成态（v4.18.0）：当前阶段已标记完成、却还没推进。卡片留在原列，
         // 用一枚 chip 说明「这一步做完了、球在对方」，与「停滞」明确区分。
@@ -266,7 +270,9 @@
         // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
         // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
         if (dl && !terminal) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
-        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(`${schedule.event.type} · ${formatDateTime(schedule.event.at)}`)}</span>`);
+        // 全天事件（只有日期）用 formatDate —— formatDateTime 会把 "2026-09-20" 当 UTC 午夜解析，
+        // 在东八区显示成「9月20日周日 08:00」，凭空多出一个不存在的时间点。
+        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(`${schedule.event.type} · ${schedule.event.allDay ? formatDate(String(schedule.event.at).slice(0, 10)) : formatDateTime(schedule.event.at)}`)}</span>`);
         // 停滞提醒只对进行中的阶段有意义。findStalled 本身就用 isActive 排除了
         // 待投递/Offer/已结束，所以这里是**第二道防线**：万一将来 isActive 放宽，
         // 终态卡片也不会长出"停滞 N 天"（已结束还催你跟进是荒谬的）。

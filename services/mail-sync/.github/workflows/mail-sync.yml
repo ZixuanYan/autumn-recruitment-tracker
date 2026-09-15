@@ -83,6 +83,10 @@ jobs:
           # ——能力在代码里，被部署配置堵死了。test/run.js 有守卫盯着这一点。
           IMAP_HOST: ${{ vars.IMAP_HOST || 'imap.qq.com' }}
           IMAP_PORT: ${{ vars.IMAP_PORT || '993' }}
+          # 时区偏移（v4.24.0）：把邮件里的相对期限（"3 日内 / 48 小时内"）换算成绝对时间时
+          # 用作基准。同样走 Variables（不是密钥），未设置时回落到 +08:00，既有部署零改动。
+          #   常见取值：+08:00（中国）/ +09:00（日韩）/ +00:00（UTC）/ -05:00（美东）
+          MAIL_TZ_OFFSET: ${{ vars.MAIL_TZ_OFFSET || '+08:00' }}
           SINCE_DAYS: ${{ github.event.inputs.SINCE_DAYS || '30' }}
           MAX_PER_RUN: ${{ github.event.inputs.MAX_PER_RUN || '30' }}
           # 留空 = 正常按云端水位增量；填 UID 则忽略水位从该处重扫（回溯被误杀的邮件）

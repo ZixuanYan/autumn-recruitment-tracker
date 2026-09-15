@@ -57,12 +57,16 @@ M0 目的：在投入真实联调前，验证最脆弱的假设——**QQ 授权
    **再配 Variables**（同一个页面的 *Variables* 标签页，不是 Secrets——主机名与端口不是敏感信息，
    用 Variables 能在仓库页面直接看到当前值）：
 
-   | Variable | 说明 | QQ（默认可不设） | 163 | 126 |
-   |---|---|---|---|---|
-   | `IMAP_HOST` | IMAP 服务器 | `imap.qq.com` | `imap.163.com` | `imap.126.com` |
-   | `IMAP_PORT` | 端口（IMAP over TLS） | `993` | `993` | `993` |
+   | Variable | 说明 | 默认 |
+   |---|---|---|
+   | `IMAP_HOST` | IMAP 服务器 | `imap.qq.com`（163 填 `imap.163.com`，126 填 `imap.126.com`） |
+   | `IMAP_PORT` | 端口（IMAP over TLS） | `993` |
+   | `MAIL_TZ_OFFSET` | 时区偏移（v4.24.0）。邮件里「3 日内」「48 小时内」这类**相对期限**换算成绝对时间时用的基准时区 | `+08:00` |
 
-   两个都不设时回落到 QQ，所以既有部署行为逐字节不变。
+   都不设时回落到默认值，所以既有部署行为逐字节不变。
+   `MAIL_TZ_OFFSET` 只认 `±HH:MM` / `±HHMM` 形态；认不出的写法**回落 `+08:00`**，
+   不会当成 0 时区（静默按 UTC 算会让所有相对期限整整偏 8 小时，而日志里什么都看不出来）。
+   偏离现实超过 14 小时的写法同样回落默认值。
 
    ### 换用 163 / 126 邮箱
 
@@ -165,7 +169,15 @@ npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ t
       // emailType 为「其它」时用 AI 写的 summary（截到 48 字），其余用简短类型名。
       // 旧版一律写「邮件·<类型>」，导致投递确认类邮件的备注全是零信息量的「邮件·其它」。
       "milestone": { "stage": "", "at": "YYYY-MM-DD", "note": "邮件·<类型或摘要>" },
-      "scheduleAt": "", "recentSchedule": "", "nextAction": ""
+      "scheduleAt": "", "recentSchedule": "", "nextAction": "",
+      // 截止（v4.24.0）：可以是 "YYYY-MM-DD" 或 "YYYY-MM-DDTHH:mm"
+      //（邮件给了时刻就带上——「9 月 13 日 09:39 失效」丢掉 09:39 等于把最关键的分界抹平）。
+      "deadline": "YYYY-MM-DD[THH:mm]|空",
+      // 相对表达的两个附带信息（v4.24.0）：expr 是邮件原文（如「3 日内」），
+      // source 为 "email"（原文写死的绝对时间）/ "relative"（AI 按 receivedAtLocal 换算出来的）。
+      // 网页端据 source 打「按邮件推算」标记——算出来的日期看起来和写死的毫无区别，不标出来
+      // 用户不会去核对换算；expr 进 title，让用户能对着原文看。
+      "deadlineExpr": "", "deadlineSource": "email|relative|空"
     }
   }]
 }
@@ -203,7 +215,7 @@ npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ t
 
 ## 默认值（可调）
 
-`SINCE_DAYS=30`、`MAX_PER_RUN=30`、`MIN_CONFIDENCE=0.3`、`UID_FROM=`（留空=正常按水位增量）、`IMAP_HOST=imap.qq.com`、`IMAP_PORT=993`、`KEYWORDS=面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview`（已收紧：去掉了易命中营销/理财邮件的 `评估|offer|assessment`；如需微调，可新增一个 `KEYWORDS` Secret 覆盖，留空则用此默认值）。低于 `MIN_CONFIDENCE` 的建议直接丢弃；`0.3~0.6` 之间的仍进队列但网页端标黄（你要人工复核）。AI 明确判定 `isRecruitment=false` 的也直接丢弃（v0.3.0 之前这道过滤不存在）。邮件正文解析上限 8000 字。
+`SINCE_DAYS=30`、`MAX_PER_RUN=30`、`MIN_CONFIDENCE=0.3`、`UID_FROM=`（留空=正常按水位增量）、`IMAP_HOST=imap.qq.com`、`IMAP_PORT=993`、`MAIL_TZ_OFFSET=+08:00`（v4.24.0：相对期限换算用的时区）、`KEYWORDS=面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview`（已收紧：去掉了易命中营销/理财邮件的 `评估|offer|assessment`；如需微调，可新增一个 `KEYWORDS` Secret 覆盖，留空则用此默认值）。低于 `MIN_CONFIDENCE` 的建议直接丢弃；`0.3~0.6` 之间的仍进队列但网页端标黄（你要人工复核）。AI 明确判定 `isRecruitment=false` 的也直接丢弃（v0.3.0 之前这道过滤不存在）。邮件正文解析上限 8000 字。
 
 ## 网页端可视化配置（mail-config.json）
 

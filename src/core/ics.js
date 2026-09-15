@@ -39,9 +39,13 @@
           const title = isDeadline
             ? `${companyBit} · 截止（${r.position || '岗位'}）`
             : `${companyBit} · ${ev.type}${r.recentSchedule ? `（${r.recentSchedule}）` : ''}`;
+          // v4.24.0：截止也可能带时刻（`2026-09-17T18:00`），带时刻时写成「日期 时:分」，
+          // 只给日期的仍写日期——把 18:00 截掉会让日历里的截止时间凭空消失。
+          const deadlineAt = String((ev.event && ev.event.at) || '—');
+          const deadlineText = ev.allDay ? deadlineAt.slice(0, 10) : `${deadlineAt.slice(0, 10)} ${deadlineAt.slice(11, 16)}`.trim();
           const desc = [
             `岗位：${r.position || '—'}`, `机构：${r.orgUnit || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
-            isDeadline ? `截止日期：${String((ev.event && ev.event.at) || '—').slice(0, 10)}` : `${ev.type}时间：${formatDateTime(ev.at)}`,
+            isDeadline ? `截止时间：${deadlineText}` : `${ev.type}时间：${formatDateTime(ev.at)}`,
             r.nextAction ? `下一步：${r.nextAction}` : ''
           ].filter(Boolean).join('\n');
           lines.push(

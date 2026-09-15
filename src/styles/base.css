@@ -143,12 +143,15 @@
     .tl-row .control { min-height: 34px; }
     .tl-del { flex: 0 0 30px; width: 30px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; line-height: 1; font-size: 13px; }
     .tl-del:hover { color: var(--red); border-color: var(--red); background: var(--red-soft); }
-    /* 关键时间编辑器（记录弹窗，v4.19.0）：一行 = 类型 + 时间 + 删除。
-       与时间线编辑器同款布局，复用 .tl-del 的删除按钮样式（视觉与行为都一致）。 */
+    /* 关键时间编辑器（记录弹窗，v4.19.0）：一行 = 类型 + 日期 + 时刻 + 删除。
+       与时间线编辑器同款布局，复用 .tl-del 的删除按钮样式（视觉与行为都一致）。
+       v4.24.0：加了一列时刻输入框（time），留空即"只有日期"（全天）——
+       是否全天不再由类型决定，所以这里必须让用户能对任意类型填/不填时刻。 */
     .event-editor { display: grid; gap: 7px; margin: 8px 0; }
     .ev-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .ev-row .ev-type { flex: 0 0 116px; }
-    .ev-row .ev-at { flex: 1 1 180px; }
+    .ev-row .ev-at { flex: 1 1 170px; }
+    .ev-row .ev-time { flex: 0 0 108px; }
     .ev-row .control { min-height: 34px; }
     .advance-stage-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
     .row-actions { display: flex; gap: 7px; white-space: nowrap; }

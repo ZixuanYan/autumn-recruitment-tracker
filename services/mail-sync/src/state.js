@@ -110,7 +110,7 @@ function buildSuggestion(mail, result, ctx) {
     // 配了 = 密文文件（正文一并受保护）。
     textBody: truncateForArchive(mail.textBody),
     confidence: Number.isFinite(Number(r.confidence)) ? Number(r.confidence) : 0,
-    proposed: r.proposed || { milestone: { stage: '', at: '', note: '' }, scheduleAt: '', recentSchedule: '', nextAction: '' }
+    proposed: r.proposed || { milestone: { stage: '', at: '', note: '' }, scheduleAt: '', deadline: '', deadlineExpr: '', deadlineSource: '', recentSchedule: '', nextAction: '' }
   };
 }
 

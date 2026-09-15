@@ -830,6 +830,14 @@
     .mail-ed-src.is-fallback { background: var(--warn-soft); color: var(--warn); }
     .mail-ed-src.is-email { background: var(--ok-soft); color: var(--ok); }
     .mail-ed-src.is-unknown { background: var(--wash-3); color: var(--muted); }
+    /* 相对表达（"3 日内完成"）由 AI 按收信时间换算出来的截止（v4.24.0）。
+       刻意用与 is-email（来自邮件原文）**不同**的配色：推算出来的日期看起来和写死的
+       毫无区别时，用户会以为邮件里真有这个时间，从而不去核对换算是否合理。
+       走蓝色信息档而不是警告档——它通常是对的，只是需要被看见。 */
+    .mail-ed-src.is-relative { background: var(--primary-soft); color: var(--primary); }
+    /* 时刻输入框（v4.24.0）。窄一点：它只装 HH:mm，占满一行是浪费；
+       与左侧日期框同高，视觉上是一组「日期 + 时刻」。 */
+    .mail-field-edit .mail-ed-time { flex: 0 0 84px; }
     .mail-ed-hint { flex: 1 1 120px; min-width: 0; color: var(--muted); font-size: 11px; }
     .mail-fields-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; margin-top: 2px; padding-top: 7px; border-top: 1px solid var(--line); }
     .mail-fields-note { color: var(--muted); font-size: 11.5px; }

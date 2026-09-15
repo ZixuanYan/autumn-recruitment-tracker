@@ -135,6 +135,13 @@ function buildConfig() {
     }),
     // 邮件建议加密密钥（可选）：设了则 mail-suggestions.json 加密存储；留空则明文（向后兼容）
     mailEncKey: strEnv('MAIL_ENC_KEY', ''),
+    // 时区偏移（v4.24.0，形如 +08:00）。**只从 env 读**，刻意不进 mail-config.json —
+    // 它是"这台部署所在的时区"这种环境属性，不是随时会调的解析偏好；而且一旦两台设备
+    // 写进同一个 Gist，值不同就会互相覆盖，算出来的相对期限会随同步时机跳变。
+    // 用途：把「3 日内 / 48 小时内」这类相对期限落成绝对时间。基准（nowLocal /
+    // receivedAtLocal）由 ai.localWallClock 按这个偏移渲染成挂钟字符串后写进用户消息，
+    // 模型只做同格式的加法。不设时默认 +08:00（校招场景的实际使用时区）。
+    tzOffset: strEnv('MAIL_TZ_OFFSET', '+08:00'),
     // 以下几项默认值，可被 Gist 里的 mail-config.json 覆盖（见 applyMailConfigOverrides）
     enabled: true,
     minIntervalHours: 0,   // 0 = 用 DEFAULT_MIN_INTERVAL_HOURS（见 gateReason 的说明），不是"每次都跑"
