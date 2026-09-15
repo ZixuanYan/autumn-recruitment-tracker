@@ -1,3 +1,40 @@
+## v4.29.0（网页：未来安排迁入日历页；宽屏左月历右明细两栏）
+
+纯网页版本，Action 与插件端未改动，卫星仓库无需同步。用户实测 v4.28.0 日历后的反馈：
+「将总览中的未来安排移动到日历这一页面上方；日历大小可以缩小一点，然后点击展示的详情
+可以放在右侧，方便查看」。
+
+### ① 未来安排迁到日历页顶部
+
+- `<aside id="upcoming">` 从总览视图整体搬到日历视图第一个子元素。`renderUpcoming()` 与
+  事件绑定都按 id 取元素，搬完零改动；总览只剩统计与洞察。
+- **去重导出按钮**：面板自带的「导出日历」（`#exportIcsBtn`）拆除——日历页头部已有
+  「导出 .ics」、工具页还有一个，同一页两个一样的按钮是冗余。绑定行一并删：元素不存在时
+  `$('#exportIcsBtn').addEventListener` 会在启动时对 null 调方法直接崩，这类"半截拆除"
+  比不拆更危险，测试里加了守卫盯住。
+- **旧书签跟随**：`ROUTE_ALIASES.upcoming` 从 `'overview'` 改为 `'calendar'`，`#/upcoming`
+  直达新家。布局零新增：`.view` 本就是单列 grid，未来安排自然成为日历页第一行；
+  `.schedule-list` 的 `repeat(auto-fill, minmax(320px, 1fr))` 在通栏宽度下自动排成 2~3 列卡片。
+
+### ② 宽屏两栏：左月历（紧凑）+ 右当日明细
+
+- 日历面板拆进 `.cal-layout` 容器：左月历、右 `<aside class="panel cal-detail">`（v4.28.0 的
+  当日明细从月历内部区块升级为独立面板，卡片外观交给 `.panel`）。
+- 断点取 **1101px**：与 ≤1100px 侧栏收窄共用一条线——侧栏都还没收窄的宽度下右栏才有余量，
+  再窄就回落为上下堆叠（手机行为与 v4.28.0 一致）。桌面端明细面板 `position: sticky; top: 16px`，
+  列表长时滚动跟随，点格子不用回头找面板。
+- 月历紧凑化：`grid-auto-rows` 96→76px、gap 6→5px、容器左右 padding 16→12px、格内边距
+  6/7→5/6px；chip 字号不动，窄列自动省略号、悬浮有全文。
+
+### 测试与版本
+
+- `test/web-check.js`：ROUTE_ALIASES 断言更新；洞察面板切片边界从 `id="upcoming"` 改为
+  `data-view="calendar"`（#upcoming 搬走后原边界落进日历视图）；接线守卫补三条——
+  `#upcoming` 必须落在日历视图内且在月历上方、`#exportIcsBtn` 按钮与绑定必须整体拆除、
+  `.cal-layout` 两栏结构与 `#calDetail` 独立面板存在。
+- `test/web-runtime.js`：`#/upcoming` 路由用例改为解析到 calendar。
+- `APP_VERSION` → 4.29.0；service-worker 缓存名、download 亮点段与页脚、README、使用说明同步 bump。
+
 ## v4.28.0（网页：日历点日期展开当日明细；已完成聚合为浅绿一行）
 
 纯网页版本，Action 与插件端未改动，卫星仓库无需同步。用户实测 v4.27.0 日历后的反馈：

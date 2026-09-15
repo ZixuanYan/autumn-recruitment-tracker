@@ -1031,8 +1031,9 @@ check('洞察面板信息层级：概览 → 行动 → 转化 → 明细（重�
   // 重构前指标条夹在两张图之后、最需要行动的「需要关注」被压到第 5 块。
   // 这条断言把顺序钉住：以后往面板里加块时若插错位置会立刻失败，而不是靠人眼复核。
   // v4.8.0：阶段分布（stageGrid）从独立 panel 并入洞察常驻区，与转化漏斗同排；
-  // 面板结束边界随之从已删除的 distributionTitle 改为紧随其后的「未来安排」aside（id="upcoming"）。
-  const panel = html.slice(html.indexOf('id="insightsBody"'), html.indexOf('id="upcoming"'));
+  // 面板结束边界随之从已删除的 distributionTitle 改为紧随其后的 aside；
+  // v4.29.0：#upcoming（未来安排）随面板迁入日历页，边界改用日历视图的开头。
+  const panel = html.slice(html.indexOf('id="insightsBody"'), html.indexOf('data-view="calendar"'));
   assert.ok(panel.length > 500, '未定位到洞察面板 HTML');
   // v4.11.0 换位：阶段分布提到整宽第 2 位（14 个色阶块在半宽的一半里每块只有 ~44px，
   // 灰→蓝→绿的递进看不清），需要关注移进 grid 与漏斗并排。常驻区仍是这四块，精简模式不变。
@@ -1819,12 +1820,13 @@ check('VIEW_META 新增 records、overview 副标题不再提「台账」', () =
   assert.ok(!meta.overview.subtitle.includes('台账'), '台账已移出总览，overview 副标题不应再提「台账」');
 });
 
-check('ROUTE_ALIASES：records 恢复为独立视图，upcoming 仍并入总览', () => {
+check('ROUTE_ALIASES：records 恢复为独立视图，upcoming 随面板迁去日历', () => {
   const line = html.split('\n').find(l => l.includes('const ROUTE_ALIASES ='));
   assert.ok(line, '未找到 ROUTE_ALIASES');
   const aliases = new Function(`return ${/\{.*\}/.exec(line)[0]};`)();
   assert.strictEqual(aliases.records, 'records', '#/records 应解析到 records 视图本身，而非重定向到 overview');
-  assert.strictEqual(aliases.upcoming, 'overview', '未来安排仍在总览');
+  // v4.29.0：未来安排面板从总览迁入日历页，旧书签 #/upcoming 跟着去新家
+  assert.strictEqual(aliases.upcoming, 'calendar', '未来安排随面板搬进日历页，旧书签应重定向过去');
   assert.strictEqual(aliases.overview, 'overview');
 });
 
@@ -1864,6 +1866,14 @@ check('日历视图接线：路由钩子 / 中央重渲 / 点格展开明细 / c
   assert.ok(/\$\('#calPrevBtn'\)/.test(html) && /\$\('#calNextBtn'\)\.addEventListener/.test(html), '翻月按钮已接线');
   assert.ok(/\$\('#calTodayBtn'\)/.test(html), '「今天」按钮已接线');
   assert.ok(/\$\('#calExportIcsBtn'\)\.addEventListener\('click', \(\) => exportIcs\(\)\)/.test(html), '导出 .ics 复用工具页同一条流程，不得另写一份');
+  // v4.29.0：未来安排面板迁入日历页（在 calendar 视图内、月历之前）；原「导出日历」按钮去重拆除
+  const calStart = html.indexOf('data-view="calendar"');
+  const calEnd = html.indexOf('data-view="records"');
+  const upcomingAt = html.indexOf('id="upcoming"');
+  assert.ok(upcomingAt > calStart && upcomingAt < calEnd, '#upcoming 必须落在日历视图内（总览不再有未来安排）');
+  assert.ok(html.indexOf('id="calendarGrid"') > upcomingAt, '未来安排排在月历上方');
+  assert.ok(!html.includes('id="exportIcsBtn"') && !/^\s*\$\('#exportIcsBtn'\)/m.test(html), '旧「导出日历」按钮与绑定必须整体拆除（半截复活 = 死绑定或重复入口）');
+  assert.ok(html.includes('class="cal-layout"') && html.includes('<aside class="panel cal-detail" id="calDetail"'), '两栏结构：月历与当日明细各占一栏，明细是独立 panel');
 });
 
 check('switchView 在切到 records 时触发 renderRecordsView（切回时台账/看板保持最新）', () => {

@@ -280,9 +280,18 @@
     .cal-dot.is-overdue { background: var(--danger); box-shadow: 0 0 0 2px var(--danger-soft); }
     .cal-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 8px 16px 0; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; }
     .cal-weekdays span { padding: 4px 6px; }
-    .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(96px, auto); gap: 6px; padding: 8px 16px 16px; }
+    /* ===== v4.29.0 两栏布局：宽屏左月历右当日明细，窄屏回落上下堆叠 =====
+       断点取 1101px：与 ≤1100px 侧栏收窄共用一条线——侧栏都还没收窄的宽度下，
+       右栏才有足够余量；再窄就硬挤两栏，chip 全变省略号反而没法扫读。 */
+    .cal-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+    @media (min-width: 1101px) {
+      .cal-layout { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); }
+      /* 明细列表可能很长：桌面端贴着视口顶部跟随滚动，点格子不用回头找面板 */
+      .cal-detail { position: sticky; top: 16px; }
+    }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(76px, auto); gap: 5px; padding: 8px 12px 12px; }
     /* v4.28.0：整格可点（点开下方当日明细），hover 反馈在 apple 层 */
-    .cal-day { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
+    .cal-day { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
     .cal-day.is-outside { background: transparent; cursor: default; }
     .cal-dayno { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
     .cal-day.is-today { border-color: var(--accent); }
@@ -307,9 +316,10 @@
     }
     .cal-chip.is-overdue { box-shadow: inset 2px 0 0 var(--danger); }
     .cal-more { padding: 1px 6px; color: var(--muted); font-size: 11px; }
-    /* ===== 当日明细面板（v4.28.0）：月格下方展开，列全部条目（含已完成），点行直达抽屉 =====
+    /* ===== 当日明细面板（v4.28.0 点格展开；v4.29.0 升级为右侧独立 .panel）=====
+       卡片外观交给 .panel 提供，这里只管内部排布。
        作者层 display:grid 会覆盖 [hidden] 的 UA display:none，必须显式补回（同 .view[hidden] 的教训）。 */
-    .cal-detail { display: grid; gap: 10px; margin: 0 16px 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+    .cal-detail { display: grid; gap: 10px; padding: 12px 14px 14px; }
     .cal-detail[hidden] { display: none; }
     .cal-detail-head { display: flex; align-items: baseline; gap: 8px; }
     .cal-detail-head h3 { margin: 0; font-size: 14px; font-weight: 720; }
@@ -332,12 +342,11 @@
     .cal-row-state.is-overdue { color: var(--danger); }
     .cal-detail-empty { color: var(--muted); font-size: 12.5px; padding: 4px 0; }
     @media (max-width: 780px) {
-      .cal-grid { grid-auto-rows: minmax(64px, auto); gap: 4px; padding: 6px 10px 12px; }
+      .cal-grid { grid-auto-rows: minmax(64px, auto); gap: 4px; padding: 6px 10px 10px; }
       .cal-weekdays { padding: 6px 10px 0; }
       .cal-legend { padding: 8px 10px 0; gap: 10px; }
       .cal-chip { font-size: 10px; padding: 1px 4px; }
       .cal-done { font-size: 10px; padding: 1px 4px; }
-      .cal-detail { margin: 0 10px 12px; }
       .cal-row { flex-wrap: wrap; gap: 6px; padding: 7px 9px; }
       .cal-row-time { flex-basis: auto; }
       .cal-row-who { flex-basis: 100%; }
@@ -837,6 +846,8 @@
     .cal-done:hover { filter: brightness(.96); }
     .cal-row { transition: background .15s var(--ease); }
     .cal-row:hover { background: var(--surface-2); }
+    /* v4.29.0：明细升级为右侧独立面板，头部加发丝线与 panel-head 同语言 */
+    .cal-detail-head { padding-bottom: 9px; border-bottom: 1px solid var(--line); }
     /* 图例「已完成」点从灰改绿：缩略图里已完成已是浅绿行，图例跟着对齐 */
     .cal-dot.is-settled { background: var(--ok); }
 
@@ -1588,22 +1599,23 @@
         </div>
       </div>
     </section>
-
+    </div>
+<div class="view" data-view="calendar" hidden>
+    <!-- 日历（v4.27.0，v4.29.0 重构）：未来安排从总览迁来当"前瞻清单"，月历是"事实视图"，
+         两份清单一页看完。宽屏两栏（左月历右明细），窄屏回落为上下堆叠。
+         周标题是静态结构，42 个月格由 renderCalendarView() 生成；图例只列四种视觉态
+         （截止 / 开始 / 已完成 / 逾期未处理），不按事件类型再细分——格子里空间太小，
+         颜色一多就变成猜色游戏。 -->
     <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
       <div class="panel-head">
         <div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">面试安排与截止日期合并排序，逾期项置顶 · 最多 6 项</div></div>
-        <button class="btn btn-small" id="exportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出日历</button>
       </div>
       <div class="schedule-list" id="upcomingList"></div>
     </aside>
-    </div>
-<div class="view" data-view="calendar" hidden>
-    <!-- 日历（v4.27.0）：关键时间按日落格。周标题是静态结构，42 个月格由 renderCalendarView() 生成。
-         图例只列四种视觉态（截止 / 开始 / 已完成 / 逾期未处理），不按事件类型再细分——
-         格子里空间太小，颜色一多就变成猜色游戏。 -->
+    <div class="cal-layout">
     <section class="panel" id="calendarPanel" aria-labelledby="calMonthTitle">
       <div class="panel-head">
-        <div><h2 class="panel-title" id="calMonthTitle">—</h2><div class="panel-caption"><span id="calMonthSummary"></span>点日期展开当日明细 · 已完成的聚合为绿行 · 点条目直达详情</div></div>
+        <div><h2 class="panel-title" id="calMonthTitle">—</h2><div class="panel-caption"><span id="calMonthSummary"></span>点日期在右侧展开明细 · 已完成的聚合为绿行 · 点条目直达详情</div></div>
         <div class="cal-actions">
           <button class="btn btn-small" id="calPrevBtn" type="button" title="上一个月">‹</button>
           <button class="btn btn-small" id="calTodayBtn" type="button" title="回到今天所在月份">今天</button>
@@ -1619,17 +1631,19 @@
       </div>
       <div class="cal-weekdays" aria-hidden="true"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
       <div class="cal-grid" id="calendarGrid"></div>
-      <!-- 当日明细（v4.28.0）：点月格展开。列表行由 renderCalendarDetail 生成，含已完成与逾期，
-           点行直达详情抽屉——月格空间有限，细节放这里而不是塞进格子里。 -->
-      <div class="cal-detail" id="calDetail" hidden>
-        <div class="cal-detail-head">
-          <h3 id="calDetailTitle">—</h3>
-          <span class="cal-detail-count" id="calDetailCount"></span>
-          <button class="text-button" id="calDetailClose" type="button" title="收起当日明细">×</button>
-        </div>
-        <div class="cal-detail-list" id="calDetailList"></div>
-      </div>
     </section>
+    <!-- 当日明细（v4.28.0 点格展开，v4.29.0 升级为右侧独立面板）：点月格展开。列表行由
+         renderCalendarDetail 生成，含已完成与逾期，点行直达详情抽屉——月格空间有限，
+         细节放这里而不是塞进格子里；宽屏贴着月历，不用左右找。 -->
+    <aside class="panel cal-detail" id="calDetail" hidden>
+      <div class="cal-detail-head">
+        <h3 id="calDetailTitle">—</h3>
+        <span class="cal-detail-count" id="calDetailCount"></span>
+        <button class="text-button" id="calDetailClose" type="button" title="收起当日明细">×</button>
+      </div>
+      <div class="cal-detail-list" id="calDetailList"></div>
+    </aside>
+    </div>
 </div>
 <div class="view" data-view="records" hidden>
     <section class="panel" id="records">
@@ -2396,7 +2410,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.28.0';
+      const APP_VERSION = '4.29.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -6668,16 +6682,16 @@
 
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
       const VIEW_META = {
-        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、洞察与未来安排——从银十到金九，每一步都在这里' },
-        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '截止与面试安排按日落格——哪天要赶、哪天要去，一眼看清' },
+        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计与洞察——从银十到金九，每一步都在这里' },
+        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '未来安排与月历——哪天要赶、哪天要去，一眼看清' },
         records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
         mail: { kicker: 'INBOX', title: '邮件提醒', subtitle: '招聘邮件解析结果，逐项复核后并入台账' }
       };
       // records 恢复为独立视图（更早版本本就是，v4.4.0 曾并入总览并重定向，v4.8.0 拆回）；
-      // upcoming（未来安排）仍留在总览，旧书签重定向兼容。
-      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
+      // upcoming（未来安排）v4.29.0 起随面板搬到日历页，旧书签重定向过去。
+      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'calendar' };
 
       // ================= 日历视图（v4.27.0，v4.28.0 扩展）：关键时间按日落格 =================
       // 浏览位置（停在哪个月）存模块变量：切走再切回不丢；刷新页面回当月——
@@ -7655,7 +7669,9 @@
       $('#toolIcsBtn').addEventListener('click', () => exportIcs());
       $('#exportRecordsBtn').addEventListener('click', exportData);
       $('#exportResumeBtn').addEventListener('click', exportResume);
-      $('#exportIcsBtn').addEventListener('click', () => exportIcs());
+      // v4.29.0：未来安排面板的「导出日历」按钮随面板迁入日历页时去重（日历头部已有
+      // 「导出 .ics」，工具页还有一个），这里的旧绑定一并拆除——面板里没有这个元素了，
+      // 保留绑定会在启动时对 null 调 addEventListener 直接崩。
       // 洞察面板：漏斗口径切换（记录 / 公司去重）+ 卡点清单点击直达记录
       $('#funnelScopeBtn').addEventListener('click', () => {
         funnelScope = funnelScope === 'company' ? 'record' : 'company';

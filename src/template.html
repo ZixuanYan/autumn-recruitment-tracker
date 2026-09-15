@@ -149,22 +149,23 @@
         </div>
       </div>
     </section>
-
+    </div>
+<div class="view" data-view="calendar" hidden>
+    <!-- 日历（v4.27.0，v4.29.0 重构）：未来安排从总览迁来当"前瞻清单"，月历是"事实视图"，
+         两份清单一页看完。宽屏两栏（左月历右明细），窄屏回落为上下堆叠。
+         周标题是静态结构，42 个月格由 renderCalendarView() 生成；图例只列四种视觉态
+         （截止 / 开始 / 已完成 / 逾期未处理），不按事件类型再细分——格子里空间太小，
+         颜色一多就变成猜色游戏。 -->
     <aside class="panel side-panel" id="upcoming" aria-labelledby="upcomingTitle">
       <div class="panel-head">
         <div><h2 class="panel-title" id="upcomingTitle">未来安排</h2><div class="panel-caption">面试安排与截止日期合并排序，逾期项置顶 · 最多 6 项</div></div>
-        <button class="btn btn-small" id="exportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出日历</button>
       </div>
       <div class="schedule-list" id="upcomingList"></div>
     </aside>
-    </div>
-<div class="view" data-view="calendar" hidden>
-    <!-- 日历（v4.27.0）：关键时间按日落格。周标题是静态结构，42 个月格由 renderCalendarView() 生成。
-         图例只列四种视觉态（截止 / 开始 / 已完成 / 逾期未处理），不按事件类型再细分——
-         格子里空间太小，颜色一多就变成猜色游戏。 -->
+    <div class="cal-layout">
     <section class="panel" id="calendarPanel" aria-labelledby="calMonthTitle">
       <div class="panel-head">
-        <div><h2 class="panel-title" id="calMonthTitle">—</h2><div class="panel-caption"><span id="calMonthSummary"></span>点日期展开当日明细 · 已完成的聚合为绿行 · 点条目直达详情</div></div>
+        <div><h2 class="panel-title" id="calMonthTitle">—</h2><div class="panel-caption"><span id="calMonthSummary"></span>点日期在右侧展开明细 · 已完成的聚合为绿行 · 点条目直达详情</div></div>
         <div class="cal-actions">
           <button class="btn btn-small" id="calPrevBtn" type="button" title="上一个月">‹</button>
           <button class="btn btn-small" id="calTodayBtn" type="button" title="回到今天所在月份">今天</button>
@@ -180,17 +181,19 @@
       </div>
       <div class="cal-weekdays" aria-hidden="true"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
       <div class="cal-grid" id="calendarGrid"></div>
-      <!-- 当日明细（v4.28.0）：点月格展开。列表行由 renderCalendarDetail 生成，含已完成与逾期，
-           点行直达详情抽屉——月格空间有限，细节放这里而不是塞进格子里。 -->
-      <div class="cal-detail" id="calDetail" hidden>
-        <div class="cal-detail-head">
-          <h3 id="calDetailTitle">—</h3>
-          <span class="cal-detail-count" id="calDetailCount"></span>
-          <button class="text-button" id="calDetailClose" type="button" title="收起当日明细">×</button>
-        </div>
-        <div class="cal-detail-list" id="calDetailList"></div>
-      </div>
     </section>
+    <!-- 当日明细（v4.28.0 点格展开，v4.29.0 升级为右侧独立面板）：点月格展开。列表行由
+         renderCalendarDetail 生成，含已完成与逾期，点行直达详情抽屉——月格空间有限，
+         细节放这里而不是塞进格子里；宽屏贴着月历，不用左右找。 -->
+    <aside class="panel cal-detail" id="calDetail" hidden>
+      <div class="cal-detail-head">
+        <h3 id="calDetailTitle">—</h3>
+        <span class="cal-detail-count" id="calDetailCount"></span>
+        <button class="text-button" id="calDetailClose" type="button" title="收起当日明细">×</button>
+      </div>
+      <div class="cal-detail-list" id="calDetailList"></div>
+    </aside>
+    </div>
 </div>
 <div class="view" data-view="records" hidden>
     <section class="panel" id="records">

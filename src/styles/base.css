@@ -259,9 +259,18 @@
     .cal-dot.is-overdue { background: var(--danger); box-shadow: 0 0 0 2px var(--danger-soft); }
     .cal-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 8px 16px 0; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; }
     .cal-weekdays span { padding: 4px 6px; }
-    .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(96px, auto); gap: 6px; padding: 8px 16px 16px; }
+    /* ===== v4.29.0 两栏布局：宽屏左月历右当日明细，窄屏回落上下堆叠 =====
+       断点取 1101px：与 ≤1100px 侧栏收窄共用一条线——侧栏都还没收窄的宽度下，
+       右栏才有足够余量；再窄就硬挤两栏，chip 全变省略号反而没法扫读。 */
+    .cal-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+    @media (min-width: 1101px) {
+      .cal-layout { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); }
+      /* 明细列表可能很长：桌面端贴着视口顶部跟随滚动，点格子不用回头找面板 */
+      .cal-detail { position: sticky; top: 16px; }
+    }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(76px, auto); gap: 5px; padding: 8px 12px 12px; }
     /* v4.28.0：整格可点（点开下方当日明细），hover 反馈在 apple 层 */
-    .cal-day { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
+    .cal-day { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
     .cal-day.is-outside { background: transparent; cursor: default; }
     .cal-dayno { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
     .cal-day.is-today { border-color: var(--accent); }
@@ -286,9 +295,10 @@
     }
     .cal-chip.is-overdue { box-shadow: inset 2px 0 0 var(--danger); }
     .cal-more { padding: 1px 6px; color: var(--muted); font-size: 11px; }
-    /* ===== 当日明细面板（v4.28.0）：月格下方展开，列全部条目（含已完成），点行直达抽屉 =====
+    /* ===== 当日明细面板（v4.28.0 点格展开；v4.29.0 升级为右侧独立 .panel）=====
+       卡片外观交给 .panel 提供，这里只管内部排布。
        作者层 display:grid 会覆盖 [hidden] 的 UA display:none，必须显式补回（同 .view[hidden] 的教训）。 */
-    .cal-detail { display: grid; gap: 10px; margin: 0 16px 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+    .cal-detail { display: grid; gap: 10px; padding: 12px 14px 14px; }
     .cal-detail[hidden] { display: none; }
     .cal-detail-head { display: flex; align-items: baseline; gap: 8px; }
     .cal-detail-head h3 { margin: 0; font-size: 14px; font-weight: 720; }
@@ -311,12 +321,11 @@
     .cal-row-state.is-overdue { color: var(--danger); }
     .cal-detail-empty { color: var(--muted); font-size: 12.5px; padding: 4px 0; }
     @media (max-width: 780px) {
-      .cal-grid { grid-auto-rows: minmax(64px, auto); gap: 4px; padding: 6px 10px 12px; }
+      .cal-grid { grid-auto-rows: minmax(64px, auto); gap: 4px; padding: 6px 10px 10px; }
       .cal-weekdays { padding: 6px 10px 0; }
       .cal-legend { padding: 8px 10px 0; gap: 10px; }
       .cal-chip { font-size: 10px; padding: 1px 4px; }
       .cal-done { font-size: 10px; padding: 1px 4px; }
-      .cal-detail { margin: 0 10px 12px; }
       .cal-row { flex-wrap: wrap; gap: 6px; padding: 7px 9px; }
       .cal-row-time { flex-basis: auto; }
       .cal-row-who { flex-basis: 100%; }

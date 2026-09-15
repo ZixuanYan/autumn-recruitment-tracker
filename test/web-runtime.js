@@ -2591,11 +2591,11 @@ check('is-entering 是瞬时态：切视图时加上、定时器到点摘掉、�
   pendingTimers[1].fn();
 });
 
-check('parseRoute：#/records 解析到 records（旧书签不再被重定向到 overview），#/upcoming 仍回总览', () => {
+check('parseRoute：#/records 解析到 records（旧书签不再被重定向到 overview），#/upcoming 回日历（v4.29.0）', () => {
   sandbox3.location.hash = '#/records';
   assert.strictEqual(sandbox3.parseRoute(), 'records');
   sandbox3.location.hash = '#/upcoming';
-  assert.strictEqual(sandbox3.parseRoute(), 'overview', '未来安排旧书签仍回总览');
+  assert.strictEqual(sandbox3.parseRoute(), 'calendar', '未来安排面板已迁入日历页，旧书签跟着去新家');
   sandbox3.location.hash = '#/jobPool';   // v4.12.0 岗位库已删：旧书签/历史记录应当回退总览，而不是白屏
   assert.strictEqual(sandbox3.parseRoute(), 'overview', '已删除的视图路由要回退到总览');
   sandbox3.location.hash = '#/不存在';

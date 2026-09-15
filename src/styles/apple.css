@@ -352,6 +352,8 @@
     .cal-done:hover { filter: brightness(.96); }
     .cal-row { transition: background .15s var(--ease); }
     .cal-row:hover { background: var(--surface-2); }
+    /* v4.29.0：明细升级为右侧独立面板，头部加发丝线与 panel-head 同语言 */
+    .cal-detail-head { padding-bottom: 9px; border-bottom: 1px solid var(--line); }
     /* 图例「已完成」点从灰改绿：缩略图里已完成已是浅绿行，图例跟着对齐 */
     .cal-dot.is-settled { background: var(--ok); }
 

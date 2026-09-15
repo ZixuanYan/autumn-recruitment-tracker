@@ -533,16 +533,16 @@
 
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
       const VIEW_META = {
-        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、洞察与未来安排——从银十到金九，每一步都在这里' },
-        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '截止与面试安排按日落格——哪天要赶、哪天要去，一眼看清' },
+        overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计与洞察——从银十到金九，每一步都在这里' },
+        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '未来安排与月历——哪天要赶、哪天要去，一眼看清' },
         records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
         mail: { kicker: 'INBOX', title: '邮件提醒', subtitle: '招聘邮件解析结果，逐项复核后并入台账' }
       };
       // records 恢复为独立视图（更早版本本就是，v4.4.0 曾并入总览并重定向，v4.8.0 拆回）；
-      // upcoming（未来安排）仍留在总览，旧书签重定向兼容。
-      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
+      // upcoming（未来安排）v4.29.0 起随面板搬到日历页，旧书签重定向过去。
+      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'calendar' };
 
       // ================= 日历视图（v4.27.0，v4.28.0 扩展）：关键时间按日落格 =================
       // 浏览位置（停在哪个月）存模块变量：切走再切回不丢；刷新页面回当月——
@@ -1520,7 +1520,9 @@
       $('#toolIcsBtn').addEventListener('click', () => exportIcs());
       $('#exportRecordsBtn').addEventListener('click', exportData);
       $('#exportResumeBtn').addEventListener('click', exportResume);
-      $('#exportIcsBtn').addEventListener('click', () => exportIcs());
+      // v4.29.0：未来安排面板的「导出日历」按钮随面板迁入日历页时去重（日历头部已有
+      // 「导出 .ics」，工具页还有一个），这里的旧绑定一并拆除——面板里没有这个元素了，
+      // 保留绑定会在启动时对 null 调 addEventListener 直接崩。
       // 洞察面板：漏斗口径切换（记录 / 公司去重）+ 卡点清单点击直达记录
       $('#funnelScopeBtn').addEventListener('click', () => {
         funnelScope = funnelScope === 'company' ? 'record' : 'company';
