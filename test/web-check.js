@@ -1843,15 +1843,24 @@ check('导航 6 项且顺序为 总览 / 日历 / 投递记录 / 邮件提醒 / 
   assert.ok(/data-route="calendar"[^>]*>[\s\S]*?#i-calendar/.test(nav), 'calendar 导航项应复用 #i-calendar 图标');
 });
 
-check('日历视图接线：路由钩子 / 中央重渲 / chip 点击直达抽屉 / 翻月与导出按钮（v4.27.0）', () => {
+check('日历视图接线：路由钩子 / 中央重渲 / 点格展开明细 / chip 与明细行直达抽屉（v4.27.0 + v4.28.0）', () => {
   assert.ok(/<div class="view" data-view="calendar" hidden>/.test(html), 'calendar 视图容器存在');
   assert.ok(html.includes('id="calendarGrid"') && html.includes('cal-weekdays'), '月格容器与周标题在模板里');
   assert.ok(/if \(route === 'calendar'\) renderCalendarView\(\);/.test(html), 'switchView 切到 calendar 要重渲日历');
   // 与 records 同一道保险：任何数据变更路径（抽屉推进 / 邮件应用）后日历都反映最新台账
   const renderFn = extractFunction(html, 'render');
   assert.ok(/renderCalendarView\(\);/.test(renderFn), 'render() 必须带上 renderCalendarView');
-  assert.ok(/\$\('#calendarGrid'\)\.addEventListener\('click'/.test(html), 'chip 点击要走事件委托');
+  // v4.28.0：月格带 data-date、已完成聚合成 .cal-done 绿行、明细面板与委托接线齐全
+  assert.ok(/data-date="\$\{cell\.iso\}"/.test(html), '月格要带 data-date（整格可点的前提）');
+  assert.ok(html.includes('class="cal-done"'), '已完成聚合绿行由渲染层生成');
+  assert.ok(html.includes('id="calDetail"') && html.includes('id="calDetailList"') && html.includes('id="calDetailClose"'), '当日明细面板骨架在模板里');
+  assert.ok(/calSelectedDate === iso \? '' : iso/.test(html), 'calSelectDay 是「再点同一天收起」的切换语义');
+  assert.ok(/chip\.closest\('\.cal-day\[data-date\]'\)/.test(html), '点 chip 要同时选中该日（抽屉关掉明细就在下面）');
   assert.ok(/openRecordFocus\(chip\.dataset\.id\)/.test(html), '点 chip 直达详情抽屉（与未来安排同一交互）');
+  assert.ok(/\$\('#calDetailList'\)\.addEventListener\('click'/.test(html) && /openRecordFocus\(row\.dataset\.id\)/.test(html), '明细行点击直达详情抽屉');
+  assert.ok(/\$\('#calDetailClose'\)\.addEventListener\('click'/.test(html), '明细面板关闭按钮已接线');
+  assert.ok(/\$\('#calMonthSummary'\)/.test(html), '本月汇总计数已接线');
+  assert.ok(html.includes("calSelectedDate = '';") && /calendarShiftMonth\(delta\) \{[\s\S]*?calSelectedDate = '';/.test(html), '翻月要取消选中（选中的是浏览状态，跟着视图走）');
   assert.ok(/\$\('#calPrevBtn'\)/.test(html) && /\$\('#calNextBtn'\)\.addEventListener/.test(html), '翻月按钮已接线');
   assert.ok(/\$\('#calTodayBtn'\)/.test(html), '「今天」按钮已接线');
   assert.ok(/\$\('#calExportIcsBtn'\)\.addEventListener\('click', \(\) => exportIcs\(\)\)/.test(html), '导出 .ics 复用工具页同一条流程，不得另写一份');

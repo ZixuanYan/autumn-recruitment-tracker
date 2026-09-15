@@ -1271,10 +1271,10 @@ check('看板卡片：已了结的关键时间不上板，完成态由「已完�
   sandbox2.records[0].events = []; sandbox2.records[1].events = [];
 });
 
-check('renderCalendarView：42 格落位、完成态灰显、溢出收进 +N（v4.27.0）', () => {
+check('renderCalendarView：42 格落位、未完成的才上格、溢出收进 +N（v4.28.0）', () => {
   // renderCalendarView 住在 20-runtime 段，sandbox2 没装整段——按函数抽取注入，同其他段的做法
   vm.runInContext(
-    ['let calViewYear = 0; let calViewMonth = 0;', extractFunction(html, 'calendarShiftMonth'), extractFunction(html, 'renderCalendarView')].join('\n'),
+    ['let calViewYear = 0; let calViewMonth = 0; let calSelectedDate = \'\';', extractFunction(html, 'calendarShiftMonth'), extractFunction(html, 'calSelectDay'), extractFunction(html, 'renderCalendarView'), extractFunction(html, 'renderCalendarDetail')].join('\n'),
     sandbox2,
     { filename: 'calendar-view.js' }
   );
@@ -1283,17 +1283,17 @@ check('renderCalendarView：42 格落位、完成态灰显、溢出收进 +N（v
     const d = new Date(Date.now() + off * 86400000);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
-  // r1：完成态的截止（规则③ → is-settled）+ 同一天 4 条溢出成「+1」
+  // r1：未完成的 4 条同日截止 → 3 条 chip + 「+1」
   sandbox2.records[0].events = [
     { id: 'ev-m1', type: '截止', at: ymd(2), allDay: true },
     { id: 'ev-m2', type: '截止', at: ymd(2), allDay: true },
     { id: 'ev-m3', type: '截止', at: ymd(2), allDay: true },
     { id: 'ev-m4', type: '其他', at: ymd(2), allDay: true }
   ];
-  sandbox2.records[0].timeline = [{ stage: '网申投递', at: ymd(-5), note: '', done: true, doneAt: ymd(-5) }];
+  sandbox2.records[0].timeline = [{ stage: '网申投递', at: ymd(-5), note: '' }];
   // r2：正常未来的面试（kind-start 带时刻）
   sandbox2.records[1].events = [{ id: 'ev-itv', type: '面试', at: `${ymd(3)}T14:00`, allDay: false }];
-  vm.runInContext('calViewYear = 0; calViewMonth = 0;', sandbox2);
+  vm.runInContext('calViewYear = 0; calViewMonth = 0; calSelectedDate = \'\';', sandbox2);
   sandbox2.renderCalendarView();
   const grid = sandbox2.$('#calendarGrid').innerHTML;
   // 注意 cal-dayno 也以 class="cal-day 开头，正则要锚住结尾的引号或空格，否则 42 会数成 84
@@ -1301,8 +1301,19 @@ check('renderCalendarView：42 格落位、完成态灰显、溢出收进 +N（v
   assert.ok(grid.includes('cal-day is-today'), '今天要有高亮格');
   const now = new Date();
   assert.strictEqual(sandbox2.$('#calMonthTitle').textContent, `${now.getFullYear()}年${now.getMonth() + 1}月`, '标题显示当前年月');
-  assert.ok(grid.includes('cal-chip kind-deadline is-settled'), '完成态的截止 chip 灰显');
-  assert.ok(grid.includes('cal-chip kind-start"') && grid.includes('面试 14:00'), '面试 chip 带类型与时刻，正常配色');
+  // 汇总只统计当前显示月：月初/月末跑测试时 ymd(2)/ymd(3) 可能落到下个月，期望值按实际日期算。
+  // r1 是 3 条截止 + 1 条其他，截止计数只算前 3 条
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const inMonth = [ymd(2), ymd(2), ymd(2), ymd(2), ymd(3)].filter(d => d.startsWith(monthKey));
+  const dlInMonth = [ymd(2), ymd(2), ymd(2)].filter(d => d.startsWith(monthKey)).length;
+  assert.strictEqual(
+    sandbox2.$('#calMonthSummary').textContent,
+    inMonth.length ? `本月 ${inMonth.length} 项（截止 ${dlInMonth} · 已完成 0）· ` : '本月暂无安排 · ',
+    '标题行有本月汇总'
+  );
+  assert.ok(!grid.includes('is-settled'), '已完成不再以 chip 形态上格');
+  assert.ok(grid.includes('cal-chip kind-deadline') && grid.includes('cal-chip kind-start"'), '截止 / 面试 chip 配色区分');
+  assert.ok(grid.includes('面试 14:00'), '面试 chip 带类型与时刻');
   assert.ok(/data-id="r1"/.test(grid) && /data-id="r2"/.test(grid), '每个 chip 都带记录 id（点击直达详情）');
   assert.ok(grid.includes('+1'), '同格第 4 条溢出收进「+N」');
   // 翻月：往未来翻一个月后，今天的格子不再高亮，标题随之变化（用 Date 换算避免 12 月跨年翻车）
@@ -1312,6 +1323,51 @@ check('renderCalendarView：42 格落位、完成态灰显、溢出收进 +N（v
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   assert.strictEqual(sandbox2.$('#calMonthTitle').textContent, `${nextMonth.getFullYear()}年${nextMonth.getMonth() + 1}月`, '翻月后标题 +1');
   sandbox2.records[0].events = []; sandbox2.records[1].events = [];
+});
+
+check('renderCalendarView：已完成聚合为浅绿行，点选日期展开当日明细（v4.28.0）', () => {
+  seedRecords();
+  const ymd = off => {
+    const d = new Date(Date.now() + off * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  // r1：规则③完成态，同日 2 条截止 → 该格只有绿行；r2：未来面试 → chip；r3（Offer 终态）截止 → 绿行
+  sandbox2.records[0].events = [
+    { id: 'ev-d1', type: '截止', at: ymd(-1), allDay: true },
+    { id: 'ev-d2', type: '截止', at: ymd(-1), allDay: true }
+  ];
+  sandbox2.records[0].timeline = [{ stage: '网申投递', at: ymd(-5), note: '', done: true, doneAt: ymd(-5) }];
+  sandbox2.records[1].events = [{ id: 'ev-itv', type: '面试', at: `${ymd(3)}T14:00`, allDay: false }];
+  sandbox2.records[2].events = [{ id: 'ev-tdl', type: '截止', at: ymd(4), allDay: true }];
+  vm.runInContext('calViewYear = 0; calViewMonth = 0; calSelectedDate = \'\';', sandbox2);
+  sandbox2.renderCalendarView();
+  const grid = sandbox2.$('#calendarGrid').innerHTML;
+  assert.ok(!grid.includes('cal-chip kind-deadline is-settled'), '已完成的不再逐条排灰 chip');
+  assert.ok(grid.includes('2 条已完成') && grid.includes('1 条已完成'), 'r1 的 2 条 / r3 的 1 条各自聚合成绿行');
+  assert.ok(!grid.includes('data-id="r1"') && !grid.includes('data-id="r3"'), '已完成条目不占 chip 的 data-id');
+  assert.ok(/class="cal-day[^"]*" data-date="/.test(grid), '月格带 data-date（整格可点的前提）');
+  // 选中 r2 面试那天 → 格高亮 + 明细面板展开
+  vm.runInContext(`calSelectedDate = '${ymd(3)}';`, sandbox2);
+  sandbox2.renderCalendarView();
+  assert.ok(new RegExp(`class="cal-day[^"]*is-selected[^"]*" data-date="${ymd(3)}"`).test(sandbox2.$('#calendarGrid').innerHTML), '选中格带 is-selected');
+  assert.strictEqual(sandbox2.$('#calDetail').hidden, false, '明细面板展开');
+  assert.ok(sandbox2.$('#calDetailTitle').textContent.includes(' · 周'), '标题带日期与星期');
+  assert.strictEqual(sandbox2.$('#calDetailCount').textContent, '1 项', '计数与条目数一致');
+  const listHtml = sandbox2.$('#calDetailList').innerHTML;
+  assert.ok(/cal-row[^>]*data-id="r2"/.test(listHtml), '明细行带记录 id（点行直达抽屉）');
+  assert.ok(listHtml.includes('14:00') && listHtml.includes('面试'), '明细行带时刻与类型');
+  assert.ok(!listHtml.includes('已完成'), '未来安排不带完成标注');
+  // 空日：如实提示，不给假信息
+  vm.runInContext(`calSelectedDate = '${ymd(9)}';`, sandbox2);
+  sandbox2.renderCalendarView();
+  assert.ok(sandbox2.$('#calDetailList').innerHTML.includes('当天没有安排'), '空日提示「当天没有安排」');
+  assert.strictEqual(sandbox2.$('#calDetailCount').textContent, '', '空日不显示计数');
+  // 再点同一天 = 取消选中 → 面板收起；翻月同样取消
+  vm.runInContext(`calSelectDay('${ymd(9)}')`, sandbox2);
+  assert.strictEqual(sandbox2.$('#calDetail').hidden, true, '再点同一天收起面板');
+  vm.runInContext(`calSelectedDate = '${ymd(3)}'; calendarShiftMonth(1)`, sandbox2);
+  assert.strictEqual(sandbox2.$('#calDetail').hidden, true, '翻月取消选中并收起面板');
+  sandbox2.records[0].events = []; sandbox2.records[1].events = []; sandbox2.records[2].events = [];
 });
 
 check('recordRowHtml：同公司 +N 岗位 chip、机构、截止倒计时分级', () => {

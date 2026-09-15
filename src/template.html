@@ -164,7 +164,7 @@
          格子里空间太小，颜色一多就变成猜色游戏。 -->
     <section class="panel" id="calendarPanel" aria-labelledby="calMonthTitle">
       <div class="panel-head">
-        <div><h2 class="panel-title" id="calMonthTitle">—</h2><div class="panel-caption">截止与面试 / 笔试按日落格 · 已完成的灰显 · 点条目看详情</div></div>
+        <div><h2 class="panel-title" id="calMonthTitle">—</h2><div class="panel-caption"><span id="calMonthSummary"></span>点日期展开当日明细 · 已完成的聚合为绿行 · 点条目直达详情</div></div>
         <div class="cal-actions">
           <button class="btn btn-small" id="calPrevBtn" type="button" title="上一个月">‹</button>
           <button class="btn btn-small" id="calTodayBtn" type="button" title="回到今天所在月份">今天</button>
@@ -180,6 +180,16 @@
       </div>
       <div class="cal-weekdays" aria-hidden="true"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
       <div class="cal-grid" id="calendarGrid"></div>
+      <!-- 当日明细（v4.28.0）：点月格展开。列表行由 renderCalendarDetail 生成，含已完成与逾期，
+           点行直达详情抽屉——月格空间有限，细节放这里而不是塞进格子里。 -->
+      <div class="cal-detail" id="calDetail" hidden>
+        <div class="cal-detail-head">
+          <h3 id="calDetailTitle">—</h3>
+          <span class="cal-detail-count" id="calDetailCount"></span>
+          <button class="text-button" id="calDetailClose" type="button" title="收起当日明细">×</button>
+        </div>
+        <div class="cal-detail-list" id="calDetailList"></div>
+      </div>
     </section>
 </div>
 <div class="view" data-view="records" hidden>

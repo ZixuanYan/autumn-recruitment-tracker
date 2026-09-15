@@ -334,13 +334,26 @@
 
     /* ===== v4.27.0：已完成徽章与日历视图的 Apple 视觉 =====
        结构骨架在 base.css（等高格子 / 颜色都用本层变量，暗色自动跟随），这里只做打磨：
-       条目 hover 的轻反馈、today 格的强调、翻月按钮的方圆。 */
+       条目 hover 的轻反馈、today / 选中格的强调、周末列浅底、翻月按钮的方圆。 */
     .settled-chip { letter-spacing: .01em; }
     .cal-actions .btn-small { min-width: 32px; }
     .cal-chip { transition: filter .15s var(--ease); }
     .cal-chip:hover { filter: brightness(.96); }
-    .cal-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .cal-chip:focus-visible, .cal-done:focus-visible, .cal-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .cal-day.is-today { box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+    /* v4.28.0：周六（7n+6）/ 周日（7n）两列浅底，按周扫读更不费眼；跨月补位格保持透明，
+       否则首尾行的补位会被误读成"这个月从周末开始就没有安排"。 */
+    .cal-day:nth-child(7n), .cal-day:nth-child(7n+6) { background: var(--surface-soft); }
+    .cal-day.is-outside { background: transparent; }
+    .cal-day:hover { border-color: var(--line-strong); }
+    .cal-day.is-selected { box-shadow: 0 0 0 2px var(--accent); background: var(--accent-soft); }
+    .cal-day.is-today.is-selected { box-shadow: 0 0 0 2px var(--accent); }
+    .cal-done { transition: filter .15s var(--ease); }
+    .cal-done:hover { filter: brightness(.96); }
+    .cal-row { transition: background .15s var(--ease); }
+    .cal-row:hover { background: var(--surface-2); }
+    /* 图例「已完成」点从灰改绿：缩略图里已完成已是浅绿行，图例跟着对齐 */
+    .cal-dot.is-settled { background: var(--ok); }
 
     /* ===== v4.4.0：洞察面板（漏斗 / sparkline / 停留 / 指标 / 卡点 / Offer 对比）===== */
     .insights { margin-bottom: 16px; }
