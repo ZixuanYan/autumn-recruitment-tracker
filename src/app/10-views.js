@@ -283,6 +283,11 @@
         const dlHit = nearestDeadlineEvent(record.events, nowBoard);
         // v4.24.0：传完整 at（截止可能带时刻），截成日期会让「今天 18:00 截止」看不到小时级紧急度
         const dl = dlHit ? deadlineInfo(dlHit.event.at, nowBoard) : null;
+        // v4.27.0：已了结的关键时间不再上板（规则③：当前阶段完成 → 截止也了结）。
+        // 卡片 chip 只放「要行动」的信号——要赶的倒计时、要动的停滞、要推的完成；
+        // 已了结的事在表格「最近时间」的已完成徽章与日历里有位置，板上出现只会添噪，
+        // 而且当前阶段完成时卡片已有「已完成 · 待推进」，再排一枚「已完成」就是同一句话出现两次。
+        const dlSettled = !!(dlHit && isEventSettled(record, dlHit.event));
         // 终态（Offer / 已结束）：截止日期、最近安排、停滞提醒都不再有意义——
         // 事情已经结束了，继续催跟进只是噪声。
         const terminal = ['Offer', '已结束'].includes(record.stage);
@@ -298,10 +303,11 @@
         const chips = [];
         // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
         // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
-        if (dl && !terminal) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
+        if (dl && !terminal && !dlSettled) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
         // 全天事件（只有日期）用 formatDate —— formatDateTime 会把 "2026-09-20" 当 UTC 午夜解析，
         // 在东八区显示成「9月20日周日 08:00」，凭空多出一个不存在的时间点。
-        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(`${schedule.event.type} · ${schedule.event.allDay ? formatDate(String(schedule.event.at).slice(0, 10)) : formatDateTime(schedule.event.at)}`)}</span>`);
+        const scheduleSettled = !!(schedule && isEventSettled(record, schedule.event));
+        if (schedule && !terminal && !scheduleSettled) chips.push(`<span class="board-chip">${escapeHtml(`${schedule.event.type} · ${schedule.event.allDay ? formatDate(String(schedule.event.at).slice(0, 10)) : formatDateTime(schedule.event.at)}`)}</span>`);
         // 停滞提醒只对进行中的阶段有意义。findStalled 本身就用 isActive 排除了
         // 待投递/Offer/已结束，所以这里是**第二道防线**：万一将来 isActive 放宽，
         // 终态卡片也不会长出"停滞 N 天"（已结束还催你跟进是荒谬的）。
@@ -493,12 +499,14 @@
         }
         // v4.19.0：关键时间按类型逐条列出（截止 / 面试 / 笔试测评 / 其他），按时间升序。
         // 此前是两个固定字段（安排时间 / 截止日期），一条记录只能各有一个时间。
+        // v4.27.0：已了结的事件（完成覆盖 / 流程越过 / 规则③当前阶段完成后的截止）补「（已完成）」
+        // 文本标注——facts 的 value 走 escapeHtml，纯文本最省事，不值得为灰显开 HTML 白名单口子。
         const drawerEvents = (Array.isArray(record.events) ? record.events : [])
           .map(ev => ({ ev, at: ev.allDay ? parseDay(ev.at) : parseLocal(ev.at) }))
           .filter(x => x.at)
           .sort((a, b) => a.at - b.at);
         const eventsValue = drawerEvents.length
-          ? drawerEvents.map(x => `${x.ev.type}：${x.ev.allDay ? formatDate(String(x.ev.at).slice(0, 10)) : formatDateTime(x.ev.at)}`).join('；')
+          ? drawerEvents.map(x => `${x.ev.type}：${x.ev.allDay ? formatDate(String(x.ev.at).slice(0, 10)) : formatDateTime(x.ev.at)}${isEventSettled(record, x.ev) ? '（已完成）' : ''}`).join('；')
           : '—';
         // v4.20.0：这条记录关联过的招聘邮件（应用邮件建议时写入）。倒序 = 最近关联的在前。
         const mailRefs = Array.isArray(record.mailRefs) ? record.mailRefs : [];

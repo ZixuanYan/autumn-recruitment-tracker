@@ -1208,6 +1208,112 @@ check('台账「最近时间」：已了结的安排灰显不报红，真逾期�
   sandbox2.records[0].events = []; sandbox2.records[1].events = []; sandbox2.records[2].events = [];
 });
 
+check('台账「最近时间」：完成态的时间带绿色「已完成」徽章，已了结的截止不再挂倒计时（v4.27.0）', () => {
+  // 用户实测反馈：「已完成网申投递」下面还排着一行黄字「截止 · 还剩 2 天」——完成与倒计时自相矛盾。
+  // 规则③（当前阶段完成 → 截止了结）打通后，最近时间列要给出明确的完成标注并撤掉倒计时。
+  seedRecords();
+  const ymd = off => {
+    const d = new Date(Date.now() + off * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const groups = sandbox2.groupRecordsByCompany(sandbox2.records);
+  const index = new Map(groups.map(g => [g.key, g.records]));
+  const groupKeyById = sandbox2.companyGroupIndex(sandbox2.records);
+  const rowNo = new Map(sandbox2.records.map((r, i) => [r.id, String(i + 1).padStart(4, '0')]));
+  // 场景一（原样复刻用户反馈）：网申投递已完成，名下的截止还剩 2 天
+  sandbox2.records[0].events = [{ id: 'ev-dl', type: '截止', at: ymd(2), allDay: true }];
+  sandbox2.records[0].timeline = [{ stage: '网申投递', at: ymd(-5), note: '', done: true, doneAt: ymd(-5) }];
+  const doneRow = sandbox2.recordRowHtml(sandbox2.records[0], rowNo, index, groupKeyById);
+  assert.ok(doneRow.includes('is-settled'), '完成态的截止也要转灰');
+  assert.ok(doneRow.includes('settled-chip') && doneRow.includes('已完成'), '要有绿色「已完成」徽章');
+  assert.ok(!doneRow.includes('deadline-hint') && !doneRow.includes('还剩'), '已了结的截止不再挂倒计时');
+  assert.ok(doneRow.includes('截止 · '), '但日期本身仍要显示（历史该看得到）');
+  // 场景二：v4.26.0 的「已推进过去」安排（过去已了结的面试）也补上徽章
+  sandbox2.records[0].events = [{ id: 'ev-i', type: '面试', at: `${ymd(-3)}T09:00`, allDay: false }];
+  sandbox2.records[0].timeline = [{ stage: '已投递', at: ymd(-9), note: '' }, { stage: '一面', at: ymd(-2), note: '' }];
+  const pastDoneRow = sandbox2.recordRowHtml(sandbox2.records[0], rowNo, index, groupKeyById);
+  assert.ok(pastDoneRow.includes('is-settled') && pastDoneRow.includes('settled-chip'), '过去已了结的安排同样带徽章');
+  // 场景三：未完成的截止照旧倒计时，不得被误标完成
+  sandbox2.records[1].events = [{ id: 'ev-dl2', type: '截止', at: ymd(2), allDay: true }];
+  sandbox2.records[1].timeline = [{ stage: '已投递', at: ymd(-5), note: '' }];
+  const openRow = sandbox2.recordRowHtml(sandbox2.records[1], rowNo, index, groupKeyById);
+  assert.ok(openRow.includes('deadline-hint') && openRow.includes('还剩 2 天'), '未完成的截止照旧倒计时');
+  assert.ok(!openRow.includes('settled-chip') && !openRow.includes('is-settled'), '未完成不得出现已完成标注');
+  sandbox2.records[0].events = []; sandbox2.records[1].events = [];
+});
+
+check('看板卡片：已了结的关键时间不上板，完成态由「已完成 · 待推进」承接（v4.27.0）', () => {
+  seedRecords();
+  const ymd = off => {
+    const d = new Date(Date.now() + off * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  // 完成态：截止被规则③了结 → 卡片只剩「已完成 · 待推进」，不再排倒计时 chip；
+  // 未来面试**不**被规则③吞掉（isEventSettled 的语义边界），chip 照排。
+  sandbox2.records[0].events = [
+    { id: 'ev-dl', type: '截止', at: ymd(2), allDay: true },
+    { id: 'ev-i', type: '面试', at: `${ymd(3)}T14:00`, allDay: false }
+  ];
+  sandbox2.records[0].timeline = [{ stage: '一面', at: ymd(-2), note: '', done: true, doneAt: ymd(-2) }];
+  const doneCard = sandbox2.boardCardHtml(sandbox2.records[0]);
+  assert.ok(!doneCard.includes('board-chip warn') && !doneCard.includes('还剩'), '已了结的截止不再排倒计时 chip');
+  assert.ok(doneCard.includes('面试 · '), '未来的面试安排照常上板（规则③只静音截止）');
+  assert.ok(doneCard.includes('已完成 · 待推进'), '完成态 chip 仍在（板上的完成语义由它单独承载）');
+  // 过去已了结的面试（完成日覆盖事件日，规则①）→「下一个安排」chip 也不上板
+  sandbox2.records[0].events = [{ id: 'ev-i2', type: '面试', at: `${ymd(-3)}T09:00`, allDay: false }];
+  const pastCard = sandbox2.boardCardHtml(sandbox2.records[0]);
+  assert.ok(!pastCard.includes('面试 · '), '已了结的过去安排 chip 不上板');
+  // 未完成：倒计时照旧
+  sandbox2.records[1].events = [{ id: 'ev-dl2', type: '截止', at: ymd(2), allDay: true }];
+  sandbox2.records[1].timeline = [{ stage: '已投递', at: ymd(-5), note: '' }];
+  const openCard = sandbox2.boardCardHtml(sandbox2.records[1]);
+  assert.ok(openCard.includes('还剩 2 天'), '未完成的截止照常排倒计时 chip');
+  sandbox2.records[0].events = []; sandbox2.records[1].events = [];
+});
+
+check('renderCalendarView：42 格落位、完成态灰显、溢出收进 +N（v4.27.0）', () => {
+  // renderCalendarView 住在 20-runtime 段，sandbox2 没装整段——按函数抽取注入，同其他段的做法
+  vm.runInContext(
+    ['let calViewYear = 0; let calViewMonth = 0;', extractFunction(html, 'calendarShiftMonth'), extractFunction(html, 'renderCalendarView')].join('\n'),
+    sandbox2,
+    { filename: 'calendar-view.js' }
+  );
+  seedRecords();
+  const ymd = off => {
+    const d = new Date(Date.now() + off * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  // r1：完成态的截止（规则③ → is-settled）+ 同一天 4 条溢出成「+1」
+  sandbox2.records[0].events = [
+    { id: 'ev-m1', type: '截止', at: ymd(2), allDay: true },
+    { id: 'ev-m2', type: '截止', at: ymd(2), allDay: true },
+    { id: 'ev-m3', type: '截止', at: ymd(2), allDay: true },
+    { id: 'ev-m4', type: '其他', at: ymd(2), allDay: true }
+  ];
+  sandbox2.records[0].timeline = [{ stage: '网申投递', at: ymd(-5), note: '', done: true, doneAt: ymd(-5) }];
+  // r2：正常未来的面试（kind-start 带时刻）
+  sandbox2.records[1].events = [{ id: 'ev-itv', type: '面试', at: `${ymd(3)}T14:00`, allDay: false }];
+  vm.runInContext('calViewYear = 0; calViewMonth = 0;', sandbox2);
+  sandbox2.renderCalendarView();
+  const grid = sandbox2.$('#calendarGrid').innerHTML;
+  // 注意 cal-dayno 也以 class="cal-day 开头，正则要锚住结尾的引号或空格，否则 42 会数成 84
+  assert.strictEqual((grid.match(/class="cal-day[" ]/g) || []).length, 42, '月历固定 42 格');
+  assert.ok(grid.includes('cal-day is-today'), '今天要有高亮格');
+  const now = new Date();
+  assert.strictEqual(sandbox2.$('#calMonthTitle').textContent, `${now.getFullYear()}年${now.getMonth() + 1}月`, '标题显示当前年月');
+  assert.ok(grid.includes('cal-chip kind-deadline is-settled'), '完成态的截止 chip 灰显');
+  assert.ok(grid.includes('cal-chip kind-start"') && grid.includes('面试 14:00'), '面试 chip 带类型与时刻，正常配色');
+  assert.ok(/data-id="r1"/.test(grid) && /data-id="r2"/.test(grid), '每个 chip 都带记录 id（点击直达详情）');
+  assert.ok(grid.includes('+1'), '同格第 4 条溢出收进「+N」');
+  // 翻月：往未来翻一个月后，今天的格子不再高亮，标题随之变化（用 Date 换算避免 12 月跨年翻车）
+  vm.runInContext('calendarShiftMonth(1)', sandbox2);
+  const nextGrid = sandbox2.$('#calendarGrid').innerHTML;
+  assert.ok(!nextGrid.includes('cal-day is-today'), '下月的格子里没有今天');
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  assert.strictEqual(sandbox2.$('#calMonthTitle').textContent, `${nextMonth.getFullYear()}年${nextMonth.getMonth() + 1}月`, '翻月后标题 +1');
+  sandbox2.records[0].events = []; sandbox2.records[1].events = [];
+});
+
 check('recordRowHtml：同公司 +N 岗位 chip、机构、截止倒计时分级', () => {
   seedRecords();
   // 截止日按「今天 +2 天」动态生成，避免测试随真实日期漂移而失效

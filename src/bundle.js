@@ -19,7 +19,7 @@ module.exports = {
     'app/00-bootstrap.js',
     { module: 'core', files: [
       'core/dates.js', 'core/ics.js', 'core/company.js',
-      'core/insights.js', 'core/dedupe.js', 'core/city.js', 'core/text.js'
+      'core/insights.js', 'core/calendar.js', 'core/dedupe.js', 'core/city.js', 'core/text.js'
     ] },
     'app/10-views.js',
     { module: 'mail', files: ['mail/pure.js'] },

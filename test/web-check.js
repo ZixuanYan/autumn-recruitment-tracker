@@ -340,8 +340,8 @@ function extractFunction(src, name) {
 
 console.log('v4.4.0 核心纯函数单测（截止日 / 日程事件 / ICS / 公司分组 / 漏斗 / 停留 / 卡点 / 查重）');
 const coreSrc = loadSrc.coreSrc;
-check('CORE 纯函数模块已按清单加载（7 个文件）', () => {
-  assert.strictEqual(loadSrc.moduleFiles('core').length, 7, 'src/core/ 应为 7 个文件（v4.26.0 加了 text.js）');
+check('CORE 纯函数模块已按清单加载（8 个文件）', () => {
+  assert.strictEqual(loadSrc.moduleFiles('core').length, 8, 'src/core/ 应为 8 个文件（v4.27.0 加了 calendar.js）');
   assert.ok(coreSrc.length > 500, `CORE 块过短或未读到：${coreSrc.length}`);
 });
 
@@ -443,8 +443,9 @@ const core = new Function(
    return {
      parseDay, daysUntil, deadlineInfo, collectScheduleEvents, icsEscape, buildIcs, foldIcsLine, utf8Octets,
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
-     computeDailyApplications, sparklinePath, findStalled, findAwaitingAdvance, findUpcomingDeadlines, collectAlerts,
+     computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
      nextTimeEvent, nearestDeadlineEvent, isEventPast, isEventSettled,
+     buildMonthGrid, collectCalendarEvents,
      sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs, mailIdOf,
      sanitizeMailArchive, unionMailArchive, pruneMailArchive, referencedMailIds, archiveSuggestionMail, backfillMailArchive,
      sanitizeMailArchiveEntry, sanitizeMailLinks, mailArchiveEntrySize,
@@ -853,7 +854,7 @@ check('normalizeRecord 保留里程碑 done/doneAt，且未完成时清空 doneA
   assert.strictEqual(rec.timeline[1].doneAt, '2026-09-06');
   assert.strictEqual(rec.timeline[0].done, false, '未标记的里程碑 done 应被规范化成 false，而不是 undefined');
   assert.strictEqual(rec.timeline[0].doneAt, '');
-  // 取消完成后 doneAt 必须清空：残留日期会让「待推进 N 天」从一个过期时间点起算
+  // 取消完成后 doneAt 必须清空：残留日期会让 isEventSettled 的完成覆盖判定（规则①）从一个过期时间点起算
   const cleared = core.normalizeRecord({
     id: 'd2', company: 'A', position: 'p', city: 'c', applicationDate: '2026-09-01',
     timeline: [{ stage: '测评', at: '2026-09-05', done: false, doneAt: '2026-09-06' }]
@@ -870,15 +871,16 @@ check('findStalled 排除当前阶段已完成的记录（球在对方手里，�
   assert.deepStrictEqual(ids, ['open'], '已完成的当前阶段不计入停滞');
 });
 
-check('findAwaitingAdvance：已完成且超过阈值才提示「待推进」，与 findStalled 互斥', () => {
+check('v4.27.0：「待推进」提醒整体移除——已完成的内容不再进「需要关注」', () => {
   const recs = [
     { id: 'old', company: 'A', position: 'p', stage: '测评', applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '测评', at: dayOffset(-13, NOW), done: true, doneAt: dayOffset(-13, NOW) }] },
     { id: 'fresh', company: 'B', position: 'p', stage: '测评', applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '测评', at: dayOffset(-1, NOW), done: true, doneAt: dayOffset(-1, NOW) }] },
-    { id: 'open', company: 'C', position: 'p', stage: '测评', applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '测评', at: dayOffset(-13, NOW) }] }
+    { id: 'open', company: 'C', position: 'p', stage: '测评', applicationDate: dayOffset(-30, NOW), timeline: [{ stage: '测评', at: dayOffset(-20, NOW) }] }
   ];
-  assert.deepStrictEqual(core.findAwaitingAdvance(recs, NOW, 7).map(x => x.record.id), ['old'], '只有「已完成且超 7 天」进待推进');
-  assert.ok(!core.findStalled(recs, NOW, 7).some(x => x.record.id === 'old'), '同一记录不得同时是停滞与待推进');
-  assert.ok(core.collectAlerts(recs, NOW, 10).some(a => a.text.includes('考虑推进到下一步')), '待推进要进「需要关注」');
+  const alerts = core.collectAlerts(recs, NOW, 10);
+  assert.ok(!alerts.some(a => a.text.includes('考虑推进到下一步')), '「已完成 N 天，考虑推进」不再出现');
+  assert.ok(!alerts.some(a => a.id === 'old'), '已完成且无其他卡点的记录不应有任何提醒');
+  assert.ok(alerts.some(a => a.id === 'open' && a.text.includes('停在「测评」')), '未完成的照旧按停滞提醒');
 });
 
 check('完成态贯通：记录行 / 看板 / 步骤条 / 表单勾选 / 抽屉动作都接上', () => {
@@ -1553,7 +1555,7 @@ check('邮件解密密钥挪到云同步弹窗，留空时回落到同步口令�
     '读文件时两把都要试：只试本机密钥的话，「MAIL_ENC_KEY 与口令同一串」这个推荐配法会直接失效');
 });
 
-check('isEventSettled：完成动作 / 更晚的里程碑都算了结；未完成的当天安排仍要提醒（v4.23.0）', () => {
+check('isEventSettled：完成动作 / 更晚的里程碑 / 当前阶段完成都算了结；未完成的当天安排仍要提醒', () => {
   const dl = evt(DL, dayOffset(-3, NOW));
   const itv = evt('面试', `${dayOffset(-3, NOW)}T09:00`);
   // ① 完成动作覆盖（完成日 ≥ 事件日）——面试当天忘了标、次日补标，一样算了结
@@ -1565,6 +1567,16 @@ check('isEventSettled：完成动作 / 更晚的里程碑都算了结；未完�
   assert.strictEqual(core.isEventSettled({ timeline: [{ stage: 'AI面试', at: dayOffset(-3, NOW) }, { stage: '二面', at: dayOffset(1, NOW) }] }, itv), true);
   // ② 刻意不管截止：硬期限的逾期不因"后来推进了"而变成不需要知道
   assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '测评', at: dayOffset(2, NOW) }] }, dl), false);
+  // ③（v4.27.0）当前阶段（末条里程碑）完成 → 该记录的**截止**一律了结，对未来的截止也成立：
+  // 网申这一步都做完了，"网申截止还剩 2 天"只是催人（用户实测反馈的原场景）。
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '网申投递', at: dayOffset(-5, NOW), done: true, doneAt: dayOffset(-5, NOW) }] }, evt(DL, dayOffset(2, NOW))), true,
+    '末条完成 → 名下的截止（哪怕还剩 2 天）已了结');
+  // ③ 只看**末条**：更早的里程碑完成不代表当前阶段的截止无效（一面完成、笔试截止仍然要赶）
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '已投递', at: dayOffset(-9, NOW), done: true, doneAt: dayOffset(-9, NOW) }, { stage: '笔试', at: dayOffset(-2, NOW) }] }, evt(DL, dayOffset(2, NOW))), false,
+    '只有末条完成才静音：推进到下一阶段后截止自动恢复');
+  // ③ 只对截止生效：未来的面试安排不因当前阶段完成而消失（它仍是日历上的事实）
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '测评', at: dayOffset(-5, NOW), done: true, doneAt: dayOffset(-5, NOW) }] }, evt('面试', `${dayOffset(1, NOW)}T09:00`)), false,
+    '规则③不吞未来的面试安排');
   // 边界：里程碑日期 = 事件当天（今天 9:00 的面试、还没标记完成）→ 那正是该提醒的，不能被吞掉
   const todayItv = evt('面试', `${dayOffset(0, NOW)}T09:00`);
   assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '一面', at: dayOffset(0, NOW) }] }, todayItv), false, '严格大于：同一天不算被越过');
@@ -1581,6 +1593,66 @@ check('未来安排 / 需要关注：已了结的事件不再出现，未了结�
   const alerts = core.collectAlerts(recs, NOW, 10);
   assert.ok(alerts.some(a => a.id === 'open'), '未完成的逾期面试仍要进「需要关注」');
   assert.ok(!alerts.some(a => a.id === 'done'), '已完成的不得再进「需要关注」（否则面板会被做掉的事占满）');
+});
+
+check('v4.27.0 规则③贯通：当前阶段完成 → 未来截止退出未来安排与需要关注；推进后恢复', () => {
+  const dlAt = dayOffset(2, NOW);
+  const applied = { id: 'applied', company: '山岚智能', position: '算法工程师', stage: '网申投递', events: [evt(DL, dlAt)], timeline: [{ stage: '网申投递', at: dayOffset(-5, NOW), done: true, doneAt: dayOffset(-5, NOW) }] };
+  const advanced = { ...applied, id: 'advanced', stage: '笔试', timeline: [applied.timeline[0], { stage: '笔试', at: dayOffset(-1, NOW) }] };
+  const open = { id: 'open', company: 'B', position: 'p', stage: '已投递', events: [evt(DL, dlAt)], timeline: [{ stage: '已投递', at: dayOffset(-5, NOW) }] };
+  assert.deepStrictEqual(core.collectScheduleEvents([applied, open], NOW, 6).map(e => e.record.id), ['open'], '完成态的截止退出「未来安排」');
+  assert.ok(!core.collectAlerts([applied, open], NOW, 10).some(a => a.id === 'applied'), '完成态的截止不再进「需要关注」（不再「还剩 2 天」）');
+  assert.ok(core.collectAlerts([applied, open], NOW, 10).some(a => a.id === 'open'), '未完成的截止照旧提醒');
+  // 推进到下一阶段后末条不再是 done，截止自动恢复（规则③的语义边界，已在方案里与用户确认）
+  assert.ok(core.collectScheduleEvents([advanced, open], NOW, 6).some(e => e.record.id === 'advanced'), '推进后截止恢复出现');
+});
+
+check('buildMonthGrid：6 行 × 7 列、周一起始、跨月补位带 inMonth 标记', () => {
+  // 2026-09-01 是周二：周一开头的首行要补 1 格 8 月；9 月有 30 天，42 格里尾部补到 10 月
+  const cells = core.buildMonthGrid(2026, 8, new Date('2026-09-15T12:00:00'));
+  assert.strictEqual(cells.length, 42, '固定 42 格（6 行 × 7 列）');
+  assert.strictEqual(cells[0].iso, '2026-08-31', '2026-09-01 是周二，首格补周一 8/31');
+  assert.strictEqual(cells[0].inMonth, false);
+  assert.strictEqual(cells[1].iso, '2026-09-01', '第 2 格起是当月 1 号');
+  assert.strictEqual(cells.filter(c => c.inMonth).length, 30, '当月恰好 30 格');
+  assert.strictEqual(cells.filter(c => c.day === 1 && c.inMonth).length, 1);
+  assert.strictEqual(cells[41].iso, '2026-10-11', '末格补到 10 月');
+  // isToday 用传入的 now 判定，不偷读系统时钟（否则测试结果随时区/日期漂移）
+  const withToday = core.buildMonthGrid(2026, 8, new Date('2026-09-10T12:00:00'));
+  assert.deepStrictEqual(withToday.filter(c => c.isToday).map(c => c.iso), ['2026-09-10'], 'isToday 恰好标中一天');
+  assert.deepStrictEqual(core.buildMonthGrid('x', null), [], '非法入参返回空数组而不是抛错');
+});
+
+check('collectCalendarEvents：全量条目含已了结（日历是事实视图）、按日分组字段齐、排序稳定', () => {
+  const NOW2 = new Date('2026-09-15T12:00:00');
+  const recs = [
+    // 已完成的网申 + 还剩 2 天的截止：规则③判定 settled，日历照列、打标记
+    { id: 'r1', company: '山岚智能', position: '算法', stage: '网申投递', events: [evt(DL, '2026-09-17'), evt('面试', '2026-09-18T14:00')], timeline: [{ stage: '网申投递', at: '2026-09-10', done: true, doneAt: '2026-09-10' }] },
+    // 已过且没人处理的逾期面试：overdue 标记给渲染层标红
+    { id: 'r2', company: 'B', position: 'p', stage: 'AI面试', events: [evt('面试', '2026-09-10T09:00')], timeline: [{ stage: 'AI面试', at: '2026-09-09' }] },
+    // 终态记录的事件全部 terminal（渲染层灰显）
+    { id: 'r3', company: 'C', position: 'p', stage: '已结束', events: [evt(DL, '2026-09-20')], timeline: [{ stage: '已结束', at: '2026-09-14' }] }
+  ];
+  const items = core.collectCalendarEvents(recs, NOW2);
+  assert.strictEqual(items.length, 4, '三条记录四个事件全量返回（settled 也在内）');
+  const r1dl = items.find(i => i.record.id === 'r1' && i.kind === 'deadline');
+  assert.strictEqual(r1dl.date, '2026-09-17');
+  assert.strictEqual(r1dl.time, '', '全天事件 time 为空串');
+  assert.strictEqual(r1dl.settled, true, '规则③：当前阶段完成 → 截止 settled');
+  assert.strictEqual(r1dl.overdue, false, 'settled 不算逾期');
+  const r1itv = items.find(i => i.record.id === 'r1' && i.kind === 'start');
+  assert.strictEqual(r1itv.time, '14:00', '定时事件带 HH:mm');
+  assert.strictEqual(r1itv.settled, false, '未来的面试不因网申完成而消失');
+  assert.strictEqual(r1itv.kind, 'start');
+  const r2itv = items.find(i => i.record.id === 'r2');
+  assert.strictEqual(r2itv.past, true);
+  assert.strictEqual(r2itv.overdue, true, '已过未处理 → 渲染层标红');
+  const r3dl = items.find(i => i.record.id === 'r3');
+  assert.strictEqual(r3dl.terminal, true, '终态记录带 terminal 标记');
+  assert.strictEqual(r3dl.overdue, false, '终态不报逾期');
+  // 排序：日期升序 → 全天在前 → 时刻升序；9/17 截止（全天）排在 9/18 14:00 面试之前
+  assert.deepStrictEqual(items.map(i => `${i.record.id}:${i.type}`), ['r2:面试', 'r1:截止', 'r1:面试', 'r3:截止']);
+  assert.deepStrictEqual(core.collectCalendarEvents([], NOW2), [], '空台账返回空数组');
 });
 
 check('backfillMailArchive：只用建议里的正文补空归档，绝不覆盖已有正文（v4.23.1）', () => {
@@ -1756,17 +1828,33 @@ check('ROUTE_ALIASES：records 恢复为独立视图，upcoming 仍并入总览'
   assert.strictEqual(aliases.overview, 'overview');
 });
 
-check('导航 5 项且顺序为 总览 / 投递记录 / 邮件提醒 / 我的简历 / 工具', () => {
+check('导航 6 项且顺序为 总览 / 日历 / 投递记录 / 邮件提醒 / 我的简历 / 工具', () => {
   const navStart = html.indexOf('<nav class="sidebar-nav">');
   const navEnd = html.indexOf('</nav>', navStart);
   const nav = html.slice(navStart, navEnd);
   const routes = [...nav.matchAll(/data-route="([\w-]+)"/g)].map(m => m[1]);
   const labels = [...nav.matchAll(/<span>([^<]+)<\/span>/g)].map(m => m[1]);
   // v4.12.0：岗位库整页删除（它是截图识别与腾讯文档同步的唯一落点，那两个入口已随之移除）
-  assert.deepStrictEqual(routes, ['overview', 'records', 'mail', 'resume', 'tools']);
-  assert.deepStrictEqual(labels, ['总览', '投递记录', '邮件提醒', '我的简历', '工具']);
+  // v4.27.0：新增「日历」入口，排在总览之后（它本质是总览「未来安排」的空间化视图）
+  assert.deepStrictEqual(routes, ['overview', 'calendar', 'records', 'mail', 'resume', 'tools']);
+  assert.deepStrictEqual(labels, ['总览', '日历', '投递记录', '邮件提醒', '我的简历', '工具']);
   // 投递记录复用既有 #i-stack sprite，不新增 symbol
   assert.ok(/data-route="records"[^>]*>[\s\S]*?#i-stack/.test(nav), 'records 导航项应复用 #i-stack 图标');
+  assert.ok(/data-route="calendar"[^>]*>[\s\S]*?#i-calendar/.test(nav), 'calendar 导航项应复用 #i-calendar 图标');
+});
+
+check('日历视图接线：路由钩子 / 中央重渲 / chip 点击直达抽屉 / 翻月与导出按钮（v4.27.0）', () => {
+  assert.ok(/<div class="view" data-view="calendar" hidden>/.test(html), 'calendar 视图容器存在');
+  assert.ok(html.includes('id="calendarGrid"') && html.includes('cal-weekdays'), '月格容器与周标题在模板里');
+  assert.ok(/if \(route === 'calendar'\) renderCalendarView\(\);/.test(html), 'switchView 切到 calendar 要重渲日历');
+  // 与 records 同一道保险：任何数据变更路径（抽屉推进 / 邮件应用）后日历都反映最新台账
+  const renderFn = extractFunction(html, 'render');
+  assert.ok(/renderCalendarView\(\);/.test(renderFn), 'render() 必须带上 renderCalendarView');
+  assert.ok(/\$\('#calendarGrid'\)\.addEventListener\('click'/.test(html), 'chip 点击要走事件委托');
+  assert.ok(/openRecordFocus\(chip\.dataset\.id\)/.test(html), '点 chip 直达详情抽屉（与未来安排同一交互）');
+  assert.ok(/\$\('#calPrevBtn'\)/.test(html) && /\$\('#calNextBtn'\)\.addEventListener/.test(html), '翻月按钮已接线');
+  assert.ok(/\$\('#calTodayBtn'\)/.test(html), '「今天」按钮已接线');
+  assert.ok(/\$\('#calExportIcsBtn'\)\.addEventListener\('click', \(\) => exportIcs\(\)\)/.test(html), '导出 .ics 复用工具页同一条流程，不得另写一份');
 });
 
 check('switchView 在切到 records 时触发 renderRecordsView（切回时台账/看板保持最新）', () => {
@@ -2200,8 +2288,8 @@ check('岗位库与截图识别已整体删除，不得半截复活（v4.12.0）
   const dirs = /const DIRS = \[[^\]]*\]/.exec(buildSrc);
   assert.ok(dirs, 'build.js 里找不到 DIRS 白名单');
   assert.ok(!dirs[0].includes('ocr'), `build.js 的 DIRS 不应再有 ocr：${dirs[0]}`);
-  // 导航与视图数量：删掉岗位库后是 5 个视图，多一个少一个都说明结构被动过
-  assert.strictEqual((html.match(/<div class="view" data-view=/g) || []).length, 5, '应有 5 个视图容器');
+  // 导航与视图数量：v4.27.0 起是 6 个视图（新增日历），多一个少一个都说明结构被动过
+  assert.strictEqual((html.match(/<div class="view" data-view=/g) || []).length, 6, '应有 6 个视图容器');
 });
 
 // ─────────────────────────────────────────────

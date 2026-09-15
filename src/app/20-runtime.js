@@ -534,6 +534,7 @@
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
       const VIEW_META = {
         overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、洞察与未来安排——从银十到金九，每一步都在这里' },
+        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '截止与面试安排按日落格——哪天要赶、哪天要去，一眼看清' },
         records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
@@ -541,7 +542,55 @@
       };
       // records 恢复为独立视图（更早版本本就是，v4.4.0 曾并入总览并重定向，v4.8.0 拆回）；
       // upcoming（未来安排）仍留在总览，旧书签重定向兼容。
-      const ROUTE_ALIASES = { overview: 'overview', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
+      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
+
+      // ================= 日历视图（v4.27.0）：关键时间按日落格 =================
+      // 浏览位置（停在哪个月）存模块变量：切走再切回不丢；刷新页面回当月——
+      // 这只是浏览状态而非值得跨设备记住的偏好，不进 uiPrefs。
+      let calViewYear = 0;
+      let calViewMonth = 0; // 0-11
+
+      function calendarShiftMonth(delta) {
+        const d = new Date(calViewYear, calViewMonth + delta, 1);
+        calViewYear = d.getFullYear();
+        calViewMonth = d.getMonth();
+        renderCalendarView();
+      }
+
+      function renderCalendarView() {
+        const grid = $('#calendarGrid');
+        if (!grid) return;
+        const now = new Date();
+        if (!calViewYear) { calViewYear = now.getFullYear(); calViewMonth = now.getMonth(); }
+        const title = $('#calMonthTitle');
+        if (title) title.textContent = `${calViewYear}年${calViewMonth + 1}月`;
+        // 关键时间按日分组一次算好，渲染每格时按 iso 取（42 格里大多数是空的）
+        const byDate = new Map();
+        for (const item of collectCalendarEvents(records, now)) {
+          if (!byDate.has(item.date)) byDate.set(item.date, []);
+          byDate.get(item.date).push(item);
+        }
+        // 每格最多 3 条，溢出收进「+N」的 title——格子高度有限，塞满会把月历变成流水账
+        const MAX_PER_CELL = 3;
+        grid.innerHTML = buildMonthGrid(calViewYear, calViewMonth, now).map(cell => {
+          const items = byDate.get(cell.iso) || [];
+          const shown = items.slice(0, MAX_PER_CELL);
+          const rest = items.length - shown.length;
+          const chips = shown.map(item => {
+            const who = item.record.company || '未填公司';
+            const what = `${item.type}${item.time ? ` ${item.time}` : ''}`;
+            const done = item.settled || item.terminal;
+            const full = `${who} · ${item.record.position || '未填岗位'} · ${what}${done ? '（已完成）' : ''}`;
+            const state = done ? ' is-settled' : (item.overdue ? ' is-overdue' : '');
+            return `<button class="cal-chip kind-${item.kind}${state}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}">${escapeHtml(`${who} ${what}`)}</button>`;
+          }).join('');
+          const more = rest > 0
+            ? `<span class="cal-more" title="${escapeHtml(items.slice(MAX_PER_CELL).map(i => `${i.record.company || '未填公司'} ${i.type}${i.time ? ` ${i.time}` : ''}`).join('\n'))}">+${rest}</span>`
+            : '';
+          return `<div class="cal-day${cell.inMonth ? '' : ' is-outside'}${cell.isToday ? ' is-today' : ''}"><span class="cal-dayno">${cell.day}</span><div class="cal-items">${chips}${more}</div></div>`;
+        }).join('');
+      }
+
 
       // ================= 工具页卡片状态：云同步连接情况与快照数量 =================
       async function renderToolCards() {
@@ -623,6 +672,7 @@
         }
         if (route === 'tools') renderToolCards();
         if (route === 'mail') renderMailView();
+        if (route === 'calendar') renderCalendarView();
         // 从别的视图切回投递记录时重渲台账/看板：数据可能在别处变更过（如邮件应用、抽屉推进），
         // 隐藏视图多渲染一次无副作用，换取各视图始终一致。
         if (route === 'records') renderRecordsView();
@@ -1610,6 +1660,21 @@
         const item = event.target.closest('.schedule-item[data-id]');
         if (item) openRecordFocus(item.dataset.id);
       });
+      // 日历（v4.27.0）：格内条目点击直达详情抽屉，与未来安排 / 对比矩阵同一交互；
+      // 翻月与「今天」只动 calViewYear/Month 再重渲，导出 .ics 直接复用工具页同一条流程。
+      $('#calendarGrid').addEventListener('click', event => {
+        const chip = event.target.closest('.cal-chip[data-id]');
+        if (chip) openRecordFocus(chip.dataset.id);
+      });
+      $('#calPrevBtn').addEventListener('click', () => calendarShiftMonth(-1));
+      $('#calNextBtn').addEventListener('click', () => calendarShiftMonth(1));
+      $('#calTodayBtn').addEventListener('click', () => {
+        const n = new Date();
+        calViewYear = n.getFullYear();
+        calViewMonth = n.getMonth();
+        renderCalendarView();
+      });
+      $('#calExportIcsBtn').addEventListener('click', () => exportIcs());
       els.upcoming.addEventListener('keydown', event => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         const item = event.target.closest('.schedule-item[data-id]');

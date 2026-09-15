@@ -84,10 +84,12 @@
         return { line, area, max, total: list.reduce((s, c) => s + (Number(c.count) || 0), 0), dots };
       }
 
-      // ----- 卡点：停滞 / 待推进 / 临期截止 / 逾期安排 / 同公司多岗位 -----
+      // ----- 卡点：停滞 / 临期截止 / 逾期安排 / 同公司多岗位 -----
       // 停滞 = 该你动、却迟迟没动。当前阶段已标记完成（done）的不算停滞：
       // 那一步已经做完、球在对方手里，再按「停滞」催办会让人分不清是谁卡住了。
-      // 这类记录交给 findAwaitingAdvance 单独提示「已完成 N 天，考虑推进」。
+      // v4.27.0：原先由 findAwaitingAdvance 单独提示的「已完成 N 天，考虑推进」按用户反馈
+      // 一并去掉——已完成的事不该再以任何姿态出现在「需要关注」里；完成态在台账里已有
+      // 「已完成」chip 与绿标承载（v4.18.0），不需要洞察再催一遍。
       function findStalled(records, now = new Date(), thresholdDays = 14) {
         const out = [];
         for (const r of (Array.isArray(records) ? records : [])) {
@@ -101,24 +103,6 @@
           // 直接减带时刻的 now 会因为半天偏移把「20 天」算成「21 天」
           const days = -daysUntil(lastDate, now);
           if (days >= thresholdDays) out.push({ record: r, stage: r.stage, days });
-        }
-        return out.sort((a, b) => b.days - a.days);
-      }
-      // 待推进：当前阶段已标记完成、却迟迟没有推进到下一步的记录（v4.18.0）。
-      // 与 findStalled 互斥——findStalled 已排除末条 done，两者合起来覆盖
-      // 「该我动」（停滞）与「该往前推」（待推进）两种不同状态。
-      function findAwaitingAdvance(records, now = new Date(), thresholdDays = 7) {
-        const span = Number(thresholdDays) > 0 ? Number(thresholdDays) : 7;
-        const out = [];
-        for (const r of (Array.isArray(records) ? records : [])) {
-          if (!isActive(r)) continue;
-          const tl = Array.isArray(r.timeline) ? r.timeline : [];
-          const last = tl.length ? tl[tl.length - 1] : null;
-          if (!last || !last.done) continue;
-          const from = parseDay(last.doneAt || last.at);
-          if (!from) continue;
-          const days = -daysUntil(from, now);
-          if (days >= span) out.push({ record: r, stage: r.stage, doneAt: last.doneAt || last.at, days });
         }
         return out.sort((a, b) => b.days - a.days);
       }
@@ -165,10 +149,6 @@
         }
         for (const item of findStalled(list, now, 14)) {
           alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：停在「${item.stage}」已 ${item.days} 天` });
-        }
-        // 已完成的当前阶段久未推进：换了措辞，不与「停滞」混为一谈
-        for (const item of findAwaitingAdvance(list, now, 7)) {
-          alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：「${item.stage}」已完成 ${item.days} 天，考虑推进到下一步` });
         }
         for (const group of groupRecordsByCompany(list)) {
           const open = group.records.filter(r => isActive(r));

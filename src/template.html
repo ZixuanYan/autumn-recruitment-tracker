@@ -48,6 +48,7 @@
       </div>
       <nav class="sidebar-nav">
         <a class="nav-item is-active" data-route="overview" href="#/overview"><span class="nav-icon"><svg><use href="#i-grid"/></svg></span><span>总览</span></a>
+        <a class="nav-item" data-route="calendar" href="#/calendar"><span class="nav-icon"><svg><use href="#i-calendar"/></svg></span><span>日历</span></a>
         <a class="nav-item" data-route="records" href="#/records"><span class="nav-icon"><svg><use href="#i-stack"/></svg></span><span>投递记录</span></a>
         <a class="nav-item" data-route="mail" href="#/mail"><span class="nav-icon"><svg><use href="#i-mail"/></svg></span><span>邮件提醒</span><span class="nav-badge" id="mailNavBadge" hidden></span></a>
         <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon"><svg><use href="#i-file"/></svg></span><span>我的简历</span></a>
@@ -157,6 +158,30 @@
       <div class="schedule-list" id="upcomingList"></div>
     </aside>
     </div>
+<div class="view" data-view="calendar" hidden>
+    <!-- 日历（v4.27.0）：关键时间按日落格。周标题是静态结构，42 个月格由 renderCalendarView() 生成。
+         图例只列四种视觉态（截止 / 开始 / 已完成 / 逾期未处理），不按事件类型再细分——
+         格子里空间太小，颜色一多就变成猜色游戏。 -->
+    <section class="panel" id="calendarPanel" aria-labelledby="calMonthTitle">
+      <div class="panel-head">
+        <div><h2 class="panel-title" id="calMonthTitle">—</h2><div class="panel-caption">截止与面试 / 笔试按日落格 · 已完成的灰显 · 点条目看详情</div></div>
+        <div class="cal-actions">
+          <button class="btn btn-small" id="calPrevBtn" type="button" title="上一个月">‹</button>
+          <button class="btn btn-small" id="calTodayBtn" type="button" title="回到今天所在月份">今天</button>
+          <button class="btn btn-small" id="calNextBtn" type="button" title="下一个月">›</button>
+          <button class="btn btn-small" id="calExportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出 .ics</button>
+        </div>
+      </div>
+      <div class="cal-legend" aria-hidden="true">
+        <span class="cal-legend-item"><i class="cal-dot kind-deadline"></i>截止</span>
+        <span class="cal-legend-item"><i class="cal-dot kind-start"></i>面试 / 笔试 / 其他</span>
+        <span class="cal-legend-item"><i class="cal-dot is-settled"></i>已完成</span>
+        <span class="cal-legend-item"><i class="cal-dot is-overdue"></i>逾期未处理</span>
+      </div>
+      <div class="cal-weekdays" aria-hidden="true"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
+      <div class="cal-grid" id="calendarGrid"></div>
+    </section>
+</div>
 <div class="view" data-view="records" hidden>
     <section class="panel" id="records">
       <div class="panel-head">

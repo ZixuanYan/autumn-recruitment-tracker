@@ -128,6 +128,9 @@
        红字留给真正没人处理的逾期项，否则这一列天天亮红灯，真逾期反而被淹没。
        仍按正常字重显示日期，只是退到次要色，与「暂未安排」的观感区分开。 */
     .schedule-time.is-settled { color: var(--muted); font-weight: 500; }
+    /* v4.27.0：已了结的时间在灰显之外再给一枚明确的「已完成」徽章——灰色表达"不紧急"，
+       徽章表达"这件事有着落"，让完成态不用靠猜。绿色走「已达成」语义（同 .stage-done-chip）。 */
+    .settled-chip { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); font-size: 11px; font-weight: 650; white-space: nowrap; }
     .badge {
       display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 1px 8px;
       border: 1px solid var(--stage-border, var(--line-strong)); border-radius: 6px;
@@ -242,6 +245,44 @@
        这里曾经有一份 .18s / 6px 的旧定义，同特异性且 apple.css 在后，被整条压死——
        改它不会有任何效果，也不报错。删掉，避免下一次有人在这里白改。
        关闭动画请走本文件下方的 @media (prefers-reduced-motion) 块（通配符 + !important，压得住任何文件）。 */
+
+    /* ================= 日历视图（v4.27.0）=================
+       结构骨架：6 行 × 7 列等高格子。grid-auto-rows 给下限而不是 1fr——
+       月历固定 42 格，等高才有"同一张月历"的观感；上限 auto 让某天条目多时整行一起长，
+       内容永远可读（挤不进去的条目由 renderCalendarView 的「+N」承接，不靠 CSS 裁切）。 */
+    .cal-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cal-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 16px 0; color: var(--muted); font-size: 11.5px; }
+    .cal-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+    .cal-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .cal-dot.kind-deadline { background: var(--danger); }
+    .cal-dot.is-settled { background: var(--muted); }
+    .cal-dot.is-overdue { background: var(--danger); box-shadow: 0 0 0 2px var(--danger-soft); }
+    .cal-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 8px 16px 0; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; }
+    .cal-weekdays span { padding: 4px 6px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(96px, auto); gap: 6px; padding: 8px 16px 16px; }
+    .cal-day { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .cal-day.is-outside { background: transparent; }
+    .cal-dayno { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+    .cal-day.is-today { border-color: var(--accent); }
+    .cal-day.is-today .cal-dayno { color: var(--accent-ink); font-weight: 700; }
+    .cal-items { display: grid; gap: 3px; min-width: 0; }
+    .cal-chip {
+      min-width: 0; max-width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 2px 6px;
+      background: var(--surface-soft); color: var(--ink-2); font-size: 11px; font-weight: 600; line-height: 1.5;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+    }
+    .cal-chip.kind-deadline { background: var(--danger-soft); color: var(--danger); }
+    .cal-chip.kind-start { background: var(--accent-soft); color: var(--accent-ink); }
+    /* 已完成退到灰：信息仍在（历史该看得到），只是不再抢颜色；完整信息在 title 里 */
+    .cal-chip.is-settled { background: var(--surface-soft); color: var(--muted); }
+    .cal-chip.is-overdue { box-shadow: inset 2px 0 0 var(--danger); }
+    .cal-more { padding: 1px 6px; color: var(--muted); font-size: 11px; }
+    @media (max-width: 780px) {
+      .cal-grid { grid-auto-rows: minmax(64px, auto); gap: 4px; padding: 6px 10px 12px; }
+      .cal-weekdays { padding: 6px 10px 0; }
+      .cal-legend { padding: 8px 10px 0; gap: 10px; }
+      .cal-chip { font-size: 10px; padding: 1px 4px; }
+    }
 
     /* ================= 简历编辑器增强 ================= */
     .resume-layout { padding: 20px 22px 22px; display: grid; gap: 16px; }

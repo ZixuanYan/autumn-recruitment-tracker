@@ -149,6 +149,9 @@
        红字留给真正没人处理的逾期项，否则这一列天天亮红灯，真逾期反而被淹没。
        仍按正常字重显示日期，只是退到次要色，与「暂未安排」的观感区分开。 */
     .schedule-time.is-settled { color: var(--muted); font-weight: 500; }
+    /* v4.27.0：已了结的时间在灰显之外再给一枚明确的「已完成」徽章——灰色表达"不紧急"，
+       徽章表达"这件事有着落"，让完成态不用靠猜。绿色走「已达成」语义（同 .stage-done-chip）。 */
+    .settled-chip { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); font-size: 11px; font-weight: 650; white-space: nowrap; }
     .badge {
       display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 1px 8px;
       border: 1px solid var(--stage-border, var(--line-strong)); border-radius: 6px;
@@ -263,6 +266,44 @@
        这里曾经有一份 .18s / 6px 的旧定义，同特异性且 apple.css 在后，被整条压死——
        改它不会有任何效果，也不报错。删掉，避免下一次有人在这里白改。
        关闭动画请走本文件下方的 @media (prefers-reduced-motion) 块（通配符 + !important，压得住任何文件）。 */
+
+    /* ================= 日历视图（v4.27.0）=================
+       结构骨架：6 行 × 7 列等高格子。grid-auto-rows 给下限而不是 1fr——
+       月历固定 42 格，等高才有"同一张月历"的观感；上限 auto 让某天条目多时整行一起长，
+       内容永远可读（挤不进去的条目由 renderCalendarView 的「+N」承接，不靠 CSS 裁切）。 */
+    .cal-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cal-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 16px 0; color: var(--muted); font-size: 11.5px; }
+    .cal-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+    .cal-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .cal-dot.kind-deadline { background: var(--danger); }
+    .cal-dot.is-settled { background: var(--muted); }
+    .cal-dot.is-overdue { background: var(--danger); box-shadow: 0 0 0 2px var(--danger-soft); }
+    .cal-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 8px 16px 0; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; }
+    .cal-weekdays span { padding: 4px 6px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(96px, auto); gap: 6px; padding: 8px 16px 16px; }
+    .cal-day { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .cal-day.is-outside { background: transparent; }
+    .cal-dayno { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+    .cal-day.is-today { border-color: var(--accent); }
+    .cal-day.is-today .cal-dayno { color: var(--accent-ink); font-weight: 700; }
+    .cal-items { display: grid; gap: 3px; min-width: 0; }
+    .cal-chip {
+      min-width: 0; max-width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 2px 6px;
+      background: var(--surface-soft); color: var(--ink-2); font-size: 11px; font-weight: 600; line-height: 1.5;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+    }
+    .cal-chip.kind-deadline { background: var(--danger-soft); color: var(--danger); }
+    .cal-chip.kind-start { background: var(--accent-soft); color: var(--accent-ink); }
+    /* 已完成退到灰：信息仍在（历史该看得到），只是不再抢颜色；完整信息在 title 里 */
+    .cal-chip.is-settled { background: var(--surface-soft); color: var(--muted); }
+    .cal-chip.is-overdue { box-shadow: inset 2px 0 0 var(--danger); }
+    .cal-more { padding: 1px 6px; color: var(--muted); font-size: 11px; }
+    @media (max-width: 780px) {
+      .cal-grid { grid-auto-rows: minmax(64px, auto); gap: 4px; padding: 6px 10px 12px; }
+      .cal-weekdays { padding: 6px 10px 0; }
+      .cal-legend { padding: 8px 10px 0; gap: 10px; }
+      .cal-chip { font-size: 10px; padding: 1px 4px; }
+    }
 
     /* ================= 简历编辑器增强 ================= */
     .resume-layout { padding: 20px 22px 22px; display: grid; gap: 16px; }
@@ -737,6 +778,16 @@
     .side-company { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .badge-sm { min-height: 19px; padding: 0 7px 0 6px; font-size: 11px; }
     .badge-sm::before { width: 5px; height: 5px; }
+
+    /* ===== v4.27.0：已完成徽章与日历视图的 Apple 视觉 =====
+       结构骨架在 base.css（等高格子 / 颜色都用本层变量，暗色自动跟随），这里只做打磨：
+       条目 hover 的轻反馈、today 格的强调、翻月按钮的方圆。 */
+    .settled-chip { letter-spacing: .01em; }
+    .cal-actions .btn-small { min-width: 32px; }
+    .cal-chip { transition: filter .15s var(--ease); }
+    .cal-chip:hover { filter: brightness(.96); }
+    .cal-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .cal-day.is-today { box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
 
     /* ===== v4.4.0：洞察面板（漏斗 / sparkline / 停留 / 指标 / 卡点 / Offer 对比）===== */
     .insights { margin-bottom: 16px; }
@@ -1385,6 +1436,7 @@
       </div>
       <nav class="sidebar-nav">
         <a class="nav-item is-active" data-route="overview" href="#/overview"><span class="nav-icon"><svg><use href="#i-grid"/></svg></span><span>总览</span></a>
+        <a class="nav-item" data-route="calendar" href="#/calendar"><span class="nav-icon"><svg><use href="#i-calendar"/></svg></span><span>日历</span></a>
         <a class="nav-item" data-route="records" href="#/records"><span class="nav-icon"><svg><use href="#i-stack"/></svg></span><span>投递记录</span></a>
         <a class="nav-item" data-route="mail" href="#/mail"><span class="nav-icon"><svg><use href="#i-mail"/></svg></span><span>邮件提醒</span><span class="nav-badge" id="mailNavBadge" hidden></span></a>
         <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon"><svg><use href="#i-file"/></svg></span><span>我的简历</span></a>
@@ -1494,6 +1546,30 @@
       <div class="schedule-list" id="upcomingList"></div>
     </aside>
     </div>
+<div class="view" data-view="calendar" hidden>
+    <!-- 日历（v4.27.0）：关键时间按日落格。周标题是静态结构，42 个月格由 renderCalendarView() 生成。
+         图例只列四种视觉态（截止 / 开始 / 已完成 / 逾期未处理），不按事件类型再细分——
+         格子里空间太小，颜色一多就变成猜色游戏。 -->
+    <section class="panel" id="calendarPanel" aria-labelledby="calMonthTitle">
+      <div class="panel-head">
+        <div><h2 class="panel-title" id="calMonthTitle">—</h2><div class="panel-caption">截止与面试 / 笔试按日落格 · 已完成的灰显 · 点条目看详情</div></div>
+        <div class="cal-actions">
+          <button class="btn btn-small" id="calPrevBtn" type="button" title="上一个月">‹</button>
+          <button class="btn btn-small" id="calTodayBtn" type="button" title="回到今天所在月份">今天</button>
+          <button class="btn btn-small" id="calNextBtn" type="button" title="下一个月">›</button>
+          <button class="btn btn-small" id="calExportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出 .ics</button>
+        </div>
+      </div>
+      <div class="cal-legend" aria-hidden="true">
+        <span class="cal-legend-item"><i class="cal-dot kind-deadline"></i>截止</span>
+        <span class="cal-legend-item"><i class="cal-dot kind-start"></i>面试 / 笔试 / 其他</span>
+        <span class="cal-legend-item"><i class="cal-dot is-settled"></i>已完成</span>
+        <span class="cal-legend-item"><i class="cal-dot is-overdue"></i>逾期未处理</span>
+      </div>
+      <div class="cal-weekdays" aria-hidden="true"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
+      <div class="cal-grid" id="calendarGrid"></div>
+    </section>
+</div>
 <div class="view" data-view="records" hidden>
     <section class="panel" id="records">
       <div class="panel-head">
@@ -1948,7 +2024,7 @@
               done,
               // doneAt 必须是合法 YYYY-MM-DD，否则清空（非法值绝不进持久化）。
               // 只清日期、不清 done：「完成了但日期脏」保留"已完成"这个事实更安全
-              // （findAwaitingAdvance 会回落到里程碑日期起算），否则用户的完成记录会被静默抹掉。
+              // （isEventSettled 的规则①会回落到里程碑日期起算），否则用户的完成记录会被静默抹掉。
               doneAt: done && /^\d{4}-\d{2}-\d{2}$/.test(rawDoneAt) ? rawDoneAt : ''
             };
           })
@@ -2259,7 +2335,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.26.0';
+      const APP_VERSION = '4.27.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -3719,6 +3795,9 @@
         renderInsights();
         renderRecordsView();
         renderUpcoming();
+        // 日历视图（v4.27.0）跟着全量重渲：与 records 同理，隐藏时多渲一次无副作用，
+        // 换取从抽屉推进 / 邮件应用等任何数据变更路径回来时格子都反映最新台账。
+        renderCalendarView();
       }
       function renderStats() {
         const now = new Date();
@@ -4080,8 +4159,12 @@
         // **没人处理**的逾期。此前只看「是不是过去了」，于是推进完的阶段仍挂着红字「已过期」，
         // 天天亮红灯，真逾期反而被淹没（用户实测反馈）。
         // 已了结的**仍然显示**（列名就叫「最近时间」，历史该看得到），只是转灰、不再报警号。
-        const settledPast = !!(nextEv && !nextEv.future) && isEventSettled(record, nextEv.event);
-        const overdue = !!(nextEv && !nextEv.future) && !settledPast && !terminal;
+        // v4.27.0：判定不再限过去事件——isEventSettled 规则③让「当前阶段已完成」的截止
+        //（哪怕还剩 2 天）也算已了结，灰显加「已完成」徽章，与下面倒计时的抑制配套。
+        const settled = !!(nextEv && isEventSettled(record, nextEv.event));
+        const settledShown = settled && !terminal;
+        const settledChipHtml = settledShown ? '<span class="settled-chip">已完成</span>' : '';
+        const overdue = !!(nextEv && !nextEv.future) && !settled && !terminal;
         const canAdvance = record.stage !== '已结束';
         // 完成态（v4.18.0）：当前阶段（时间线末条）是否已标记完成。终态若已被标记，也允许取消。
         const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
@@ -4090,9 +4173,13 @@
         const dlHit = nearestDeadlineEvent(record.events, now);
         // v4.24.0：传完整 at —— 带时刻的截止（`2026-09-17T18:00`）截成 10 位就丢掉小时级倒计时
         const dl = dlHit ? deadlineInfo(dlHit.event.at, now) : null;
+        // v4.27.0：已了结的截止不再挂倒计时。「已完成网申投递」下面还排着一行黄字
+        // 「截止 · 还剩 2 天」等于自相矛盾。v4.26.0 曾刻意保留倒计时（注释见 git 历史），
+        // 那时没有规则③、倒计时是唯一的紧急信号；现在完成态有绿标承接，倒计时卸任。
+        const dlSettled = !!(dlHit && isEventSettled(record, dlHit.event));
         // 注意：即使「最近时间」本身就是这条截止，也**保留**倒计时提示——它带黄/红的紧急色，
         // 去掉它等于把"还剩 2 天 / 已过期"这个信号藏了；日期重复出现只是外观小瑕疵。
-        const dlHtml = dl && !terminal
+        const dlHtml = dl && !terminal && !dlSettled
           ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
         const companyHtml = record.applicationUrl
           ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
@@ -4110,7 +4197,7 @@
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.done ? '（已完成）' : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span>${curDone ? '<span class="stage-done-chip" title="当前阶段已标记完成，尚未推进">已完成</span>' : ''}</td>
-          <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}${settledPast && !terminal ? ' is-settled' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
+          <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}${settledShown ? ' is-settled' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}${settledChipHtml}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
           <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
           <td data-label="操作"><div class="row-actions">
             ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
@@ -4326,10 +4413,20 @@
       // 不会因为后来推进了阶段就变得不需要知道。
       // ② 必须严格大于：当前阶段的里程碑日期等于事件当天时（"今天 9:00 的面试、还没标记完成"）
       // 那正是该提醒的逾期项，用 ≥ 会被自己的规则吞掉。
+      //   ③（v4.27.0）当前阶段（时间线**末条**）已标记完成时，该记录的**截止**一律已了结——
+      // 对过去与未来的截止都成立：网申这一步都做完了，"网申截止还剩 2 天"只是催人。
+      // 之前只认①，完成日早于截止日就照样倒计时，与"已完成网申投递"并排出现（用户实测反馈）。
+      // 只看末条：更早的里程碑完成不代表当前阶段的截止无效（一面完成、笔试截止仍然要赶）；
+      // 推进到下一阶段后末条不再是 done，截止自动恢复倒计时。
       function isEventSettled(record, event) {
         const evDate = parseDay(String((event && event.at) || '').slice(0, 10));
         if (!evDate) return false;
         const deadline = event && event.type === TIME_EVENT_DEADLINE;
+        if (deadline) {
+          const tl = Array.isArray(record && record.timeline) ? record.timeline : [];
+          const last = tl[tl.length - 1];
+          if (last && last.done) return true;
+        }
         for (const m of (Array.isArray(record && record.timeline) ? record.timeline : [])) {
           if (!m) continue;
           if (m.done) {
@@ -4647,10 +4744,12 @@
         return { line, area, max, total: list.reduce((s, c) => s + (Number(c.count) || 0), 0), dots };
       }
 
-      // ----- 卡点：停滞 / 待推进 / 临期截止 / 逾期安排 / 同公司多岗位 -----
+      // ----- 卡点：停滞 / 临期截止 / 逾期安排 / 同公司多岗位 -----
       // 停滞 = 该你动、却迟迟没动。当前阶段已标记完成（done）的不算停滞：
       // 那一步已经做完、球在对方手里，再按「停滞」催办会让人分不清是谁卡住了。
-      // 这类记录交给 findAwaitingAdvance 单独提示「已完成 N 天，考虑推进」。
+      // v4.27.0：原先由 findAwaitingAdvance 单独提示的「已完成 N 天，考虑推进」按用户反馈
+      // 一并去掉——已完成的事不该再以任何姿态出现在「需要关注」里；完成态在台账里已有
+      // 「已完成」chip 与绿标承载（v4.18.0），不需要洞察再催一遍。
       function findStalled(records, now = new Date(), thresholdDays = 14) {
         const out = [];
         for (const r of (Array.isArray(records) ? records : [])) {
@@ -4664,24 +4763,6 @@
           // 直接减带时刻的 now 会因为半天偏移把「20 天」算成「21 天」
           const days = -daysUntil(lastDate, now);
           if (days >= thresholdDays) out.push({ record: r, stage: r.stage, days });
-        }
-        return out.sort((a, b) => b.days - a.days);
-      }
-      // 待推进：当前阶段已标记完成、却迟迟没有推进到下一步的记录（v4.18.0）。
-      // 与 findStalled 互斥——findStalled 已排除末条 done，两者合起来覆盖
-      // 「该我动」（停滞）与「该往前推」（待推进）两种不同状态。
-      function findAwaitingAdvance(records, now = new Date(), thresholdDays = 7) {
-        const span = Number(thresholdDays) > 0 ? Number(thresholdDays) : 7;
-        const out = [];
-        for (const r of (Array.isArray(records) ? records : [])) {
-          if (!isActive(r)) continue;
-          const tl = Array.isArray(r.timeline) ? r.timeline : [];
-          const last = tl.length ? tl[tl.length - 1] : null;
-          if (!last || !last.done) continue;
-          const from = parseDay(last.doneAt || last.at);
-          if (!from) continue;
-          const days = -daysUntil(from, now);
-          if (days >= span) out.push({ record: r, stage: r.stage, doneAt: last.doneAt || last.at, days });
         }
         return out.sort((a, b) => b.days - a.days);
       }
@@ -4729,10 +4810,6 @@
         for (const item of findStalled(list, now, 14)) {
           alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：停在「${item.stage}」已 ${item.days} 天` });
         }
-        // 已完成的当前阶段久未推进：换了措辞，不与「停滞」混为一谈
-        for (const item of findAwaitingAdvance(list, now, 7)) {
-          alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：「${item.stage}」已完成 ${item.days} 天，考虑推进到下一步` });
-        }
         for (const group of groupRecordsByCompany(list)) {
           const open = group.records.filter(r => isActive(r));
           if (group.records.length > 1 && open.length > 1) {
@@ -4741,6 +4818,71 @@
         }
         const rank = { danger: 0, warn: 1, info: 2 };
         return alerts.sort((a, b) => (rank[a.level] - rank[b.level])).slice(0, Number(limit) > 0 ? limit : 5);
+      }
+      // ===== v4.27.0 日历视图纯函数：月网格 + 全台账关键时间按日聚合 =====
+      // 与 collectScheduleEvents 的分工：那份是「前瞻清单」（剔除已了结、逾期置顶、限条数），
+      // 这份是「事实日历」——一个月里每一天发生过 / 将发生什么。已了结的照列、只打 settled 标记，
+      // 由渲染层灰显加「已完成」：历史在日历上仍有位置，「已完成」是标注而不是抹除。
+
+      // 本地某月的完整月网格：6 行 × 7 列（周一为第一列，中文日历习惯），含前后月补位。
+      // 返回 42 格 { iso, day, inMonth, isToday }；iso 为 YYYY-MM-DD，
+      // 必须走 localDateInput 而不是 toISOString()——后者按 UTC 取日期，东八区之外会差一天。
+      function buildMonthGrid(year, monthIndex, now = new Date()) {
+        const y = Number(year);
+        const m = Number(monthIndex);
+        if (!Number.isFinite(y) || !Number.isFinite(m)) return [];
+        const todayIso = localDateInput(now);
+        const lead = (new Date(y, m, 1).getDay() + 6) % 7; // getDay() 周日=0，换算成周一=0
+        const start = new Date(y, m, 1 - lead);
+        const cells = [];
+        for (let i = 0; i < 42; i += 1) {
+          const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+          const iso = localDateInput(d);
+          cells.push({ iso, day: d.getDate(), inMonth: d.getMonth() === m, isToday: iso === todayIso });
+        }
+        return cells;
+      }
+
+      // 全台账关键时间 → 日历条目。每条：
+      //   date     本地日历日 YYYY-MM-DD（全天事件即其日期，定时事件按本地时区落到当天）
+      //   time     「HH:mm」，全天事件为空串
+      //   type     事件类型原文（截止 / 面试 / 笔试测评 / 其他）
+      //   kind     'deadline'（截止）/ 'start'（开始）——渲染层据此配色
+      //   settled  isEventSettled（含 v4.27.0 规则③：当前阶段完成 → 截止已了结）
+      //   terminal Offer / 已结束 —— 渲染层一并灰显（与 collectScheduleEvents 不列终态截止同一取舍）
+      //   overdue  已过且没人处理（未了结、非终态）—— 渲染层标红
+      // 排序：日期升序 → 全天在前 → 时刻升序；渲染层按 date 直接落格，无需再排。
+      function collectCalendarEvents(records, now = new Date()) {
+        const out = [];
+        for (const r of (Array.isArray(records) ? records : [])) {
+          if (!r) continue;
+          const terminal = ['Offer', '已结束'].includes(r.stage);
+          for (const ev of (Array.isArray(r.events) ? r.events : [])) {
+            if (!ev) continue;
+            const allDay = !!ev.allDay;
+            const at = allDay ? parseDay(ev.at) : parseLocal(ev.at);
+            if (!at) continue;
+            const settled = isEventSettled(r, ev);
+            const past = isEventPast(at, allDay, now);
+            out.push({
+              date: localDateInput(at),
+              time: allDay ? '' : clockOf(at),
+              type: ev.type,
+              kind: ev.type === TIME_EVENT_DEADLINE ? 'deadline' : 'start',
+              record: r,
+              event: ev,
+              allDay,
+              settled,
+              past,
+              overdue: past && !settled && !terminal,
+              terminal
+            });
+          }
+        }
+        return out.sort((a, b) =>
+          a.date.localeCompare(b.date)
+          || (a.time === b.time ? 0 : a.time === '' ? -1 : b.time === '' ? 1 : a.time.localeCompare(b.time))
+        );
       }
       // ----- 查重四态（同公司多岗位的关键）-----
       // 岗位名归一化：全半角统一、去空白、小写。**保留括号内容** —— 括号里常是城市 / iOS-Android /
@@ -5262,6 +5404,11 @@
         const dlHit = nearestDeadlineEvent(record.events, nowBoard);
         // v4.24.0：传完整 at（截止可能带时刻），截成日期会让「今天 18:00 截止」看不到小时级紧急度
         const dl = dlHit ? deadlineInfo(dlHit.event.at, nowBoard) : null;
+        // v4.27.0：已了结的关键时间不再上板（规则③：当前阶段完成 → 截止也了结）。
+        // 卡片 chip 只放「要行动」的信号——要赶的倒计时、要动的停滞、要推的完成；
+        // 已了结的事在表格「最近时间」的已完成徽章与日历里有位置，板上出现只会添噪，
+        // 而且当前阶段完成时卡片已有「已完成 · 待推进」，再排一枚「已完成」就是同一句话出现两次。
+        const dlSettled = !!(dlHit && isEventSettled(record, dlHit.event));
         // 终态（Offer / 已结束）：截止日期、最近安排、停滞提醒都不再有意义——
         // 事情已经结束了，继续催跟进只是噪声。
         const terminal = ['Offer', '已结束'].includes(record.stage);
@@ -5277,10 +5424,11 @@
         const chips = [];
         // 批次 chip 已随字段删除；机构不做成 chip —— 它已经跟在卡片的公司名后面
         // （boardCardHtml 的 .board-card-unit），再做一个 chip 就是同一信息出现两次。
-        if (dl && !terminal) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
+        if (dl && !terminal && !dlSettled) chips.push(`<span class="board-chip ${dl.level}">${escapeHtml(dl.text.replace('截止 · ', ''))}</span>`);
         // 全天事件（只有日期）用 formatDate —— formatDateTime 会把 "2026-09-20" 当 UTC 午夜解析，
         // 在东八区显示成「9月20日周日 08:00」，凭空多出一个不存在的时间点。
-        if (schedule && !terminal) chips.push(`<span class="board-chip">${escapeHtml(`${schedule.event.type} · ${schedule.event.allDay ? formatDate(String(schedule.event.at).slice(0, 10)) : formatDateTime(schedule.event.at)}`)}</span>`);
+        const scheduleSettled = !!(schedule && isEventSettled(record, schedule.event));
+        if (schedule && !terminal && !scheduleSettled) chips.push(`<span class="board-chip">${escapeHtml(`${schedule.event.type} · ${schedule.event.allDay ? formatDate(String(schedule.event.at).slice(0, 10)) : formatDateTime(schedule.event.at)}`)}</span>`);
         // 停滞提醒只对进行中的阶段有意义。findStalled 本身就用 isActive 排除了
         // 待投递/Offer/已结束，所以这里是**第二道防线**：万一将来 isActive 放宽，
         // 终态卡片也不会长出"停滞 N 天"（已结束还催你跟进是荒谬的）。
@@ -5472,12 +5620,14 @@
         }
         // v4.19.0：关键时间按类型逐条列出（截止 / 面试 / 笔试测评 / 其他），按时间升序。
         // 此前是两个固定字段（安排时间 / 截止日期），一条记录只能各有一个时间。
+        // v4.27.0：已了结的事件（完成覆盖 / 流程越过 / 规则③当前阶段完成后的截止）补「（已完成）」
+        // 文本标注——facts 的 value 走 escapeHtml，纯文本最省事，不值得为灰显开 HTML 白名单口子。
         const drawerEvents = (Array.isArray(record.events) ? record.events : [])
           .map(ev => ({ ev, at: ev.allDay ? parseDay(ev.at) : parseLocal(ev.at) }))
           .filter(x => x.at)
           .sort((a, b) => a.at - b.at);
         const eventsValue = drawerEvents.length
-          ? drawerEvents.map(x => `${x.ev.type}：${x.ev.allDay ? formatDate(String(x.ev.at).slice(0, 10)) : formatDateTime(x.ev.at)}`).join('；')
+          ? drawerEvents.map(x => `${x.ev.type}：${x.ev.allDay ? formatDate(String(x.ev.at).slice(0, 10)) : formatDateTime(x.ev.at)}${isEventSettled(record, x.ev) ? '（已完成）' : ''}`).join('；')
           : '—';
         // v4.20.0：这条记录关联过的招聘邮件（应用邮件建议时写入）。倒序 = 最近关联的在前。
         const mailRefs = Array.isArray(record.mailRefs) ? record.mailRefs : [];
@@ -6458,6 +6608,7 @@
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
       const VIEW_META = {
         overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计、洞察与未来安排——从银十到金九，每一步都在这里' },
+        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '截止与面试安排按日落格——哪天要赶、哪天要去，一眼看清' },
         records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
@@ -6465,7 +6616,55 @@
       };
       // records 恢复为独立视图（更早版本本就是，v4.4.0 曾并入总览并重定向，v4.8.0 拆回）；
       // upcoming（未来安排）仍留在总览，旧书签重定向兼容。
-      const ROUTE_ALIASES = { overview: 'overview', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
+      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'overview' };
+
+      // ================= 日历视图（v4.27.0）：关键时间按日落格 =================
+      // 浏览位置（停在哪个月）存模块变量：切走再切回不丢；刷新页面回当月——
+      // 这只是浏览状态而非值得跨设备记住的偏好，不进 uiPrefs。
+      let calViewYear = 0;
+      let calViewMonth = 0; // 0-11
+
+      function calendarShiftMonth(delta) {
+        const d = new Date(calViewYear, calViewMonth + delta, 1);
+        calViewYear = d.getFullYear();
+        calViewMonth = d.getMonth();
+        renderCalendarView();
+      }
+
+      function renderCalendarView() {
+        const grid = $('#calendarGrid');
+        if (!grid) return;
+        const now = new Date();
+        if (!calViewYear) { calViewYear = now.getFullYear(); calViewMonth = now.getMonth(); }
+        const title = $('#calMonthTitle');
+        if (title) title.textContent = `${calViewYear}年${calViewMonth + 1}月`;
+        // 关键时间按日分组一次算好，渲染每格时按 iso 取（42 格里大多数是空的）
+        const byDate = new Map();
+        for (const item of collectCalendarEvents(records, now)) {
+          if (!byDate.has(item.date)) byDate.set(item.date, []);
+          byDate.get(item.date).push(item);
+        }
+        // 每格最多 3 条，溢出收进「+N」的 title——格子高度有限，塞满会把月历变成流水账
+        const MAX_PER_CELL = 3;
+        grid.innerHTML = buildMonthGrid(calViewYear, calViewMonth, now).map(cell => {
+          const items = byDate.get(cell.iso) || [];
+          const shown = items.slice(0, MAX_PER_CELL);
+          const rest = items.length - shown.length;
+          const chips = shown.map(item => {
+            const who = item.record.company || '未填公司';
+            const what = `${item.type}${item.time ? ` ${item.time}` : ''}`;
+            const done = item.settled || item.terminal;
+            const full = `${who} · ${item.record.position || '未填岗位'} · ${what}${done ? '（已完成）' : ''}`;
+            const state = done ? ' is-settled' : (item.overdue ? ' is-overdue' : '');
+            return `<button class="cal-chip kind-${item.kind}${state}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}">${escapeHtml(`${who} ${what}`)}</button>`;
+          }).join('');
+          const more = rest > 0
+            ? `<span class="cal-more" title="${escapeHtml(items.slice(MAX_PER_CELL).map(i => `${i.record.company || '未填公司'} ${i.type}${i.time ? ` ${i.time}` : ''}`).join('\n'))}">+${rest}</span>`
+            : '';
+          return `<div class="cal-day${cell.inMonth ? '' : ' is-outside'}${cell.isToday ? ' is-today' : ''}"><span class="cal-dayno">${cell.day}</span><div class="cal-items">${chips}${more}</div></div>`;
+        }).join('');
+      }
+
 
       // ================= 工具页卡片状态：云同步连接情况与快照数量 =================
       async function renderToolCards() {
@@ -6547,6 +6746,7 @@
         }
         if (route === 'tools') renderToolCards();
         if (route === 'mail') renderMailView();
+        if (route === 'calendar') renderCalendarView();
         // 从别的视图切回投递记录时重渲台账/看板：数据可能在别处变更过（如邮件应用、抽屉推进），
         // 隐藏视图多渲染一次无副作用，换取各视图始终一致。
         if (route === 'records') renderRecordsView();
@@ -7534,6 +7734,21 @@
         const item = event.target.closest('.schedule-item[data-id]');
         if (item) openRecordFocus(item.dataset.id);
       });
+      // 日历（v4.27.0）：格内条目点击直达详情抽屉，与未来安排 / 对比矩阵同一交互；
+      // 翻月与「今天」只动 calViewYear/Month 再重渲，导出 .ics 直接复用工具页同一条流程。
+      $('#calendarGrid').addEventListener('click', event => {
+        const chip = event.target.closest('.cal-chip[data-id]');
+        if (chip) openRecordFocus(chip.dataset.id);
+      });
+      $('#calPrevBtn').addEventListener('click', () => calendarShiftMonth(-1));
+      $('#calNextBtn').addEventListener('click', () => calendarShiftMonth(1));
+      $('#calTodayBtn').addEventListener('click', () => {
+        const n = new Date();
+        calViewYear = n.getFullYear();
+        calViewMonth = n.getMonth();
+        renderCalendarView();
+      });
+      $('#calExportIcsBtn').addEventListener('click', () => exportIcs());
       els.upcoming.addEventListener('keydown', event => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         const item = event.target.closest('.schedule-item[data-id]');

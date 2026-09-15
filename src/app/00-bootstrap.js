@@ -47,7 +47,7 @@
               done,
               // doneAt 必须是合法 YYYY-MM-DD，否则清空（非法值绝不进持久化）。
               // 只清日期、不清 done：「完成了但日期脏」保留"已完成"这个事实更安全
-              // （findAwaitingAdvance 会回落到里程碑日期起算），否则用户的完成记录会被静默抹掉。
+              // （isEventSettled 的规则①会回落到里程碑日期起算），否则用户的完成记录会被静默抹掉。
               doneAt: done && /^\d{4}-\d{2}-\d{2}$/.test(rawDoneAt) ? rawDoneAt : ''
             };
           })
@@ -358,7 +358,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.26.0';
+      const APP_VERSION = '4.27.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -1818,6 +1818,9 @@
         renderInsights();
         renderRecordsView();
         renderUpcoming();
+        // 日历视图（v4.27.0）跟着全量重渲：与 records 同理，隐藏时多渲一次无副作用，
+        // 换取从抽屉推进 / 邮件应用等任何数据变更路径回来时格子都反映最新台账。
+        renderCalendarView();
       }
       function renderStats() {
         const now = new Date();
@@ -2179,8 +2182,12 @@
         // **没人处理**的逾期。此前只看「是不是过去了」，于是推进完的阶段仍挂着红字「已过期」，
         // 天天亮红灯，真逾期反而被淹没（用户实测反馈）。
         // 已了结的**仍然显示**（列名就叫「最近时间」，历史该看得到），只是转灰、不再报警号。
-        const settledPast = !!(nextEv && !nextEv.future) && isEventSettled(record, nextEv.event);
-        const overdue = !!(nextEv && !nextEv.future) && !settledPast && !terminal;
+        // v4.27.0：判定不再限过去事件——isEventSettled 规则③让「当前阶段已完成」的截止
+        //（哪怕还剩 2 天）也算已了结，灰显加「已完成」徽章，与下面倒计时的抑制配套。
+        const settled = !!(nextEv && isEventSettled(record, nextEv.event));
+        const settledShown = settled && !terminal;
+        const settledChipHtml = settledShown ? '<span class="settled-chip">已完成</span>' : '';
+        const overdue = !!(nextEv && !nextEv.future) && !settled && !terminal;
         const canAdvance = record.stage !== '已结束';
         // 完成态（v4.18.0）：当前阶段（时间线末条）是否已标记完成。终态若已被标记，也允许取消。
         const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
@@ -2189,9 +2196,13 @@
         const dlHit = nearestDeadlineEvent(record.events, now);
         // v4.24.0：传完整 at —— 带时刻的截止（`2026-09-17T18:00`）截成 10 位就丢掉小时级倒计时
         const dl = dlHit ? deadlineInfo(dlHit.event.at, now) : null;
+        // v4.27.0：已了结的截止不再挂倒计时。「已完成网申投递」下面还排着一行黄字
+        // 「截止 · 还剩 2 天」等于自相矛盾。v4.26.0 曾刻意保留倒计时（注释见 git 历史），
+        // 那时没有规则③、倒计时是唯一的紧急信号；现在完成态有绿标承接，倒计时卸任。
+        const dlSettled = !!(dlHit && isEventSettled(record, dlHit.event));
         // 注意：即使「最近时间」本身就是这条截止，也**保留**倒计时提示——它带黄/红的紧急色，
         // 去掉它等于把"还剩 2 天 / 已过期"这个信号藏了；日期重复出现只是外观小瑕疵。
-        const dlHtml = dl && !terminal
+        const dlHtml = dl && !terminal && !dlSettled
           ? `<div class="deadline-hint ${dl.level}">${escapeHtml(dl.text)}</div>` : '';
         const companyHtml = record.applicationUrl
           ? `<a class="company-link" href="${escapeHtml(record.applicationUrl)}" target="_blank" rel="noopener noreferrer" title="打开投递网页">${escapeHtml(record.company)} ↗</a>`
@@ -2209,7 +2220,7 @@
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
           <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.done ? '（已完成）' : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span>${curDone ? '<span class="stage-done-chip" title="当前阶段已标记完成，尚未推进">已完成</span>' : ''}</td>
-          <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}${settledPast && !terminal ? ' is-settled' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
+          <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}${settledShown ? ' is-settled' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}${settledChipHtml}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
           <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
           <td data-label="操作"><div class="row-actions">
             ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}

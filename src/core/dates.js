@@ -72,10 +72,20 @@
       // 不会因为后来推进了阶段就变得不需要知道。
       // ② 必须严格大于：当前阶段的里程碑日期等于事件当天时（"今天 9:00 的面试、还没标记完成"）
       // 那正是该提醒的逾期项，用 ≥ 会被自己的规则吞掉。
+      //   ③（v4.27.0）当前阶段（时间线**末条**）已标记完成时，该记录的**截止**一律已了结——
+      // 对过去与未来的截止都成立：网申这一步都做完了，"网申截止还剩 2 天"只是催人。
+      // 之前只认①，完成日早于截止日就照样倒计时，与"已完成网申投递"并排出现（用户实测反馈）。
+      // 只看末条：更早的里程碑完成不代表当前阶段的截止无效（一面完成、笔试截止仍然要赶）；
+      // 推进到下一阶段后末条不再是 done，截止自动恢复倒计时。
       function isEventSettled(record, event) {
         const evDate = parseDay(String((event && event.at) || '').slice(0, 10));
         if (!evDate) return false;
         const deadline = event && event.type === TIME_EVENT_DEADLINE;
+        if (deadline) {
+          const tl = Array.isArray(record && record.timeline) ? record.timeline : [];
+          const last = tl[tl.length - 1];
+          if (last && last.done) return true;
+        }
         for (const m of (Array.isArray(record && record.timeline) ? record.timeline : [])) {
           if (!m) continue;
           if (m.done) {
