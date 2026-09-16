@@ -66,3 +66,58 @@
           || (a.time === b.time ? 0 : a.time === '' ? -1 : b.time === '' ? 1 : a.time.localeCompare(b.time))
         );
       }
+
+      // v4.31.0 邮件关联事件的聚合展示：一封笔试/面试邮件多选应用到同公司多个岗位后，
+      // 每条记录的 events 里各有一条 mailId 相同、同日同类型的重复条目——实际上是同一场安排。
+      // 这里把 (mailId, date, type) 相同的条目折成一个聚合条目（携带全部关联记录），
+      // 无 mailId 的事件原样透传。数据不合并（各记录仍独立改期/推进），只合并展示与批量操作。
+      // 返回条目形如原 item，聚合条目额外带 aggregate: { mailId, items, records, orgUnits, total, doneCount, positions }。
+      function aggregateCalendarItems(items) {
+        const list = Array.isArray(items) ? items : [];
+        const groups = new Map(); // mailKey -> { entry, members }
+        const out = [];
+        for (const item of list) {
+          const mailId = String((item && item.event && item.event.mailId) || '');
+          if (!mailId) { out.push(Object.assign({}, item, { aggregate: null })); continue; }
+          const key = `${mailId}|${item.date}|${item.type}`;
+          const group = groups.get(key);
+          if (group) {
+            group.members.push(item);
+            continue;
+          }
+          const entry = Object.assign({}, item, { aggregate: null });
+          const g = { entry, members: [item] };
+          groups.set(key, g);
+          out.push(entry);
+        }
+        // 第二遍：把成组的条目升级为聚合条目（保持首次出现位置，日/时排序不乱）
+        for (const g of groups.values()) {
+          if (g.members.length < 2) continue;
+          const distinctRecords = new Set(g.members.map(i => i.record && i.record.id));
+          if (distinctRecords.size < 2) continue; // 同一条记录的重复（理论上不会出现）不聚合
+          const doneCount = g.members.filter(i => i.settled || i.terminal).length;
+          const orgUnits = [];
+          for (const i of g.members) {
+            const org = String((i.record && i.record.orgUnit) || '').trim();
+            if (org && orgUnits.indexOf(org) === -1) orgUnits.push(org);
+          }
+          g.entry.aggregate = {
+            mailId: String(g.members[0].event.mailId),
+            items: g.members,
+            records: g.members.map(i => i.record),
+            orgUnits,
+            total: g.members.length,
+            doneCount,
+            positions: g.members.map(i => ({
+              record: i.record,
+              settled: !!(i.settled || i.terminal),
+              overdue: !!i.overdue
+            }))
+          };
+          // 聚合后的状态语义：全部完成才算完成；只要还有未处理的逾期就仍算逾期
+          g.entry.settled = doneCount === g.members.length;
+          g.entry.past = g.members.some(i => i.past);
+          g.entry.overdue = !g.entry.settled && g.members.some(i => i.overdue);
+        }
+        return out;
+      }

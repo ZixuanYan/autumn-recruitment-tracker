@@ -131,8 +131,32 @@
             }
           }
         }
-        const overdueList = out.filter(e => e.overdue).sort((a, b) => a.at - b.at);
-        const futureList = out.filter(e => !e.overdue).sort((a, b) => a.at - b.at);
+        // v4.31.0：同一封邮件写给多个岗位的同一场安排聚合为一条（与 calendar.js 的
+        // aggregateCalendarItems 同口径：mailId + 同日 + 同类型，≥2 条不同记录才合并）。
+        // 聚合条目带 _positions（岗位清单）供 ICS 描述列出，数据本身不合并。
+        const grouped = [];
+        const mailIndex = new Map();
+        for (const e of out) {
+          const mailId = String((e.event && e.event.mailId) || '');
+          if (!mailId) { grouped.push(e); continue; }
+          const key = `${mailId}|${e.at.getFullYear()}-${e.at.getMonth()}-${e.at.getDate()}|${e.type}`;
+          const g = mailIndex.get(key);
+          if (g) { g.members.push(e); continue; }
+          const entry = Object.assign({}, e, { _positions: null });
+          mailIndex.set(key, { entry, members: [e] });
+          grouped.push(entry);
+        }
+        for (const g of mailIndex.values()) {
+          if (g.members.length < 2) continue;
+          const distinct = new Set(g.members.map(m => m.record && m.record.id));
+          if (distinct.size < 2) continue;
+          g.entry._positions = g.members.map(m => {
+            const r = m.record || {};
+            return `${r.company || ''} ${r.position || ''}`.trim() + (r.orgUnit ? `（${r.orgUnit}）` : '');
+          });
+        }
+        const overdueList = grouped.filter(e => e.overdue).sort((a, b) => a.at - b.at);
+        const futureList = grouped.filter(e => !e.overdue).sort((a, b) => a.at - b.at);
         return [...overdueList, ...futureList].slice(0, Number(limit) > 0 ? limit : 6);
       }
       // ICS 文本转义（RFC 5545）：反斜杠/分号/逗号/换行

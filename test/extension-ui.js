@@ -850,10 +850,12 @@ check('填入逻辑的三处踩坑成果仍在（原生 setter / input+change / 
   assert.ok(/return 'filled'|return 'copied'/.test(SRC.core), 'fillFocusedField 应返回结果码供面板提示');
 });
 
-check('面板与迷你卡片通过 storage.onChanged 同步（不需要额外广播消息）', () => {
+// v5.6.0 起迷你卡片已随页面胶囊退役，暂存箱只剩面板一个消费方（标题与断言文案同步改口，
+// 免得用例名指向一个不存在的 UI，读的人以为漏删了东西）。
+check('面板通过 storage.onChanged 同步简历与暂存（不需要额外广播消息）', () => {
   assert.ok(/chrome\.storage\.onChanged\.addListener/.test(SRC.panelJs), 'panel.js 没有监听 storage 变化');
   assert.ok(/changes\[AJA\.RESUME_STORAGE_KEY\]/.test(SRC.panelJs), '简历更新不会刷新面板');
-  assert.ok(/changes\[AJA\.PENDING_KEY\]/.test(SRC.panelJs), '迷你卡片存的暂存不会刷新面板');
+  assert.ok(/changes\[AJA\.PENDING_KEY\]/.test(SRC.panelJs), '暂存箱新增内容不会刷新面板');
   assert.ok(/chrome\.tabs\.onActivated/.test(SRC.panelJs), '切标签页不会刷新当前页状态');
 });
 

@@ -445,7 +445,7 @@ const core = new Function(
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
      nextTimeEvent, nearestDeadlineEvent, isEventPast, isEventSettled,
-     buildMonthGrid, collectCalendarEvents,
+     buildMonthGrid, collectCalendarEvents, aggregateCalendarItems,
      sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs, mailIdOf,
      sanitizeMailArchive, unionMailArchive, pruneMailArchive, referencedMailIds, archiveSuggestionMail, backfillMailArchive,
      sanitizeMailArchiveEntry, sanitizeMailLinks, mailArchiveEntrySize,
@@ -1608,6 +1608,54 @@ check('v4.27.0 规则③贯通：当前阶段完成 → 未来截止退出未来
   assert.ok(core.collectScheduleEvents([advanced, open], NOW, 6).some(e => e.record.id === 'advanced'), '推进后截止恢复出现');
 });
 
+check('collectScheduleEvents / collectAlerts：同一封邮件的多岗位同场安排合并为一条（v4.31.0）', () => {
+  // 一封笔试邮件应用到同公司两个岗位：两条记录各有一条同 mailId 的截止 + 笔试测评事件
+  const mkRec = (id, pos, org) => ({
+    id, company: '山岚智能', position: pos, orgUnit: org, stage: '笔试',
+    applicationDate: dayOffset(-9, NOW),
+    events: [evt(DL, dayOffset(2, NOW), `ev-dl-${id}`), evt('笔试测评', `${dayOffset(3, NOW)}T19:00`, `ev-ex-${id}`)],
+    // 时间线只有投递里程碑：不能放「笔试」里程碑——规则②（更晚的里程碑越过事件）
+    // 会把逾期笔试判成已了结，逾期提醒就测不到了
+    timeline: [{ stage: '网申投递', at: dayOffset(-9, NOW) }]
+  });
+  const withMail = [mkRec('p1', '算法', '杭州研究院'), mkRec('p2', '后端', '成都研究所')].map((r, i) => ({
+    ...r,
+    events: r.events.map(ev => ({ ...ev, mailId: 'mid:exam' }))
+  }));
+  // 前瞻清单：同场安排聚合成一条，_positions 带全部岗位（含机构）
+  const schedule = core.collectScheduleEvents(withMail, NOW, 50);
+  const dlEntries = schedule.filter(e => e.type === '截止');
+  assert.strictEqual(dlEntries.length, 1, '两条同邮件截止聚合成一条');
+  assert.deepStrictEqual(dlEntries[0]._positions, ['山岚智能 算法（杭州研究院）', '山岚智能 后端（成都研究所）'], '聚合条目带岗位清单');
+  const examEntries = schedule.filter(e => e.type === '笔试测评');
+  assert.strictEqual(examEntries.length, 1, '笔试同场安排同样聚合');
+  // 需要关注：截止临期提醒合并为一条「等 2 个岗位」；不同邮件不合并
+  const alerts = core.collectAlerts(withMail, NOW, 10);
+  const dlAlerts = alerts.filter(a => a.text.includes('截止'));
+  assert.strictEqual(dlAlerts.length, 1, '同邮件截止提醒只出一条');
+  assert.ok(dlAlerts[0].text.includes('等 2 个岗位'), '合并提醒标注岗位数');
+  assert.ok(dlAlerts[0].text.includes('山岚智能'), '合并提醒带公司名');
+  // 对照组：不同邮件（不同 mailId）→ 两条独立提醒
+  const separate = withMail.map((r, i) => ({ ...r, events: r.events.map(ev => ({ ...ev, mailId: `mid:exam-${i}` })) }));
+  assert.strictEqual(core.collectAlerts(separate, NOW, 10).filter(a => a.text.includes('截止')).length, 2, '不同邮件的截止提醒不合并');
+  // 逾期笔试提醒合并；无 mailId 的手填事件保持原样式
+  const overduePair = withMail.map(r => ({
+    ...r,
+    events: r.events.map(ev => ({ ...ev, at: `${dayOffset(-3, NOW)}T19:00`, allDay: false }))
+  }));
+  const overdueAlerts = core.collectAlerts(overduePair, NOW, 10).filter(a => a.text.includes('笔试测评时间已过'));
+  assert.strictEqual(overdueAlerts.length, 1, '同邮件逾期笔试提醒合并为一条');
+  assert.ok(overdueAlerts[0].text.includes('等 2 个岗位') && overdueAlerts[0].text.includes('阶段未推进'), '合并逾期提醒带岗位数与新文案');
+  // 导出日历：聚合后只剩一条 VEVENT，描述里必须列清这次笔试牵动哪几个岗位——
+  // 否则导进系统日历后只看到「山岚智能 · 笔试测评」，另外两个岗位凭空消失。
+  const ics = core.buildIcs(examEntries);
+  const unfolded = ics.replace(/\r\n[ \t]/g, '');
+  assert.strictEqual((ics.match(/BEGIN:VEVENT/g) || []).length, 1, '两个岗位的同场笔试只导出一条日程');
+  assert.ok(/涉及岗位：山岚智能 算法（杭州研究院）、山岚智能 后端（成都研究所）/.test(unfolded),
+    'ICS 描述里要列出涉及的全部岗位（折行还原后仍应是完整一行）');
+  assert.deepStrictEqual(validateIcs(ics).problems, [], '聚合描述变长后仍须满足 RFC 5545（75 octets 折行）');
+});
+
 check('buildMonthGrid：行数自适应（4~6 行）、周一起始、跨月补位带 inMonth 标记', () => {
   // 2026-09-01 是周二：周一开头的首行要补 1 格 8 月；9 月 30 天 → (1+30)/7 上取整 = 5 行 35 格
   const cells = core.buildMonthGrid(2026, 8, new Date('2026-09-15T12:00:00'));
@@ -1657,6 +1705,62 @@ check('collectCalendarEvents：全量条目含已了结（日历是事实视图�
   // 排序：日期升序 → 全天在前 → 时刻升序；9/17 截止（全天）排在 9/18 14:00 面试之前
   assert.deepStrictEqual(items.map(i => `${i.record.id}:${i.type}`), ['r2:面试', 'r1:截止', 'r1:面试', 'r3:截止']);
   assert.deepStrictEqual(core.collectCalendarEvents([], NOW2), [], '空台账返回空数组');
+});
+
+check('aggregateCalendarItems：同邮件同日同类型聚合，其余透传（v4.31.0）', () => {
+  const mk = (rid, mailId, date, opts = {}) => ({
+    date,
+    time: opts.time || '',
+    type: opts.type || '笔试测评',
+    kind: opts.kind || 'start',
+    record: { id: rid, company: '山岚智能', position: `岗位${rid}`, orgUnit: opts.orgUnit || '' },
+    event: { id: `ev-${rid}`, type: opts.type || '笔试测评', at: date, mailId: mailId || '' },
+    allDay: !opts.time,
+    settled: !!opts.settled,
+    past: !!opts.past,
+    overdue: !!opts.overdue,
+    terminal: !!opts.terminal
+  });
+  const NOW2 = new Date('2026-09-15T12:00:00');
+  const recs = [
+    { id: 'a', company: '山岚智能', position: '算法', stage: '笔试', events: [evt('笔试测评', '2026-09-17T19:00')], timeline: [{ stage: '笔试', at: '2026-09-14' }] },
+    { id: 'b', company: '山岚智能', position: '后端', stage: '笔试', events: [evt('笔试测评', '2026-09-17T19:00')], timeline: [{ stage: '笔试', at: '2026-09-14' }] }
+  ];
+  // 同一封邮件（同 mailId）写给两个岗位：聚合为一条，携带两条记录
+  const mailItems = core.aggregateCalendarItems(core.collectCalendarEvents(recs.map((r, i) => ({
+    ...r, events: r.events.map(ev => ({ ...ev, mailId: 'mid:exam-1' }))
+  })), NOW2));
+  assert.strictEqual(mailItems.length, 1, '同 mailId 同日同类型 → 一条聚合条目');
+  assert.strictEqual(mailItems[0].aggregate.total, 2, '聚合条目带岗位数');
+  assert.deepStrictEqual(mailItems[0].aggregate.records.map(r => r.id), ['a', 'b'], '聚合条目携带全部关联记录');
+  assert.deepStrictEqual(mailItems[0].aggregate.orgUnits, [], 'orgUnit 去重列表（空则空）');
+  // 不同邮件不合并：mailId 不同 → 两条独立
+  const twoMails = core.aggregateCalendarItems([
+    mk('a', 'mid:1', '2026-09-17', { time: '19:00' }),
+    mk('b', 'mid:2', '2026-09-17', { time: '19:00' })
+  ]);
+  assert.strictEqual(twoMails.length, 2, '不同邮件的同日同类型不合并');
+  // 无 mailId（手填）透传，且单条同邮件也不套聚合壳
+  const plain = core.aggregateCalendarItems([mk('a', '', '2026-09-17', { time: '19:00' }), mk('a', 'mid:1', '2026-09-18', { time: '10:00' })]);
+  assert.strictEqual(plain.length, 2, '无 mailId 与单条均透传');
+  assert.strictEqual(plain[0].aggregate, null, '透传条目 aggregate 为 null');
+  // 部分完成：一条 terminal → 聚合条目不灰显但带进度
+  const partial = core.aggregateCalendarItems([
+    mk('a', 'mid:1', '2026-09-17', { settled: false }),
+    mk('b', 'mid:1', '2026-09-17', { terminal: true })
+  ]);
+  assert.strictEqual(partial.length, 1);
+  assert.strictEqual(partial[0].aggregate.doneCount, 1, '已完成 1/2');
+  assert.strictEqual(partial[0].settled, false, '部分完成不算全部完成');
+  // 排序位置保持在首次出现处（输入已按 collectCalendarEvents 的规则排好序，聚合不重排）
+  const mixed = core.aggregateCalendarItems([
+    mk('b', '', '2026-09-17', { time: '09:00' }),
+    mk('a', 'mid:1', '2026-09-18', { time: '19:00' }),
+    mk('c', 'mid:1', '2026-09-18', { time: '19:00' })
+  ]);
+  assert.strictEqual(mixed.length, 2, '聚合后 3 条变 2 条');
+  assert.strictEqual(mixed[0].date, '2026-09-17', '无邮件条目保持在 9/17 的位置');
+  assert.strictEqual(mixed[1].aggregate.total, 2, '聚合条目保持在首次出现的 9/18');
 });
 
 check('backfillMailArchive：只用建议里的正文补空归档，绝不覆盖已有正文（v4.23.1）', () => {

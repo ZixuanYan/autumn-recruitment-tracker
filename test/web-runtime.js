@@ -1274,7 +1274,7 @@ check('看板卡片：已了结的关键时间不上板，完成态由「已完�
 check('renderCalendarView：月格行数自适应、未完成的才上格、溢出收进 +N（v4.30.0）', () => {
   // renderCalendarView 住在 20-runtime 段，sandbox2 没装整段——按函数抽取注入，同其他段的做法
   vm.runInContext(
-    ['let calViewYear = 0; let calViewMonth = 0; let calSelectedDate = \'\';', extractFunction(html, 'calendarShiftMonth'), extractFunction(html, 'calSelectDay'), extractFunction(html, 'renderCalendarView'), extractFunction(html, 'flowDayTitle'), extractFunction(html, 'calFlowRow'), extractFunction(html, 'renderCalFlow')].join('\n'),
+    ['let calViewYear = 0; let calViewMonth = 0; let calSelectedDate = \'\';', extractFunction(html, 'calendarShiftMonth'), extractFunction(html, 'calSelectDay'), extractFunction(html, 'renderCalendarView'), extractFunction(html, 'flowDayTitle'), extractFunction(html, 'calFlowRow'), extractFunction(html, 'calFlowAggregateRow'), extractFunction(html, 'renderCalFlow')].join('\n'),
     sandbox2,
     { filename: 'calendar-view.js' }
   );
@@ -1371,6 +1371,34 @@ check('renderCalendarView：已完成聚合为浅绿行，点选日期在日程�
   vm.runInContext(`calSelectedDate = '${ymd(3)}'; calendarShiftMonth(1)`, sandbox2);
   assert.ok(!sandbox2.$('#calFlowList').innerHTML.includes('已选 ·'), '翻月取消选中');
   sandbox2.records[0].events = []; sandbox2.records[1].events = []; sandbox2.records[2].events = [];
+});
+
+check('renderCalFlow：邮件聚合行（覆盖 N 岗位）与展开子行（v4.31.0）', () => {
+  seedRecords();
+  const ymd = off => {
+    const d = new Date(Date.now() + off * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  // 一封笔试邮件（同 mailId）写到 r1/r2 两条记录：日程流应聚合成一行
+  for (const [idx, rid] of [['0', 'r1'], ['1', 'r2']]) {
+    sandbox2.records[Number(idx)].events = [{ id: `ev-${rid}`, type: '笔试测评', at: `${ymd(2)}T19:00`, allDay: false, mailId: 'mid:exam' }];
+  }
+  vm.runInContext('calViewYear = 0; calViewMonth = 0; calSelectedDate = \'\'; calFlowExpandedKey = \'\';', sandbox2);
+  sandbox2.renderCalendarView();
+  const grid = sandbox2.$('#calendarGrid').innerHTML;
+  assert.strictEqual((grid.match(/cal-chip kind-start/g) || []).length, 1, '月历上两条同场笔试聚合成一颗 chip');
+  assert.ok(grid.includes('等 2 岗'), 'chip 标注「等 2 岗」');
+  const flow = sandbox2.$('#calFlowList').innerHTML;
+  assert.ok(flow.includes('is-multi') && flow.includes('覆盖 2 个岗位'), '日程流聚合行标注覆盖岗位数');
+  assert.ok(!flow.includes('cal-row-sub'), '未展开时不显示子行');
+  // 展开：子行列出每个岗位（机构），并带两个批量动作
+  vm.runInContext(`calFlowExpandedKey = 'mid:exam|${ymd(2)}|笔试测评';`, sandbox2);
+  sandbox2.renderCalendarView();
+  const flowOpen = sandbox2.$('#calFlowList').innerHTML;
+  assert.strictEqual((flowOpen.match(/cal-row-sub/g) || []).length, 2, '展开后每个岗位一个子行');
+  assert.ok(flowOpen.includes('data-batch-done') && flowOpen.includes('data-batch-advance'), '展开后带批量标记完成与批量推进按钮');
+  assert.ok(flowOpen.includes('云计算事业部'), '子行带机构信息');
+  sandbox2.records[0].events = []; sandbox2.records[1].events = [];
 });
 
 check('recordRowHtml：同公司 +N 岗位 chip、机构、截止倒计时分级', () => {
@@ -2603,6 +2631,74 @@ check('parseRoute：#/records 解析到 records（旧书签不再被重定向到
   assert.strictEqual(sandbox3.parseRoute(), 'overview', '已删除的视图路由要回退到总览');
   sandbox3.location.hash = '#/不存在';
   assert.strictEqual(sandbox3.parseRoute(), 'overview', '未知路由回退总览');
+});
+
+check('批量操作：batchMarkMailDone / applyBatchAdvance 一次作用于全部关联记录（v4.31.0）', () => {
+  // 批量函数住在 20-runtime 段且引用 render/showToast/saveRecords 等全局——
+  // 用隔离沙箱（自带桩）跑，避免覆盖 sandbox2 的全局桩影响后续用例
+  const sb = { console, Date };
+  sb.localDateInput = extractFunction(html, 'localDateInput');
+  sb.escapeHtml = extractFunction(html, 'escapeHtml');
+  sb.sanitizeTimeline = extractFunction(html, 'sanitizeTimeline');
+  sb.deriveStage = extractFunction(html, 'deriveStage');
+  sb.setTimeline = extractFunction(html, 'setTimeline');
+  sb.setCurrentMilestoneDone = extractFunction(html, 'setCurrentMilestoneDone');
+  // stageOrder 是网页端专有（住在 00-bootstrap.js），shared/ 只导出 STAGE_PRESETS——
+  // 所以它跟别的函数一样从产物里抠，不能指望 AJA_SHARED 带上它。
+  sb.stageOrder = extractFunction(html, 'stageOrder');
+  sb.STAGE_PRESETS = AJA_SHARED.STAGE_PRESETS;
+  sb.recordsForMailEvent = extractFunction(html, 'recordsForMailEvent');
+  sb.batchMarkMailDone = extractFunction(html, 'batchMarkMailDone');
+  sb.openBatchAdvanceDialog = extractFunction(html, 'openBatchAdvanceDialog');
+  sb.applyBatchAdvance = extractFunction(html, 'applyBatchAdvance');
+  sb.closeBatchAdvanceDialog = extractFunction(html, 'closeBatchAdvanceDialog');
+  sb.render = function () {};
+  sb.showToast = function (msg) { sb._toast = msg; };
+  sb.saveRecords = function (msg) { sb._saved = msg; };
+  sb.$ = () => ({ textContent: '', innerHTML: '', value: '', open: false, showModal() { this.open = true; }, close() { this.open = false; }, addEventListener() {}, appendChild() {} });
+  vm.createContext(sb);
+  vm.runInContext(
+    [sb.localDateInput, sb.escapeHtml, sb.sanitizeTimeline, sb.deriveStage, sb.setTimeline, sb.setCurrentMilestoneDone,
+      sb.stageOrder, sb.recordsForMailEvent, sb.batchMarkMailDone, sb.openBatchAdvanceDialog,
+      sb.applyBatchAdvance, sb.closeBatchAdvanceDialog].join('\n'),
+    sb,
+    { filename: 'calendar-batch.js' }
+  );
+  const ymd = off => {
+    const d = new Date(Date.now() + off * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const mk = (id, org, extra) => Object.assign({
+    id, company: '山岚智能', position: `岗位${id}`, orgUnit: org, stage: '笔试',
+    applicationDate: ymd(-5),
+    events: [{ id: `ev-${id}`, type: '笔试测评', at: `${ymd(2)}T19:00`, allDay: false, mailId: 'mid:exam' }],
+    timeline: [{ stage: '笔试', at: ymd(-1), note: '', done: false }]
+  }, extra || {});
+  sb.records = [
+    mk('a', '杭州研究院'),
+    mk('b', '成都研究所'),
+    mk('c', '武汉中心', { stage: 'Offer', timeline: [{ stage: 'Offer', at: ymd(-1), note: '', done: false }] }), // 终态跳过
+    mk('d', '北京分行', { timeline: [{ stage: '笔试', at: ymd(-1), note: '', done: true }] }) // 已完成跳过
+  ];
+  const key = `mid:exam|${ymd(2)}|笔试测评`;
+  sb.batchMarkMailDone(key);
+  assert.strictEqual(sb.records[0].timeline[0].done, true, 'a 被批量标记完成');
+  assert.strictEqual(sb.records[1].timeline[0].done, true, 'b 被批量标记完成');
+  assert.strictEqual(sb.records[2].timeline[0].done, false, '终态记录跳过');
+  assert.strictEqual(sb.records[3].timeline[0].done, true, '本就完成的记录保持完成');
+  assert.ok(sb._saved && sb._saved.includes('2 条'), `保存提示按实际标记数（${sb._saved}）`);
+  // 批量推进：三个非终态记录（a/b/d）各追加一条「面试」里程碑，日期/备注一致
+  sb.openBatchAdvanceDialog(key);
+  assert.strictEqual(sb._dialogOpen, undefined); // 桩 open 不落地，仅验证不抛错
+  sb.applyBatchAdvance('面试');
+  for (const id of ['a', 'b', 'd']) {
+    const r = sb.records.find(x => x.id === id);
+    const last = r.timeline[r.timeline.length - 1];
+    assert.strictEqual(last.stage, '面试', `${id} 追加了批量推进里程碑`);
+    assert.strictEqual(last.at, ymd(0), '里程碑日期默认今天');
+  }
+  const c = sb.records.find(x => x.id === 'c');
+  assert.strictEqual(c.timeline.length, 1, '终态记录不追加');
 });
 
 runAll();

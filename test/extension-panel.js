@@ -660,7 +660,7 @@ check('panel.html 的区块顺序：一键收录 → 简历字段 → 暂存箱�
   }
 });
 
-check('storage.onChanged：网页版下发简历 / 迷你卡片存暂存，面板都自动刷新', async () => {
+check('storage.onChanged：网页版下发简历 / 暂存箱新增条目，面板都自动刷新', async () => {
   const { el, state } = await bootPanel({
     quiet: true,
     respond: (msg) => (msg.type === 'GET_RESUME_DATA' ? { ok: true, data: { '优先信息': { '手机': '138' } } } : { ok: true, records: [] })

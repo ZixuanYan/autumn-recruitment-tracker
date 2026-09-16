@@ -123,18 +123,37 @@
           // 截成 10 位会把"今天 18:00 截止"退化成"今天"，24 小时内的紧急度就看不出来了。
           const info = deadlineInfo(hit.event.at, now);
           if (!info) continue;
-          if (info.days < 0 || info.days <= span) out.push({ record: r, info });
+          if (info.days < 0 || info.days <= span) out.push({ record: r, info, mailId: String(hit.event.mailId || '') });
         }
         return out.sort((a, b) => a.info.days - b.info.days);
       }
-      // 汇总需要关注的事项，danger 优先，最多 limit 条；每条带 recordId 便于点击跳转
+      // 汇总需要关注的事项，danger 优先，最多 limit 条；每条带 recordId 便于点击跳转。
+      // v4.31.0：同一封邮件写给多岗位的同一场安排（同 mailId），截止/逾期提醒合并为一条，
+      // 不再一个岗位刷一条（点击跳转取第一条记录，其余岗位在抽屉的「相关邮件」里能看到同一封邮件）。
       function collectAlerts(records, now = new Date(), limit = 5) {
         const alerts = [];
         const list = Array.isArray(records) ? records : [];
+        const mailDeadlines = new Map();
         for (const item of findUpcomingDeadlines(list, now, 3)) {
           const r = item.record;
-          alerts.push({ level: item.info.level === 'danger' ? 'danger' : 'warn', id: r.id, text: `${r.company} · ${r.position}：${item.info.text}` });
+          const mailId = item.mailId || '';
+          if (!mailId) {
+            alerts.push({ level: item.info.level === 'danger' ? 'danger' : 'warn', id: r.id, text: `${r.company} · ${r.position}：${item.info.text}` });
+            continue;
+          }
+          const key = `${mailId}|${item.info.text}`;
+          const seen = mailDeadlines.get(key);
+          if (seen) { seen.count += 1; continue; }
+          mailDeadlines.set(key, { item, count: 1 });
         }
+        for (const g of mailDeadlines.values()) {
+          const r = g.item.record;
+          const text = g.count > 1
+            ? `${r.company} 等 ${g.count} 个岗位：${g.item.info.text}`
+            : `${r.company} · ${r.position}：${g.item.info.text}`;
+          alerts.push({ level: g.item.info.level === 'danger' ? 'danger' : 'warn', id: r.id, text });
+        }
+        const mailOverdue = new Map();
         for (const r of list) {
           if (['Offer', '已结束'].includes(r.stage)) continue;
           // v4.19.0：改看 events[] 里已过期的「非截止」事件（面试 / 笔试测评 / 其他）。
@@ -144,8 +163,23 @@
             if (!ev || ev.allDay || ev.type === TIME_EVENT_DEADLINE) continue;
             if (isEventSettled(r, ev)) continue;
             const s = parseLocal(ev.at);
-            if (s && s < now) alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：${ev.type}时间已过（${formatDateTime(ev.at)}）但阶段仍是「${r.stage}」` });
+            if (!s || s >= now) continue;
+            const mailId = String(ev.mailId || '');
+            if (!mailId) {
+              alerts.push({ level: 'danger', id: r.id, text: `${r.company} · ${r.position}：${ev.type}时间已过（${formatDateTime(ev.at)}）但阶段仍是「${r.stage}」` });
+              continue;
+            }
+            const key = `${mailId}|${String(ev.at)}|${ev.type}`;
+            const seen = mailOverdue.get(key);
+            if (seen) { seen.count += 1; continue; }
+            mailOverdue.set(key, { record: r, ev, count: 1 });
           }
+        }
+        for (const g of mailOverdue.values()) {
+          const text = g.count > 1
+            ? `${g.record.company} 等 ${g.count} 个岗位：${g.ev.type}时间已过（${formatDateTime(g.ev.at)}）但阶段未推进`
+            : `${g.record.company} · ${g.record.position}：${g.ev.type}时间已过（${formatDateTime(g.ev.at)}）但阶段仍是「${g.record.stage}」`;
+          alerts.push({ level: 'danger', id: g.record.id, text });
         }
         for (const item of findStalled(list, now, 14)) {
           alerts.push({ level: 'warn', id: item.record.id, text: `${item.record.company} · ${item.record.position}：停在「${item.stage}」已 ${item.days} 天` });

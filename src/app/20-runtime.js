@@ -574,14 +574,15 @@
         if (!calViewYear) { calViewYear = now.getFullYear(); calViewMonth = now.getMonth(); }
         const title = $('#calMonthTitle');
         if (title) title.textContent = `${calViewYear}年${calViewMonth + 1}月`;
-        // 关键时间按日分组一次算好，渲染每格时按 iso 取（42 格里大多数是空的）；
-        // 顺带统计当前显示月（ISO 前缀匹配），给标题行的「本月 N 项」汇总
+        // 关键时间按日分组一次算好，渲染每格时按 iso 取；
+        // v4.31.0：先做邮件聚合——同一封邮件写给同公司多个岗位的同一场安排（同 mailId 同日同类型）
+        // 折成一条，月历与日程流都不再出现 3 条一模一样的「笔试 19:00」。
         const byDate = new Map();
         const monthKey = `${calViewYear}-${String(calViewMonth + 1).padStart(2, '0')}`;
         let monthTotal = 0;
         let monthDeadline = 0;
         let monthDone = 0;
-        for (const item of collectCalendarEvents(records, now)) {
+        for (const item of aggregateCalendarItems(collectCalendarEvents(records, now))) {
           if (!byDate.has(item.date)) byDate.set(item.date, []);
           byDate.get(item.date).push(item);
           if (item.date.startsWith(monthKey)) {
@@ -606,11 +607,14 @@
           const rest = open.length - shown.length;
           const chips = shown.map(item => {
             const who = item.record.company || '未填公司';
-            const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${item.time ? ` ${item.time}` : ''}`;
+            const agg = item.aggregate;
+            const n = agg ? agg.total : 0;
+            const full = agg
+              ? `${who} 等 ${n} 个岗位 · ${item.type}${item.time ? ` ${item.time}` : ''}\n${agg.positions.map(p => `${p.record.company || ''} ${p.record.position || ''}${p.record.orgUnit ? `（${p.record.orgUnit}）` : ''}`).join('\n')}`
+              : `${who} · ${item.record.position || '未填岗位'} · ${item.type}${item.time ? ` ${item.time}` : ''}`;
             const state = item.overdue ? ' is-overdue' : '';
-            // 两段渲染：时刻（截止类无时刻时给类型名）+ 公司名。窄屏隐藏公司名后
-            // 剩「14:00 / 截止」仍可读，不再是一串省略号。
-            return `<button class="cal-chip kind-${item.kind}${state}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-chip-main">${escapeHtml(item.time || item.type)}</span><span class="cal-chip-who">${escapeHtml(who)}</span></button>`;
+            // 两段渲染：时刻（截止类无时刻时给类型名）+ 公司名（聚合条目带「等 N 岗」）。
+            return `<button class="cal-chip kind-${item.kind}${state}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-chip-main">${escapeHtml(item.time || item.type)}</span><span class="cal-chip-who">${escapeHtml(who)}${n > 1 ? ` 等 ${n} 岗` : ''}</span></button>`;
           }).join('');
           const more = rest > 0
             ? `<span class="cal-more" title="${escapeHtml(open.slice(MAX_PER_CELL).map(i => `${i.record.company || '未填公司'} ${i.type}${i.time ? ` ${i.time}` : ''}`).join('\n'))}">+${rest}</span>`
@@ -627,9 +631,12 @@
         renderCalFlow(byDate);
       }
 
-      // 日程流（v4.30.0）：取代「未来安排」与「当日明细」两份面板——月历负责定位，这里负责阅读。
+      // 日程流（v4.30.0，v4.31.0 增加邮件聚合）：月历负责定位，这里负责阅读。
       // 分组：① 逾期未处理置顶（与未来安排同一口径，已了结的不算）；② 点选日期的全量明细插队
       //（含已完成，日历是事实视图）；③ 未来 7 天按日分组（只列未完成的，空日跳过）。
+      // v4.31.0：聚合条目（同一封邮件的多岗位同场安排）单行显示 + 可展开子行 + 批量完成/推进。
+      let calFlowExpandedKey = '';
+
       function flowDayTitle(iso) {
         const parts = iso.split('-').map(Number);
         const d = new Date(parts[0], parts[1] - 1, parts[2]);
@@ -649,11 +656,36 @@
         return `<button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(item.time || item.type)}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>`;
       }
 
+      // 聚合条目行：主行（公司 + 覆盖 N 岗位，点击展开/收起）；展开后是每个岗位的子行
+      //（点击进各自详情抽屉）与两个批量动作（全部标记完成 / 批量推进）。
+      function calFlowAggregateRow(item) {
+        const agg = item.aggregate;
+        const who = item.record.company || '未填公司';
+        const done = item.settled;
+        const state = done
+          ? '<span class="cal-row-state is-settled">已完成</span>'
+          : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
+        const key = `${agg.mailId}|${item.date}|${item.type}`;
+        const expanded = calFlowExpandedKey === key;
+        const posText = agg.positions.map(p => `${p.record.company || ''} ${p.record.position || ''}${p.record.orgUnit ? `（${p.record.orgUnit}）` : ''}${p.settled ? ' ✓' : ''}`).join('；');
+        const main = `<button class="cal-row kind-${item.kind} is-multi" type="button" data-flow-key="${escapeHtml(key)}" title="${escapeHtml(`${who} · ${item.type}${item.time ? ` ${item.time}` : ''} · 同一场安排覆盖 ${agg.total} 个岗位：${posText}`)}"><span class="cal-row-time">${escapeHtml(item.time || item.type)}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>同一场 · 覆盖 ${agg.total} 个岗位${done ? '' : (agg.doneCount ? `（已完成 ${agg.doneCount}）` : '')}</em></span>${state}<span class="cal-row-arrow">${expanded ? '▾' : '▸'}</span></button>`;
+        if (!expanded) return `<div class="cal-flow-multi">${main}</div>`;
+        const subRows = agg.positions.map(p => {
+          const r = p.record;
+          const subState = p.settled
+            ? '<span class="cal-row-state is-settled">已完成</span>'
+            : (p.overdue ? '<span class="cal-row-state is-overdue">逾期</span>' : '');
+          return `<button class="cal-row cal-row-sub kind-${item.kind}" type="button" data-id="${escapeHtml(r.id)}" title="${escapeHtml(`${r.company || ''} · ${r.position || '未填岗位'} · 查看详情`)}"><span class="cal-row-time"></span><span class="cal-row-type">${escapeHtml(r.orgUnit || '—')}</span><span class="cal-row-who">${escapeHtml(r.company || '未填公司')}<em>${escapeHtml(r.position || '未填岗位')}</em></span>${subState}</button>`;
+        }).join('');
+        const actions = done ? '' : `<div class="cal-flow-actions"><button class="p-mini-btn" type="button" data-batch-done="${escapeHtml(key)}">全部标记完成</button><button class="p-mini-btn" type="button" data-batch-advance="${escapeHtml(key)}">批量推进</button></div>`;
+        return `<div class="cal-flow-multi is-open">${main}${subRows}${actions}</div>`;
+      }
+
       function renderCalFlow(byDate) {
         const list = $('#calFlowList');
         if (!list) return;
         const now = new Date();
-        const items = collectCalendarEvents(records, now);
+        const items = aggregateCalendarItems(collectCalendarEvents(records, now));
         const groups = [];
         const overdue = items.filter(i => i.overdue);
         if (overdue.length) groups.push({ title: '逾期未处理', items: overdue, mod: ' is-overdue-group' });
@@ -669,8 +701,79 @@
           groups.push({ title: flowDayTitle(iso), items: dayItems, mod: '' });
         }
         list.innerHTML = groups.length
-          ? groups.map(g => `<div class="cal-flow-group${g.mod}"><div class="cal-flow-day">${escapeHtml(g.title)}<span class="cal-flow-count">${g.items.length ? `${g.items.length} 项` : ''}</span></div>${g.items.length ? g.items.map(calFlowRow).join('') : (g.empty ? '<div class="cal-detail-empty">当天没有安排</div>' : '')}</div>`).join('')
+          ? groups.map(g => `<div class="cal-flow-group${g.mod}"><div class="cal-flow-day">${escapeHtml(g.title)}<span class="cal-flow-count">${g.items.length ? `${g.items.length} 项` : ''}</span></div>${g.items.length ? g.items.map(item => (item.aggregate ? calFlowAggregateRow(item) : calFlowRow(item))).join('') : (g.empty ? '<div class="cal-detail-empty">当天没有安排</div>' : '')}</div>`).join('')
           : '<div class="cal-detail-empty">未来 7 天没有安排；点月历上的日期可查看当天全部条目</div>';
+      }
+
+      // ================= v4.31.0 邮件关联安排的批量操作 =================
+      // key 形如 `${mailId}|${date}|${type}`（与 calFlowAggregateRow 的 data-* 一致）。
+      // 记录不合并：批量动作只是把"用户对每条记录本来要做的操作"一次做完。
+      function recordsForMailEvent(key) {
+        const parts = String(key || '').split('|');
+        const mailId = parts[0] || '';
+        const date = parts[1] || '';
+        const type = parts[2] || '';
+        if (!mailId || !date || !type) return [];
+        return records.filter(r => (r.events || []).some(ev =>
+          ev && ev.mailId === mailId && ev.type === type && String(ev.at || '').slice(0, 10) === date));
+      }
+
+      function batchMarkMailDone(key) {
+        const targets = recordsForMailEvent(key).filter(r => !['Offer', '已结束'].includes(r.stage));
+        let n = 0;
+        for (const r of targets) {
+          const tl = Array.isArray(r.timeline) ? r.timeline : [];
+          const last = tl[tl.length - 1];
+          if (last && last.done) continue;
+          setCurrentMilestoneDone(r, true, localDateInput(new Date()));
+          n += 1;
+        }
+        // 必须走 saveRecords 而不是 showToast：setCurrentMilestoneDone 只改内存
+        // （单条流程是 setCurrentMilestoneDone + saveRecords 两步），漏了落库就是
+        // 「看着标记成功、刷新后完成态全没」的静默失效。n 为 0 表示无改动，不写库。
+        if (n) saveRecords(`已把 ${n} 条记录的当前阶段标记完成`);
+        else showToast('关联记录都已完成，无需重复标记');
+        render();
+      }
+
+      let batchAdvanceKey = '';
+      function openBatchAdvanceDialog(key) {
+        batchAdvanceKey = key;
+        const targets = recordsForMailEvent(key).filter(r => !['Offer', '已结束'].includes(r.stage));
+        if (!targets.length) { showToast('没有可推进的关联记录'); return; }
+        $('#batchAdvanceTitle').textContent = `批量推进阶段 · ${targets.length} 条记录`;
+        $('#batchAdvanceTargets').innerHTML = targets.map(r =>
+          `<span class="batch-target-chip" title="${escapeHtml(`${r.company || ''} ${r.orgUnit || ''} ${r.position || ''}`)}">${escapeHtml(r.company || '未填公司')}${r.orgUnit ? ` · ${escapeHtml(r.orgUnit)}` : ''} · ${escapeHtml(r.position || '未填岗位')}</span>`).join('');
+        const curMin = Math.min(...targets.map(r => stageOrder(r.stage)));
+        let candidates = STAGE_PRESETS.filter(s => stageOrder(s) > curMin && s !== '待投递');
+        if (!candidates.length) candidates = STAGE_PRESETS.filter(s => s !== '待投递');
+        $('#batchAdvanceStageGrid').innerHTML = candidates.map(s =>
+          `<button class="btn btn-small advance-pick" type="button" data-stage="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('');
+        $('#batchAdvanceCustom').value = '';
+        $('#batchAdvanceDate').value = localDateInput(new Date());
+        $('#batchAdvanceNote').value = '';
+        $('#batchAdvanceDialog').showModal();
+      }
+
+      function applyBatchAdvance(stage) {
+        const s = String(stage || '').trim();
+        const targets = recordsForMailEvent(batchAdvanceKey).filter(r => !['Offer', '已结束'].includes(r.stage));
+        if (!targets.length || !s) { showToast('请选择或填写一个阶段'); return; }
+        const at = $('#batchAdvanceDate').value || localDateInput(new Date());
+        const noteEl = $('#batchAdvanceNote');
+        const note = noteEl ? String(noteEl.value || '').trim().slice(0, 60) : '';
+        for (const r of targets) {
+          setTimeline(r, [...(r.timeline || []), { stage: s, at, note }]);
+        }
+        saveRecords(`已批量推进 ${targets.length} 条记录到「${s}」`);
+        closeBatchAdvanceDialog();
+        render();
+      }
+
+      function closeBatchAdvanceDialog() {
+        batchAdvanceKey = '';
+        const dlg = $('#batchAdvanceDialog');
+        if (dlg && dlg.open) dlg.close();
       }
 
 
@@ -1756,6 +1859,18 @@
         if (cell) calSelectDay(cell.dataset.date);
       });
       $('#calFlowList').addEventListener('click', event => {
+        const doneBtn = event.target.closest('[data-batch-done]');
+        if (doneBtn) { batchMarkMailDone(doneBtn.dataset.batchDone); return; }
+        const advanceBtn = event.target.closest('[data-batch-advance]');
+        if (advanceBtn) { openBatchAdvanceDialog(advanceBtn.dataset.batchAdvance); return; }
+        const sub = event.target.closest('.cal-row-sub[data-id]');
+        if (sub) { openRecordFocus(sub.dataset.id); return; }
+        const multi = event.target.closest('.cal-row.is-multi[data-flow-key]');
+        if (multi) {
+          calFlowExpandedKey = calFlowExpandedKey === multi.dataset.flowKey ? '' : multi.dataset.flowKey;
+          renderCalendarView();
+          return;
+        }
         const row = event.target.closest('.cal-row[data-id]');
         if (row) openRecordFocus(row.dataset.id);
       });
@@ -1839,6 +1954,15 @@
       $('#closeAdvanceDialog').addEventListener('click', closeAdvanceDialog);
       $('#cancelAdvanceDialog').addEventListener('click', closeAdvanceDialog);
       $('#advanceDialog').addEventListener('click', event => { if (event.target === $('#advanceDialog')) closeAdvanceDialog(); });
+      // 批量推进弹窗（v4.31.0）：与单条推进同款交互——点预设阶段直接应用，自定义填框后确认
+      $('#batchAdvanceStageGrid').addEventListener('click', event => {
+        const btn = event.target.closest('.advance-pick');
+        if (btn) applyBatchAdvance(btn.dataset.stage);
+      });
+      $('#confirmBatchAdvanceBtn').addEventListener('click', () => applyBatchAdvance($('#batchAdvanceCustom').value));
+      $('#closeBatchAdvanceDialog').addEventListener('click', closeBatchAdvanceDialog);
+      $('#cancelBatchAdvanceDialog').addEventListener('click', closeBatchAdvanceDialog);
+      $('#batchAdvanceDialog').addEventListener('click', event => { if (event.target === $('#batchAdvanceDialog')) closeBatchAdvanceDialog(); });
       window.addEventListener('message', handleCaptureMessage);
       $('#closeSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());
       $('#doneSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());

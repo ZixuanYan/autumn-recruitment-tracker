@@ -46,7 +46,9 @@
           const desc = [
             `岗位：${r.position || '—'}`, `机构：${r.orgUnit || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
             isDeadline ? `截止时间：${deadlineText}` : `${ev.type}时间：${formatDateTime(ev.at)}`,
-            r.nextAction ? `下一步：${r.nextAction}` : ''
+            r.nextAction ? `下一步：${r.nextAction}` : '',
+            // v4.31.0：同一封邮件写给多个岗位的同一场安排聚合为一条事件，这里列出全部岗位
+            Array.isArray(ev._positions) && ev._positions.length > 1 ? `涉及岗位：${ev._positions.join('、')}` : ''
           ].filter(Boolean).join('\n');
           lines.push(
             'BEGIN:VEVENT',

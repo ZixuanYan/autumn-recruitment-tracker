@@ -470,6 +470,21 @@
     <div class="modal-actions"><button class="btn" id="cancelAdvanceDialog" type="button">取消</button><button class="btn btn-primary" id="confirmAdvanceBtn" type="button">确认推进</button></div>
   </dialog>
 
+  <!-- v4.31.0 批量推进：同一场安排（同一封邮件）覆盖的多个岗位一起推进到同一阶段。
+       每个岗位的时间线各自追加一条新里程碑（记录不合并，只是操作批量）。 -->
+  <dialog id="batchAdvanceDialog">
+    <div class="modal-head"><h2 id="batchAdvanceTitle">批量推进阶段</h2><button class="close-btn" id="closeBatchAdvanceDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">同一场安排覆盖的多个岗位一起推进——每个岗位的时间线都会追加一条相同的新里程碑，当前阶段随之更新。</p>
+      <div class="batch-targets" id="batchAdvanceTargets"></div>
+      <div class="field"><label for="batchAdvanceDate">阶段日期</label><input class="control" id="batchAdvanceDate" type="date"></div>
+      <div class="advance-stage-grid" id="batchAdvanceStageGrid"></div>
+      <div class="field"><label for="batchAdvanceCustom">或自定义阶段</label><input class="control" id="batchAdvanceCustom" maxlength="20" placeholder="例如：加面、复试、意向书、测评"></div>
+      <div class="field"><label for="batchAdvanceNote">里程碑备注（可选）</label><input class="control" id="batchAdvanceNote" maxlength="60" placeholder="例如：统一通过笔试"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelBatchAdvanceDialog" type="button">取消</button><button class="btn btn-primary" id="confirmBatchAdvanceBtn" type="button">确认批量推进</button></div>
+  </dialog>
+
   <dialog id="safetyDialog">
     <div class="modal-head"><h2>数据安全与恢复</h2><button class="close-btn" id="closeSafetyDialog" type="button" aria-label="关闭">×</button></div>
     <div class="form-body">

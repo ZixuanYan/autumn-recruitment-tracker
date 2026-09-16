@@ -327,6 +327,19 @@
     .cal-row-state.is-settled { color: var(--ok); }
     .cal-row-state.is-overdue { color: var(--danger); }
     .cal-detail-empty { color: var(--muted); font-size: 12.5px; padding: 4px 0; }
+    /* ===== v4.31.0 邮件聚合条目：主行 + 可展开的岗位子行 + 批量动作 ===== */
+    .cal-flow-multi { display: grid; gap: 5px; }
+    .cal-row.is-multi { background: var(--surface-soft); }
+    .cal-row-arrow { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+    .cal-row-sub { margin-left: 14px; padding: 6px 9px; font-size: 12.5px; background: var(--surface-2); }
+    .cal-row-sub .cal-row-time { visibility: hidden; }
+    .cal-flow-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .batch-targets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .batch-target-chip {
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      padding: 2px 9px; border-radius: 999px; background: var(--surface-soft);
+      color: var(--ink-2); font-size: 12px;
+    }
     /* 两档显示：宽屏排文字 chip、隐藏圆点行；≤1100px 反过来——月格压到 44px 只留日期 + 圆点，
        阅读全部交给日程流。538px 窄面板实测文字 chip 全是省略号，圆点才扫得动。 */
     @media (max-width: 1100px) {
