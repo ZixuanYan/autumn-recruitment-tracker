@@ -33,7 +33,6 @@ const SHARED_FILES = ['stages.js', 'company-types.js', 'company-key.js', 'defaul
 
 const SRC = {
   core: read('content/01-core.js'),
-  capture: read('content/05-capture.js'),
   parsers: read('content/03-parsers.js'),
   bridge: read('content/06-bridge.js'),
   tokens: read('common/tokens.js'),
@@ -51,7 +50,7 @@ const SRC = {
 // 刻意把 shared/ 与其生成拷贝 extension/shared/ 都纳入：生成拷贝若不扫就成了守卫盲区，
 // 有人往跨端共享源里塞蓝紫渐变或 emoji 也发现不了（方案 D13 提到的正是这个）。
 const SCAN_FILES = [
-  'extension/content/01-core.js', 'extension/content/05-capture.js', 'extension/content/06-bridge.js',
+  'extension/content/01-core.js', 'extension/content/06-bridge.js',
   'extension/content/03-parsers.js', 'extension/common/tokens.js', 'extension/common/icons.js',
   'extension/common/capture-form.js', 'extension/common/constants.js',
   'extension/panel/panel.css', 'extension/panel/panel.js', 'extension/panel/panel.html',
@@ -165,12 +164,12 @@ check('零渐变：linear/radial/conic-gradient 一处都不许有', () => {
   assert.ok(!SRC.panelJs.includes('gradient'), 'panel.js 里出现了 gradient');
 });
 
-check('毛玻璃只允许 4 个浮层选择器，且必须有 @supports 降级（v5.2.0 从全面禁令改为白名单）', () => {
-  // 为什么放宽：胶囊浮在别人的招聘页面上、Side Panel 是浏览器 UI 的一部分，
+check('毛玻璃只允许浮层选择器，且必须有 @supports 降级（v5.2.0 从全面禁令改为白名单）', () => {
+  // 为什么放宽：toast 浮在别人的招聘页面上、Side Panel 是浏览器 UI 的一部分，
   // 玻璃是这两处最合适的分离手段，也最符合 Apple 语言（glass-nav 配方 .72 + saturate(180%) blur(20px)）。
   // 为什么不全放开：blur 用在密集小元素上会糊且掉帧（低端机），v5.0.0 的全面禁令正是为此。
-  // 白名单是**四个具体选择器名**而不是"允许 backdrop-filter"，所以放宽面是可控的。
-  const GLASS_OK = ['#aja-toggle', '#aja-capture-pop', '.p-header', '.aja-toast'];
+  // v5.6.0：收录胶囊与迷你卡片退役后，content 侧只剩 toast 一个浮层。
+  const GLASS_OK = ['.p-header', '.aja-toast'];
   for (const { name, css } of ALL_CSS) {
     const rules = css.match(/[^{}]*\{[^}]*backdrop-filter[^}]*\}/g) || [];
     for (const rule of rules) {
@@ -291,7 +290,9 @@ check('CSS 里的硬编码色值只允许 #fff（强调色按钮上的白字）'
 check('所有颜色/圆角/间距/字号都走 var(--aja-*)，令牌确实在被使用', () => {
   for (const { name, css } of ALL_CSS) {
     const used = (css.match(/var\(--aja-[a-z0-9-]+\)/g) || []);
-    assert.ok(used.length > 10, `${name} 只用了 ${used.length} 处令牌，怀疑有写死的样式`);
+    // v5.6.0：content 的 COMPONENT_CSS 只剩 toast，令牌用量 20+ 降到 9 处——阈值跟着降，
+    // 但不能低于 8，否则令牌段等于白建（整段写死样式也能混过这条守卫）
+    assert.ok(used.length > 8, `${name} 只用了 ${used.length} 处令牌，怀疑有写死的样式`);
     for (const u of used) {
       const varName = u.slice(4, -1);
       const declared = AJA.tokensToCssVars('light', ':root');
@@ -310,10 +311,8 @@ check('被 hidden 切换且自身设了 display 的容器，必须有 [hidden]{d
     { name: 'panel.css 的 .p-badge', css: SRC.panelCss, cls: '.p-badge' },
     { name: 'panel.css 的 .p-res-body', css: SRC.panelCss, cls: '.p-res-body' },
     { name: 'capture-form css() 的 .capture-form', css: FORM_CSS, cls: '.capture-form' },
-    { name: 'capture-form css() 的 .detect-hint', css: FORM_CSS, cls: '.detect-hint' },
-    { name: '01-core 的 #aja-capture-pop', css: CORE_CSS, cls: '#aja-capture-pop' }
-    // 注：胶囊 #aja-toggle 不在列表里——它常驻显示，从不用 hidden 切换。
-    // 旧版展开全高抽屉时会隐藏胶囊，抽屉退役后那条 .hidden 规则已作为死代码删除。
+    { name: 'capture-form css() 的 .detect-hint', css: FORM_CSS, cls: '.detect-hint' }
+    // v5.6.0：#aja-capture-pop 随页面收录胶囊一起删除，content 侧不再有 hidden 切换的容器。
   ];
   for (const t of targets) {
     const escaped = t.cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -425,7 +424,7 @@ check('svg() 尺寸参数生效，未知图标名返回空串而不是抛错', (
 
 check('源码里不再有任何 emoji 字面量当图标用（含 toast 文案）', () => {
   // 旧版连 toast 文案都带 emoji（"🎉 已推送…"、"♻️ 已更新…"、"📋 已复制…"），一并清除
-  const all = [SRC.core, SRC.capture, SRC.panelJs, SRC.form, SRC.background].join('\n');
+  const all = [SRC.core, SRC.panelJs, SRC.form, SRC.background].join('\n');
   assert.ok(!/showToast\([^)]*[\u{1F300}-\u{1FAFF}]/u.test(all), 'toast 文案里还有 emoji');
   assert.ok(!/toast\([^)]*[\u{1F300}-\u{1FAFF}]/u.test(all), 'toast 文案里还有 emoji');
 });
@@ -436,8 +435,8 @@ section('D. manifest 契约');
 check('manifest 版本与 AJA.VERSION 一致（两处不同步会让人以为没加载新代码）', () => {
   assert.strictEqual(SRC.manifest.version, AJA.VERSION,
     `manifest.version=${SRC.manifest.version} 与 constants.js 的 AJA.VERSION=${AJA.VERSION} 不一致`);
-  // 这里刻意**不**硬编码期望版本号：具体版本由 web-check.js 的「插件版本号 10 处一致」守卫负责
-  // （那条覆盖 manifest / AJA.VERSION / download.html 三处 / README 两处 / 使用说明 / extension README 两处）。
+  // 这里刻意**不**硬编码期望版本号：具体版本由 web-check.js 的「插件版本号 11 处一致」守卫负责
+  // （manifest / AJA.VERSION / download.html 三处 / 根 README 两处 / 使用说明 / 教程 / extension README 两处）。
   // 在本文件再写死一次只会让每次升版多改一处、且两处容易不同步——本轮就自己踩了一次。
   assert.ok(/^\d+\.\d+\.\d+$/.test(SRC.manifest.version), `版本号格式异常：${SRC.manifest.version}`);
 });
@@ -447,33 +446,34 @@ check('content_scripts 列出的文件全部存在，且旧文件已彻底移除
   for (const f of files) {
     assert.ok(fs.existsSync(path.join(EXT, f)), `manifest 引用了不存在的文件 ${f}`);
   }
-  for (const gone of ['content/02-resume.js', 'content/05-sidebar.js']) {
+  // v5.6.0 新增 05-capture.js：迷你收录卡片随页面胶囊退役，safeSendMessage 迁入 06-bridge.js
+  for (const gone of ['content/02-resume.js', 'content/05-sidebar.js', 'content/05-capture.js']) {
     assert.ok(!files.includes(gone), `${gone} 已删除却仍在 content_scripts 里，扩展会加载失败`);
     assert.ok(!fs.existsSync(path.join(EXT, gone)), `${gone} 应当已被删除`);
   }
+  // v5.6.0：icons / capture-form 只剩 Side Panel 一个消费方，content_scripts 不再注入
+  //（panel.html 自行加载；少注入两个文件，每个普通页面都省一份解析开销）
+  for (const unneeded of ['common/icons.js', 'common/capture-form.js']) {
+    assert.ok(!files.includes(unneeded), `${unneeded} 已无 content 侧消费方，不应再注入每个页面`);
+  }
 });
 
-check('注入顺序满足依赖（shared→constants→tokens→icons→capture-form→01-core→03-parsers→05-capture→06-bridge）', () => {
+check('注入顺序满足依赖（shared→constants→tokens→01-core→03-parsers→06-bridge）', () => {
   const files = SRC.manifest.content_scripts[0].js;
   const idx = (f) => files.indexOf(f);
   const required = ['shared/stages.js', 'shared/company-types.js', 'common/constants.js', 'common/tokens.js',
-    'common/icons.js', 'common/capture-form.js',
-    'content/01-core.js', 'content/03-parsers.js', 'content/05-capture.js', 'content/06-bridge.js'];
+    'content/01-core.js', 'content/03-parsers.js', 'content/06-bridge.js'];
   for (const f of required) assert.ok(idx(f) > -1, `content_scripts 缺少 ${f}`);
   // 🔴 shared 必须在 constants 之前：constants 里 AJA.STAGES = AJA.STAGE_PRESETS 是别名转发，
   // 顺序反了会转发到 undefined 且**不报错**，只表现为收录表单的阶段下拉空空如也。
   // 这条依赖是阶段 2 新增的，原来的断言只覆盖 constants 之后的相对顺序、守不住它。
   assert.ok(idx('shared/stages.js') < idx('common/constants.js'), 'shared/stages.js 必须在 constants.js 之前（别名转发依赖）');
   assert.ok(idx('shared/company-types.js') < idx('common/constants.js'), 'shared/company-types.js 必须在 constants.js 之前');
-  // 01-core 顶层就调用 AJA.tokensToCssVars / AJA.svg / AJA.onSchemeChange，三者必须在它之前
+  // 01-core 顶层就调用 AJA.tokensToCssVars / AJA.onSchemeChange，必须在它之前
   assert.ok(idx('common/constants.js') < idx('common/tokens.js'), 'constants 必须在 tokens 之前（AJA 命名空间）');
   assert.ok(idx('common/tokens.js') < idx('content/01-core.js'), 'tokens 必须在 01-core 之前');
-  assert.ok(idx('common/icons.js') < idx('content/01-core.js'), 'icons 必须在 01-core 之前（胶囊 innerHTML 用 AJA.svg）');
-  assert.ok(idx('common/icons.js') < idx('common/capture-form.js'), 'icons 必须在 capture-form 之前（表单模板用 AJA.svg）');
-  assert.ok(idx('common/capture-form.js') < idx('content/01-core.js'), 'capture-form 必须在 01-core 之前（escapeHtml / css()）');
   assert.ok(idx('content/01-core.js') < idx('content/03-parsers.js'), '01-core 必须先建 Shadow Root');
-  assert.ok(idx('content/03-parsers.js') < idx('content/05-capture.js'), '05-capture 调用 extractPageJobData');
-  assert.ok(idx('content/05-capture.js') < idx('content/06-bridge.js'), '06-bridge 依赖 05-capture 的 safeSendMessage');
+  assert.ok(idx('content/03-parsers.js') < idx('content/06-bridge.js'), '06-bridge 依赖 01-core 的顶层声明（isolated world 顺序）');
 });
 
 check('panel.html 的 script 顺序同样满足依赖，且引用的文件都存在', () => {
@@ -523,9 +523,8 @@ check('sidePanel 调用点都有特性检测（Chrome/Edge 114 以下没有该 A
     'setPanelBehavior 缺少特性检测');
   assert.ok(/if\s*\(!chrome\.sidePanel\s*\|\|\s*!chrome\.sidePanel\.open\)\s*return/.test(SRC.background),
     'sidePanel.open 缺少特性检测');
-  // 不支持 Side Panel 时胶囊仍要能用：迷你卡片不得依赖 sidePanel
-  assert.ok(!/sidePanel/.test(SRC.core), '01-core.js 不该依赖 sidePanel（低版本浏览器上胶囊会失效）');
-  assert.ok(!/sidePanel/.test(SRC.capture), '05-capture.js 不该依赖 sidePanel');
+  // 不支持 Side Panel 时 toast 反馈仍要能用：content 侧不得依赖 sidePanel
+  assert.ok(!/sidePanel/.test(SRC.core), '01-core.js 不该依赖 sidePanel（低版本浏览器上速填反馈会失效）');
 });
 
 // ============================================================================
@@ -535,7 +534,6 @@ check('各端使用的 MSG.XXX 都在 constants.js 里定义过', () => {
   const defined = new Set(Object.keys(AJA.MSG));
   const users = {
     'content/01-core.js': SRC.core,
-    'content/05-capture.js': SRC.capture,
     'content/06-bridge.js': SRC.bridge,
     'background.js': SRC.background,
     'panel/panel.js': SRC.panelJs
@@ -590,7 +588,7 @@ check('面板保存记录用的是目标页 URL，不是面板自己的 location
 });
 
 // ============================================================================
-section('F. 收录表单模板契约（迷你卡片与 Side Panel 共用一份）');
+section('F. 收录表单模板契约（Side Panel 使用）');
 
 check('html() 输出的 id 与 els() 取用的 id 完全一致', () => {
   const html = AJA.CaptureForm.html();
@@ -676,17 +674,9 @@ check('两端渲染用的 class 都在各自的 CSS 里有定义（防「渲染�
   for (const c of panelClasses) {
     assert.ok(SRC.panelCss.includes(`.${c}`), `panel.js 渲染用了 .${c}，但 panel.css 里没有定义`);
   }
-  const popClasses = fromJs(SRC.capture, 'pop-');
-  assert.ok(popClasses.length >= 3, `只从 05-capture.js 提取到 ${popClasses.length} 个 pop- 类`);
-  for (const c of popClasses) {
-    assert.ok(CORE_CSS.includes(`.${c}`), `05-capture.js 渲染用了 .${c}，但 01-core.js 的 COMPONENT_CSS 里没有定义`);
-  }
   // 状态类同样要有样式，否则"告警态""折叠态"只是改了个看不见的 class
   for (const c of ['is-warn', 'is-empty', 'is-collapsed']) {
     assert.ok(SRC.panelCss.includes(`.${c}`), `panel.css 缺少状态类 .${c} 的样式`);
-  }
-  for (const c of ['is-left', 'is-right', 'is-dragging']) {
-    assert.ok(CORE_CSS.includes(`.${c}`), `COMPONENT_CSS 缺少胶囊状态类 .${c} 的样式`);
   }
 });
 
@@ -751,97 +741,10 @@ check('save() 的三条分支：推送成功 / 管理器未打开回落暂存箱
 });
 
 // ============================================================================
-section('G. 胶囊拖拽与迷你卡片定位的纯数学（从 01-core.js 原文提取，不复制实现）');
-
-function extractDragMath(src) {
-  const marker = 'AJA.dragMath = {';
-  const start = src.indexOf(marker);
-  assert.ok(start > -1, '01-core.js 里找不到 AJA.dragMath');
-  let i = src.indexOf('{', start);
-  let depth = 0;
-  for (; i < src.length; i++) {
-    if (src[i] === '{') depth += 1;
-    else if (src[i] === '}') { depth -= 1; if (depth === 0) break; }
-  }
-  assert.ok(depth === 0, 'AJA.dragMath 的对象字面量没有配平');
-  const objText = src.slice(src.indexOf('{', start), i + 1);
-  // 只提取对象字面量求值，不执行整个 01-core.js（它顶层就要建 Shadow Root）
-  return vm.runInNewContext(`(${objText})`, {}, { filename: 'drag-math.js' });
-}
-const drag = extractDragMath(SRC.core);
-
-check('pickSide：按中心点吸到更近的一侧', () => {
-  assert.strictEqual(drag.pickSide(100, 1200), 'left');
-  assert.strictEqual(drag.pickSide(1100, 1200), 'right');
-  assert.strictEqual(drag.pickSide(600, 1200), 'left', '正好居中时吸左，避免抖动');
-  assert.strictEqual(drag.pickSide(0, 1200), 'left');
-  assert.strictEqual(drag.pickSide(1200, 1200), 'right');
-  assert.strictEqual(drag.pickSide(NaN, 1200), 'left', '非法输入不该抛错');
-  assert.strictEqual(drag.pickSide(100, 0), 'right', '视口宽度为 0 时回落 right（默认方位）');
-});
-
-check('clampTop：上下留边距，视口比按钮还矮时不给负区间', () => {
-  assert.strictEqual(drag.clampTop(300, 800, 32, 8), 300, '区间内应原样返回');
-  assert.strictEqual(drag.clampTop(-50, 800, 32, 8), 8, '低于上边界应贴到 8');
-  assert.strictEqual(drag.clampTop(900, 800, 32, 8), 760, '超出下边界应贴到 视口-按钮-边距');
-  assert.strictEqual(drag.clampTop(100, 20, 32, 8), 8, '视口比按钮矮时不产生负区间');
-  assert.strictEqual(drag.clampTop(NaN, 800, 32, 8), 8, '非法 top 回落到边距');
-  assert.strictEqual(drag.clampTop(100, 800, 0, 8), 100, '按钮高度为 0 时用默认高度兜底');
-});
-
-check('placePop：卡片放在胶囊内侧，溢出视口时贴边而不是跑到屏幕外', () => {
-  const opts = { viewportW: 1200, viewportH: 800, gap: 8, margin: 8 };
-  // 胶囊吸右：卡片应在胶囊左侧
-  let p = drag.placePop({ left: 1100, right: 1200, top: 200, width: 100, height: 32 }, 300, 400, Object.assign({ side: 'right' }, opts));
-  assert.strictEqual(p.left, 1100 - 8 - 300, '胶囊在右时卡片应放其左侧');
-  assert.strictEqual(p.top, 200);
-  // 胶囊吸左：卡片应在胶囊右侧
-  p = drag.placePop({ left: 0, right: 100, top: 200, width: 100, height: 32 }, 300, 400, Object.assign({ side: 'left' }, opts));
-  assert.strictEqual(p.left, 108, '胶囊在左时卡片应放其右侧');
-  // 垂直溢出：卡片高于剩余空间时应上移贴底
-  p = drag.placePop({ left: 0, right: 100, top: 700, width: 100, height: 32 }, 300, 400, Object.assign({ side: 'left' }, opts));
-  assert.strictEqual(p.top, 800 - 400 - 8, '底部放不下时应上移贴底');
-  // 窄窗口：卡片宽于视口时贴左边距，绝不允许负值（负值意味着卡片跑到屏幕外找不回来）
-  p = drag.placePop({ left: 0, right: 60, top: 10, width: 60, height: 32 }, 300, 200, Object.assign({ side: 'left' }, { viewportW: 280, viewportH: 400, gap: 8, margin: 8 }));
-  assert.ok(p.left >= 8, `窄窗口下 left=${p.left} 小于边距，卡片会被挤出视口`);
-  // 胶囊贴右且窗口窄：不允许算出负 left
-  p = drag.placePop({ left: 250, right: 280, top: 10, width: 30, height: 32 }, 300, 200, Object.assign({ side: 'right' }, { viewportW: 280, viewportH: 400, gap: 8, margin: 8 }));
-  assert.ok(p.left >= 8, `胶囊贴右的窄窗口下 left=${p.left} 越界`);
-  // 缺参数不抛错
-  p = drag.placePop(null, 0, 0, {});
-  assert.ok(Number.isFinite(p.left) && Number.isFinite(p.top), '缺参数时应给出有限数值');
-});
-
-check('胶囊位置持久化：读写的 storage key 与字段与 constants 一致', () => {
-  assert.strictEqual(AJA.UI_STORAGE_KEY, 'autumnRecruitmentTracker.ui.v1');
-  assert.ok(SRC.core.includes('AJA.UI_STORAGE_KEY'), '01-core.js 没有用 UI_STORAGE_KEY（位置不会持久化）');
-  assert.ok(/chrome\.storage\.local\.set\(\{\s*\[UI_KEY\]:\s*\{\s*side:\s*togglePos\.side,\s*top:/.test(SRC.core),
-    '位置没有按 {side, top} 结构写入 storage');
-  assert.ok(/saved\.side === 'left' \|\| saved\.side === 'right'/.test(SRC.core), '读回时没有校验 side 的合法值');
-  assert.ok(/addEventListener\('resize'/.test(SRC.core), '缺少 resize 后重新 clamp（窗口变小胶囊会跑到视口外）');
-  assert.ok(/setPointerCapture/.test(SRC.core), '拖拽没有用 pointer capture，鼠标移出胶囊就会丢事件');
-  assert.ok(/touch-action: none/.test(CORE_CSS), '胶囊缺 touch-action:none，触摸设备上拖动会同时滚动页面');
-});
-
-check('迷你卡片有关闭路径：Esc、点外部、关闭按钮、取消按钮', () => {
-  assert.ok(/e\.key !== 'Escape'/.test(SRC.core) || /'Escape'/.test(SRC.core), '缺少 Esc 关闭');
-  assert.ok(/composedPath\(\)/.test(SRC.core), '点外部关闭必须用 composedPath（Shadow DOM 下 e.target 会被重定向）');
-  assert.ok(SRC.capture.includes('aja-pop-close') && SRC.capture.includes('closePop'), '缺少关闭按钮');
-  assert.ok(SRC.capture.includes('cancelBtn'), '缺少取消按钮');
-  assert.ok(/#aja-capture-pop\[hidden\]\s*\{\s*display:\s*none/.test(CORE_CSS), '卡片缺 [hidden] 守卫');
-});
-
-check('胶囊键盘可达（HTML 拖拽与点击对键盘用户不可用）', () => {
-  assert.ok(/setAttribute\('tabindex', '0'\)/.test(SRC.core), '胶囊缺 tabindex，键盘聚焦不到');
-  assert.ok(/setAttribute\('role', 'button'\)/.test(SRC.core), '胶囊是 div，缺 role=button 读屏器不会当按钮念');
-  assert.ok(/e\.key === 'Enter' \|\| e\.key === ' '/.test(SRC.core), '缺 Enter/Space 触发');
-});
-
-check('迷你卡片每次打开都重新解析（否则会把 A 公司的岗位存成 B 公司的链接）', () => {
-  assert.ok(/AJA\.onCaptureOpen = \(\) => rescan\(\)/.test(SRC.capture), '打开卡片时没有重新解析');
-  assert.ok(/AJA\.onCaptureOpen\(\)/.test(SRC.core) || /AJA\.onCaptureOpen/.test(SRC.core), 'core 侧没有调用 onCaptureOpen');
-  assert.ok(/extractPageJobData\(\)/.test(SRC.capture), '解析入口没有复用 03-parsers.js');
-});
+// v5.6.0：原 G 节「胶囊拖拽与迷你卡片定位的纯数学」随页面收录胶囊整体删除——
+// pickSide / clampTop / placePop、位置持久化、关闭路径、键盘可达、打开重新解析
+// 这些用例的被测对象（#aja-toggle / #aja-capture-pop / AJA.dragMath / UI_STORAGE_KEY）
+// 已不存在；Side Panel 的解析链路在 H 节有独立覆盖。
 
 // ============================================================================
 section('H. Side Panel 运行时契约');
@@ -916,15 +819,15 @@ check('已填字段计数与 chip 渲染口径一致（两段规则刻意不对�
   assert.strictEqual(chips, P.countResumeFilledFields(resume), '渲染出的 chip 数与徽标计数不一致');
 });
 
-check('panel 与 content 两侧都不重复实现表单（一律走 common/capture-form.js）', () => {
-  for (const [name, src] of Object.entries({ 'panel.js': SRC.panelJs, '05-capture.js': SRC.capture })) {
-    assert.ok(src.includes('AJA.CaptureForm.html()'), `${name} 没有复用 CaptureForm.html()`);
-    assert.ok(src.includes('AJA.CaptureForm.els('), `${name} 没有复用 CaptureForm.els()`);
-    assert.ok(src.includes('AJA.CaptureForm.collect('), `${name} 没有复用 CaptureForm.collect()`);
-    assert.ok(src.includes('AJA.CaptureForm.save('), `${name} 没有复用 CaptureForm.save()`);
-    // 两端都不该自己写死字段 id 去 getElementById
-    assert.ok(!/getElementById\('cap-/.test(src), `${name} 绕过 CaptureForm.els 自己取字段元素，两端会漂移`);
-  }
+check('表单只由 Side Panel 渲染且一律走 common/capture-form.js（v5.6.0 起收录入面板）', () => {
+  assert.ok(SRC.panelJs.includes('AJA.CaptureForm.html()'), 'panel.js 没有复用 CaptureForm.html()');
+  assert.ok(SRC.panelJs.includes('AJA.CaptureForm.els('), 'panel.js 没有复用 CaptureForm.els()');
+  assert.ok(SRC.panelJs.includes('AJA.CaptureForm.collect('), 'panel.js 没有复用 CaptureForm.collect()');
+  assert.ok(SRC.panelJs.includes('AJA.CaptureForm.save('), 'panel.js 没有复用 CaptureForm.save()');
+  // 面板不该自己写死字段 id 去 getElementById
+  assert.ok(!/getElementById\('cap-/.test(SRC.panelJs), 'panel.js 绕过 CaptureForm.els 自己取字段元素，会与模板漂移');
+  // v5.6.0：content 侧不再渲染收录表单（迷你卡片已随胶囊退役），谁再引回去就是复活死 UI
+  assert.ok(!SRC.core.includes('AJA.CaptureForm'), '01-core.js 不该再引用 CaptureForm（content 侧无表单）');
   // 填入逻辑只有 content 侧一份（panel 经消息调用），不许两处各写一遍
   assert.ok(/function fillFocusedField/.test(SRC.core), '01-core.js 缺少 fillFocusedField');
   assert.ok(!/fillFocusedField/.test(SRC.panelJs.replace(/FILL_FOCUSED_FIELD/g, '')), 'panel.js 不该自己实现填入');
@@ -1011,10 +914,12 @@ check('插件 constants.js 只做别名转发，不得再有阶段/企业性质�
   assert.ok(!/AJA\.STAGES = \[/.test(SRC.constants), 'constants.js 里又出现了阶段字面量数组');
   assert.ok(!/AJA\.COMPANY_TYPES = \[/.test(SRC.constants), 'constants.js 里又出现了企业性质字面量数组');
   assert.ok(!/央国企|私企|外企/.test(SRC.constants), 'constants.js 里不该再有企业性质的中文字面量');
-  // 插件专有常量必须保留原地（网页版与 Action 用不到，搬进 shared 只会制造新耦合）
-  for (const k of ['TRACKER_URL', 'TRACKER_ORIGIN', 'TRACKER_PATH_PREFIX', 'UI_STORAGE_KEY', 'MSG', 'VERSION', 'BRIDGE_SOURCE']) {
+  // 插件专有常量必须保留原地（网页版与 Action 用不到，搬进 shared 只会制造新耦合）；
+  // UI_STORAGE_KEY 已随胶囊删除（v5.6.0），不得复活
+  for (const k of ['TRACKER_URL', 'TRACKER_ORIGIN', 'TRACKER_PATH_PREFIX', 'MSG', 'VERSION', 'BRIDGE_SOURCE']) {
     assert.ok(SRC.constants.includes(`AJA.${k}`), `constants.js 丢了插件专有常量 ${k}`);
   }
+  assert.ok(!/root\.AJA\.UI_STORAGE_KEY\s*=/.test(SRC.constants), 'UI_STORAGE_KEY 随胶囊删除，不应再定义');
 });
 
 check('三端都指向同一份 shared，五组原始副本已清零（语法级断言，不受排版影响）', () => {

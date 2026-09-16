@@ -1,16 +1,13 @@
 /**
- * 秋招求职与简历助手 - Content Script 01/05 核心基础设施（v5.0.0）
- * 常量、共享状态、光标追踪、Shadow Root 宿主与设计令牌样式、常驻收录胶囊、字段填入引擎
+ * 秋招求职与简历助手 - Content Script 01/06 核心基础设施（v5.6.0）
+ * 常量、共享状态、光标追踪、Shadow Root 宿主与设计令牌样式、字段填入引擎、Toast
  * 注意：01-06 按序注入同一 isolated world，顶层 const/let/function 跨文件可见
  *
- * v5.0.0 的三处结构性变化：
- * 1. 全高注入抽屉（#aja-drawer，350px、top/bottom:20px）退役，改为紧凑的迷你收录卡片
- *    （#aja-capture-pop）——它跟随胶囊定位，用户把胶囊拖到页面空白处，表单就落在空白处，
- *    不再遮挡正在填写的网申表单。完整功能（暂存箱、简历字段库）迁到 Chrome 原生 Side Panel。
- * 2. 胶囊从「只能垂直拖 + 位置不持久化」改为 pointer 拖拽（支持触摸）、松手吸边、
- *    位置存 chrome.storage.local，刷新与跨页面都保持。
- * 3. 577 行 CSS 收敛为设计令牌（common/tokens.js）+ 组件样式，全部走 var(--aja-*)，
- *    跟随系统深浅主题；渐变、毛玻璃、彩色阴影、emoji 图标全部移除。
+ * v5.6.0：常驻收录胶囊（#aja-toggle）与其唯一下游迷你收录卡片（#aja-capture-pop）整体退役
+ * ——用户实测它并没有用：收录走 Side Panel（识别当前页面 → 核对 → 收录）已是完整链路，
+ * 页面上不再注入任何常驻按钮（拖拽吸边、位置持久化、 AJA.dragMath 一并删除）。
+ * 保留的职责全部服务 Side Panel：光标追踪与字段填入引擎（FILL_FOCUSED_FIELD）、
+ * 解析当前页（SCAN_CURRENT_PAGE，引擎在 03-parsers.js）、toast 反馈。
  */
 'use strict';
 
@@ -19,17 +16,12 @@ const IS_TRACKER_PAGE = location.origin === AJA.TRACKER_ORIGIN && location.pathn
 let shadow = null;
 let host = null;
 
-// ===== 顶层声明：05-capture 等跨文件引用，严禁包进块级作用域 =====
+// ===== 顶层声明：06-bridge 等跨文件引用，严禁包进块级作用域 =====
 const MSG = AJA.MSG;
 let lastFocusedEl = null;
 let lastSelectionStart = null;
 let lastSelectionEnd = null;
-let toggleBtn = null;
 let toastTimer = null;
-
-// HTML 转义：唯一实现在 common/capture-form.js（Side Panel 也要用，而那里的 isolated world
-// 看不到本文件的顶层函数）。这些数据可能来自任意招聘页解析，未转义直接拼 innerHTML 会形成注入面。
-const escapeHtml = AJA.escapeHtml;
 
 // Toast 消息函数（桥接模式下无 shadow，静默忽略）
 function showToast(msg) {
@@ -133,45 +125,8 @@ function fillFocusedField(value) {
   }
 }
 
-// 拖拽定位的纯数学（挂到 AJA 供 test/extension-ui.js 单测：吸边判定与边界 clamp 是
-// 「胶囊拖到窗口外找不回来」这类问题的唯一防线，必须可测）
-AJA.dragMath = {
-  // 松手吸边：比较胶囊中心点到左右边缘的距离，贴回更近的一侧
-  pickSide(centerX, viewportW) {
-    const cx = Number(centerX) || 0, vw = Number(viewportW) || 0;
-    if (vw <= 0) return 'right';
-    return (vw / 2 - cx) >= 0 ? 'left' : 'right';
-  },
-  // 垂直边界 clamp：留 margin，且视口比按钮还矮时不至于算出负区间
-  clampTop(top, viewportH, btnH, margin) {
-    const m = Number(margin) >= 0 ? Number(margin) : 8;
-    const h = Number(btnH) > 0 ? Number(btnH) : 32;
-    const vh = Number(viewportH) > 0 ? Number(viewportH) : 0;
-    const max = Math.max(m, vh - h - m);
-    const t = Number(top) || m;
-    return Math.min(Math.max(m, t), max);
-  },
-  // 迷你卡片定位：放在胶囊内侧，空间不足则贴视口边缘（窄窗口下允许覆盖胶囊，
-  // 否则卡片会被挤到视口外彻底看不见）
-  placePop(btnRect, popW, popH, opts) {
-    const o = opts || {};
-    const gap = Number(o.gap) >= 0 ? Number(o.gap) : 8;
-    const margin = Number(o.margin) >= 0 ? Number(o.margin) : 8;
-    const vw = Number(o.viewportW) > 0 ? Number(o.viewportW) : 0;
-    const vh = Number(o.viewportH) > 0 ? Number(o.viewportH) : 0;
-    const b = btnRect || { left: 0, right: 0, top: 0, width: 0, height: 0 };
-    const pw = Number(popW) > 0 ? Number(popW) : 300;
-    const ph = Number(popH) > 0 ? Number(popH) : 200;
-
-    let left = o.side === 'left' ? (b.right + gap) : (b.left - gap - pw);
-    if (left < margin) left = margin;
-    if (vw > 0 && left + pw > vw - margin) left = Math.max(margin, vw - pw - margin);
-
-    let top = Number(b.top) || margin;
-    if (vh > 0 && top + ph > vh - margin) top = Math.max(margin, vh - ph - margin);
-    return { left: Math.round(left), top: Math.round(top) };
-  }
-};
+// 拖拽定位的纯数学随胶囊一起退役（v5.6.0）：吸边判定与迷你卡片定位只服务已删除的
+// #aja-toggle / #aja-capture-pop，没有别的消费方。
 
 if (IS_TRACKER_PAGE) {
   console.log('[秋招求职与简历助手] 检测到网页版管理器，进入桥接模式（不注入 UI）');
@@ -212,116 +167,6 @@ document.getElementById('autumn-job-assistant-host')?.remove();
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
     :host { all: initial; }
 
-    .aja-ico { flex: 0 0 auto; display: block; }
-
-    /* ---------- 常驻收录胶囊：吸边、可拖拽、跟随系统深浅主题 ---------- */
-    #aja-toggle {
-      position: fixed;
-      z-index: 2147483646;
-      display: flex;
-      align-items: center;
-      gap: var(--aja-space-2);
-      padding: 6px 10px;
-      background: var(--aja-bg);
-      color: var(--aja-text);
-      font-size: var(--aja-font-sm);
-      font-weight: 600;
-      line-height: 1.4;
-      border: 1px solid var(--aja-border-soft);
-      border-radius: var(--aja-radius-pill);
-      box-shadow: 0 2px 8px var(--aja-shadow);
-      cursor: pointer;
-      user-select: none;
-      -webkit-user-select: none;
-      /* pointer 拖拽必需：否则触摸设备上拖动胶囊会同时滚动宿主页面 */
-      touch-action: none;
-      transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
-                  border-color var(--aja-motion-fast) var(--aja-motion-ease),
-                  color var(--aja-motion-fast) var(--aja-motion-ease);
-    }
-    /* hover 只改颜色，绝不改 padding/transform——旧版 hover 时 padding-left 从 10px 变 14px，
-       按钮会"跳"一下，是廉价感的典型来源 */
-    #aja-toggle:hover { background: var(--aja-bg-hover); border-color: var(--aja-accent); color: var(--aja-accent); }
-    /* 玻璃：胶囊浮在别人的招聘页面上，.72 半透明 + blur 让它与宿主内容自然分离，
-       这是插件里玻璃收益最大的一处（比 Side Panel 顶栏更明显，因为背后是真实网页内容）。
-       hover 时玻璃会让 hover 底色透出宿主内容，所以 @supports 内把 hover 恢复成不透明。 */
-    @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
-      #aja-toggle { background: var(--aja-glass); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
-      #aja-toggle:hover { background: var(--aja-bg-hover); }
-    }
-    /* 吸边：贴住的一侧去掉圆角与边框，视觉上像从屏幕边缘抽出的标签 */
-    #aja-toggle.is-right { border-right: 0; border-radius: var(--aja-radius-pill) 0 0 var(--aja-radius-pill); }
-    #aja-toggle.is-left  { border-left: 0;  border-radius: 0 var(--aja-radius-pill) var(--aja-radius-pill) 0; }
-    #aja-toggle.is-dragging {
-      transition: none;
-      cursor: grabbing;
-      opacity: .92;
-      border-width: 1px;
-      border-radius: var(--aja-radius-pill);
-    }
-    #aja-toggle .toggle-label { white-space: nowrap; }
-
-    /* ---------- 迷你收录卡片 ---------- */
-    #aja-capture-pop {
-      position: fixed;
-      z-index: 2147483647;
-      width: 300px;
-      max-height: calc(100vh - 16px);
-      overflow-y: auto;
-      background: var(--aja-bg);
-      color: var(--aja-text);
-      border: 1px solid var(--aja-border-soft);
-      border-radius: var(--aja-radius-lg);
-      box-shadow: 0 12px 40px var(--aja-shadow);
-      padding: var(--aja-space-4);
-    }
-    /* 迷你卡片同样用玻璃（浮在招聘页面上）；阴影从 2px/8px 升档到 lift（12px/40px），
-       因为卡片面积大、需要比胶囊更强的分离感。降级同胶囊：不支持时留在上面的不透明 bg。 */
-    @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
-      #aja-capture-pop { background: var(--aja-glass); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
-    }
-    /* [hidden] 守卫：本规则块设了 display，必须显式压回 none，否则收起后仍占据空间并吞掉点击
-       （网页版踩过四次同类缺陷，见 test/web-check.js 的同款守卫） */
-    #aja-capture-pop[hidden] { display: none; }
-    #aja-capture-pop::-webkit-scrollbar { width: 6px; }
-    #aja-capture-pop::-webkit-scrollbar-thumb { background: var(--aja-border); border-radius: var(--aja-radius-sm); }
-
-    .pop-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--aja-space-3);
-      padding-bottom: var(--aja-space-3);
-      margin-bottom: var(--aja-space-4);
-      border-bottom: 1px solid var(--aja-border-soft);
-    }
-    .pop-title {
-      display: flex;
-      align-items: center;
-      gap: var(--aja-space-2);
-      font-size: var(--aja-font-md);
-      font-weight: 650;
-      color: var(--aja-text);
-    }
-    .pop-close {
-      display: grid;
-      place-items: center;
-      width: 22px;
-      height: 22px;
-      border: 0;
-      border-radius: var(--aja-radius-sm);
-      background: transparent;
-      color: var(--aja-text-mute);
-      cursor: pointer;
-      transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
-                  color var(--aja-motion-fast) var(--aja-motion-ease);
-    }
-    .pop-close:hover { background: var(--aja-bg-hover); color: var(--aja-text); }
-    .pop-actions { display: flex; align-items: center; gap: var(--aja-space-1); }
-
-    /* 收录表单的组件样式不在这里：它与表单模板同源，放在 common/capture-form.js 的 css()，
-       由下方 applyTheme() 拼接注入。迷你卡片与 Side Panel 共用同一份，避免样式各自漂移。 */
-
     /* ---------- Toast ---------- */
     /* toast 从黑底白字改为玻璃白（与网页版 v4.10.0 的 toast 同语言）：
        圆角用矩形档 lg 而非胶囊（toast 常是标题+副文本两行，胶囊会压行）、
@@ -352,9 +197,8 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       to { opacity: 1; }
     }
     /* 前庭敏感用户的动效总开关（shadow root 版本）。
-       迷你卡片与侧栏的样式活在 Shadow DOM 里，外面的文档级媒体查询进不来，
-       所以必须在这段 COMPONENT_CSS 里自带一份。媒体查询在 shadow root 内照常生效。
-       capture-form.js 的 css() 拼在本段之后，一并被覆盖。 */
+       toast 的样式活在 Shadow DOM 里，外面的文档级媒体查询进不来，
+       所以必须在这段 COMPONENT_CSS 里自带一份。媒体查询在 shadow root 内照常生效。 */
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         animation-duration: .01ms !important;
@@ -370,185 +214,11 @@ document.getElementById('autumn-job-assistant-host')?.remove();
   // 后者依赖字符串定位，组件样式一改就会静默错位（拼出半截 CSS，界面直接花掉）。
   const style = document.createElement('style');
   function applyTheme(scheme) {
-    style.textContent = AJA.tokensToCssVars(scheme, ':host') + COMPONENT_CSS + AJA.CaptureForm.css();
+    style.textContent = AJA.tokensToCssVars(scheme, ':host') + COMPONENT_CSS;
   }
   applyTheme(AJA.currentScheme());
   AJA.onSchemeChange(applyTheme);
   shadow.appendChild(style);
-
-  // ================= 常驻收录胶囊（轻量 DOM，迷你卡片首次唤起时才完整构建）=================
-  toggleBtn = document.createElement('div');
-  toggleBtn.id = 'aja-toggle';
-  toggleBtn.className = 'is-right';
-  toggleBtn.setAttribute('role', 'button');
-  toggleBtn.setAttribute('tabindex', '0');
-  toggleBtn.title = `收录当前岗位 v${AJA.VERSION}\n可拖拽移动，松手自动吸边（位置会记住）\n暂存箱与简历字段速填在侧边面板里：点浏览器工具栏的扩展图标`;
-  toggleBtn.innerHTML = `${AJA.svg('plus', 14)}<span class="toggle-label">收录岗位</span>`;
-  shadow.appendChild(toggleBtn);
-
-  // ================= 胶囊位置：读写持久化 =================
-  const UI_KEY = AJA.UI_STORAGE_KEY;
-  let togglePos = { side: 'right', top: 180 };
-
-  function applyTogglePos() {
-    if (!toggleBtn) return;
-    const h = toggleBtn.offsetHeight || 32;
-    togglePos.top = AJA.dragMath.clampTop(togglePos.top, window.innerHeight, h, 8);
-    toggleBtn.style.top = `${Math.round(togglePos.top)}px`;
-    const isLeft = togglePos.side === 'left';
-    toggleBtn.classList.toggle('is-left', isLeft);
-    toggleBtn.classList.toggle('is-right', !isLeft);
-    toggleBtn.style.left = isLeft ? '0px' : 'auto';
-    toggleBtn.style.right = isLeft ? 'auto' : '0px';
-    if (!AJA.positionCapturePop) return;
-    AJA.positionCapturePop();
-  }
-  AJA.applyTogglePos = applyTogglePos;
-
-  function loadTogglePos() {
-    try {
-      chrome.storage.local.get([UI_KEY], (res) => {
-        const saved = res && res[UI_KEY];
-        if (saved && typeof saved === 'object') {
-          if (saved.side === 'left' || saved.side === 'right') togglePos.side = saved.side;
-          if (Number(saved.top) > 0) togglePos.top = Number(saved.top);
-        }
-        applyTogglePos();
-      });
-    } catch (_) {
-      applyTogglePos();
-    }
-  }
-  function saveTogglePos() {
-    try {
-      chrome.storage.local.set({ [UI_KEY]: { side: togglePos.side, top: Math.round(togglePos.top) } });
-    } catch (_) {}
-  }
-  AJA.getTogglePos = () => ({ side: togglePos.side, top: togglePos.top });
-
-  // ================= 胶囊拖拽：pointer events + 松手吸边 =================
-  // 旧版用 mousedown + document.mousemove，只改 style.top（不能左右移），且鼠标移出按钮就丢事件；
-  // 改用 pointer capture 后鼠标/触摸/笔统一处理，移出元素仍持续收到 move。
-  let dragState = null;
-  let suppressClick = false; // 拖拽位移超过阈值则抑制随后的 click，避免重定位胶囊后卡片被误弹开
-
-  toggleBtn.addEventListener('pointerdown', (e) => {
-    if (typeof e.button === 'number' && e.button !== 0) return;
-    const rect = toggleBtn.getBoundingClientRect();
-    dragState = {
-      id: e.pointerId,
-      moved: false,
-      startX: e.clientX,
-      startY: e.clientY,
-      originLeft: rect.left,
-      originTop: rect.top,
-      w: rect.width,
-      h: rect.height
-    };
-    try { toggleBtn.setPointerCapture(e.pointerId); } catch (_) {}
-    e.preventDefault();
-  });
-
-  toggleBtn.addEventListener('pointermove', (e) => {
-    if (!dragState || e.pointerId !== dragState.id) return;
-    const dx = e.clientX - dragState.startX;
-    const dy = e.clientY - dragState.startY;
-    // 4px 阈值：手抖不算拖拽，否则单击会被吞掉
-    if (!dragState.moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
-    dragState.moved = true;
-    toggleBtn.classList.add('is-dragging');
-    const maxTop = AJA.dragMath.clampTop(dragState.originTop + dy, window.innerHeight, dragState.h, 8);
-    const left = Math.min(Math.max(0, dragState.originLeft + dx), Math.max(0, window.innerWidth - dragState.w));
-    toggleBtn.style.left = `${Math.round(left)}px`;
-    toggleBtn.style.right = 'auto';
-    toggleBtn.style.top = `${Math.round(maxTop)}px`;
-  });
-
-  function endDrag(e, commit) {
-    if (!dragState || (e && e.pointerId !== dragState.id)) return;
-    const wasMoved = dragState.moved;
-    try { toggleBtn.releasePointerCapture(dragState.id); } catch (_) {}
-    toggleBtn.classList.remove('is-dragging');
-    if (wasMoved && commit) {
-      const rect = toggleBtn.getBoundingClientRect();
-      togglePos.side = AJA.dragMath.pickSide(rect.left + rect.width / 2, window.innerWidth);
-      togglePos.top = AJA.dragMath.clampTop(rect.top, window.innerHeight, rect.height, 8);
-      applyTogglePos();
-      saveTogglePos();
-    } else if (wasMoved) {
-      applyTogglePos(); // 取消：回到拖拽前的吸边位置
-    }
-    suppressClick = wasMoved;
-    dragState = null;
-  }
-  toggleBtn.addEventListener('pointerup', (e) => endDrag(e, true));
-  toggleBtn.addEventListener('pointercancel', (e) => endDrag(e, false));
-
-  // 点击胶囊：首次唤起时构建迷你卡片再展开
-  function openCapture() {
-    if (suppressClick) { suppressClick = false; return; }
-    if (AJA.ensureCaptureUI) AJA.ensureCaptureUI();
-    if (AJA.toggleCapturePop) AJA.toggleCapturePop(true);
-  }
-  toggleBtn.addEventListener('click', openCapture);
-  // 键盘可达：胶囊有 tabindex，Enter/Space 等价于点击（HTML 拖拽对键盘用户不可用）
-  toggleBtn.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); openCapture(); }
-  });
-
-  // 窗口尺寸变化后重新 clamp，避免窗口变小后胶囊留在视口外找不回来
-  let resizeTimer = null;
-  window.addEventListener('resize', () => {
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => applyTogglePos(), 150);
-  });
-
-  // ================= 迷你卡片开关与定位 =================
-  function positionCapturePop() {
-    const pop = shadow && shadow.getElementById('aja-capture-pop');
-    if (!pop || pop.hidden || !toggleBtn) return;
-    const btn = toggleBtn.getBoundingClientRect();
-    // 卡片必须先可见才能量到尺寸；hidden 时 offsetWidth/Height 为 0
-    const pos = AJA.dragMath.placePop(btn, pop.offsetWidth || 300, pop.offsetHeight || 200, {
-      side: togglePos.side,
-      viewportW: window.innerWidth,
-      viewportH: window.innerHeight,
-      gap: 8,
-      margin: 8
-    });
-    pop.style.left = `${pos.left}px`;
-    pop.style.top = `${pos.top}px`;
-  }
-  AJA.positionCapturePop = positionCapturePop;
-
-  function toggleCapturePop(open) {
-    const pop = shadow && shadow.getElementById('aja-capture-pop');
-    if (!pop) return;
-    const want = typeof open === 'boolean' ? open : pop.hidden;
-    pop.hidden = !want;
-    if (want) {
-      positionCapturePop();
-      if (AJA.onCaptureOpen) AJA.onCaptureOpen();
-    }
-  }
-  AJA.toggleCapturePop = toggleCapturePop;
-
-  // Esc 关闭卡片
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    const pop = shadow && shadow.getElementById('aja-capture-pop');
-    if (pop && !pop.hidden) { pop.hidden = true; e.preventDefault(); }
-  });
-
-  // 点击卡片外部关闭。Shadow DOM 下 e.target 会被重定向为宿主节点，
-  // 必须用 composedPath() 判断点击是否落在插件 UI 内部。
-  document.addEventListener('pointerdown', (e) => {
-    const pop = shadow && shadow.getElementById('aja-capture-pop');
-    if (!pop || pop.hidden) return;
-    const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
-    if (path.indexOf(host) > -1) return;
-    pop.hidden = true;
-  }, true);
 
   // ================= Side Panel 的远程调用入口 =================
   // Side Panel 是扩展页面，无法直接访问宿主 DOM，所以解析当前页与填入字段都要经
@@ -576,7 +246,5 @@ document.getElementById('autumn-job-assistant-host')?.remove();
       sendResponse({ ok: result === 'filled', result });
     }
   });
-
-  loadTogglePos();
 
 } // end !IS_TRACKER_PAGE

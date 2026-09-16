@@ -35,6 +35,43 @@
 - `test/web-runtime.js`：`#/upcoming` 路由用例改为解析到 calendar。
 - `APP_VERSION` → 4.29.0；service-worker 缓存名、download 亮点段与页脚、README、使用说明同步 bump。
 
+## 插件 v5.6.0（移除页面收录胶囊；content 注入瘦身）
+
+纯插件版本，网页版与 Action 未改动，卫星仓库无需同步。用户原话：「插件我想去掉在页面上的
+那个胶囊，目前实际上并没有用」。
+
+### 分析结论：胶囊确实没有承担不可替代的职责
+
+页面胶囊（`#aja-toggle`，常驻悬浮"收录岗位"按钮，可拖拽吸边、位置持久化）的唯一功能是
+点开迷你收录卡片（`#aja-capture-pop`）。而 Side Panel 已有完整收录链路：**「识别当前页面」
+（`SCAN_CURRENT_PAGE` 复用同一套解析引擎）→ 核对/补填 → 收录**，暂存箱、简历速填、网页版
+桥接全部与胶囊无关。它还带来真实的成本：每个网页常驻注入一个悬浮按钮 + 三个仅供它使用的
+content 文件。
+
+### 改动
+
+- `content/01-core.js`：删除胶囊 DOM、拖拽吸边与持久化（`AJA.dragMath` / `UI_STORAGE_KEY`
+  的读写）、迷你卡片开关定位与 Esc / 外点关闭；`applyTheme` 不再拼接表单 CSS。保留：Shadow
+  Root（toast 挂载点）、光标追踪、`fillFocusedField` 填入引擎、`SCAN_CURRENT_PAGE` /
+  `FILL_FOCUSED_FIELD` 处理器。
+- **`content/05-capture.js` 删除**：迷你卡片是胶囊的唯一下游，胶囊没了它不可达；
+  `safeSendMessage` 迁入 `06-bridge.js` 顶层（其唯一剩余消费方是暂存箱驱动）。
+- **manifest 收缩**：content_scripts 移除 `05-capture.js`，同时移除已无 content 侧消费方的
+  `common/icons.js` 与 `common/capture-form.js`（panel.html 自行加载）——每个普通页面少注入
+  三个文件。description 去掉胶囊表述。
+- `constants.js`：删 `UI_STORAGE_KEY`（storage 里的旧值属无害残留，不做迁移清理）；版本 5.6.0。
+
+### 测试与文档
+
+- `test/extension-ui.js`：删拖拽数学整节（G 节）、位置持久化 / 关闭路径 / 键盘可达 / 打开重新
+  解析四条用例、玻璃白名单里的胶囊选择器、吸边状态类断言、`MSG` 对账与 sidePanel 守卫里的
+  05-capture 条目；顺序断言按新注入清单重写；新增"icons/capture-form 不得再注入 content"与
+  "UI_STORAGE_KEY 不得复活"守卫。63 → 56 项。
+- 文档全量同步：`docs/安装与使用教程.md`（"两个入口"改为面板单入口、删胶囊拖拽段、低版本
+  建议改为升级浏览器）、`docs/快速上手指南.md`、`extension/README.md`（UI 表格、流程图、
+  目录结构、加载顺序、存储键、版本史等约 14 处）、`download.html` 插件卡片；web-check 的
+  「插件版本号 11 处一致」守卫覆盖全部版本落点。
+
 ## v4.28.0（网页：日历点日期展开当日明细；已完成聚合为浅绿一行）
 
 纯网页版本，Action 与插件端未改动，卫星仓库无需同步。用户实测 v4.27.0 日历后的反馈：

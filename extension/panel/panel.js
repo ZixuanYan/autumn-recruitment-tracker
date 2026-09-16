@@ -545,7 +545,7 @@
     });
     els.openTracker.addEventListener('click', openTracker);
 
-    // 跨 UI 同步：迷你卡片（content script）保存记录、网页版下发简历，都会写 chrome.storage.local，
+    // 跨 UI 同步：收录的记录（实时推送 / 暂存箱写入）与网页版下发的简历都会写 chrome.storage.local，
     // 面板监听同一份存储即可自动刷新，不需要额外的广播消息
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener((changes, area) => {

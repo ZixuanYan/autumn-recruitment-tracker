@@ -11,7 +11,7 @@
 //
 // 本测试把 chrome.runtime.id 置空（这正是上下文失效后的可观测状态）来复现该条件，
 // 断言：不抛异常、失败被收敛成一次性 BRIDGE_BROKEN 上报、多次触发不刷屏。
-// 真实的 safeSendMessage 从 05-capture.js 原文抽取（不打桩），保证测的是实际防护逻辑。
+// 真实的 safeSendMessage 从 06-bridge.js 原文抽取（不打桩），保证测的是实际防护逻辑。
 // 运行：node test/extension-bridge.js
 // ============================================================================
 
@@ -22,10 +22,9 @@ const assert = require('assert');
 
 const EXT = path.resolve(__dirname, '../extension');
 const bridgeSrc = fs.readFileSync(path.join(EXT, 'content/06-bridge.js'), 'utf8');
-// v5.0.0：safeSendMessage 仍在 content 侧（05-capture.js）；收录表单的 HTML、下拉选项生成、
-// 保存 payload 与暂存箱回填则收敛到 common/capture-form.js——迷你卡片与 Side Panel 共用一份，
-// 下面那几条跨仓库契约断言因此有了唯一落点，不会出现「一端改了另一端漏改」。
-const captureSrc = fs.readFileSync(path.join(EXT, 'content/05-capture.js'), 'utf8');
+// v5.6.0：safeSendMessage 随迷你卡片退役迁入 06-bridge.js 顶层（此前在 05-capture.js）；
+// 收录表单的 HTML、下拉选项生成、保存 payload 与暂存箱回填则在 common/capture-form.js——
+// Side Panel 经它复用，跨仓库契约断言因此有了唯一落点。
 const formSrc = fs.readFileSync(path.join(EXT, 'common/capture-form.js'), 'utf8');
 
 let failed = 0;
@@ -57,8 +56,8 @@ function extractFunction(src, name) {
   return '';
 }
 
-const safeSendMessageSrc = extractFunction(captureSrc, 'safeSendMessage');
-assert.ok(safeSendMessageSrc.length > 100, '未能从 05-capture.js 抽取真实的 safeSendMessage');
+const safeSendMessageSrc = extractFunction(bridgeSrc, 'safeSendMessage');
+assert.ok(safeSendMessageSrc.length > 100, '未能从 06-bridge.js 抽取真实的 safeSendMessage');
 
 // ---------------- 沙箱：可中途「失效」的插件桥接环境 ----------------
 // 真实时序是：页面正常加载（上下文有效）→ 用户去 edge://extensions 重载了插件 →
@@ -145,10 +144,15 @@ async function runAll() {
 // ============================================================================
 section('静态守卫');
 
-check('06-bridge.js 里没有任何裸调 chrome.runtime.sendMessage（只能走 safeSendMessage）', () => {
+check('06-bridge.js 里 chrome.runtime.sendMessage 只允许出现在 safeSendMessage 封装内部（v5.6.0 起封装就在本文件）', () => {
   const noComments = bridgeSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-  assert.ok(!/chrome\.runtime\.sendMessage/.test(noComments),
-    '仍存在裸调用；扩展重载后它会同步抛 "Extension context invalidated." 冒到网页控制台');
+  // safeSendMessage 自体迁入本文件后（v5.6.0，自 05-capture.js），封装内部那一次调用是合法的；
+  // 守卫改为：剥掉封装函数体后，其余位置不得再出现裸调用。
+  const safeBody = extractFunction(bridgeSrc, 'safeSendMessage');
+  assert.ok(safeBody.length > 0, '找不到 safeSendMessage 封装');
+  const outside = noComments.replace(safeBody, '');
+  assert.ok(!/chrome\.runtime\.sendMessage/.test(outside),
+    '封装之外仍存在裸调用；扩展重载后它会同步抛 "Extension context invalidated." 冒到网页控制台');
   assert.ok(/safeSendMessage\(/.test(noComments), '应通过 safeSendMessage 封装通信');
 });
 

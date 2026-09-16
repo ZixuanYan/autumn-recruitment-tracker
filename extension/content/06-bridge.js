@@ -10,6 +10,30 @@
  */
 'use strict';
 
+// chrome.runtime.sendMessage 安全封装（v5.6.0 自 05-capture.js 迁入——迷你收录卡片删除后，
+// 本文件的暂存箱驱动是它唯一的消费方）：
+// 为什么不能直接调 chrome.runtime.sendMessage：扩展被重新加载（手动重载 / 更新 / 浏览器停用后恢复）后，
+// 页面上旧的内容脚本还活着，但它的 chrome.runtime 已成失效句柄，任何直接调用都会**同步抛出**
+// "Uncaught Error: Extension context invalidated." 冒到网页控制台 —— 用户看到报错却不知该做什么。
+// 它先用 chrome.runtime.id 探测上下文是否还在，再 try/catch 兜底，失败走回调而不是抛异常。
+function safeSendMessage(message, onResult, onError) {
+  if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+    if (onError) onError('扩展连接不可用，请刷新页面后重试');
+    return;
+  }
+  try {
+    chrome.runtime.sendMessage(message, (res) => {
+      if (chrome.runtime.lastError) {
+        if (onError) onError(chrome.runtime.lastError.message || '扩展通信失败');
+        return;
+      }
+      if (onResult) onResult(res);
+    });
+  } catch (err) {
+    if (onError) onError(err && err.message ? err.message : '扩展通信异常');
+  }
+}
+
 if (IS_TRACKER_PAGE) {
   // ================= 实时推送中继 =================
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -31,12 +55,8 @@ if (IS_TRACKER_PAGE) {
   let openRetries = 0;
 
   // ================= 与 background 的通信：一律走安全封装 =================
-  // 为什么不能直接调 chrome.runtime.sendMessage：扩展被重新加载（手动重载 / 更新 / 浏览器停用后恢复）后，
-  // 页面上旧的内容脚本还活着，但它的 chrome.runtime 已成失效句柄，任何直接调用都会**同步抛出**
-  // "Uncaught Error: Extension context invalidated." 冒到网页控制台 —— 用户看到报错却不知该做什么。
-  // safeSendMessage 由先注入的 05-capture.js 提供（同一 isolated world，顶层函数跨文件可见；
-  // 它定义在文件顶层而不是 IS_TRACKER_PAGE 分支内，所以本文件依赖的桥接模式下同样可用），
-  // 它先用 chrome.runtime.id 探测上下文是否还在，再 try/catch 兜底，失败走回调而不是抛异常。
+  // safeSendMessage 定义在本文件顶层（同一 isolated world，跨 if 分支可见），
+  // 探测失效句柄与兜底的说明见上方函数注释。
   function sendRuntimeMessage(message) {
     return new Promise((resolve, reject) => {
       safeSendMessage(message, resolve, reason => reject(reason));

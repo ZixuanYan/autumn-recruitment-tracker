@@ -1,10 +1,12 @@
-# 秋招求职与简历助手（Chrome/Edge 扩展 v5.5.0）
+# 秋招求职与简历助手（Chrome/Edge 扩展 v5.6.0）
 
 网申页采集端浏览器扩展（Manifest V3）：**简历字段点击速填 + 岗位一键收录 + 暂存箱**。与网页版 [秋招投递管理器](https://github.com/ZixuanYan/autumn-recruitment-tracker) 配套使用，插件负责采集与速填，网页版负责管理与跨设备同步。
 
 > 本目录是 monorepo `autumn-recruitment-tracker` 的浏览器扩展部分（网页版管理器在仓库根目录）。安装：Chrome/Edge 扩展页开启开发者模式 →「加载已解压的扩展程序」→ 选择本 `extension/` 文件夹。
 
-> **v5.0.0 重大调整**：完整 UI 从「注入网页的全高抽屉」搬到 **Chrome 原生 Side Panel**（侧边面板）。抽屉浮在页面之上、位置写死不能移动，正在填的网申表单被挡住一半；Side Panel 由浏览器管理，压缩页面宽度而不是覆盖页面，于是「一边看表单、一边点字段填入」第一次真正成立。页面上只保留一个**可拖拽吸边的收录胶囊**。同时整套样式重做为设计令牌体系，去掉了渐变、毛玻璃、彩色阴影与 18 处 emoji 图标。
+> **v5.6.0 调整**：**页面上的收录胶囊（`#aja-toggle`）与其迷你卡片（`#aja-capture-pop`）整体移除**——用户实测它并没有用，收录入口统一到 Side Panel（「识别当前页面」→ 核对 → 收录）。content script 不再往任何页面注入常驻按钮，也不再注入 `icons.js` 与 `capture-form.js`（两者只剩面板一个消费方，由 panel.html 自行加载）；`safeSendMessage` 迁入 `06-bridge.js`。
+
+> **v5.0.0 重大调整**：完整 UI 从「注入网页的全高抽屉」搬到 **Chrome 原生 Side Panel**（侧边面板）。抽屉浮在页面之上、位置写死不能移动，正在填的网申表单被挡住一半；Side Panel 由浏览器管理，压缩页面宽度而不是覆盖页面，于是「一边看表单、一边点字段填入」第一次真正成立。页面上只保留一个**可拖拽吸边的收录胶囊**（该胶囊已于 v5.6.0 移除）。同时整套样式重做为设计令牌体系，去掉了渐变、毛玻璃、彩色阴影与 18 处 emoji 图标。
 
 > v3.0.0 重大调整：本扩展聚焦为纯采集端。投递看板、简历编辑器、OCR 与云同步已移除，统一由网页版管理器承担；简历在网页版编辑后自动下发到本扩展供填表使用。
 
@@ -13,14 +15,11 @@
 | 载体 | 入口 | 职责 | 遮挡页面吗 |
 | --- | --- | --- | --- |
 | **Side Panel**（侧边面板） | 点浏览器工具栏的扩展图标，或快捷键 `Ctrl/⌘+Shift+F` | 完整功能：一键收录、简历字段库速填、暂存箱、打开网页版（v5.3.1 起就是这个顺序） | **不遮挡**（浏览器压缩页面宽度），宽度可拖分隔条调整，跨标签页保持打开 |
-| **收录胶囊 + 迷你卡片** | 页面上那个可拖拽的小标签，点它弹出紧凑表单 | 只做收录：识别当前页 → 核对/补填 → 存入 | 卡片仅 300px 宽，且**位置跟随胶囊**——把胶囊拖到页面空白处，表单就落在空白处 |
-| Shadow DOM 隔离 | — | 胶囊与迷你卡片都渲染在 `attachShadow` 里 | 与任意招聘网站的 CSS 完全隔离，互不污染 |
-
-胶囊位置会记住（存 `chrome.storage.local`），刷新页面、换个网站都保持在你上次放的地方；拖动支持鼠标与触摸，松手自动吸附到更近的左/右边缘。
+| Shadow DOM 隔离 | — | toast 反馈渲染在 `attachShadow` 里（速填成功 / 回退复制的提示） | 与任意招聘网站的 CSS 完全隔离，互不污染 |
 
 > v5.3.1 修了两件事：**面板滚不动**（`.p-section` 缺 `flex: 0 0 auto`，在高度被限死的 flex 滚动容器里被压扁、又被自己的 `overflow: hidden` 裁掉，于是 `.p-body` 永不溢出、滚动条永不出现，且控制台零报错），以及**区块顺序与默认展开态**（一键收录 → 简历字段 → 暂存箱，前两段默认展开；面板不持久化折叠状态，`panel.html` 的属性就是默认值的唯一来源）。
 
-> 为什么胶囊不能用来打开 Side Panel：`chrome.sidePanel.open()` 要求 user gesture，从页面里的点击转发到 background 再调用会**丢失手势**而失败。所以胶囊只承担收录，面板入口是工具栏图标与浏览器级快捷键（`chrome.commands` 的触发算手势，可以直接调 `open()`）。
+> 为什么不在网页里放按钮打开 Side Panel：`chrome.sidePanel.open()` 要求 user gesture，从页面里的点击转发到 background 再调用会**丢失手势**而失败。所以面板入口是工具栏图标与浏览器级快捷键（`chrome.commands` 的触发算手势，可以直接调 `open()`）。
 
 ## 核心特性
 
@@ -38,11 +37,11 @@
    - 收录时自动查重：同链接或「同公司 + 同岗位」的记录更新而非重复堆积；同公司的**另一个**岗位正常入库
    - **机构可直接填**（v5.3.0）：收录表单在公司名下面有「机构 / 子公司 / BU（选填）」。同一家企业的不同分行 / 子公司招同名岗位时，靠它区分才不会被判成重复投递；网页端查重的三要素正是「公司 + 机构 + 岗位」，插件端用的是同一套判定（两端不一致的话，同一次收录走网页和走暂存箱会给出不同结论）。暂存箱条目标题会带上机构，回填表单时也带回来
    - **企业性质可直接选**（v4.2.0）：收录表单有「央国企 / 私企 / 外企」下拉，选完随记录一起进网页端台账，网页端洞察的「企业性质」统计就有数据了。**刻意不做自动识别**——页面上没有可靠依据判断企业性质，猜错比留空更糟；因此识别全中时提示条会写「企业性质需手动选一次」，免得用户注意不到这个下拉。暂存箱条目会显示已选的性质，回填表单时带回，重复收录同一条岗位时「这次没选」不会冲掉上次选好的值
-   - **两个入口同一份表单**：迷你卡片与 Side Panel 共用 `common/capture-form.js` 的模板、下拉生成、置信提示与保存链路，不会出现「一边改了另一边漏改」
+   - **表单只有一份**：Side Panel 使用 `common/capture-form.js` 的模板、下拉生成、置信提示与保存链路；v5.6.0 起迷你卡片退役，不再存在"两个入口"的漂移面
 3. **暂存箱**（在 Side Panel 里）
    - 网页版管理器未打开时，收录的岗位自动进入暂存箱排队
    - 打开网页版管理器后逐条弹出确认，人工核对后入库并云同步
-   - 可随时展开查看、丢弃或点击回填修改；迷你卡片存进去的记录会**自动刷新**到面板（监听同一份 `chrome.storage.local`）
+   - 可随时展开查看、丢弃或点击回填修改；收录的记录会**自动刷新**到面板（监听同一份 `chrome.storage.local`）
 
 > v4.0.0 起已**移除**「整页一键自动填充」与「AI 辅助填写」：网申站点结构千差万别，整页自动填充命中率不稳且有误填风险，AI 亦需联网/配置/隐私成本。改为上面这套**用户主导、逐字段、跨站通用、零误填**的点击速填（左键填入 / 右键复制 / 搜索）。
 
@@ -54,8 +53,7 @@
 ① 点侧边面板里的字段 → 填入表单
    （面板不遮挡，表单全程可见）
 ② 提交后收录岗位：
-   点页面胶囊 → 迷你卡片核对/补填
-   或 侧边面板 →「识别当前页面」
+   侧边面板 →「识别当前页面」→ 核对/补填
     │ 管理器已打开 → 实时推送
     │ 管理器未打开 → 进暂存箱（面板可查看/丢弃/回填）
     └──────────────────────────→  弹窗人工确认入库
@@ -72,11 +70,11 @@
 4. 点击**加载已解压的扩展程序**，选择本 `extension/` 文件夹（含 `manifest.json`）
 5. 打开侧边面板：点浏览器工具栏上的扩展图标，或按 `Ctrl/⌘+Shift+F`（可在 `edge://extensions/shortcuts` 改绑）
 
-**浏览器版本**：Side Panel 需要 Chrome / Edge **114 或更新**。更低版本上侧边面板入口无效，但**胶囊与迷你收录卡片仍然完整可用**（收录功能不受影响，代码里对 `chrome.sidePanel` 做了特性检测）。
+**浏览器版本**：Side Panel 需要 Chrome / Edge **114 或更新**。更低版本上插件界面不可用（主要功能都依赖 Side Panel），请先升级浏览器；代码里对 `chrome.sidePanel` 做了特性检测，不会报错。
 
-更新插件：`git pull`（或重新下载解压）后在扩展管理页点击"重新加载"。数据保存在浏览器存储中，不受更新影响；胶囊位置也会保留。
+更新插件：`git pull`（或重新下载解压）后在扩展管理页点击"重新加载"。数据保存在浏览器存储中，不受更新影响。
 
-> 重载后如果页面上的胶囊点了没反应，刷新一下网页即可——旧的内容脚本在扩展重载后会失去 `chrome.runtime` 句柄，这是浏览器机制，代码里已把失败收敛成一次性提示而不是刷屏报错。
+> 重载后如果桥接或速填提示"扩展连接不可用"，刷新一下网页即可——旧的内容脚本在扩展重载后会失去 `chrome.runtime` 句柄，这是浏览器机制，代码里已把失败收敛成一次性提示而不是刷屏报错。
 
 ## 代码结构
 
@@ -104,17 +102,17 @@ extension/
 │   ├── icons.js               13 个内联 SVG 图标（currentColor，替代 18 处 emoji）
 │   └── capture-form.js        收录表单的模板 + 样式 + 下拉生成 + 置信提示 + 保存链路 + 暂存回填
 └── content/                   注入网页的内容脚本（同一 isolated world，按序加载）
-    ├── 01-core.js             Shadow Root、设计令牌样式、胶囊拖拽吸边与持久化、
+    ├── 01-core.js             Shadow Root、设计令牌样式、toast、
     │                          光标追踪、fillFocusedField 填入引擎、Side Panel 的远程调用入口
     ├── 03-parsers.js          岗位解析引擎（ATS/平台/JSON-LD/打分调度/字段清洗）
-    ├── 05-capture.js          迷你收录卡片（惰性构建，首次点胶囊时才创建）
-    └── 06-bridge.js           与网页版管理器的 postMessage 桥接（只在管理器页面生效）
+    └── 06-bridge.js           与网页版管理器的 postMessage 桥接（只在管理器页面生效）、
+                               chrome.runtime 安全封装 safeSendMessage
 ```
 
-v5.1.0 起 `common/` 里不再有 `company-key.js` 与 `default-resume.js`——它们与网页版、Action 的那两份副本一起合并进了仓库根 `shared/`。
+v5.1.0 起 `common/` 里不再有 `company-key.js` 与 `default-resume.js`——它们与网页版、Action 的那两份副本一起合并进了仓库根 `shared/`。v5.6.0 起 `content/` 里不再有 `05-capture.js`（迷你收录卡片随页面胶囊退役），`common/icons.js` 与 `common/capture-form.js` 也不再注入 content scripts（只剩 panel.html 加载）。
 
 **加载顺序有硬依赖**，改 `manifest.json` 的 `content_scripts.js`、`panel.html` 的 `<script>` 或 `background.js` 的 `importScripts` 时必须保持：
-`shared/stages` → `shared/company-types` →（background 另需 `shared/company-key`、`shared/default-resume`）→ `common/constants`（`AJA.STAGES` 是对 `AJA.STAGE_PRESETS` 的**别名转发**，所以 shared 必须先加载）→ `common/tokens` → `common/icons` → `common/capture-form`（模板要用 `AJA.svg`）→ `content/01-core`（顶层就调用 `tokensToCssVars`）→ `03-parsers` → `05-capture`（调用 `extractPageJobData`）→ `06-bridge`（依赖 `05-capture` 的 `safeSendMessage`）。
+`shared/stages` → `shared/company-types` →（background 另需 `shared/company-key`、`shared/default-resume`）→ `common/constants`（`AJA.STAGES` 是对 `AJA.STAGE_PRESETS` 的**别名转发**，所以 shared 必须先加载）→ `common/tokens` → `content/01-core`（顶层就调用 `tokensToCssVars`）→ `03-parsers` → `06-bridge`（依赖 `01-core` 的 `IS_TRACKER_PAGE` 等顶层声明）。panel.html 侧另有 `common/icons` → `common/capture-form` → `panel.js` 的顺序（模板要用 `AJA.svg`）。
 
 顺序错了**不会抛异常**，只会让 `AJA.STAGES` 变成 `undefined`——表现为收录表单的阶段下拉空空如也、企业性质只剩「未设置」一项。这类静默失败比报错难查得多，所以 `test/extension-ui.js` 对三处加载点都有顺序断言（含"shared 必须在 constants 之前"）。
 
@@ -129,13 +127,13 @@ v5.1.0 起 `common/` 里不再有 `company-key.js` 与 `default-resume.js`——
 
 ## 数据与隐私
 
-- 简历、暂存记录与胶囊位置 100% 保存在本机浏览器（`chrome.storage.local`），不上传任何服务器
+- 简历与暂存记录 100% 保存在本机浏览器（`chrome.storage.local`），不上传任何服务器
 - 投递记录的云端同步仅发生在网页版管理器（GitHub 私有 Gist，可口令加密），详见网页版仓库说明
 
 ## 版本
 
-- 扩展：v5.5.0（阶段预设新增「AI面试」，收录表单与面板的阶段下拉自动多出这一档；数据位补 `tabular-nums`、两个样式上下文补 `prefers-reduced-motion` 总开关、头部硬规则注释与代码对账；阶段/企业性质/归一化/默认简历消费仓库根 `shared/` 的单一事实源；Side Panel + 可拖拽胶囊 + 设计令牌化样式自 v5.0.0 起）
-- 存储键：`autumnRecruitmentTracker.resume.v1` / `autumnRecruitmentTracker.pending.v1` / `autumnRecruitmentTracker.ui.v1`（胶囊位置）
+- 扩展：v5.6.0（**移除页面上的收录胶囊与其迷你卡片**——收录入口统一到 Side Panel，页面上不再注入任何常驻按钮；`content/05-capture.js` 删除、`safeSendMessage` 迁入 `06-bridge.js`；`icons.js` / `capture-form.js` 不再注入 content scripts，每个普通页面少加载两个文件）
+- 存储键：`autumnRecruitmentTracker.resume.v1` / `autumnRecruitmentTracker.pending.v1`（v5.6.0 起胶囊位置的 `ui.v1` 键随胶囊删除，storage 里的旧值属无害残留）
 
 ### v5.0.0 UI 重构要点
 
@@ -164,4 +162,4 @@ v5.1.0 起 `common/` 里不再有 `company-key.js` 与 `default-resume.js`——
 - **属性提取与文本提取分离**：`alt`/`title` 优先原本只为 logo `<img>` 设计，此前被无差别用到 `h1` 与岗位标题上，导致带 tooltip 的元素取到属性而非用户看到的文本
 - **城市按文本出现位置选取**：城市库 31 → 100；排除页脚总部地址与城市切换器；全文兜底改为「工作地点/办公地点/base」后 40 字窗口
 - **暂存箱去重与网页端同源**：v5.1.0 起归一化只有**一份**实现（仓库根 `shared/company-key.js`，插件加载 `extension/shared/` 的生成拷贝）。此前 `common/company-key.js` 是网页版 `companyGroupKey` / `normalizePositionSlug` / `loosePositionSlug` / `sameCompanyGroup` 的镜像副本、两处必须同步修改，靠 `test/company-dedup.js` 的逐值一致性断言防漂移；合并后那批断言的语义升级为「行为契约（21 个黄金样例的期望值实测钉死）+ 别名唯一性（运行时比函数引用）」，**黄金样例一条没减**，防护强度反而上升——旧断言只保证两端相同（两端可以一起错），新断言保证只有一份且那份值正确
-- **与 background 的通信一律走 `safeSendMessage`**：扩展被重新加载后，页面上旧内容脚本的 `chrome.runtime` 已成失效句柄，直接调用会同步抛 `Extension context invalidated.` 冒到网页控制台。封装先用 `chrome.runtime.id` 探测、再 `try/catch` 兜底（v5.0.0 起定义在 `05-capture.js` 顶层，`06-bridge.js` 与 `panel.js` 各自复用同签名实现）。失败时经 postMessage 上报一次 `BRIDGE_BROKEN`，由网页版弹「刷新页面即可恢复」提示（带刷新按钮）；上报去重，但每次留 `console.warn`。**新增任何 `chrome.runtime.*` 调用都必须走封装**，`autumn-mail-sync/test/extension-bridge.js` 有一条静态守卫会拦截裸调用
+- **与 background 的通信一律走 `safeSendMessage`**：扩展被重新加载后，页面上旧内容脚本的 `chrome.runtime` 已成失效句柄，直接调用会同步抛 `Extension context invalidated.` 冒到网页控制台。封装先用 `chrome.runtime.id` 探测、再 `try/catch` 兜底（v5.6.0 起定义在 `06-bridge.js` 顶层，此前随迷你卡片住在 `05-capture.js`）。失败时经 postMessage 上报一次 `BRIDGE_BROKEN`，由网页版弹「刷新页面即可恢复」提示（带刷新按钮）；上报去重，但每次留 `console.warn`。**新增任何 `chrome.runtime.*` 调用都必须走封装**，`autumn-mail-sync/test/extension-bridge.js` 有一条静态守卫会拦截裸调用

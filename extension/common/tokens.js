@@ -31,7 +31,7 @@
     // 间距收敛到 4 的倍数网格（设计资源的阶是 4/8/12/16/24/32/48/64/96，没有 6 与 20）
     space: { 1: '4px', 2: '8px', 3: '12px', 4: '16px', 5: '24px', 6: '32px' },
     // 字号保持工具类尺度（11-14px）：插件浮在别人的网页上、面板只有 ~360px 宽，
-    // 设计资源的 Body 17px / Headline 19px 是营销页尺度，套过来会撑爆迷你卡片。
+    // 设计资源的 Body 17px / Headline 19px 是营销页尺度，套过来会撑爆窄容器。
     font: { xs: '11px', sm: '12px', md: '13px', lg: '14px' },
     // fast=微交互（hover 底色）、base=Apple hover 180ms、slow=抽屉/toast/卡片展开 320ms。
     // ease 是 ease-apple；全局曲线统一，组件 CSS 不许再硬写 cubic-bezier。

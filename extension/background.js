@@ -81,8 +81,8 @@ if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
 }
 
 // 浏览器级快捷键（chrome.commands）：比页面内监听可靠，不受焦点/iframe/保留键影响。
-// commands 的触发算 user gesture，所以这里可以调 sidePanel.open()；而 content script 里点胶囊
-// 再转发过来就丢了手势、open() 会失败——这正是胶囊不承担「打开面板」职责、只做收录的原因。
+// commands 的触发算 user gesture，所以这里可以调 sidePanel.open()（v5.6.0 起页面上已无
+// 注入按钮，面板入口只有工具栏图标与这条快捷键）。
 // command id 仍叫 toggle-sidebar（改 id 会让用户已自定义的快捷键绑定失效），但语义已变为「打开面板」：
 // Side Panel 没有提供关闭 API，关闭走面板右上角浏览器自带的 X。
 chrome.commands.onCommand.addListener(async (command) => {
@@ -93,7 +93,6 @@ chrome.commands.onCommand.addListener(async (command) => {
     if (win && typeof win.id === 'number') await chrome.sidePanel.open({ windowId: win.id });
   } catch (_) {
     // 浏览器版本过低（Side Panel 需 Chrome/Edge 114+）或窗口不可用：静默忽略。
-    // 胶囊与迷你收录卡片不依赖 Side Panel，收录功能仍然完整。
   }
 });
 

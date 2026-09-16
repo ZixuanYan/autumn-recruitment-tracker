@@ -17,7 +17,7 @@
  *    否则鼠标划过时元素会"跳"。
  *
  * 收录表单的样式不在此文件：它与表单模板同源，见 common/capture-form.js 的 css()，
- * 由 panel.js 一并注入，迷你卡片与面板因此不会各自漂移。
+ * 由 panel.js 一并注入（v5.6.0 起表单只在面板渲染，模板天然只有一份消费方）。
  */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

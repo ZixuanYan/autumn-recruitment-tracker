@@ -8,15 +8,15 @@
   const root = typeof globalThis !== 'undefined' ? globalThis : self;
   root.AJA = root.AJA || {};
 
-  // 扩展版本（胶囊 title / 控制台均会展示，用于排查“是否已加载新代码”）
+  // 扩展版本（控制台日志会展示，用于排查“是否已加载新代码”）
   // 必须与 manifest.json 的 version 一致，test/extension-ui.js 有契约断言
-  root.AJA.VERSION = '5.5.0';
+  root.AJA.VERSION = '5.6.0';
 
   // 招聘阶段预设（实际阶段可自定义，允许跳过笔试、支持三/四/五面、交叉面等）
   // v4.9.0 起值来自 shared/stages.js —— 它**必须先于本文件加载**（见 manifest.json 的
   // content_scripts、panel/panel.html 的 script、background.js 的 importScripts 三处顺序）。
   // 这里只做别名转发：shared 导出的名字是 STAGE_PRESETS（与网页版、Action 同名），
-  // 而插件全代码用的是 AJA.STAGES，这一行让 capture-form.js / panel.js / 05-capture.js 的调用点零改动。
+  // 而插件全代码用的是 AJA.STAGES，这一行让 capture-form.js / panel.js 的调用点零改动。
   // 注意：不要再在这里写字面量——本文件在 shared **之后**加载，字面量会把单一事实源覆盖回两份副本，
   //    而测试与功能全都正常，只有下次改阶段名时才会发现两端不一致。
   root.AJA.STAGES = root.AJA.STAGE_PRESETS;
@@ -33,10 +33,8 @@
   root.AJA.RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
   root.AJA.PENDING_KEY = 'autumnRecruitmentTracker.pending.v1';           // 暂存箱队列
   root.AJA.SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
-  // 插件 UI 偏好（v5.0.0）：胶囊吸边方位与垂直位置 { side:'left'|'right', top:number }。
-  // 与网页版同名 key 但存储域不同（插件是 chrome.storage.local，网页是 localStorage），不会互相覆盖。
-  // 旧版胶囊位置完全不持久化，刷新页面就回到 top:180px，用户每次都得重新拖。
-  root.AJA.UI_STORAGE_KEY = 'autumnRecruitmentTracker.ui.v1';
+  // v5.6.0：UI_STORAGE_KEY（胶囊吸边位置）随页面收录胶囊一起删除——storage 域里的旧值
+  // 不再有人读，属无害残留，不需要迁移清理。
 
   // 与网页版管理器的桥接
   root.AJA.TRACKER_URL = 'https://zixuanyan.github.io/autumn-recruitment-tracker/';
