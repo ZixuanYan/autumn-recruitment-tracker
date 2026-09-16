@@ -426,6 +426,66 @@ body {
   border-radius: var(--aja-radius-md);
 }
 
+/* ---------------- v5.7.0 识别诊断与纠正记忆 ---------------- */
+.p-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--aja-space-1);
+  min-height: 28px;
+  padding: 0 var(--aja-space-3);
+  border: 1px solid var(--aja-border);
+  border-radius: var(--aja-radius-sm);
+  background: var(--aja-bg);
+  color: var(--aja-text-mute);
+  font-size: var(--aja-font-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--aja-motion-fast) var(--aja-motion-ease),
+              color var(--aja-motion-fast) var(--aja-motion-ease);
+}
+.p-mini-btn:hover { background: var(--aja-bg-hover); color: var(--aja-text); }
+.p-cap-body .p-mini-btn { margin-top: var(--aja-space-2); }
+.p-learn-list { display: grid; gap: var(--aja-space-2); }
+.p-learn-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--aja-space-2);
+  min-width: 0;
+  padding: var(--aja-space-2) var(--aja-space-3);
+  border: 1px solid var(--aja-border);
+  border-radius: var(--aja-radius-sm);
+  background: var(--aja-bg);
+  font-size: var(--aja-font-xs);
+}
+.p-learn-host {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--aja-text-mute);
+}
+.p-learn-val { flex: 1 1 auto; min-width: 0; font-weight: 650; color: var(--aja-text); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-learn-actions { display: flex; gap: var(--aja-space-2); margin-top: var(--aja-space-2); }
+.p-learn-area {
+  width: 100%;
+  margin-top: var(--aja-space-2);
+  padding: var(--aja-space-2) var(--aja-space-3);
+  border: 1px solid var(--aja-border);
+  border-radius: var(--aja-radius-sm);
+  background: var(--aja-bg);
+  color: var(--aja-text);
+  font-size: var(--aja-font-xs);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+/* 低可信来源的字段黄标（v5.7.0）：错值必须看得见，不能与可信值混在一处。
+   warn 令牌在 light/dark 两套主题里都有定义（v5.2.0 起），不需要硬编码回退色。 */
+.capture-form .is-guessed, .is-guessed {
+  background: var(--aja-warn-soft);
+  border-color: var(--aja-warn);
+}
+
 /* ---------------- 底栏 ---------------- */
 .p-footer {
   flex: 0 0 auto;

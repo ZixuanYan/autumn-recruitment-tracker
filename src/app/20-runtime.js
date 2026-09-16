@@ -534,7 +534,7 @@
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
       const VIEW_META = {
         overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计与洞察——从银十到金九，每一步都在这里' },
-        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '未来安排与月历——哪天要赶、哪天要去，一眼看清' },
+        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '未来 7 天日程与月历——哪天要赶、哪天要去，一眼看清' },
         records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
@@ -594,9 +594,9 @@
         if (summary) summary.textContent = monthTotal
           ? `本月 ${monthTotal} 项（截止 ${monthDeadline} · 已完成 ${monthDone}）· `
           : '本月暂无安排 · ';
-        // 每格最多 3 条「要行动」的条目，溢出收进「+N」的 title——格子高度有限，塞满会把月历变成流水账。
-        // 已完成的（settled / 终态）不逐条上格：聚合成一行浅绿「N 条已完成」，点它选中该日、
-        // 在下方明细面板里看是哪些——完成的事不抢格子，但也不消失（日历是事实视图）。
+        // v4.30.0：月格降级为「定位器」——宽屏排文字 chip（时刻 + 公司两段），窄屏只排事件圆点
+        //（CSS 按断点切换显示）。每格最多 3 条「要行动」的条目，溢出收进「+N」的 title。
+        // 已完成的（settled / 终态）不逐条上格：聚合成一行浅绿「N 条已完成」+ 一颗绿点。
         const MAX_PER_CELL = 3;
         grid.innerHTML = buildMonthGrid(calViewYear, calViewMonth, now).map(cell => {
           const items = byDate.get(cell.iso) || [];
@@ -606,10 +606,11 @@
           const rest = open.length - shown.length;
           const chips = shown.map(item => {
             const who = item.record.company || '未填公司';
-            const what = `${item.type}${item.time ? ` ${item.time}` : ''}`;
-            const full = `${who} · ${item.record.position || '未填岗位'} · ${what}`;
+            const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${item.time ? ` ${item.time}` : ''}`;
             const state = item.overdue ? ' is-overdue' : '';
-            return `<button class="cal-chip kind-${item.kind}${state}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}">${escapeHtml(`${who} ${what}`)}</button>`;
+            // 两段渲染：时刻（截止类无时刻时给类型名）+ 公司名。窄屏隐藏公司名后
+            // 剩「14:00 / 截止」仍可读，不再是一串省略号。
+            return `<button class="cal-chip kind-${item.kind}${state}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-chip-main">${escapeHtml(item.time || item.type)}</span><span class="cal-chip-who">${escapeHtml(who)}</span></button>`;
           }).join('');
           const more = rest > 0
             ? `<span class="cal-more" title="${escapeHtml(open.slice(MAX_PER_CELL).map(i => `${i.record.company || '未填公司'} ${i.type}${i.time ? ` ${i.time}` : ''}`).join('\n'))}">+${rest}</span>`
@@ -617,45 +618,59 @@
           const doneLine = doneCount > 0
             ? `<button class="cal-done" type="button" title="${escapeHtml(`当天有 ${doneCount} 条已完成，点开看明细`)}">${doneCount} 条已完成</button>`
             : '';
+          const dots = open.slice(0, 4).map(i => `<i class="cal-dot kind-${i.kind}"></i>`).join('')
+            + (doneCount > 0 ? '<i class="cal-dot is-settled"></i>' : '');
           const hasOverdue = open.some(i => i.overdue);
           const selected = calSelectedDate === cell.iso;
-          return `<div class="cal-day${cell.inMonth ? '' : ' is-outside'}${cell.isToday ? ' is-today' : ''}${selected ? ' is-selected' : ''}${hasOverdue ? ' has-overdue' : ''}" data-date="${cell.iso}"><span class="cal-dayno">${cell.day}</span><div class="cal-items">${chips}${more}${doneLine}</div></div>`;
+          return `<div class="cal-day${cell.inMonth ? '' : ' is-outside'}${cell.isToday ? ' is-today' : ''}${selected ? ' is-selected' : ''}${hasOverdue ? ' has-overdue' : ''}" data-date="${cell.iso}"><span class="cal-dayno">${cell.day}</span><div class="cal-dots" aria-hidden="true">${dots}</div><div class="cal-items">${chips}${more}${doneLine}</div></div>`;
         }).join('');
-        renderCalendarDetail(byDate);
+        renderCalFlow(byDate);
       }
 
-      // 当日明细面板（v4.28.0）：列出选中日期的**全部**条目（含已完成与逾期），点行直达详情抽屉。
-      // 月格只承载扫读，细节与历史都放这里——两段式浏览：先扫月历，再看某一天。
-      function renderCalendarDetail(byDate) {
-        const panel = $('#calDetail');
-        if (!panel) return;
-        const list = $('#calDetailList');
-        if (!calSelectedDate) {
-          panel.hidden = true;
-          if (list) list.innerHTML = '';
-          return;
-        }
-        const parts = calSelectedDate.split('-').map(Number);
-        const date = new Date(parts[0], parts[1] - 1, parts[2]);
+      // 日程流（v4.30.0）：取代「未来安排」与「当日明细」两份面板——月历负责定位，这里负责阅读。
+      // 分组：① 逾期未处理置顶（与未来安排同一口径，已了结的不算）；② 点选日期的全量明细插队
+      //（含已完成，日历是事实视图）；③ 未来 7 天按日分组（只列未完成的，空日跳过）。
+      function flowDayTitle(iso) {
+        const parts = iso.split('-').map(Number);
+        const d = new Date(parts[0], parts[1] - 1, parts[2]);
         const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-        const items = byDate.get(calSelectedDate) || [];
-        const head = $('#calDetailTitle');
-        if (head) head.textContent = `${parts[1]}月${parts[2]}日 · ${WEEKDAYS[date.getDay()]}`;
-        const count = $('#calDetailCount');
-        if (count) count.textContent = items.length ? `${items.length} 项` : '';
-        panel.hidden = false;
+        const diff = daysUntil(d, new Date());
+        const prefix = diff === 0 ? '今天 · ' : diff === 1 ? '明天 · ' : '';
+        return `${prefix}${parts[1]}月${parts[2]}日 ${WEEKDAYS[d.getDay()]}`;
+      }
+
+      function calFlowRow(item) {
+        const who = item.record.company || '未填公司';
+        const done = item.settled || item.terminal;
+        const state = done
+          ? '<span class="cal-row-state is-settled">已完成</span>'
+          : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
+        const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${item.time ? ` ${item.time}` : ''}`;
+        return `<button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(item.time || item.type)}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>`;
+      }
+
+      function renderCalFlow(byDate) {
+        const list = $('#calFlowList');
         if (!list) return;
-        list.innerHTML = items.length
-          ? items.map(item => {
-              const who = item.record.company || '未填公司';
-              const done = item.settled || item.terminal;
-              const state = done
-                ? '<span class="cal-row-state is-settled">已完成</span>'
-                : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
-              const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${item.time ? ` ${item.time}` : ''}`;
-              return `<button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(item.time || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>`;
-            }).join('')
-          : '<div class="cal-detail-empty">当天没有安排</div>';
+        const now = new Date();
+        const items = collectCalendarEvents(records, now);
+        const groups = [];
+        const overdue = items.filter(i => i.overdue);
+        if (overdue.length) groups.push({ title: '逾期未处理', items: overdue, mod: ' is-overdue-group' });
+        if (calSelectedDate) {
+          const sel = byDate.get(calSelectedDate) || [];
+          groups.push({ title: `已选 · ${flowDayTitle(calSelectedDate)}`, items: sel, mod: ' is-selected-group', empty: !sel.length });
+        }
+        for (let off = 0; off < 7; off += 1) {
+          const iso = localDateInput(new Date(now.getFullYear(), now.getMonth(), now.getDate() + off));
+          if (iso === calSelectedDate) continue; // 已在②里全量展示，不重复
+          const dayItems = (byDate.get(iso) || []).filter(i => !i.settled && !i.terminal);
+          if (!dayItems.length) continue;
+          groups.push({ title: flowDayTitle(iso), items: dayItems, mod: '' });
+        }
+        list.innerHTML = groups.length
+          ? groups.map(g => `<div class="cal-flow-group${g.mod}"><div class="cal-flow-day">${escapeHtml(g.title)}<span class="cal-flow-count">${g.items.length ? `${g.items.length} 项` : ''}</span></div>${g.items.length ? g.items.map(calFlowRow).join('') : (g.empty ? '<div class="cal-detail-empty">当天没有安排</div>' : '')}</div>`).join('')
+          : '<div class="cal-detail-empty">未来 7 天没有安排；点月历上的日期可查看当天全部条目</div>';
       }
 
 
@@ -1724,14 +1739,10 @@
         const row = event.target.closest('tr[data-id]');
         if (row) openRecordFocus(row.dataset.id);
       });
-      // 未来安排卡片可点击/可键盘激活（role=button + tabindex=0）
-      els.upcoming.addEventListener('click', event => {
-        const item = event.target.closest('.schedule-item[data-id]');
-        if (item) openRecordFocus(item.dataset.id);
-      });
-      // 日历（v4.27.0，v4.28.0 扩展）：点月格切换「当日明细」面板；点格内 chip 选中该日**并**
-      // 直达详情抽屉（抽屉关掉，明细面板就在下面）；明细行与未来安排 / 对比矩阵同一交互直达抽屉；
-      // 翻月与「今天」只动 calViewYear/Month（并取消选中），导出 .ics 直接复用工具页同一条流程。
+      // 日历（v4.27.0，v4.30.0 重构）：点月格选中该日（日程流顶部插队全量明细，再点同一天取消）；
+      // 点格内 chip 选中该日**并**直达详情抽屉；日程流行与对比矩阵同一交互直达抽屉（行本身是
+      // button，键盘天然可达）；翻月与「今天」只动 calViewYear/Month（并取消选中），
+      // 导出 .ics 直接复用工具页同一条流程。
       $('#calendarGrid').addEventListener('click', event => {
         const chip = event.target.closest('.cal-chip[data-id]');
         if (chip) {
@@ -1744,11 +1755,7 @@
         const cell = event.target.closest('.cal-day[data-date]');
         if (cell) calSelectDay(cell.dataset.date);
       });
-      $('#calDetailClose').addEventListener('click', () => {
-        calSelectedDate = '';
-        renderCalendarView();
-      });
-      $('#calDetailList').addEventListener('click', event => {
+      $('#calFlowList').addEventListener('click', event => {
         const row = event.target.closest('.cal-row[data-id]');
         if (row) openRecordFocus(row.dataset.id);
       });
@@ -1762,13 +1769,6 @@
         renderCalendarView();
       });
       $('#calExportIcsBtn').addEventListener('click', () => exportIcs());
-      els.upcoming.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        const item = event.target.closest('.schedule-item[data-id]');
-        if (!item) return;
-        event.preventDefault();
-        openRecordFocus(item.dataset.id);
-      });
       $('#topSyncBtn').addEventListener('click', openSyncDialog);
       // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
       $('#closeDialog').addEventListener('click', closeDialog);

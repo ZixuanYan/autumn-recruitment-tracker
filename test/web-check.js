@@ -1608,16 +1608,19 @@ check('v4.27.0 规则③贯通：当前阶段完成 → 未来截止退出未来
   assert.ok(core.collectScheduleEvents([advanced, open], NOW, 6).some(e => e.record.id === 'advanced'), '推进后截止恢复出现');
 });
 
-check('buildMonthGrid：6 行 × 7 列、周一起始、跨月补位带 inMonth 标记', () => {
-  // 2026-09-01 是周二：周一开头的首行要补 1 格 8 月；9 月有 30 天，42 格里尾部补到 10 月
+check('buildMonthGrid：行数自适应（4~6 行）、周一起始、跨月补位带 inMonth 标记', () => {
+  // 2026-09-01 是周二：周一开头的首行要补 1 格 8 月；9 月 30 天 → (1+30)/7 上取整 = 5 行 35 格
   const cells = core.buildMonthGrid(2026, 8, new Date('2026-09-15T12:00:00'));
-  assert.strictEqual(cells.length, 42, '固定 42 格（6 行 × 7 列）');
+  assert.strictEqual(cells.length, 35, '行数自适应：2026-09 恰好 5 行（35 格），不再固定 42 格撑高度');
   assert.strictEqual(cells[0].iso, '2026-08-31', '2026-09-01 是周二，首格补周一 8/31');
   assert.strictEqual(cells[0].inMonth, false);
   assert.strictEqual(cells[1].iso, '2026-09-01', '第 2 格起是当月 1 号');
   assert.strictEqual(cells.filter(c => c.inMonth).length, 30, '当月恰好 30 格');
   assert.strictEqual(cells.filter(c => c.day === 1 && c.inMonth).length, 1);
-  assert.strictEqual(cells[41].iso, '2026-10-11', '末格补到 10 月');
+  assert.strictEqual(cells[34].iso, '2026-10-04', '末格补到 10 月');
+  // 2026-02：周日开头（补 6 格）、28 天 → 5 行；2027-02 恰好周一起始 + 28 天 → 4 行整
+  assert.strictEqual(core.buildMonthGrid(2026, 1, new Date('2026-02-10T12:00:00')).length, 35, '2026-02 是 5 行');
+  assert.strictEqual(core.buildMonthGrid(2027, 1, new Date('2027-02-10T12:00:00')).length, 28, '2027-02 恰好 4 行整，不再多出空行');
   // isToday 用传入的 now 判定，不偷读系统时钟（否则测试结果随时区/日期漂移）
   const withToday = core.buildMonthGrid(2026, 8, new Date('2026-09-10T12:00:00'));
   assert.deepStrictEqual(withToday.filter(c => c.isToday).map(c => c.iso), ['2026-09-10'], 'isToday 恰好标中一天');
@@ -1845,35 +1848,35 @@ check('导航 6 项且顺序为 总览 / 日历 / 投递记录 / 邮件提醒 / 
   assert.ok(/data-route="calendar"[^>]*>[\s\S]*?#i-calendar/.test(nav), 'calendar 导航项应复用 #i-calendar 图标');
 });
 
-check('日历视图接线：路由钩子 / 中央重渲 / 点格展开明细 / chip 与明细行直达抽屉（v4.27.0 + v4.28.0）', () => {
+check('日历视图接线：路由钩子 / 中央重渲 / 点格选中 / 日程流与 chip 直达抽屉（v4.27.0 ~ v4.30.0）', () => {
   assert.ok(/<div class="view" data-view="calendar" hidden>/.test(html), 'calendar 视图容器存在');
   assert.ok(html.includes('id="calendarGrid"') && html.includes('cal-weekdays'), '月格容器与周标题在模板里');
   assert.ok(/if \(route === 'calendar'\) renderCalendarView\(\);/.test(html), 'switchView 切到 calendar 要重渲日历');
   // 与 records 同一道保险：任何数据变更路径（抽屉推进 / 邮件应用）后日历都反映最新台账
   const renderFn = extractFunction(html, 'render');
   assert.ok(/renderCalendarView\(\);/.test(renderFn), 'render() 必须带上 renderCalendarView');
-  // v4.28.0：月格带 data-date、已完成聚合成 .cal-done 绿行、明细面板与委托接线齐全
+  assert.ok(!renderFn.includes('renderUpcoming'), 'render() 不得再调 renderUpcoming（v4.30.0 起并入日程流）');
+  // 月格带 data-date、已完成聚合成 .cal-done 绿行、chip 两段式
   assert.ok(/data-date="\$\{cell\.iso\}"/.test(html), '月格要带 data-date（整格可点的前提）');
   assert.ok(html.includes('class="cal-done"'), '已完成聚合绿行由渲染层生成');
-  assert.ok(html.includes('id="calDetail"') && html.includes('id="calDetailList"') && html.includes('id="calDetailClose"'), '当日明细面板骨架在模板里');
+  assert.ok(html.includes('class="cal-dots"') && html.includes('cal-chip-main') && html.includes('cal-chip-who'), '月格渲染圆点定位行与两段式 chip');
   assert.ok(/calSelectedDate === iso \? '' : iso/.test(html), 'calSelectDay 是「再点同一天收起」的切换语义');
-  assert.ok(/chip\.closest\('\.cal-day\[data-date\]'\)/.test(html), '点 chip 要同时选中该日（抽屉关掉明细就在下面）');
-  assert.ok(/openRecordFocus\(chip\.dataset\.id\)/.test(html), '点 chip 直达详情抽屉（与未来安排同一交互）');
-  assert.ok(/\$\('#calDetailList'\)\.addEventListener\('click'/.test(html) && /openRecordFocus\(row\.dataset\.id\)/.test(html), '明细行点击直达详情抽屉');
-  assert.ok(/\$\('#calDetailClose'\)\.addEventListener\('click'/.test(html), '明细面板关闭按钮已接线');
+  assert.ok(/chip\.closest\('\.cal-day\[data-date\]'\)/.test(html), '点 chip 要同时选中该日');
+  assert.ok(/openRecordFocus\(chip\.dataset\.id\)/.test(html), '点 chip 直达详情抽屉');
+  assert.ok(html.includes('id="calFlow"') && html.includes('id="calFlowList"'), '日程流面板骨架在模板里');
+  assert.ok(html.includes('function renderCalFlow') && html.includes('function flowDayTitle'), '日程流渲染函数存在');
+  assert.ok(!html.includes('renderUpcoming'), 'renderUpcoming 不得残留（v4.30.0 并入日程流，死代码即漂移面）');
+  assert.ok(/\$\('#calFlowList'\)\.addEventListener\('click'/.test(html) && /openRecordFocus\(row\.dataset\.id\)/.test(html), '日程流行点击直达详情抽屉');
+  assert.ok(!html.includes('id="calDetailClose"') && !html.includes("id=\"calDetailList\""), 'v4.28 的独立明细面板骨架不得残留');
   assert.ok(/\$\('#calMonthSummary'\)/.test(html), '本月汇总计数已接线');
   assert.ok(html.includes("calSelectedDate = '';") && /calendarShiftMonth\(delta\) \{[\s\S]*?calSelectedDate = '';/.test(html), '翻月要取消选中（选中的是浏览状态，跟着视图走）');
   assert.ok(/\$\('#calPrevBtn'\)/.test(html) && /\$\('#calNextBtn'\)\.addEventListener/.test(html), '翻月按钮已接线');
   assert.ok(/\$\('#calTodayBtn'\)/.test(html), '「今天」按钮已接线');
   assert.ok(/\$\('#calExportIcsBtn'\)\.addEventListener\('click', \(\) => exportIcs\(\)\)/.test(html), '导出 .ics 复用工具页同一条流程，不得另写一份');
-  // v4.29.0：未来安排面板迁入日历页（在 calendar 视图内、月历之前）；原「导出日历」按钮去重拆除
-  const calStart = html.indexOf('data-view="calendar"');
-  const calEnd = html.indexOf('data-view="records"');
-  const upcomingAt = html.indexOf('id="upcoming"');
-  assert.ok(upcomingAt > calStart && upcomingAt < calEnd, '#upcoming 必须落在日历视图内（总览不再有未来安排）');
-  assert.ok(html.indexOf('id="calendarGrid"') > upcomingAt, '未来安排排在月历上方');
+  // v4.29.0：旧「导出日历」按钮去重；v4.30.0：未来安排并入日程流，旧骨架整体退役
   assert.ok(!html.includes('id="exportIcsBtn"') && !/^\s*\$\('#exportIcsBtn'\)/m.test(html), '旧「导出日历」按钮与绑定必须整体拆除（半截复活 = 死绑定或重复入口）');
-  assert.ok(html.includes('class="cal-layout"') && html.includes('<aside class="panel cal-detail" id="calDetail"'), '两栏结构：月历与当日明细各占一栏，明细是独立 panel');
+  assert.ok(!html.includes('id="upcoming"') && !html.includes('renderUpcoming'), '#upcoming 面板与 renderUpcoming 不得残留（已并入日程流）');
+  assert.ok(html.includes('class="cal-layout"') && html.includes('<aside class="panel cal-flow" id="calFlow"'), '两栏结构：月历与日程流各占一栏，日程流是独立 panel');
 });
 
 check('switchView 在切到 records 时触发 renderRecordsView（切回时台账/看板保持最新）', () => {

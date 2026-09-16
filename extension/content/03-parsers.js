@@ -53,7 +53,54 @@
     { domains: ['cvte.com'], company: 'CVTE' },
     { domains: ['360.cn'], company: '360' },
     { domains: ['lenovo.com'], company: '联想集团' },
-    { domains: ['zte.com.cn'], company: '中兴通讯' }
+    { domains: ['zte.com.cn'], company: '中兴通讯' },
+    // v5.7.0 扩容（秋招高频厂商与金融/制造/智能硬件）：仍是「注册域 + 后缀匹配」，只加数据不加逻辑
+    { domains: ['netease.com'], company: '网易' },
+    { domains: ['ctrip.com', 'trip.com'], company: '携程集团' },
+    { domains: ['vip.com'], company: '唯品会' },
+    { domains: ['zhuanzhuan.com'], company: '转转' },
+    { domains: ['sangfor.com.cn', 'sangfor.com'], company: '深信服' },
+    { domains: ['hikvision.com'], company: '海康威视' },
+    { domains: ['dahuatech.com'], company: '大华股份' },
+    { domains: ['iflytek.com'], company: '科大讯飞' },
+    { domains: ['sensetime.com'], company: '商汤科技' },
+    { domains: ['megvii.com'], company: '旷视科技' },
+    { domains: ['cambricon.com'], company: '寒武纪' },
+    { domains: ['horizonrobotics.com'], company: '地平线' },
+    { domains: ['weride.ai'], company: '文远知行' },
+    { domains: ['pony.ai'], company: '小马智行' },
+    { domains: ['catl.com'], company: '宁德时代' },
+    { domains: ['longi.com'], company: '隆基绿能' },
+    { domains: ['inovance.com'], company: '汇川技术' },
+    { domains: ['willsemi.com'], company: '韦尔股份' },
+    { domains: ['geely.com'], company: '吉利控股' },
+    { domains: ['gwm.com.cn'], company: '长城汽车' },
+    { domains: ['saicmotor.com'], company: '上汽集团' },
+    { domains: ['faw.com.cn'], company: '中国一汽' },
+    { domains: ['dfmc.com.cn'], company: '东风汽车' },
+    { domains: ['crrcgc.cc'], company: '中国中车' },
+    { domains: ['sany.com.cn'], company: '三一重工' },
+    { domains: ['xcmg.com'], company: '徐工集团' },
+    { domains: ['haier.net', 'haier.com'], company: '海尔' },
+    { domains: ['midea.com'], company: '美的集团' },
+    { domains: ['gree.com'], company: '格力电器' },
+    { domains: ['hisense.com'], company: '海信集团' },
+    { domains: ['cmbchina.com'], company: '招商银行' },
+    { domains: ['pingan.com'], company: '中国平安' },
+    { domains: ['icbc.com.cn'], company: '中国工商银行' },
+    { domains: ['ccb.com'], company: '中国建设银行' },
+    { domains: ['abchina.com'], company: '中国农业银行' },
+    { domains: ['bankcomm.com'], company: '交通银行' },
+    { domains: ['boc.cn', 'bankofchina.com'], company: '中国银行' },
+    { domains: ['cib.com.cn'], company: '兴业银行' },
+    { domains: ['spdb.com.cn'], company: '浦发银行' },
+    { domains: ['citicbank.com'], company: '中信银行' },
+    { domains: ['cicc.com'], company: '中金公司' },
+    { domains: ['citics.com'], company: '中信证券' },
+    { domains: ['gtja.com'], company: '国泰海通' },
+    { domains: ['htsc.com.cn'], company: '华泰证券' },
+    { domains: ['chinalife.com.cn'], company: '中国人寿' },
+    { domains: ['cpic.com.cn'], company: '中国太保' }
   ];
 
   // 品牌名清单：用于标题角色识别时给「命中已知品牌」的段加最高分
@@ -81,8 +128,14 @@
   }
 
   // ================= 2. DOM 提取原语 =================
-  // 贪婪选择器需要排除的祖先容器：页脚总部地址、导航、侧栏推荐岗位、筛选器与列表容器
-  const NOISE_CONTAINER_SEL = 'footer, nav, aside, [class*="footer" i], [class*="sidebar" i], [class*="recommend" i], [class*="filter" i], [class*="nav" i], [class*="list" i]';
+  // 贪婪选择器需要排除的祖先容器：页脚总部地址、导航、侧栏推荐岗位、筛选器与列表容器。
+  // v5.7.0 收紧：原先的裸子串 [class*="list" i] / [class*="nav" i] 会把嵌在 detail-list、
+  // listContainer 这类容器里的**真实详情区**一并屏蔽（强来源全部失效，结果跌落到网页标题），
+  // 现在只匹配确属「岗位列表/列表项」的组合类名。
+  const NOISE_CONTAINER_SEL = 'footer, nav, aside, [class*="footer" i], [class*="sidebar" i], [class*="recommend" i], [class*="filter" i], [class*="menu" i],'
+    + ' [class*="job-list" i], [class*="jobList" i], [class*="job_list" i],'
+    + ' [class*="position-list" i], [class*="positionList" i], [class*="post-list" i],'
+    + ' [class*="list-item" i], [class*="listItem" i], [class*="item-list" i]';
 
   function isOwnHost(el) {
     try { return !!(el && el.closest && el.closest('#autumn-job-assistant-host')); } catch (_) { return false; }
@@ -108,20 +161,47 @@
     return '';
   }
 
+  // v5.7.0 Shadow DOM 穿透：部分站点把岗位详情渲染进 web component。带 2 秒缓存的惰性收集
+  // （一次扫描里多条选择器共享同一次树遍历），常规无 shadow 的页面roots 为空数组、零额外开销。
+  let _shadowCache = null;
+  let _shadowCacheAt = 0;
+  function shadowRoots() {
+    const now = Date.now();
+    if (_shadowCache && now - _shadowCacheAt < 2000) return _shadowCache;
+    const roots = [];
+    try {
+      const base = document.documentElement || document.body;
+      if (base && document.createTreeWalker) {
+        const walker = document.createTreeWalker(base, NodeFilter.SHOW_ELEMENT);
+        let node;
+        let guard = 0;
+        while ((node = walker.nextNode()) && guard < 20000) {
+          guard += 1;
+          if (node.shadowRoot) roots.push(node.shadowRoot);
+        }
+      }
+    } catch (_) {}
+    _shadowCache = roots;
+    _shadowCacheAt = now;
+    return roots;
+  }
+
   // 只取可见文本。options: { min, max, avoid }（avoid=true 时跳过页脚/导航/列表等噪声容器）
   function queryFirstText(selectors, options = {}) {
     const min = Number(options.min) > 0 ? Number(options.min) : 2;
     const max = Number(options.max) > 0 ? Number(options.max) : 150;
+    const roots = [document].concat(shadowRoots());
     for (const sel of selectors) {
-      try {
-        const nodes = document.querySelectorAll(sel);
+      for (const root of roots) {
+        let nodes;
+        try { nodes = root.querySelectorAll(sel); } catch (_) { continue; }
         for (let i = 0; i < nodes.length; i += 1) {
           const el = nodes[i];
           if (isOwnHost(el) || isNoiseContainer(el, options.avoid === true)) continue;
           const txt = deepestFittingText(el, min, max);
           if (txt) return txt;
         }
-      } catch (_) {}
+      }
     }
     return '';
   }
@@ -131,9 +211,11 @@
   function queryFirstAttr(selectors, attrs = ['alt', 'title'], options = {}) {
     const min = Number(options.min) > 0 ? Number(options.min) : 2;
     const max = Number(options.max) > 0 ? Number(options.max) : 40;
+    const roots = [document].concat(shadowRoots());
     for (const sel of selectors) {
-      try {
-        const nodes = document.querySelectorAll(sel);
+      for (const root of roots) {
+        let nodes;
+        try { nodes = root.querySelectorAll(sel); } catch (_) { continue; }
         for (let i = 0; i < nodes.length; i += 1) {
           const el = nodes[i];
           if (isOwnHost(el)) continue;
@@ -142,7 +224,7 @@
             if (v.length >= min && v.length <= max) return v;
           }
         }
-      } catch (_) {}
+      }
     }
     return '';
   }
@@ -153,96 +235,86 @@
     '.logo_wrap img', '.tenant-logo img', '[class*="logo" i] img', '[class*="brand" i] img'
   ];
 
+  // v5.7.0：解析器改为**声明式规则表**——加一家 ATS/平台 = 加一条表项（host 正则 + 选择器组），
+  // 不再往 parseAtsJobData 里塞 if 分支。选择器与 v5.6.0 逐字相同，行为零变化。
+  const ATS_RULES = [
+    {
+      name: 'Beisen', host: /beisen\.com|italent\.cn|zhiye\.com/i,
+      position: ['.job-detail-title', '.detail-title', '.detail-header .title', '.job-title', '.job-name',
+        '.post-name', '.position-name', '.beisen-breadcrumb .ant-breadcrumb-link:last-child',
+        '.ant-breadcrumb li:last-child', '.breadcrumb-item:last-child', 'h1'],
+      companyLogo: ['.header-logo img', '.logo img'],
+      companyText: ['.header .company-name', '.tenant-name', '.brand-name', '.header-left .name']
+    },
+    {
+      name: 'Moka', host: /mokahr\.com/i,
+      position: ['.job-title', '.position-title', 'h1.title', '.position-head .title',
+        '.job-detail-title', '.job-name', '.moka-breadcrumb span:last-child', '.ant-breadcrumb li:last-child'],
+      companyLogo: ['.org-logo img', '.logo img'],
+      companyText: ['.org-name', '.company-title', '.brand-title'],
+      // 路径里的 org 段常是英文/拼音 slug 甚至数字 id，可信度低，只作最后兜底
+      pathCompany: /(?:campus-recruitment|apply|campus|social-recruitment)\/([^\/\?#]+)/i
+    },
+    {
+      name: 'Dayee', host: /dayee\.com|hitalent\.cn|wintalent\.cn|cloudtalent\.cn|bphr\.com\.cn/i,
+      position: ['.jobName', '.job_name', '.post_name', '.job-title', '.detail_title',
+        '.nav_path a:last-child', '.nav-path span:last-child', 'h1'],
+      companyLogo: ['.header_logo img', '.logo img'],
+      companyText: ['.comp-title', '.header-brand', '.company-name']
+    },
+    {
+      name: 'Yonyou', host: /yonyou\.com|yonyoucloud\.com|dayhr\.com|upesn\.com/i,
+      position: ['.post-title', '.job-name', '.position-detail-title', '.recruit-title', '.detail-header-title', 'h1'],
+      companyLogo: ['.header img', '.logo_wrap img', '.tenant-logo img'],
+      companyText: ['.company-name']
+    },
+    {
+      name: '24Talent', host: /24talent\.com|24-talent\.com|acmcoder\.com|51sai\.com/i,
+      position: ['.position-title', '.job-title', '.detail-title', '.job-detail-head .title', 'h1'],
+      companyLogo: ['.logo img'],
+      companyText: ['.company-title', '.company_name']
+    },
+    {
+      name: 'Boss', host: /zhipin\.com/i,
+      position: ['.job-name', '.name', 'h1'],
+      companyLogo: [],
+      companyText: ['.company-name', '.company-info .name', '.job-sec-company .name']
+    },
+    {
+      name: 'Nowcoder', host: /nowcoder\.com/i,
+      position: ['.job-item-title', '.job-title', '.detail-title', 'h1'],
+      companyLogo: [],
+      companyText: ['.company-item-title', '.job-detail-company', '.company-name', '.feed-item-company-name']
+    },
+    {
+      name: 'Shixiseng', host: /shixiseng\.com/i,
+      position: ['.job-name', '.job_name', '.new_job_name', 'h1'],
+      companyLogo: [],
+      companyText: ['.com-name', '.company-name', '.com_name']
+    },
+    {
+      name: 'Liepin', host: /liepin\.com/i,
+      position: ['.job-title-left .name', '.job-title-box .name', 'h1'],
+      companyLogo: [],
+      companyText: ['.company-info-title', '.name-box .name', '.company-name']
+    }
+  ];
+
   function parseAtsJobData() {
     const host = location.hostname.toLowerCase();
     const pathname = location.pathname;
-
-    // ① 北森 (Beisen / iTalent / zhiye)
-    if (/beisen\.com|italent\.cn|zhiye\.com/i.test(host)) {
-      const position = queryFirstText([
-        '.job-detail-title', '.detail-title', '.detail-header .title', '.job-title', '.job-name',
-        '.post-name', '.position-name', '.beisen-breadcrumb .ant-breadcrumb-link:last-child',
-        '.ant-breadcrumb li:last-child', '.breadcrumb-item:last-child', 'h1'
-      ]);
-      const company = queryFirstAttr(['.header-logo img', '.logo img'])
-        || queryFirstText(['.header .company-name', '.tenant-name', '.brand-name', '.header-left .name']);
-      return { company, position, source: 'Beisen' };
-    }
-
-    // ② Moka (MokaHR)
-    if (/mokahr\.com/i.test(host)) {
-      const position = queryFirstText([
-        '.job-title', '.position-title', 'h1.title', '.position-head .title',
-        '.job-detail-title', '.job-name', '.moka-breadcrumb span:last-child', '.ant-breadcrumb li:last-child'
-      ]);
-      let company = queryFirstAttr(['.org-logo img', '.logo img'])
-        || queryFirstText(['.org-name', '.company-title', '.brand-title']);
-      if (!company) {
-        // 路径里的 org 段常是英文/拼音 slug 甚至数字 id，可信度低，只作最后兜底
-        const m = pathname.match(/(?:campus-recruitment|apply|campus|social-recruitment)\/([^\/\?#]+)/i);
+    for (const rule of ATS_RULES) {
+      if (!rule.host.test(host)) continue;
+      const position = queryFirstText(rule.position);
+      // companyLogo 为空 = 该站点明确不做 logo 反查（平台站的页面 logo 是平台自己，不是招聘企业）
+      let company = rule.companyLogo.length ? queryFirstAttr(rule.companyLogo) : '';
+      company = company || queryFirstText(rule.companyText);
+      if (!company && rule.pathCompany) {
+        const m = pathname.match(rule.pathCompany);
         if (m && m[1]) company = m[1];
       }
-      return { company, position, source: 'Moka' };
+      return { company, position, source: rule.name };
     }
-
-    // ③ 大易 (Dayee / HiTalent / WinTalent / CloudTalent)
-    if (/dayee\.com|hitalent\.cn|wintalent\.cn|cloudtalent\.cn|bphr\.com\.cn/i.test(host)) {
-      const position = queryFirstText([
-        '.jobName', '.job_name', '.post_name', '.job-title', '.detail_title',
-        '.nav_path a:last-child', '.nav-path span:last-child', 'h1'
-      ]);
-      const company = queryFirstAttr(['.header_logo img', '.logo img'])
-        || queryFirstText(['.comp-title', '.header-brand', '.company-name']);
-      return { company, position, source: 'Dayee' };
-    }
-
-    // ④ 用友 (Yonyou / DayHR / YonBIP)
-    if (/yonyou\.com|yonyoucloud\.com|dayhr\.com|upesn\.com/i.test(host)) {
-      const position = queryFirstText([
-        '.post-title', '.job-name', '.position-detail-title', '.recruit-title', '.detail-header-title', 'h1'
-      ]);
-      const company = queryFirstAttr(['.header img', '.logo_wrap img', '.tenant-logo img'])
-        || queryFirstText(['.company-name']);
-      return { company, position, source: 'Yonyou' };
-    }
-
-    // ⑤ 24Talent / 赛码 (24talent.com / acmcoder.com)
-    if (/24talent\.com|24-talent\.com|acmcoder\.com|51sai\.com/i.test(host)) {
-      const position = queryFirstText(['.position-title', '.job-title', '.detail-title', '.job-detail-head .title', 'h1']);
-      const company = queryFirstAttr(['.logo img']) || queryFirstText(['.company-title', '.company_name']);
-      return { company, position, source: '24Talent' };
-    }
-
-    // ⑥ 招聘平台专属 (BOSS直聘 / 牛客 / 实习僧 / 猎聘)
-    if (/zhipin\.com/i.test(host)) {
-      return {
-        company: queryFirstText(['.company-name', '.company-info .name', '.job-sec-company .name']),
-        position: queryFirstText(['.job-name', '.name', 'h1']),
-        source: 'Boss'
-      };
-    }
-    if (/nowcoder\.com/i.test(host)) {
-      return {
-        company: queryFirstText(['.company-item-title', '.job-detail-company', '.company-name', '.feed-item-company-name']),
-        position: queryFirstText(['.job-item-title', '.job-title', '.detail-title', 'h1']),
-        source: 'Nowcoder'
-      };
-    }
-    if (/shixiseng\.com/i.test(host)) {
-      return {
-        company: queryFirstText(['.com-name', '.company-name', '.com_name']),
-        position: queryFirstText(['.job-name', '.job_name', '.new_job_name', 'h1']),
-        source: 'Shixiseng'
-      };
-    }
-    if (/liepin\.com/i.test(host)) {
-      return {
-        company: queryFirstText(['.company-info-title', '.name-box .name', '.company-name']),
-        position: queryFirstText(['.job-title-left .name', '.job-title-box .name', 'h1']),
-        source: 'Liepin'
-      };
-    }
-
     return null;
   }
 
@@ -372,9 +444,16 @@
     return str.slice(0, 60);
   }
 
-  // 标题角色识别用的词库
-  const JOB_HINT_RE = /(工程师|开发|产品|运营|设计|算法|分析|经理|专员|管培生?|顾问|研究员|总监|实习|前端|后端|客户端|测试|运维|数据|架构|策划|编辑|翻译|财务|法务|人力|市场|销售|客服|审计|风控|硬件|软件|嵌入式|安卓|全栈|技术支持|项目管理|科学家|专家|助理|主管|Java|Android|iOS|Python|Go|C\+\+|UI|UX|PM|RD|QA|BD|HR)/i;
+  // 标题角色识别用的词库。
+  // v5.7.0 拆成 CJK / Latin 两张表：中文词没有 \b 边界可用，而裸的英文 token（如 Go）不带边界
+  // 会误命中 Algorithm / Google——把 Google 段当岗位段扣 60 分，公司名识别直接歪掉。
+  const JOB_HINT_RE = /(工程师|开发|产品|运营|设计|算法|分析|经理|专员|管培生?|顾问|研究员|总监|实习|前端|后端|客户端|测试|运维|数据|架构|策划|编辑|翻译|财务|法务|人力|市场|销售|客服|审计|风控|硬件|软件|嵌入式|安卓|全栈|技术支持|项目管理|科学家|专家|助理|主管)/i;
+  const JOB_HINT_EN_RE = /\b(?:engineer|engineering|developer|development|intern(?:ship)?|manager|analyst|designer|scientist|consultant|specialist|architect|administrator|associate|director|lead|staff|senior|junior|graduate|trainee|SDE|SRE|QA|PM|RD|BD|HR|UI|UX|Java|JavaScript|Python|Golang|PHP|Ruby|Scala|Rust|C\+\+|React|Vue|Angular|Node|iOS|Android|Sales|Marketing|Finance|Legal|Accounting|Operations)\b/i;
   const COMPANY_HINT_RE = /(有限公司|股份|集团|控股|科技|网络|信息|技术|银行|证券|保险|汽车|电子|通信|研究院|研究所|大学|学院|医院|中心|传媒|文化|能源|生物|制药|地产|物流|航空|食品|零售|制造|电气|机械|化工|材料|建筑)/;
+  // 英文公司后缀表刻意**不含** Software / System(s) / Solutions / Digital：这些词更常出现在
+  // 岗位名里（Software Engineer / Systems Engineer / Solutions Architect），
+  // 放进公司表会把整段英文岗位名误判成公司段（isJob 反向失效）。
+  const COMPANY_HINT_EN_RE = /\b(?:Inc|LLC|Ltd|Limited|Corp|Corporation|Technologies|Group|Holdings|Bank|Capital|Securities|Insurance|Motors|Electric|Logistics|Semiconductor|Pharma|Laboratories|Partners|Energy)\b/i;
   const TITLE_NOISE_RE = /^(?:20\d{2}\s*届?|招聘|校招|社招|秋招|春招|校园招聘|秋季招聘|春季招聘|职位|岗位|详情|首页|主页|官网|门户|系统|投递|申请|网申|欢迎|加入|诚聘英才|加入我们|人才|北森|Moka|大易|用友|24Talent|赛码|BOSS直聘|猎聘|智联招聘|前程无忧|牛客|实习僧|拉勾|campus|careers|jobs?|talent|hr|zhaopin|recruit)/i;
   const TITLE_SPLIT_RE = /[-—|·_~–/、,，]+/;
   // 公司名尾巴上的招聘修饰（「小米集团校园招聘」→「小米集团」）
@@ -396,15 +475,16 @@
     const segments = raw.split(TITLE_SPLIT_RE).map(s => s.trim()).filter(Boolean);
     if (!segments.length) return '';
     const posSlug = String(knownPosition || '').replace(/\s+/g, '').toLowerCase();
-    const isJob = seg => JOB_HINT_RE.test(seg) && !COMPANY_HINT_RE.test(seg);
+    const isJob = seg => (JOB_HINT_RE.test(seg) || JOB_HINT_EN_RE.test(seg))
+      && !(COMPANY_HINT_RE.test(seg) || COMPANY_HINT_EN_RE.test(seg));
     const hasJobSeg = segments.some(isJob);
 
     let best = null;
     for (const seg of segments) {
       let score = 0;
       if (brandHit(seg)) score += 100;                       // 命中已知品牌：最强信号
-      if (COMPANY_HINT_RE.test(seg)) score += 40;            // 含法人/行业后缀
-      if (JOB_HINT_RE.test(seg)) score -= 60;                // 含岗位词
+      if (COMPANY_HINT_RE.test(seg) || COMPANY_HINT_EN_RE.test(seg)) score += 40; // 含法人/行业后缀
+      if (JOB_HINT_RE.test(seg) || JOB_HINT_EN_RE.test(seg)) score -= 60;         // 含岗位词
       if (TITLE_NOISE_RE.test(seg)) score -= 30;             // 整段以噪声词开头
       if (hasJobSeg && !isJob(seg) && !TITLE_NOISE_RE.test(seg)) score += 25; // 另一段大概率是公司
       const segSlug = seg.replace(/\s+/g, '').toLowerCase();
@@ -447,7 +527,14 @@
     '贵阳', '温州', '常州', '徐州', '南通', '扬州', '镇江', '盐城', '泰州', '绍兴', '嘉兴', '金华', '台州', '湖州',
     '芜湖', '泉州', '汕头', '湛江', '中山', '惠州', '江门', '肇庆', '柳州', '桂林', '烟台', '潍坊', '威海', '洛阳',
     '保定', '唐山', '秦皇岛', '廊坊', '邯郸', '邢台', '张家口', '承德', '沧州', '衡水', '绵阳', '宜宾', '泸州', '德阳',
-    '襄阳', '宜昌', '株洲', '湘潭', '赣州', '九江', '上饶', '咸阳', '宝鸡', '渭南', '鞍山', '吉林', '大庆', '包头', '大同'
+    '襄阳', '宜昌', '株洲', '湘潭', '赣州', '九江', '上饶', '咸阳', '宝鸡', '渭南', '鞍山', '吉林', '大庆', '包头', '大同',
+    // v5.7.0：港澳台与海外主要工作地 + 远程/全国（外企与出海岗位常给这些 base）。
+    // 放在表尾不影响 pickCity——它按「文本中出现位置」取最早者，与库内顺序无关。
+    '台北', '新北', '高雄', '台南', '桃园',
+    '新加坡', '东京', '首尔', '吉隆坡', '曼谷', '雅加达', '迪拜',
+    '伦敦', '巴黎', '柏林', '慕尼黑', '阿姆斯特丹', '都柏林', '苏黎世', '斯德哥尔摩', '法兰克福',
+    '纽约', '旧金山', '圣何塞', '西雅图', '洛杉矶', '芝加哥', '波士顿', '奥斯汀', '湾区', '硅谷', '多伦多', '温哥华',
+    '悉尼', '墨尔本', '全国', '远程'
   ];
   const CITY_NEGATIVE_SEL = 'footer, [class*="footer" i], [class*="select" i], [class*="picker" i], [class*="switch" i], [class*="filter" i], [class*="sidebar" i], [class*="nav" i]';
   const CITY_LOC_SELECTORS = [
@@ -563,6 +650,21 @@
     // 先用「不带公司」的清洗结果作为反向排除的依据（此时公司还没定）
     const prelimPosition = cleanJobPosition(bestPosition ? bestPosition.value : '', '');
 
+    // v5.7.0 列表页检测：岗位语义选择器命中多个元素 + 胜出来源又是弱语义时，
+    // 大概率用户停在岗位列表页——抓到的"岗位名"是列表第一项，不是用户在看的那条。
+    // 该标记只用于 UI 提示（面板建议先进详情页），不参与取值。
+    let semanticPositionHits = 0;
+    try {
+      semanticPositionHits = document.querySelectorAll(
+        POSITION_SELECTORS.concat(POSITION_GENERIC_SELECTORS).join(',')
+      ).length;
+    } catch (_) { semanticPositionHits = 0; }
+    const winSource = bestPosition ? String(bestPosition.source) : '';
+    const isListPage = !bestPosition
+      || ((winSource === 'selector' || winSource === 'generic' || winSource === 'h1' || winSource === 'breadcrumb'
+        || winSource === 'document.title' || winSource === 'og:title')
+        && semanticPositionHits >= 3);
+
     // ---- 再定公司（域名库只是候选之一，不再锁死后续来源）----
     const companyCandidates = [];
     if (jobLd.organization) companyCandidates.push({ value: jobLd.organization, weight: COMPANY_SOURCE_WEIGHTS.jsonld, source: 'jsonld' });
@@ -600,18 +702,27 @@
       stage: '已投递',
       applicationDate: resolveApplicationDate(pageText),
       applicationUrl: location.href,
-      // 采集来源，仅供排查（console.debug），本轮不上 UI；后续做置信度展示时可直接接上
+      // v5.7.0 列表页标记：面板据此提示「请进入岗位详情后再收录」
+      _listPage: isListPage,
+      // 采集来源与权重（v5.7.0 起权重上 UI：低可信来源的值会黄标提醒核对，错值不再无声流入台账）
       _sources: {
         company: bestCompany ? bestCompany.source : '',
         position: bestPosition ? bestPosition.source : '',
         city: city ? 'detected' : ''
+      },
+      _weights: {
+        company: bestCompany ? bestCompany.weight : 0,
+        position: bestPosition ? bestPosition.weight : 0
       }
     };
   }
 
   function resolveApplicationDate(pageText) {
     const dateMatch = String(pageText || '').match(/(?:投递|申请)(?:时间|日期)?\s*[:：]?\s*(20\d{2})[.\/年-](\d{1,2})[.\/月-](\d{1,2})日?/);
-    return dateMatch
-      ? `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`
-      : new Date().toISOString().slice(0, 10);
+    if (dateMatch) {
+      return `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
+    }
+    // v5.7.0：兜底日期改用**本地**时区——toISOString 按 UTC 取日期，北京时间 0-8 点会写成昨天
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }

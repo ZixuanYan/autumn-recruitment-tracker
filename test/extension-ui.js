@@ -506,6 +506,13 @@ check('panel.html 的 script 顺序同样满足依赖，且引用的文件都存
   assert.ok(!/<script>(?!<\/script>)/.test(SRC.panelHtml), 'panel.html 里有内联脚本，会被 extension_pages 的 CSP 拦掉');
 });
 
+check('all_frames 与 webNavigation 已启用（v5.7.0 多帧扫描的前提）', () => {
+  // 部分招聘门户把岗位详情嵌在 iframe 里——不开 all_frames，content script 只活在顶层，
+  // 解析只能看到壳页（这就是"识别不准"的结构性根因之一）。
+  assert.strictEqual(SRC.manifest.content_scripts[0].all_frames, true, 'all_frames 必须开启，否则 iframe 里的岗位详情永远扫不到');
+  assert.ok(SRC.manifest.permissions.includes('webNavigation'), 'webNavigation 权限缺失：弱结果时无法枚举帧做按字段合并');
+});
+
 check('Side Panel 已声明，且 openPanelOnActionClick 与 action.onClicked 没有并存', () => {
   assert.ok(SRC.manifest.permissions.includes('sidePanel'), 'permissions 缺少 sidePanel');
   assert.ok(SRC.manifest.side_panel && SRC.manifest.side_panel.default_path, 'manifest 缺少 side_panel 配置');

@@ -223,8 +223,12 @@ document.getElementById('autumn-job-assistant-host')?.remove();
   // ================= Side Panel 的远程调用入口 =================
   // Side Panel 是扩展页面，无法直接访问宿主 DOM，所以解析当前页与填入字段都要经
   // background 中转到这里。解析引擎 extractPageJobData 在 03-parsers.js，零改动复用。
+  // v5.7.0：manifest 开 all_frames 后本文件也活在子帧里——岗位详情嵌在 iframe 里的站点
+  // （部分高校/集团门户）由此可扫。SCAN 各帧都响应（background 按字段权重合并）；
+  // FILL 只有顶层或「确实有聚焦目标」的帧才响应，否则空帧会抢答"已复制"淹没真正的聚焦帧。
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (!request || !request.type || window.self !== window.top) return;
+    if (!request || !request.type) return;
+    const isTop = window.self === window.top;
 
     if (request.type === MSG.SCAN_CURRENT_PAGE) {
       try {
@@ -240,6 +244,7 @@ document.getElementById('autumn-job-assistant-host')?.remove();
     }
 
     if (request.type === MSG.FILL_FOCUSED_FIELD) {
+      if (!isTop && !lastFocusedEl) return; // 空帧不抢答（见上方注释）
       const result = fillFocusedField(request.value);
       if (result === 'filled') showToast(`已填入：${String(request.value).slice(0, 12)}${String(request.value).length > 12 ? '…' : ''}`);
       else if (result === 'copied') showToast('未聚焦输入框，已复制到剪贴板，请粘贴');

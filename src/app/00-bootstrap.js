@@ -358,7 +358,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.29.0';
+      const APP_VERSION = '4.30.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -378,7 +378,7 @@
       const els = {
         total: $('#totalCount'), today: $('#todayCount'), active: $('#activeCount'), week: $('#weekCount'), offer: $('#offerCount'),
         stageGrid: $('#stageGrid'), body: $('#recordBody'), empty: $('#emptyState'), caption: $('#resultCaption'),
-        upcoming: $('#upcomingList'), search: $('#searchInput'), filter: $('#stageFilter'), sort: $('#sortSelect'),
+        search: $('#searchInput'), filter: $('#stageFilter'), sort: $('#sortSelect'),
         dialog: $('#recordDialog'), form: $('#recordForm'), dialogTitle: $('#dialogTitle'), toast: $('#toast')
       };
       let primaryLoadState = 'unknown';
@@ -1817,9 +1817,9 @@
         renderDistribution();
         renderInsights();
         renderRecordsView();
-        renderUpcoming();
         // 日历视图（v4.27.0）跟着全量重渲：与 records 同理，隐藏时多渲一次无副作用，
-        // 换取从抽屉推进 / 邮件应用等任何数据变更路径回来时格子都反映最新台账。
+        // 换取从抽屉推进 / 邮件应用等任何数据变更路径回来时格子与日程流都反映最新台账。
+        // v4.30.0 起「未来安排」面板并入日程流（renderCalFlow 由 renderCalendarView 带出）。
         renderCalendarView();
       }
       function renderStats() {
@@ -2322,39 +2322,7 @@
         $('#recordsTableScroll').hidden = visible.length === 0;
       }
 
-      function renderUpcoming() {
-        // 统一事件流：events[] 里的事件一起排（逾期置顶），最多 6 项
-        const events = collectScheduleEvents(records, new Date(), 6);
-        if (!events.length) {
-          els.upcoming.innerHTML = '<div class="side-empty">近期还没有安排或截止<br>新增 / 编辑记录时在「关键时间」里填写面试 / 笔试或截止日期</div>';
-          return;
-        }
-        els.upcoming.innerHTML = events.map(ev => {
-          const r = ev.record;
-          const d = ev.at;
-          const diff = daysUntil(d);
-          const isDeadline = ev.type === TIME_EVENT_DEADLINE;
-          // v4.24.0：截止也能带时刻，所以不能再直接把 at 拼进界面——那会露出 `2026-09-15T17:00`
-          // 这种机器格式（v4.24.0 之前截止恒为日期，拼出来恰好是人看的）。按是否全天走两种格式。
-          // 「就是今天」对定时事件也丢了时刻，而"今天几点"恰恰是它唯一要说的事。
-          const deadlineText = ev.allDay ? formatDate(String(ev.event && ev.event.at || '').slice(0, 10)) : formatDateTime(ev.event && ev.event.at);
-          const when = ev.overdue
-            ? `已过期${diff < 0 ? ` ${-diff} 天` : ''}`
-            : (diff === 0
-              ? (ev.allDay ? '就是今天' : `今天 ${String(ev.event && ev.event.at || '').slice(11, 16)}`)
-              : (diff > 0 && diff <= 3 ? `还剩 ${diff} 天` : (ev.allDay ? formatDate(localDateInput(d)) : `${ev.type} · ${formatDateTime(ev.event && ev.event.at)}`)));
-          return `<article class="schedule-item${isDeadline ? ' is-deadline' : ''}${ev.overdue ? ' is-overdue' : ''}" data-id="${escapeHtml(r.id)}" role="button" tabindex="0" title="查看详情">
-            <div class="date-tile"><div class="date-month">${d.getMonth() + 1} 月</div><div class="date-day">${d.getDate()}</div></div>
-            <div class="schedule-body">
-              <div class="side-company">${escapeHtml(r.company)} · ${escapeHtml(r.position)} <span class="badge badge-sm" data-stage="${escapeHtml(r.stage)}">${escapeHtml(r.stage)}</span></div>
-              <div class="side-detail"><span class="side-kind">${escapeHtml(ev.type)}</span>${escapeHtml(isDeadline ? deadlineText : (r.recentSchedule || r.nextAction || '待处理安排'))}</div>
-              <div class="side-time${ev.overdue ? ' overdue' : ''}">${escapeHtml(when)}</div>
-            </div>
-          </article>`;
-        }).join('');
-      }
-
-      // 记录聚焦入口：未来安排卡片 / 看板卡片 / ⌘K 命令面板 / 洞察卡点清单统一走这里，
+      // 记录聚焦入口：日程流行 / 看板卡片 / ⌘K 命令面板 / 洞察卡点清单统一走这里，
       // 避免多处各写一套打开逻辑。v4.4.0 起打开详情抽屉（而不是直接进编辑弹窗）。
       function openRecordFocus(id) {
         const record = records.find(item => item.id === id);

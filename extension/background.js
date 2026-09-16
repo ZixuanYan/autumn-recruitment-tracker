@@ -106,6 +106,70 @@ async function getActiveTabId() {
   }
 }
 
+// ================= v5.7.0 多帧扫描合并 =================
+// 部分招聘门户把岗位详情嵌在 iframe 里（高校/集团门户套 ATS 是常态），只扫顶层只能看到壳页。
+// 策略：先扫顶层；结果是「弱结果」（关键字段缺失，或公司/岗位都来自标题类低权重来源）时，
+// 用 webNavigation 列出全部帧逐帧请求，按字段取权重最高者合并。URL 跟随岗位胜出的帧——
+// iframe 里的地址才是岗位详情地址，顶层地址只是门户壳。
+const SCAN_WEAK_WEIGHT = 60;
+
+function scanFieldWeight(data, field) {
+  return Number((data && data._weights && data._weights[field]) || 0);
+}
+
+function isWeakScan(data) {
+  if (!data) return true;
+  if (!data.company && !data.position) return true;
+  return scanFieldWeight(data, 'company') < SCAN_WEAK_WEIGHT && scanFieldWeight(data, 'position') < SCAN_WEAK_WEIGHT;
+}
+
+async function scanTabFrames(tabId, request) {
+  let top;
+  try {
+    top = await chrome.tabs.sendMessage(tabId, request);
+  } catch (err) {
+    return { ok: false, reason: 'no-content-script', message: err && err.message ? err.message : String(err) };
+  }
+  top = top || { ok: false, reason: 'no-response' };
+  if (!top.ok || !isWeakScan(top.data)) return top;
+  if (!chrome.webNavigation || !chrome.webNavigation.getAllFrames) return top;
+  let frames;
+  try {
+    frames = await chrome.webNavigation.getAllFrames({ tabId });
+  } catch (_) {
+    return top;
+  }
+  const subFrames = (frames || []).filter(f => f && f.frameId !== 0 && /^https?:/i.test(f.url || ''));
+  if (!subFrames.length) return top;
+  const subResults = (await Promise.all(subFrames.map(async f => {
+    try {
+      return await chrome.tabs.sendMessage(tabId, request, { frameId: f.frameId });
+    } catch (_) {
+      return null;
+    }
+  }))).filter(r => r && r.ok && r.data);
+  if (!subResults.length) return top;
+
+  const merged = JSON.parse(JSON.stringify((top.data || {})));
+  merged._sources = Object.assign({}, top.data && top.data._sources);
+  merged._weights = Object.assign({}, top.data && top.data._weights);
+  merged._sources.mergedFrames = String(subResults.length);
+  let positionFrameUrl = '';
+  for (const r of subResults) {
+    for (const field of ['company', 'position']) {
+      if (r.data[field] && scanFieldWeight(r.data, field) > scanFieldWeight(merged, field)) {
+        merged[field] = r.data[field];
+        merged._weights[field] = scanFieldWeight(r.data, field);
+        merged._sources[field] = (r.data._sources && r.data._sources[field]) || 'iframe';
+      }
+    }
+    if (!merged.city && r.data.city) merged.city = r.data.city;
+    if (r.data.position && r.data.applicationUrl) positionFrameUrl = r.data.applicationUrl;
+  }
+  if (positionFrameUrl) merged.applicationUrl = positionFrameUrl;
+  return { ok: true, data: merged, title: (top && top.title) || '', url: positionFrameUrl || (top && top.url) || '' };
+}
+
 // ================= 监听各页面消息 =================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
@@ -122,6 +186,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return;
       }
       try {
+        if (request.type === MSG.SCAN_CURRENT_PAGE) {
+          // v5.7.0：all_frames 后岗位详情嵌在 iframe 里的站点（部分高校/集团门户）也能扫到，
+          // 弱结果时按字段权重跨帧合并（见 scanTabFrames）
+          sendResponse(await scanTabFrames(tabId, request));
+          return;
+        }
         const res = await chrome.tabs.sendMessage(tabId, request);
         sendResponse(res || { ok: false, reason: 'no-response' });
       } catch (err) {
@@ -184,13 +254,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           pendingAt: Date.now()
         };
 
-        // 查重：duplicate（同链接或同公司同岗位）→ 更新暂存项；variant（同公司的另一个岗位）→ 入队
+        // 查重：duplicate（同链接或同公司同岗位）→ 更新暂存项；variant（同公司的另一个岗位）→ 入队。
+        // v5.7.0：「待确认公司/待确认岗位」占位值不参与合并——它们会被 companyKey 归一化成同一个键，
+        // 不同 URL 的两条未补填记录会静默互相覆盖（第一条的链接与字段直接丢失）。
+        const PLACEHOLDER_COMPANY = '待确认公司';
+        const PLACEHOLDER_POSITION = '待确认岗位';
+        const stagedIsPlaceholder = staged.company === PLACEHOLDER_COMPANY || staged.position === PLACEHOLDER_POSITION;
         const hit = findDuplicateRecord(queue, staged);
-        if (hit && hit.mode === 'duplicate') {
+        if (hit && hit.mode === 'duplicate' && !stagedIsPlaceholder) {
           const existing = hit.record;
           Object.assign(existing, {
-            company: staged.company,
-            position: staged.position,
+            // 字段级防护：老记录是真值、新值是占位符时不回退（历史遗留的占位记录允许被真值覆盖）
+            company: staged.company === PLACEHOLDER_COMPANY && existing.company !== PLACEHOLDER_COMPANY ? existing.company : staged.company,
+            position: staged.position === PLACEHOLDER_POSITION && existing.position !== PLACEHOLDER_POSITION ? existing.position : staged.position,
             city: staged.city || existing.city,
             applicationDate: staged.applicationDate || existing.applicationDate,
             stage: staged.stage || existing.stage,

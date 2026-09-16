@@ -66,7 +66,8 @@ function makeSandbox(fixture) {
   const exportLine = '\n;__export({ matchEnterpriseByHost, hasRecruitContext, pickCompanyFromTitle, cleanJobPosition,'
     + ' cleanJobCompany, pickCity, subdomainGuess, stripPlatformNoise, pickBestCandidate, extractPageJobData,'
     + ' queryFirstText, queryFirstAttr, deepestFittingText, readJobPostingLd, parseBreadcrumbPosition,'
-    + ' parseHeaderLogoCompany, KNOWN_ENTERPRISES, KNOWN_CITIES, COMPANY_SOURCE_WEIGHTS, POSITION_SOURCE_WEIGHTS });';
+    + ' parseHeaderLogoCompany, KNOWN_ENTERPRISES, KNOWN_CITIES, COMPANY_SOURCE_WEIGHTS, POSITION_SOURCE_WEIGHTS,'
+    + ' POSITION_SELECTORS, POSITION_GENERIC_SELECTORS });';
   sandbox.__export = api => { sandbox.__api = api; };
   vm.runInContext(parserSrc + exportLine, sandbox, { filename: '03-parsers.js' });
   return sandbox;
@@ -457,6 +458,48 @@ check('返回值结构与旧版兼容（收录表单只消费这 5 个字段）'
   }
   assert.ok(typeof got.company === 'string' && typeof got.position === 'string');
   assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(got.applicationDate), '日期格式应为 YYYY-MM-DD');
+});
+
+// ============================================================================
+section('v5.7.0 识别准确性：列表页检测 / 英文标题 / 新词库');
+
+check('列表页检测：语义选择器命中多个元素且无强来源时标记 _listPage', () => {
+  const listSel = api.POSITION_SELECTORS.concat(api.POSITION_GENERIC_SELECTORS).join(',');
+  const mk = t => ({ textContent: t, children: [] });
+  const sb = makeSandbox({
+    hostname: 'jobs.example.com',
+    title: '在招职位列表 - 示例招聘',
+    selectors: { [listSel]: [mk('后端开发工程师'), mk('前端开发工程师'), mk('算法工程师')] }
+  });
+  const got = sb.__api.extractPageJobData();
+  assert.strictEqual(got._listPage, true, '语义候选 ≥3 且胜出来源是弱语义 → 应标记列表页');
+  assert.ok(got._sources.position, '岗位仍按原链路取值（列表页标记不参与取值）');
+  // 详情页（选择器唯一命中）不应误标
+  const sb2 = makeSandbox({
+    hostname: 'jobs.example.com',
+    title: '后端开发工程师 - 示例科技',
+    selectors: { [listSel]: [mk('后端开发工程师（深圳）')] }
+  });
+  assert.strictEqual(sb2.__api.extractPageJobData()._listPage, false, '详情页不得误标列表页');
+});
+
+check('英文标题的角色识别：Software Engineer 段判岗位、含 Inc 后缀段判公司', () => {
+  assert.strictEqual(companyFromTitle('Software Engineer - ByteDance Inc'), 'ByteDance Inc');
+  // 旧版裸 Go 会命中 Google/Algorithm——Google 段被当岗位段扣 60 分，公司名直接识别失败
+  assert.strictEqual(companyFromTitle('Google - Software Engineer'), 'Google');
+});
+
+check('城市库扩容：远程 / 海外 base 可识别', () => {
+  assert.strictEqual(api.pickCity('可远程办公，也可 base 新加坡'), '远程', '「远程」按文本出现位置取最早者');
+  assert.strictEqual(api.pickCity('base 新加坡 / 上海'), '新加坡');
+  assert.strictEqual(api.pickCity('工作地点：吉隆坡'), '吉隆坡');
+});
+
+check('域名库扩容：秋招高频厂商与金融/制造新条目', () => {
+  assert.strictEqual(api.matchEnterpriseByHost('careers.iflytek.com').company, '科大讯飞');
+  assert.strictEqual(api.matchEnterpriseByHost('campus.cmbchina.com').company, '招商银行');
+  assert.strictEqual(api.matchEnterpriseByHost('hr.hikvision.com').company, '海康威视');
+  assert.strictEqual(api.matchEnterpriseByHost('careers.trip.com').company, '携程集团');
 });
 
 runAll();

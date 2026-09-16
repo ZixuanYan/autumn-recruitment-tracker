@@ -277,10 +277,20 @@
   }
 
   // ================= 一键收录 =================
+  let lastScan = null; // v5.7.0：{ host, detected } —— 纠正记忆的记录与诊断导出都依赖它
+
   async function scan() {
     if (!els) return;
     els.scanBtn.disabled = true;
-    const res = await sendToTab(MSG.SCAN_CURRENT_PAGE);
+    let res = await sendToTab(MSG.SCAN_CURRENT_PAGE);
+    // v5.7.0 SPA 兜底：详情区异步渲染的站点，首次扫描可能跑在内容挂载之前——
+    // 关键字段全空时等 800ms 自动重试一次（不引入常驻 observer，失败也不打扰用户）
+    if (res && res.ok && res.data && !res.data.company && !res.data.position) {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const retry = await sendToTab(MSG.SCAN_CURRENT_PAGE);
+      const better = retry && retry.ok && retry.data && (retry.data.company || retry.data.position);
+      if (better) res = retry;
+    }
     renderPageState();
     els.scanBtn.disabled = classifyPage(currentTabUrl) !== 'ok';
     if (!res || !res.ok) {
@@ -289,16 +299,134 @@
     }
     capturedPageUrl = res.url || currentTabUrl;
     const detected = Object.assign({}, res.data, { pageTitle: res.title || '' });
+    // v5.7.0 纠正记忆：同域名之前改正过的公司名自动套用（多租户 ATS 域名明确排除）
+    await applyLearnedCorrections(detected, capturedPageUrl);
+    lastScan = { host: hostOf(capturedPageUrl || currentTabUrl), detected };
     if (formEls.form) formEls.form.hidden = false;
     AJA.CaptureForm.fillForm(formEls, detected);
-    if (detected._sources) console.debug('[秋招助手] 采集来源', detected._sources);
+    if (detected._sources) console.debug('[秋招助手] 采集来源', detected._sources, detected._weights || {});
     // 自动聚焦第一个没识别出来的字段（都识别出来则聚焦公司名），方便快速修正
     const target = AJA.CaptureForm.firstEmptyField(formEls, detected);
     if (target) setTimeout(() => { try { target.focus(); } catch (_) {} }, 30);
   }
 
+  // v5.7.0 纠正记忆：保存时对比用户最终值与当时的识别值，改动的公司名按域名记下。
+  // 只学公司名：岗位/城市是逐岗位变化的，按域名学必然张冠李戴；多租户 ATS 域名
+  // （一个域名下成千上万家企业）连公司名都不学——那是平台的域名，不是某一家公司的。
+  function rememberCorrections(record) {
+    if (!lastScan || !lastScan.detected) return;
+    try {
+      const host = lastScan.host;
+      if (!host) return;
+      const d = lastScan.detected;
+      const company = String(record.company || '').trim();
+      if (!company || company === '待确认公司' || company === d.company) return;
+      if ((AJA.MULTI_TENANT_HOSTS || []).some(dom => host === dom || host.endsWith('.' + dom))) return;
+      chrome.storage.local.get([AJA.LEARN_STORAGE_KEY], (res) => {
+        const store = (res && res[AJA.LEARN_STORAGE_KEY]) || {};
+        const entry = store[host] || { hits: 0 };
+        if (entry.company === company) return;
+        entry.company = company;
+        entry.updatedAt = Date.now();
+        entry.hits = (entry.hits || 0) + 1;
+        store[host] = entry;
+        chrome.storage.local.set({ [AJA.LEARN_STORAGE_KEY]: store }, () => refreshLearn());
+      });
+    } catch (_) {}
+  }
+
+  // 应用纠正记忆：命中本机记忆的公司名直接覆盖识别值，来源标 learned（提示条会写「按你上次的修正」）
+  async function applyLearnedCorrections(detected, pageUrl) {
+    try {
+      const host = hostOf(pageUrl || currentTabUrl);
+      if (!host) return;
+      const res = await chrome.storage.local.get([AJA.LEARN_STORAGE_KEY]);
+      const store = (res && res[AJA.LEARN_STORAGE_KEY]) || {};
+      const entry = store[host];
+      if (!entry || !entry.company) return;
+      if ((AJA.MULTI_TENANT_HOSTS || []).some(dom => host === dom || host.endsWith('.' + dom))) return;
+      detected.company = entry.company;
+      detected._sources = Object.assign({}, detected._sources, { company: 'learned' });
+      detected._weights = Object.assign({}, detected._weights, { company: 120 });
+    } catch (_) {}
+  }
+
+  // ================= 识别纠正记忆管理（v5.7.0）=================
+  async function refreshLearn() {
+    if (!els || !els.learnList) return;
+    let store = {};
+    try {
+      const res = await chrome.storage.local.get([AJA.LEARN_STORAGE_KEY]);
+      store = (res && res[AJA.LEARN_STORAGE_KEY]) || {};
+    } catch (_) { store = {}; }
+    const entries = Object.entries(store).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
+    els.learnCount.textContent = String(entries.length);
+    els.learnCount.hidden = entries.length === 0;
+    els.learnList.innerHTML = entries.length
+      ? entries.map(([host, entry]) => `<div class="p-learn-item"><span class="p-learn-host" title="${escapeHtml(host)}">${escapeHtml(host)}</span><span class="p-learn-val">${escapeHtml(entry.company || '')}</span></div>`).join('')
+      : '<div class="p-empty">还没有纠正记录。在收录表单里改正识别结果并保存后，这里就会出现对应网站。</div>';
+  }
+
+  async function exportLearn() {
+    try {
+      const res = await chrome.storage.local.get([AJA.LEARN_STORAGE_KEY]);
+      const store = (res && res[AJA.LEARN_STORAGE_KEY]) || {};
+      const json = JSON.stringify({ kind: 'autumn-assistant-learn', version: 1, entries: store }, null, 2);
+      els.learnArea.value = json;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(json).then(() => toast('纠正记忆已导出到文本域与剪贴板'), () => toast('纠正记忆已导出到文本域'));
+      } else {
+        toast('纠正记忆已导出到文本域');
+      }
+    } catch (err) {
+      toast(`导出失败：${err && err.message ? err.message : err}`);
+    }
+  }
+
+  function importLearn() {
+    const raw = String(els.learnArea.value || '').trim();
+    if (!raw) { toast('请先把之前导出的 JSON 粘贴到文本域'); return; }
+    try {
+      const parsed = JSON.parse(raw);
+      const entries = parsed && parsed.entries && typeof parsed.entries === 'object' ? parsed.entries : null;
+      if (!entries) { toast('JSON 里没有识别纠正数据（应为 { entries: … } 结构）'); return; }
+      chrome.storage.local.get([AJA.LEARN_STORAGE_KEY], (res) => {
+        const store = (res && res[AJA.LEARN_STORAGE_KEY]) || {};
+        Object.assign(store, entries);
+        chrome.storage.local.set({ [AJA.LEARN_STORAGE_KEY]: store }, () => {
+          els.learnArea.value = '';
+          refreshLearn();
+          toast('纠正记忆已导入');
+        });
+      });
+    } catch (_) {
+      toast('粘贴的内容不是合法 JSON');
+    }
+  }
+
+  // 复制识别诊断：把当前扫描的完整过程（各字段来源、权重、列表页判定）导出成 JSON。
+  // 这是"识别不准"的可维护性出口：用户贴出诊断，开发者照着补规则，不再靠猜。
+  function copyDiagnostics() {
+    if (!lastScan || !lastScan.detected) { toast('请先点一次「识别当前页面」'); return; }
+    const payload = {
+      kind: 'autumn-assistant-scan-diagnostic',
+      version: 1,
+      url: capturedPageUrl || currentTabUrl,
+      host: lastScan.host,
+      detected: lastScan.detected,
+      learnedApplied: lastScan.detected._sources && lastScan.detected._sources.company === 'learned'
+    };
+    const json = JSON.stringify(payload, null, 2);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(json).then(() => toast('识别诊断已复制到剪贴板'), () => toast('复制失败：剪贴板不可用'));
+    } else {
+      toast('剪贴板不可用，无法复制诊断');
+    }
+  }
+
   function saveCapture() {
     const record = AJA.CaptureForm.collect(formEls, capturedPageUrl || currentTabUrl);
+    rememberCorrections(record);
     AJA.CaptureForm.save(record, {
       send,
       toast,
@@ -472,8 +600,12 @@
       logo: $('p-logo'), ver: $('p-ver'), pagestate: $('p-pagestate'),
       capHead: $('p-cap-head'), capBody: $('p-cap-body'), capArrow: $('p-cap-arrow'),
       scanBtn: $('p-scan-btn'), scanIco: $('p-scan-ico'), formHost: $('p-form-host'),
+      diagBtn: $('p-diag-btn'),
       pendHead: $('p-pend-head'), pendBody: $('p-pend-body'), pendArrow: $('p-pend-arrow'),
       pendCount: $('p-pend-count'), pendList: $('p-pend-list'),
+      learnHead: $('p-learn-head'), learnBody: $('p-learn-body'), learnArrow: $('p-learn-arrow'),
+      learnCount: $('p-learn-count'), learnList: $('p-learn-list'),
+      learnExport: $('p-learn-export'), learnImport: $('p-learn-import'), learnArea: $('p-learn-area'),
       resHead: $('p-res-head'), resBody: $('p-res-body'), resArrow: $('p-res-arrow'),
       resCount: $('p-res-count'), resumeStatus: $('p-resume-status'),
       resumeSearch: $('p-resume-search'), resumeList: $('p-resume-list'), searchIco: $('p-search-ico'),
@@ -489,6 +621,7 @@
     els.capArrow.innerHTML = AJA.svg('chevron', 13);
     els.pendArrow.innerHTML = AJA.svg('chevron', 13);
     els.resArrow.innerHTML = AJA.svg('chevron', 13);
+    els.learnArrow.innerHTML = AJA.svg('chevron', 13);
 
     // 设计令牌 + 收录表单样式（表单样式与模板同源，见 common/capture-form.js 的 css()）
     const themeStyle = document.createElement('style');
@@ -509,9 +642,13 @@
     bindSection(els.capHead, els.capBody);
     bindSection(els.pendHead, els.pendBody);
     bindSection(els.resHead, els.resBody);
+    bindSection(els.learnHead, els.learnBody);
 
     // 事件
     els.scanBtn.addEventListener('click', scan);
+    els.diagBtn.addEventListener('click', copyDiagnostics);
+    els.learnExport.addEventListener('click', exportLearn);
+    els.learnImport.addEventListener('click', importLearn);
     if (formEls.saveBtn) formEls.saveBtn.addEventListener('click', saveCapture);
     if (formEls.cancelBtn) formEls.cancelBtn.addEventListener('click', () => { formEls.form.hidden = true; });
     if (formEls.titleHint) {
@@ -555,6 +692,7 @@
           renderResume();
         }
         if (changes[AJA.PENDING_KEY]) refreshPending();
+        if (changes[AJA.LEARN_STORAGE_KEY]) refreshLearn();
       });
     }
 
@@ -568,6 +706,7 @@
 
     refreshTab();
     refreshPending();
+    refreshLearn();
     loadResume();
     console.log(`[秋招求职与简历助手] Side Panel v${AJA.VERSION} 已就绪`);
   }

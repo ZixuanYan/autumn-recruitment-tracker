@@ -336,7 +336,7 @@
        结构骨架在 base.css（等高格子 / 颜色都用本层变量，暗色自动跟随），这里只做打磨：
        条目 hover 的轻反馈、today / 选中格的强调、周末列浅底、翻月按钮的方圆。 */
     .settled-chip { letter-spacing: .01em; }
-    .cal-actions .btn-small { min-width: 32px; }
+    .cal-nav .btn-small { min-width: 32px; }
     .cal-chip { transition: filter .15s var(--ease); }
     .cal-chip:hover { filter: brightness(.96); }
     .cal-chip:focus-visible, .cal-done:focus-visible, .cal-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -352,8 +352,8 @@
     .cal-done:hover { filter: brightness(.96); }
     .cal-row { transition: background .15s var(--ease); }
     .cal-row:hover { background: var(--surface-2); }
-    /* v4.29.0：明细升级为右侧独立面板，头部加发丝线与 panel-head 同语言 */
-    .cal-detail-head { padding-bottom: 9px; border-bottom: 1px solid var(--line); }
+    /* v4.30.0：日程流分组的日期行加发丝线分隔，与 panel-head 同语言 */
+    .cal-flow-day { padding-bottom: 5px; border-bottom: 1px solid var(--line); }
     /* 图例「已完成」点从灰改绿：缩略图里已完成已是浅绿行，图例跟着对齐 */
     .cal-dot.is-settled { background: var(--ok); }
 

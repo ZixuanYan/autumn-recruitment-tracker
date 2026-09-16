@@ -10,7 +10,7 @@
 
   // 扩展版本（控制台日志会展示，用于排查“是否已加载新代码”）
   // 必须与 manifest.json 的 version 一致，test/extension-ui.js 有契约断言
-  root.AJA.VERSION = '5.6.0';
+  root.AJA.VERSION = '5.7.0';
 
   // 招聘阶段预设（实际阶段可自定义，允许跳过笔试、支持三/四/五面、交叉面等）
   // v4.9.0 起值来自 shared/stages.js —— 它**必须先于本文件加载**（见 manifest.json 的
@@ -33,8 +33,17 @@
   root.AJA.RESUME_STORAGE_KEY = 'autumnRecruitmentTracker.resume.v1';
   root.AJA.PENDING_KEY = 'autumnRecruitmentTracker.pending.v1';           // 暂存箱队列
   root.AJA.SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
-  // v5.6.0：UI_STORAGE_KEY（胶囊吸边位置）随页面收录胶囊一起删除——storage 域里的旧值
-  // 不再有人读，属无害残留，不需要迁移清理。
+  // v5.7.0 识别纠正记忆：{ [hostname]: { company, position?, city?, updatedAt, hits } }。
+  // 用户在收录表单里改正并保存后记下「这个域名该取什么」，下次同域名自动套用（标「按你上次的修正」）。
+  // 只存本机 chrome.storage.local，绝不联网。多租户 ATS 域名（见 MULTI_TENANT_HOSTS）不学公司名。
+  root.AJA.LEARN_STORAGE_KEY = 'autumnRecruitmentTracker.learn.v1';
+  // 多租户 ATS/平台域名：一个域名下有成千上万家招聘企业，域级学习公司名必然张冠李戴，明确排除。
+  root.AJA.MULTI_TENANT_HOSTS = [
+    'beisen.com', 'italent.cn', 'zhiye.com', 'mokahr.com', 'dayee.com', 'hitalent.cn',
+    'wintalent.cn', 'cloudtalent.cn', 'bphr.com.cn', 'yonyou.com', 'yonyoucloud.com', 'dayhr.com',
+    'upesn.com', '24talent.com', '24-talent.com', 'acmcoder.com', '51sai.com',
+    'zhipin.com', 'nowcoder.com', 'shixiseng.com', 'liepin.com', 'zhaopin.com', '51job.com'
+  ];
 
   // 与网页版管理器的桥接
   root.AJA.TRACKER_URL = 'https://zixuanyan.github.io/autumn-recruitment-tracker/';

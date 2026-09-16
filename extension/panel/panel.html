@@ -41,6 +41,8 @@
         <button class="p-primary" id="p-scan-btn" type="button">
           <span class="p-btn-ico" id="p-scan-ico"></span><span>识别当前页面</span>
         </button>
+        <!-- v5.7.0 识别诊断：把各来源候选与权重导出成 JSON，排查"识别不准"不再靠猜 -->
+        <button class="p-mini-btn" id="p-diag-btn" type="button" title="把本页识别过程（各字段来源与权重）复制成 JSON">复制识别诊断</button>
         <div class="p-form-host" id="p-form-host"></div>
       </div>
     </section>
@@ -77,6 +79,27 @@
       <div class="p-sec-body" id="p-pend-body" hidden>
         <p class="p-hint">网页版管理器没打开时，收录的岗位在这里排队；打开网页版后逐条确认入库。</p>
         <div class="p-pend-list" id="p-pend-list"></div>
+      </div>
+    </section>
+
+    <!-- 识别纠正记忆（v5.7.0）：用户在收录表单里改正过的公司名按域名记住，下次识别同站点自动套用。
+         纯本地 chrome.storage.local，绝不联网；可导出 JSON 备份 / 导入恢复。默认折叠。 -->
+    <section class="p-section" id="p-sec-learn">
+      <button class="p-sec-head" id="p-learn-head" type="button" aria-expanded="false" aria-controls="p-learn-body">
+        <span class="p-sec-title">识别纠正记忆</span>
+        <span class="p-badge" id="p-learn-count" hidden>0</span>
+        <span class="p-sec-arrow" id="p-learn-arrow"></span>
+      </button>
+      <div class="p-sec-body" id="p-learn-body" hidden>
+        <p class="p-hint">你在收录表单里<b>改正过的公司名</b>会按网站记住，下次识别同站点自动套用（提示「按你上次的修正」）。只保存在本机浏览器，不上传。</p>
+        <div class="p-learn-list" id="p-learn-list"></div>
+        <!-- 导出/导入走可见文本域而不是 navigator.clipboard.readText：后者在扩展页面需要额外交互授权，
+             失败时用户对着「导入失败」无能为力；粘贴是所有人都会的操作。 -->
+        <textarea class="p-learn-area" id="p-learn-area" rows="4" placeholder="点「导出 JSON」生成备份；换设备时把内容粘贴到这里点「导入」" spellcheck="false"></textarea>
+        <div class="p-learn-actions">
+          <button class="p-mini-btn" id="p-learn-export" type="button">导出 JSON</button>
+          <button class="p-mini-btn" id="p-learn-import" type="button">导入上方粘贴的 JSON</button>
+        </div>
       </div>
     </section>
 

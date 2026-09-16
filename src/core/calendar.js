@@ -3,8 +3,9 @@
       // 这份是「事实日历」——一个月里每一天发生过 / 将发生什么。已了结的照列、只打 settled 标记，
       // 由渲染层灰显加「已完成」：历史在日历上仍有位置，「已完成」是标注而不是抹除。
 
-      // 本地某月的完整月网格：6 行 × 7 列（周一为第一列，中文日历习惯），含前后月补位。
-      // 返回 42 格 { iso, day, inMonth, isToday }；iso 为 YYYY-MM-DD，
+      // 本地某月的月网格（v4.30.0 起行数自适应）：周一起始，含前后月补位，行数按需 4~6 行——
+      // 固定 42 格的月份（如 2026-02 恰好 4 行整）会多出两行全空格子，页面高度被白白撑高。
+      // 返回 N×7 格 { iso, day, inMonth, isToday }；iso 为 YYYY-MM-DD，
       // 必须走 localDateInput 而不是 toISOString()——后者按 UTC 取日期，东八区之外会差一天。
       function buildMonthGrid(year, monthIndex, now = new Date()) {
         const y = Number(year);
@@ -12,9 +13,11 @@
         if (!Number.isFinite(y) || !Number.isFinite(m)) return [];
         const todayIso = localDateInput(now);
         const lead = (new Date(y, m, 1).getDay() + 6) % 7; // getDay() 周日=0，换算成周一=0
+        const daysInMonth = new Date(y, m + 1, 0).getDate();
+        const rows = Math.ceil((lead + daysInMonth) / 7);
         const start = new Date(y, m, 1 - lead);
         const cells = [];
-        for (let i = 0; i < 42; i += 1) {
+        for (let i = 0; i < rows * 7; i += 1) {
           const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
           const iso = localDateInput(d);
           cells.push({ iso, day: d.getDate(), inMonth: d.getMonth() === m, isToday: iso === todayIso });

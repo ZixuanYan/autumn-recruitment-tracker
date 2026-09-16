@@ -251,7 +251,28 @@
     if (e.date) e.date.value = d.applicationDate || '';
     if (e.titleText) e.titleText.textContent = d.pageTitle || '';
     if (e.titleHint) e.titleHint.title = `点击复制: ${d.pageTitle || ''}`;
+    markGuessedFields(e, d);
     renderDetectHint(e.detectHint, d);
+  }
+
+  // v5.7.0 低可信来源清单：来自这些来源的值在表单里黄标（is-guessed），错值不再无声流入台账。
+  // 刻意按「来源名」而非权重数字判断——来源名是解析器的稳定契约，权重的分值档会随调优漂移。
+  const WEAK_COMPANY_SOURCES = ['title', 'og:site_name', 'subdomain'];
+  const WEAK_POSITION_SOURCES = ['og:title', 'document.title', 'generic'];
+  function setGuessed(el, on, why) {
+    if (!el || !el.classList || !el.classList.toggle) return;
+    el.classList.toggle('is-guessed', !!on);
+    if (on && el.setAttribute) el.setAttribute('title', why || '该值来自低可信来源，建议核对');
+    else if (el.removeAttribute) el.removeAttribute('title');
+  }
+  function markGuessedFields(e, d) {
+    const sources = d._sources || {};
+    const listPage = d._listPage === true;
+    const weakCompany = !!d.company && (WEAK_COMPANY_SOURCES.indexOf(sources.company) > -1 || listPage);
+    const weakPosition = !!d.position && (WEAK_POSITION_SOURCES.indexOf(sources.position) > -1 || listPage);
+    setGuessed(e.company, weakCompany, '该值来自低可信来源（如网页标题），建议核对');
+    setGuessed(e.position, weakPosition, '该值来自低可信来源（如网页标题），建议核对');
+    setGuessed(e.city, false);
   }
 
   // 自动聚焦到第一个没识别出来的字段（都识别出来则聚焦公司名），方便快速修正
@@ -284,6 +305,8 @@
 
   /**
    * 渲染采集置信提示：解析器「宁空勿错」，识别不出的字段会留空，这里明确告知需要人工补填。
+   * v5.7.0：低可信来源的值（网页标题 / og 标签 / 列表页）也会警示——
+   * 此前只对空字段告警，错值与可信值在 UI 上毫无区分，用户看到「已自动识别」就直接保存了。
    */
   function renderDetectHint(hintEl, detected) {
     if (!hintEl) return;
@@ -297,19 +320,41 @@
       .filter(k => d[k] && sources[k])
       .map(k => `${k === 'company' ? '公司' : k === 'position' ? '岗位' : '城市'}来自${detectSourceLabel(sources[k])}`)
       .join(' · ');
+    const listPage = d._listPage === true;
+    const weak = [];
+    if (d.company && WEAK_COMPANY_SOURCES.indexOf(sources.company) > -1) weak.push('公司名称');
+    if (d.position && WEAK_POSITION_SOURCES.indexOf(sources.position) > -1) weak.push('投递岗位');
+    const learned = sources.company === 'learned';
     const svg = root.AJA.svg || (() => '');
+    const srcHtml = srcText ? `<div class="detect-hint-src">${escapeHtml(srcText)}</div>` : '';
     if (missing.length) {
       hintEl.className = 'detect-hint warn';
-      hintEl.innerHTML = `${svg('warn', 13)}<span>未能从页面识别出：<b>${missing.map(escapeHtml).join('、')}</b>，请手动补填后再保存。</span>`
-        + (srcText ? `<div class="detect-hint-src">${escapeHtml(srcText)}</div>` : '');
+      hintEl.innerHTML = `${svg('warn', 13)}<span>未能从页面识别出：<b>${missing.map(escapeHtml).join('、')}</b>，请手动补填后再保存。</span>` + srcHtml;
+    } else if (listPage) {
+      hintEl.className = 'detect-hint warn';
+      hintEl.innerHTML = `${svg('warn', 13)}<span>当前页面更像<b>岗位列表</b>，抓到的可能不是你想收的那一条——建议进入岗位详情页后再收录。</span>` + srcHtml;
+    } else if (learned) {
+      hintEl.className = 'detect-hint';
+      hintEl.innerHTML = `<span>公司名<b>按你上次的修正</b>填入；请核对后保存，「企业性质」需手动选一次（央国企 / 私企 / 外企）。</span>` + srcHtml;
+    } else if (weak.length) {
+      hintEl.className = 'detect-hint warn';
+      hintEl.innerHTML = `${svg('warn', 13)}<span><b>${weak.map(escapeHtml).join('、')}</b>来自网页标题等低可信来源，请核对后再保存。</span>` + srcHtml;
     } else {
       hintEl.className = 'detect-hint';
       // 企业性质从来不自动识别，所以识别全中时也要提一句，否则用户不会注意到这个下拉，
       // 洞察的企业性质统计就一直缺这一维。
-      hintEl.innerHTML = `<span>已自动识别，请核对后保存；「企业性质」需手动选一次（央国企 / 私企 / 外企）。</span>`
-        + (srcText ? `<div class="detect-hint-src">${escapeHtml(srcText)}</div>` : '');
+      hintEl.innerHTML = `<span>已自动识别，请核对后保存；「企业性质」需手动选一次（央国企 / 私企 / 外企）。</span>` + srcHtml;
     }
     hintEl.hidden = false;
+  }
+
+  /**
+   * 本地时区的今天（v5.7.0）：toISOString 按 UTC 取日期，北京时间 0-8 点会写成昨天。
+   * resolveApplicationDate（03-parsers.js）同一轮修掉了同款问题。
+   */
+  function localToday() {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
   }
 
   /**
@@ -330,7 +375,7 @@
       stage: val(e.stage) || '已投递',
       // 企业性质：收录时一并选掉，网页端就不用再打开编辑弹窗补填（''=未设置）
       companyType: val(e.companyType),
-      applicationDate: val(e.date) || new Date().toISOString().slice(0, 10),
+      applicationDate: val(e.date) || localToday(),
       applicationUrl: String(url || ''),
       recentSchedule: '已完成网申投递',
       nextAction: '关注招聘动态与邮件通知'
