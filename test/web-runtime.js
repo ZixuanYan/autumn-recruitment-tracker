@@ -141,6 +141,8 @@ check('meta.lastStatus=error → error 条 + lastError + 修复说明', () => {
   assert.ok(bar().className.includes('error'));
   assert.ok(bar().innerHTML.includes('QQ 授权码失效'));
   assert.ok(bar().innerHTML.includes('怎么修复'));
+  assert.ok(bar().innerHTML.includes('打开重试 Action'));
+  assert.ok(bar().innerHTML.includes('RETRY_FAILED'));
 });
 check('meta 正常 → ok 条 + 统计', () => {
   sandbox.mailMeta = { lastStatus: 'ok', lastRunAt: '2026-09-05T10:00:00Z', newCount: 2, pendingCount: 3 };

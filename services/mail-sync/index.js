@@ -88,6 +88,7 @@ async function run() {
   const { client, lock, mailbox } = await openInbox(cfg);
   let fetched = [];
   const incoming = [];
+  const retryUids = new Set((Array.isArray(prev.meta.retryUids) ? prev.meta.retryUids : []).map(v => Number(v) || 0).filter(Boolean));
   let candidates = 0;
   let aiErrors = 0;
   let lastAiError = '';
@@ -110,8 +111,8 @@ async function run() {
   const adjudicated = new Set();
 
   try {
-    const plan = planFetch(mailbox, prev.meta, cfg.sinceDays, cfg.uidFrom);
-    console.log(`[sync] 抓取模式=${plan.mode}${plan.mode === 'uid' ? ` startUid=${plan.startUid}` : ` since=${plan.since.toISOString()}`}${plan.forced ? '（UID_FROM 强制回溯：已忽略云端水位）' : ''}${plan.resetWatermark ? '（UIDVALIDITY 变化→重置水位）' : ''}`);
+    const plan = planFetch(mailbox, prev.meta, cfg.sinceDays, cfg.uidFrom, cfg.retryFailed);
+    console.log(`[sync] 抓取模式=${plan.retryOnly ? 'retry-only' : plan.mode}${plan.mode === 'uid' ? ` startUid=${plan.startUid}` : ` since=${plan.since.toISOString()}`}${plan.forced ? '（UID_FROM 强制回溯：已忽略云端水位）' : ''}${plan.resetWatermark ? '（UIDVALIDITY 变化→重置水位）' : ''}`);
     fetched = await fetchMessages(client, plan, cfg.maxPerRun);
     console.log(`[sync] 本次抓取 ${fetched.length} 封（上限 ${cfg.maxPerRun}），INBOX exists=${mailbox.exists}`);
 
@@ -123,6 +124,7 @@ async function run() {
         drops.note(mail, verdict.reason);
         // 预筛丢弃是明确的裁决结论（规则变了就该按新规则清掉旧建议），计入已裁决
         if (mail.sourceUid) adjudicated.add(mail.sourceUid);
+        if (mail.sourceUid) retryUids.delete(Number(mail.sourceUid));
         continue;
       }
       candidates += 1;
@@ -133,10 +135,12 @@ async function run() {
         aiErrors += 1;
         lastAiError = e.message;
         drops.note(mail, DROP_REASONS.AI_ERROR);
+        if (mail.sourceUid) retryUids.add(Number(mail.sourceUid));
         console.warn(`[sync] AI 分析失败 uid=${mail.sourceUid}：${e.message}`);
         continue; // 刻意不计入 adjudicated：本轮未能裁决，保留已有建议
       }
       if (mail.sourceUid) adjudicated.add(mail.sourceUid);
+      if (mail.sourceUid) retryUids.delete(Number(mail.sourceUid));
       // AI 结果的两道过滤（isRecruitment + 置信度）统一走 ai.verdictOnAiResult，
       // 判定逻辑只有一处、可单测。isRecruitment 那道在 v4.6.1 之前完全不存在：
       // 字段被 prompt 要求返回、被 normalizeAiResult 归一，却没有任何代码检查它，
@@ -175,6 +179,7 @@ async function run() {
     newCount: incoming.length,
     pendingCount: merged.length,
     lastDropped: dropped,
+    retryUids: [...retryUids],
     // 与实际发给 AI 的 system prompt 用同一个函数、同一组参数计算，保证网页端展示的就是生效的那份
     promptSnapshot: buildSystemPrompt(cfg.promptExtra, cfg.promptOverride)
   });

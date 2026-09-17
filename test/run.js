@@ -779,6 +779,13 @@ test('planFetch 不传 UID_FROM（或传 0/非法值）时维持既有增量语�
   assert.strictEqual(reset.mode, 'since');
   assert.strictEqual(reset.resetWatermark, true);
 });
+test('planFetch RETRY_FAILED 只带回 retryUids，不改变增量起点', () => {
+  const meta = { lastUid: 1938, lastUidValidity: 100, retryUids: [1936, 1937, 1936] };
+  const plan = planFetch({ uidValidity: 100 }, meta, 30, 0, true);
+  assert.strictEqual(plan.retryOnly, true);
+  assert.deepStrictEqual(plan.retryUids, [1936, 1937, 1936]);
+  assert.strictEqual(plan.startUid, 1939);
+});
 test('buildConfig 读取 UID_FROM，留空/非法回落 0', () => {
   const old = process.env.UID_FROM;
   process.env.UID_FROM = '1877';
@@ -789,6 +796,14 @@ test('buildConfig 读取 UID_FROM，留空/非法回落 0', () => {
   assert.strictEqual(config.buildConfig().uidFrom, 0);
   if (old === undefined) delete process.env.UID_FROM; else process.env.UID_FROM = old;
   assert.strictEqual(config.buildConfig().uidFrom, 0);
+});
+test('buildConfig 读取 RETRY_FAILED 开关', () => {
+  const old = process.env.RETRY_FAILED;
+  process.env.RETRY_FAILED = 'true';
+  assert.strictEqual(config.buildConfig().retryFailed, true);
+  process.env.RETRY_FAILED = 'false';
+  assert.strictEqual(config.buildConfig().retryFailed, false);
+  if (old === undefined) delete process.env.RETRY_FAILED; else process.env.RETRY_FAILED = old;
 });
 test('pruneSuggestions 上限 100 条、丢弃 30 天前', () => {
   const now = Date.now();

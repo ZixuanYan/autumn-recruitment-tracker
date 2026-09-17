@@ -119,6 +119,8 @@ function buildConfig() {
     // 用途：捞回被旧噪声规则误杀、且水位已永久越过的邮件（水位推过就不会再回看）。
     // 注意配合 MAX_PER_RUN 一起调大，否则一次只能重扫 maxPerRun 封。
     uidFrom: intEnv('UID_FROM', 0),
+    // 仅重试上次 AI 网络失败的 UID，不抓取水位之后的新邮件。
+    retryFailed: ['1', 'true', 'yes', 'on'].includes(strEnv('RETRY_FAILED', '').toLowerCase()),
     minConfidence: floatEnv('MIN_CONFIDENCE', 0.3),
     keywords: strEnv('KEYWORDS', DEFAULT_KEYWORDS),
     ai: Object.freeze({

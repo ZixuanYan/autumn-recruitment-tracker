@@ -270,7 +270,7 @@
         }
         if (mailMeta && mailMeta.lastStatus === 'error') {
           bar.className = 'mail-statusbar error';
-          bar.innerHTML = `<strong>上次邮件同步失败</strong>${escapeHtml(mailMeta.lastError || '未知错误')}<details class="mail-help"><summary>怎么修复？</summary><ol><li>最常见：改过 QQ 密码后 <strong>16 位授权码失效</strong> → 到 QQ 邮箱重新生成，更新私有仓库 autumn-mail-sync 的 QQ_AUTHCODE Secret。</li><li>AI 超额/密钥无效 → 检查 AI_API_KEY / AI_BASE_URL / AI_MODEL。</li><li>被 QQ 风控（Unsafe Login）→ 需把定时任务迁到国内宿主。</li><li>修复后在仓库手动重跑 mail-sync，再回本页点「重新读取」。</li></ol></details>`;
+          bar.innerHTML = `<strong>上次邮件同步失败</strong>${escapeHtml(mailMeta.lastError || '未知错误')} <a class="btn btn-small" href="https://github.com/ZixuanYan/autumn-mail-sync/actions/workflows/mail-sync.yml" target="_blank" rel="noopener"><span class="icon">↻</span>打开重试 Action</a><details class="mail-help"><summary>怎么修复？</summary><ol><li>最常见：改过 QQ 密码后 <strong>16 位授权码失效</strong> → 到 QQ 邮箱重新生成，更新私有仓库 autumn-mail-sync 的 QQ_AUTHCODE Secret。</li><li>AI 超额/密钥无效 → 检查 AI_API_KEY / AI_BASE_URL / AI_MODEL。</li><li>被 QQ 风控（Unsafe Login）→ 需把定时任务迁到国内宿主。</li><li>修复后打开上面的 Action，勾选 <code>RETRY_FAILED</code> 后运行；完成后回本页点「重新读取」。</li></ol></details>`;
         } else if (mailMeta) {
           bar.className = 'mail-statusbar ok';
           // 丢弃统计（v4.6.1）：老 Gist 文件没有 lastDropped、或本次一封没丢时 normalizeDropStats 返回 null，
