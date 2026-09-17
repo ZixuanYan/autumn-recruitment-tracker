@@ -515,6 +515,7 @@ check('all_frames 与 webNavigation 已启用（v5.7.0 多帧扫描的前提）'
 
 check('Side Panel 已声明，且 openPanelOnActionClick 与 action.onClicked 没有并存', () => {
   assert.ok(SRC.manifest.permissions.includes('sidePanel'), 'permissions 缺少 sidePanel');
+  assert.ok(SRC.manifest.permissions.includes('clipboardWrite'), 'permissions 缺少 clipboardWrite：连续右键复制会受瞬时用户激活限制');
   assert.ok(SRC.manifest.side_panel && SRC.manifest.side_panel.default_path, 'manifest 缺少 side_panel 配置');
   assert.ok(fs.existsSync(path.join(EXT, SRC.manifest.side_panel.default_path)), 'side_panel.default_path 指向的文件不存在');
   assert.strictEqual(SRC.manifest.side_panel.default_path, 'panel/panel.html');

@@ -219,6 +219,7 @@
   // 绝不能用 location.href——那是 chrome-extension:// 的面板地址，存进记录就是废数据
   let capturedPageUrl = '';
   let toastTimer = null;
+  let clipboardWriteQueue = Promise.resolve();
 
   function toast(msg) {
     if (!els || !els.toast) return;
@@ -569,17 +570,54 @@
     toast(reasonText(res));
   }
 
+  function legacyCopyText(value) {
+    let area = null;
+    const previousFocus = document.activeElement;
+    try {
+      area = document.createElement('textarea');
+      area.value = value;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.left = '-9999px';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.focus();
+      area.select();
+      area.setSelectionRange(0, value.length);
+      return document.execCommand('copy');
+    } catch (_) {
+      return false;
+    } finally {
+      if (area) area.remove();
+      if (previousFocus && typeof previousFocus.focus === 'function') {
+        try { previousFocus.focus({ preventScroll: true }); } catch (_) {}
+      }
+    }
+  }
+
+  async function writeClipboardText(value) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch (_) {}
+    }
+    return legacyCopyText(value);
+  }
+
   function onChipCopy(chipEl) {
     const value = decodeURIComponent(chipEl.getAttribute('data-val') || '');
     if (!value) return;
     const key = chipEl.getAttribute('data-key') || '';
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      toast('当前环境不支持剪贴板');
-      return;
-    }
-    navigator.clipboard.writeText(value)
-      .then(() => toast(`已复制：${key ? key + ' → ' : ''}${truncate(value, 20)}`))
-      .catch(() => toast('复制失败，请手动选择文本'));
+    // 串行化写入：连续右键不同条目时，较慢的前一次 Promise 不能反过来覆盖后一次结果。
+    clipboardWriteQueue = clipboardWriteQueue
+      .catch(() => false)
+      .then(() => writeClipboardText(value));
+    clipboardWriteQueue.then((ok) => {
+      toast(ok
+        ? `已复制：${key ? key + ' → ' : ''}${truncate(value, 20)}`
+        : '复制失败，请手动选择文本');
+    });
   }
 
   // ================= 其它 =================
@@ -678,6 +716,7 @@
       const chipEl = e.target.closest && e.target.closest('.p-chip');
       if (!chipEl) return;
       e.preventDefault();
+      e.stopPropagation();
       onChipCopy(chipEl);
     });
     els.openTracker.addEventListener('click', openTracker);

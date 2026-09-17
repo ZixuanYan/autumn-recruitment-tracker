@@ -1,8 +1,10 @@
-# 秋招求职与简历助手（Chrome/Edge 扩展 v5.7.0）
+# 秋招求职与简历助手（Chrome/Edge 扩展 v5.7.1）
 
 网申页采集端浏览器扩展（Manifest V3）：**简历字段点击速填 + 岗位一键收录 + 暂存箱**。与网页版 [秋招投递管理器](https://github.com/ZixuanYan/autumn-recruitment-tracker) 配套使用，插件负责采集与速填，网页版负责管理与跨设备同步。
 
 > 本目录是 monorepo `autumn-recruitment-tracker` 的浏览器扩展部分（网页版管理器在仓库根目录）。安装：Chrome/Edge 扩展页开启开发者模式 →「加载已解压的扩展程序」→ 选择本 `extension/` 文件夹。
+
+> **v5.7.1 调整**：修复 Side Panel 简历字段无法连续右键复制的问题。补齐剪贴板写入权限、串行化连续复制请求，并在 Clipboard API 被拒绝时回退到兼容复制路径；左键快速输入逻辑未改动。
 
 > **v5.7.0 调整**：**一键识别的准确性大幅增强**（用户反馈"识别非常不准"）。四层修复：① 确定性 bug——噪声容器过滤收紧（`[class*="list" i]` 不再把 detail-list 里的真实详情区整体屏蔽）、投递日期 UTC 时区 bug、占位值参与判重导致记录互相覆盖、岗位列表页检测与提示、SPA 空结果自动重扫；② **低可信来源透明化**——来自网页标题 / og 标签的值在表单里黄标提醒核对，错值不再无声流入；③ **识别纠正记忆**——在表单里改正过的公司名按域名记住（`chrome.storage.local`，多租户 ATS 域名除外），下次识别同站点自动套用，可在面板「识别纠正记忆」区查看 / 导出 / 导入；④ 覆盖面——manifest 开启 `all_frames` + `webNavigation`（弱结果时逐帧扫描按字段权重合并，iframe 里的岗位详情可扫）、Shadow DOM 穿透、ATS 解析器改为声明式规则表、公司域名库 30→60+ 家、城市库补港澳台 / 海外 / 远程、英文标题角色识别（旧的裸 `Go` token 会误命中 Google/Algorithm）。
 
@@ -134,7 +136,7 @@ v5.1.0 起 `common/` 里不再有 `company-key.js` 与 `default-resume.js`——
 
 ## 版本
 
-- 扩展：v5.7.0（**识别准确性四层修复**：噪声过滤收紧 / 日期时区与判重覆盖 bug / 列表页检测与 SPA 重扫、低可信来源黄标提醒、**识别纠正记忆**（域名级公司名学习 + 导出导入）、`all_frames` 多帧扫描合并 + Shadow DOM 穿透 + ATS 声明式规则表 + 域名库 30→60+ 家；页面胶囊移除与 content 注入瘦身见 v5.6.0）
+- 扩展：v5.7.1（连续右键复制修复：补齐剪贴板权限、串行写入与兼容回退；识别准确性四层修复见 v5.7.0，页面胶囊移除与 content 注入瘦身见 v5.6.0）
 - 存储键：`autumnRecruitmentTracker.resume.v1` / `autumnRecruitmentTracker.pending.v1` / `autumnRecruitmentTracker.learn.v1`（v5.7.0 识别纠正记忆；v5.6.0 起胶囊位置的 `ui.v1` 键已随胶囊删除，storage 里的旧值属无害残留）
 
 ### v5.0.0 UI 重构要点

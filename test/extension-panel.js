@@ -44,6 +44,7 @@ function makeDoc() {
   const doc = {
     readyState: 'complete',
     activeElement: null,
+    _legacyCopies: [],
     _ids: new Map(),
     _listeners: {},
     _styleEls: [],
@@ -61,11 +62,18 @@ function makeDoc() {
     },
     querySelectorAll() { return []; },
     createElement(tag) { return makeEl('', tag, doc); },
+    execCommand(command) {
+      if (command !== 'copy' || !doc.activeElement) return false;
+      doc._legacyCopies.push(String(doc.activeElement.value || ''));
+      return true;
+    },
     addEventListener(type, fn) { (doc._listeners[type] = doc._listeners[type] || []).push(fn); },
     fire(type, ev) { for (const fn of (doc._listeners[type] || [])) fn(Object.assign({ type, preventDefault() {} }, ev || {})); }
   };
   doc.head = makeEl('', 'head', doc);
+  doc.body = makeEl('', 'body', doc);
   doc.head.appendChild = (el) => { doc._styleEls.push(el); };
+  doc.body.appendChild = (el) => { el.parentNode = doc.body; };
   return doc;
 }
 
@@ -99,6 +107,9 @@ function makeEl(id, tag, doc) {
     querySelectorAll(sel) { const l = el._byClass[String(sel || '')]; return Array.isArray(l) ? l : []; },
     closest() { return null; },
     focus() { doc.activeElement = el; },
+    select() { doc.activeElement = el; },
+    setSelectionRange() {},
+    remove() { el.parentNode = null; },
     // 测试用：派发事件，target 默认自己（可覆盖成子元素以验证事件委托）
     fire(type, ev) {
       for (const fn of (el._listeners[type] || [])) {
@@ -213,7 +224,7 @@ async function bootPanel(options) {
     console: opts.quiet ? { log() {}, debug() {}, warn() {}, error() {} } : console,
     document: doc,
     chrome: chromeStub,
-    navigator: { clipboard: { writeText: async () => {} } },
+    navigator: { clipboard: opts.clipboard || { writeText: async () => {} } },
     URL, encodeURIComponent, decodeURIComponent,
     Number, String, Object, Array, JSON, Math, Promise, RegExp, Date, Error, Set, Map, Boolean,
     setTimeout, clearTimeout, setImmediate
@@ -552,21 +563,44 @@ check('简历字段库：渲染 chip、徽标计数、chip 左键发 FILL_FOCUSE
   assert.ok(el('p-toast').textContent.includes('已填入'), '应给出填入成功提示');
 });
 
-check('chip 右键复制到剪贴板，不经 content script', async () => {
-  let copied = null;
-  const { el, state } = await bootPanel({ quiet: true, respond: (msg) => (msg.type === 'GET_RESUME_DATA' ? { ok: true, data: { '优先信息': { '手机': '139' } } } : { ok: true }) });
+check('chip 可连续右键复制不同条目，不需穿插左键且不经 content script', async () => {
+  const copied = [];
+  const { el, state } = await bootPanel({
+    quiet: true,
+    clipboard: { writeText: async (value) => { copied.push(value); } },
+    respond: (msg) => (msg.type === 'GET_RESUME_DATA' ? { ok: true, data: { '优先信息': { '手机': '139' } } } : { ok: true })
+  });
   el('p-resume-list').querySelector = () => null;
-  // 换掉 clipboard 桩以捕获写入
-  const chip = makeEl('', 'button', { register: () => null });
-  chip.setAttribute('data-key', '手机');
-  chip.setAttribute('data-val', encodeURIComponent('139'));
-  chip.closest = (sel) => (String(sel).includes('p-chip') ? chip : null);
+  const chipA = makeEl('', 'button', { register: () => null });
+  chipA.setAttribute('data-key', '手机');
+  chipA.setAttribute('data-val', encodeURIComponent('139'));
+  chipA.closest = (sel) => (String(sel).includes('p-chip') ? chipA : null);
+  const chipB = makeEl('', 'button', { register: () => null });
+  chipB.setAttribute('data-key', '邮箱');
+  chipB.setAttribute('data-val', encodeURIComponent('a@b.c'));
+  chipB.closest = (sel) => (String(sel).includes('p-chip') ? chipB : null);
   state.sent.length = 0;
-  el('p-resume-list').fire('contextmenu', { target: chip });
-  await settle();
+  el('p-resume-list').fire('contextmenu', { target: chipA });
+  el('p-resume-list').fire('contextmenu', { target: chipB });
+  await settle(8);
   assert.ok(!state.sent.some(m => m.type === 'FILL_FOCUSED_FIELD'), '右键是复制，不该发填入消息');
   assert.ok(el('p-toast').textContent.includes('已复制'), `应提示已复制，实际「${el('p-toast').textContent}」`);
-  assert.strictEqual(copied, null, '（剪贴板由桩接管，此处只验证没有走消息通道）');
+  assert.deepStrictEqual(copied, ['139', 'a@b.c'], '连续右键必须按触发顺序写入两个不同值');
+});
+
+check('Clipboard API 拒绝时回退到同步 copy 命令', async () => {
+  const { el, doc } = await bootPanel({
+    quiet: true,
+    clipboard: { writeText: async () => { throw new Error('denied'); } }
+  });
+  const chip = makeEl('', 'button', { register: () => null });
+  chip.setAttribute('data-key', '学校');
+  chip.setAttribute('data-val', encodeURIComponent('某大学'));
+  chip.closest = (sel) => (String(sel).includes('p-chip') ? chip : null);
+  el('p-resume-list').fire('contextmenu', { target: chip });
+  await settle(8);
+  assert.deepStrictEqual(doc._legacyCopies, ['某大学'], '剪贴板 API 失败后没有走兼容复制路径');
+  assert.ok(el('p-toast').textContent.includes('已复制'), '兼容复制成功后应提示已复制');
 });
 
 check('速填失败但 content 已回退复制：如实转告而不是报"操作失败"', async () => {

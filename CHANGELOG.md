@@ -1,3 +1,16 @@
+## 插件 v5.7.1（连续右键复制修复）
+
+纯插件版本，网页版与 Action 未改动。修复 Side Panel 简历字段无法连续右键复制的问题：此前复制
+只依赖异步 `navigator.clipboard.writeText()`，Manifest 又未声明 `clipboardWrite`；第一次右键消耗
+瞬时用户激活后，后续右键可能被浏览器拒绝，必须先左键重新激活面板。
+
+- Manifest 增加 `clipboardWrite`，使扩展面板的剪贴板写入不再依赖一次性的页面激活状态。
+- 连续复制请求改为串行执行，避免前一次较慢的 Promise 在后一次之后完成、反向覆盖剪贴板。
+- Clipboard API 失败时回退到临时文本框 + `execCommand('copy')`，并恢复原焦点。
+- `contextmenu` 同时阻止默认菜单与继续冒泡；左键快速输入链路未改动。
+- 面板运行时测试新增“连续右键两个不同条目”和“Clipboard API 拒绝后回退”两种回归场景；
+  Manifest 契约新增 `clipboardWrite` 权限守卫。
+
 ## v4.31.0（网页：一封邮件牵动的多个岗位合并展示 + 批量操作）
 
 纯网页版本，Action 与插件端未改动。用户反馈：一封笔试邮件关联了同一家公司不同机构下的多个岗位
