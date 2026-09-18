@@ -110,6 +110,12 @@
             // 全天只保留日期，避免存成"带时刻的全天"半吊子；定时保留到分钟
             at: timed ? at.slice(0, 16) : at.slice(0, 10),
             allDay: !timed,
+            // 固定安排的可选结束时刻；截止事件不使用该字段。
+            endAt: (() => {
+              const end = String(e.endAt || '').trim();
+              return type !== TIME_EVENT_DEADLINE && timed && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(end) && end.slice(0, 16) > at.slice(0, 16)
+                ? end.slice(0, 16) : '';
+            })(),
             // v4.22.0 来源标识：sourceId 让「同一封邮件改期」能**替换**旧事件而不是并排留两条；
             // mailId 指向邮件归档，详情里可以从事件回看邮件。
             sourceId: String(e.sourceId || '').trim().slice(0, 120),

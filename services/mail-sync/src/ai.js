@@ -31,6 +31,7 @@ const DEFAULT_PROMPT_BODY = [
   '- scheduleAt 与 deadline 是**两件不同的事**，别混：面试/笔试/测评的**开始时间**填 scheduleAt；'
     + '**完成期限**（"请在 X 日前完成"、"考试链接 X 日失效"、"X 日前回复确认"）填 deadline。'
     + '两者都出现就都填；都没有就都留空——尤其不要拿收信日期去填任何一个。',
+  '- 固定安排的时间区间（如「9 月 15 日 14:00-16:00 面试」「14:00 至 16:00 笔试」）只是一项安排：开始填 scheduleAt，结束填 scheduleEndAt，**区间结束时间绝不能填 deadline**。只有「前完成 / 截止 / 失效 / 提交 / 回复」等履约语义明确关联的时间才填 deadline。',
   '- 完成期限有时写成**相对表达**（"3 日内"、"48 小时内"、"7 天内完成"）。以邮件收到的时刻为基准换算成绝对时间填进 deadline，'
     + '并把原文表达放进 deadlineExpr、把 deadlineSource 标成 "relative"。换算基准（nowLocal / email.receivedAtLocal）'
     + '与时区都在用户消息里给了，直接用现值，不要自己去推时区、也不要拿当前时间去猜收信时刻。',
@@ -41,16 +42,16 @@ const DEFAULT_PROMPT_BODY = [
 const OUTPUT_CONTRACT = [
   '【输出契约 · 不可覆盖】以下要求优先于上面的任何自定义说明，必须严格遵守：',
   '1. 严格只返回一个 JSON 对象，不要 markdown、不要 ```代码围栏```、不要任何解释文字。',
-  '2. JSON 必须且只能包含这些字段：isRecruitment(bool), emailType(string), company(string), position(string), stage(string), scheduleAt(string), deadline(string), deadlineExpr(string), deadlineSource(string), location(string), round(string), summary(string), confidence(number 0~1)。',
+  '2. JSON 必须且只能包含这些字段：isRecruitment(bool), emailType(string), company(string), position(string), stage(string), scheduleAt(string), scheduleEndAt(string), deadline(string), deadlineExpr(string), deadlineSource(string), location(string), round(string), summary(string), confidence(number 0~1)。',
   `3. emailType 只能是这些之一：${EMAIL_TYPES.join(' | ')}。非招聘邮件填「其它」且 isRecruitment=false。`,
   '4. stage 只能从用户提供的 allowedStages 数组里原样选取；无法确定就留空字符串 ""，绝不臆造或改写阶段名。',
-  '5. 时间字段（四件，别混）：scheduleAt 是面试/笔试/测评的**开始时间**，格式 "YYYY-MM-DDTHH:mm"（24 小时制）。'
+  '5. 时间字段（五件，别混）：scheduleAt 是面试/笔试/测评的**开始时间**，格式 "YYYY-MM-DDTHH:mm"（24 小时制）；scheduleEndAt 是同一固定安排的**结束时间**，格式 "YYYY-MM-DDTHH:mm"。'
     + 'deadline 是**完成期限**（在线笔试/测评截止、考试链接失效、Offer 回复期限、网申截止），格式 "YYYY-MM-DD"；'
     + '邮件给了具体时刻（如「9 月 13 日 09:39 失效」）就写成 "YYYY-MM-DDTHH:mm"，不要丢掉时刻。'
     + 'deadlineExpr 是邮件原文里那个时间表达（绝对或相对，如 "3 日内"、"9 月 13 日 09:39"），照抄，别改写。'
     + 'deadlineSource 只能是 "email"（邮件里写死的绝对时间）或 "relative"（原文是相对表达，你按 receivedAtLocal 为基准算出了 deadline）。'
     + '用户消息里 nowLocal / email.receivedAtLocal / timezone 就是基准，直接用；它们都取不到换算依据时（如邮件没给收信时刻）宁可不填。'
-    + '四个字段都必须在邮件里确有依据才填，未给出就留空 ""，不要猜测，也不要用收信日期顶替任何一项。',
+    + '五个字段都必须在邮件里确有依据才填，未给出就留空 ""，不要猜测，也不要用收信日期顶替任何一项。时间范围的结束时刻属于 scheduleEndAt，不属于 deadline。',
   '6. confidence：这封邮件「是招聘相关邮件、且你的字段解析正确」的置信度（0~1）。注意：这不是"你对自己判断有多确定"。若判定为非招聘邮件（营销/账单/订阅/系统通知/理财推销/课程促销），必须给 <= 0.1，即使你非常确定它不是招聘邮件。',
   '7. 严禁编造任何未在邮件中出现的信息；无法确定的字段一律留空字符串。'
 ].join('\n');
@@ -186,7 +187,9 @@ function buildProposed(n, mail) {
   // 网页端显示成「笔试（2026-09-10）」，看起来完全像是从邮件里读出来的。
   const atSource = n.scheduleDate ? 'email' : 'received';
   const at = n.scheduleDate || receivedDate(mail);
-  const timePart = n.scheduleAt ? n.scheduleAt.replace('T', ' ') : (n.scheduleDate || '');
+  const timePart = n.scheduleAt
+    ? `${n.scheduleAt.replace('T', ' ')}${n.scheduleEndAt ? `-${n.scheduleEndAt.slice(11, 16)}` : ''}`
+    : (n.scheduleDate || '');
   const recentSchedule = [n.round, timePart, n.location].filter(Boolean).join(' · ').slice(0, 100);
   return {
     // 里程碑备注：这条会被用户勾选后**永久写进台账时间线**，所以要有信息量。
@@ -196,6 +199,7 @@ function buildProposed(n, mail) {
     // 其余类型（测评/笔试/面试邀请/Offer/拒信）本身已足够明确且更短，保留类型名便于扫读。
     milestone: { stage: n.stage, at, atSource, note: milestoneNote(n, atSource) },
     scheduleAt: n.scheduleAt,
+    scheduleEndAt: n.scheduleEndAt,
     // 截止时间。台账一直有 deadline 字段（还有「签约截止」列、deadlineInfo 倒计时、按截止日排序），
     // 但 v4.15.0 之前 AI 契约里没有它、proposed 里也没有 —— 而笔试/测评类邮件里最常见、
     // 最有用的时间恰恰就是这个（"链接 X 日失效"、"请在 X 日前完成"），于是它被整条链路丢弃，
@@ -232,7 +236,10 @@ function normalizeAiResult(raw, mail) {
   const r = raw && typeof raw === 'object' ? raw : {};
   const emailType = normalizeEmailType(r.emailType);
   const sched = normalizeScheduleAt(r.scheduleAt);
+  const schedEnd = normalizeScheduleAt(r.scheduleEndAt);
   const dl = normalizeScheduleAt(r.deadline);
+  const scheduleEndAt = schedEnd.scheduleAt && (!sched.scheduleAt || schedEnd.scheduleAt > sched.scheduleAt)
+    ? schedEnd.scheduleAt : '';
   const n = {
     // 缺省视为相关：AI 未返回该字段时不丢弃（预筛已滤掉确定性垃圾，且漏掉真面邀不可逆）。
     // 只有 AI **明确**返回 false 才判为非招聘 —— index.js 会据此丢弃并计入 meta.lastDropped.aiNotRecruit。
@@ -244,6 +251,7 @@ function normalizeAiResult(raw, mail) {
     position: cleanStr(r.position, 80),
     stage: normalizeStage(r.stage),
     scheduleAt: sched.scheduleAt,
+    scheduleEndAt,
     scheduleDate: sched.scheduleDate,
     // deadline 复用同一个归一器，但**取全** scheduleAt 分量：v4.24.0 起截止可以带时刻
     //（"考试链接 2026-09-13 09:39:53 失效" —— 那个时刻本身就是最有用的信息）。

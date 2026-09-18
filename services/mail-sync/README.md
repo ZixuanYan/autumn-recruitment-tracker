@@ -162,7 +162,7 @@ npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ t
     "emailType": "测评|笔试|机试|面试邀请|Offer|拒信|其它",
     "isRecruitment": true,   // v0.3.0 新增，落盘备查；能入队的一律为 true
     "company": "", "position": "", "stage": "(STAGE_PRESETS 之一或空)",
-    "scheduleAt": "YYYY-MM-DDTHH:mm|空", "location": "", "round": "",
+    "scheduleAt": "YYYY-MM-DDTHH:mm|空", "scheduleEndAt": "YYYY-MM-DDTHH:mm|空", "location": "", "round": "",
     "summary": "(≤60)", "confidence": 0,
     // 邮件里的链接（v0.5.0）：由 extractLinks 从 HTML 的 <a href> 机械抽出（不经 AI），
     // 网页端在记录详情里给成可点胶囊——「开始测评」那个地址不该逼用户回邮箱翻。
@@ -173,7 +173,8 @@ npm test                    # 64 项 = test/run.js（54 项纯函数单测）+ t
       // emailType 为「其它」时用 AI 写的 summary（截到 48 字），其余用简短类型名。
       // 旧版一律写「邮件·<类型>」，导致投递确认类邮件的备注全是零信息量的「邮件·其它」。
       "milestone": { "stage": "", "at": "YYYY-MM-DD", "note": "邮件·<类型或摘要>" },
-      "scheduleAt": "", "recentSchedule": "", "nextAction": "",
+      "scheduleAt": "", "scheduleEndAt": "", "recentSchedule": "", "nextAction": "",
+      // 固定安排的区间用 scheduleAt + scheduleEndAt；区间结束不是 deadline。
       // 截止（v4.24.0）：可以是 "YYYY-MM-DD" 或 "YYYY-MM-DDTHH:mm"
       //（邮件给了时刻就带上——「9 月 13 日 09:39 失效」丢掉 09:39 等于把最关键的分界抹平）。
       "deadline": "YYYY-MM-DD[THH:mm]|空",

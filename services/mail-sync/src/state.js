@@ -100,6 +100,7 @@ function buildSuggestion(mail, result, ctx) {
     position: r.position || '',
     stage: r.stage || '',
     scheduleAt: r.scheduleAt || '',
+    scheduleEndAt: r.scheduleEndAt || '',
     location: r.location || '',
     round: r.round || '',
     summary: r.summary || '',
@@ -114,7 +115,7 @@ function buildSuggestion(mail, result, ctx) {
     // 这里只截断数量——它是**独立字段**而不是正文的一部分：归档正文只有 2000 字，链接常在末尾被截掉。
     links: (Array.isArray(mail.links) ? mail.links : []).slice(0, LINK_MAX),
     confidence: Number.isFinite(Number(r.confidence)) ? Number(r.confidence) : 0,
-    proposed: r.proposed || { milestone: { stage: '', at: '', note: '' }, scheduleAt: '', deadline: '', deadlineExpr: '', deadlineSource: '', recentSchedule: '', nextAction: '' }
+    proposed: r.proposed || { milestone: { stage: '', at: '', note: '' }, scheduleAt: '', scheduleEndAt: '', deadline: '', deadlineExpr: '', deadlineSource: '', recentSchedule: '', nextAction: '' }
   };
 }
 

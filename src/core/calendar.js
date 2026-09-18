@@ -46,9 +46,11 @@
             if (!at) continue;
             const settled = isEventSettled(r, ev);
             const past = isEventPast(at, allDay, now);
+            const end = (!allDay && ev.endAt) ? parseLocal(ev.endAt) : null;
             out.push({
               date: localDateInput(at),
               time: allDay ? '' : clockOf(at),
+              endTime: end && end > at ? clockOf(end) : '',
               type: ev.type,
               kind: ev.type === TIME_EVENT_DEADLINE ? 'deadline' : 'start',
               record: r,

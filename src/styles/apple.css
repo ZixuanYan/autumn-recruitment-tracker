@@ -324,10 +324,10 @@
     .schedule-item[role="button"] { cursor: pointer; transition: background .18s var(--ease); }
     .schedule-item[role="button"]:hover { background: var(--surface-2); }
     .schedule-item.is-overdue { box-shadow: inset 3px 0 0 var(--danger); padding-left: 10px; }
-    .schedule-item.is-deadline .date-tile { background: var(--warn-soft); color: var(--warn); }
-    .schedule-item.is-deadline .date-month { background: var(--warn); }
+    .schedule-item.is-deadline .date-tile { background: var(--accent-soft); color: var(--accent-ink); }
+    .schedule-item.is-deadline .date-month { background: var(--accent); }
     .side-kind { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: none; border: 0; color: var(--ink-2); font-size: 11px; font-weight: 700; }
-    .schedule-item.is-deadline .side-kind { background: var(--warn-soft); color: var(--warn); box-shadow: none; }
+    .schedule-item.is-deadline .side-kind { background: var(--accent-soft); color: var(--accent-ink); box-shadow: none; }
     .side-company { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .badge-sm { min-height: 19px; padding: 0 7px 0 6px; font-size: 11px; }
     .badge-sm::before { width: 5px; height: 5px; }

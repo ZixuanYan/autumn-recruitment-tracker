@@ -58,7 +58,7 @@
       //   · 有 sourceId（来自邮件）→ 按 sourceId **替换**：改期后重投同一封邮件时旧时间必须消失，
       //     否则记录会同时挂着"旧面试时间"和"新面试时间"。
       //   · 无 sourceId（手工添加）→ 按「类型 + 时间」去重，重复点不会堆叠。
-      function upsertEvent(rec, type, at, sourceId, mailId) {
+      function upsertEvent(rec, type, at, sourceId, mailId, endAt) {
         const kind = normalizeTimeEventType(type);
         // v4.24.0：全天与否按 at 自身判定（含 'T' = 定时），不再看类型 —— 截止也能有具体时刻
         const value = splitEventAt(at);
@@ -70,7 +70,8 @@
           if (src && String(ev.sourceId || '') === src) return false;
           return !(!src && ev.type === kind && ev.at === value.at);
         });
-        list.push({ id: cryptoId(), type: kind, at: value.at, allDay: value.allDay, sourceId: src, mailId: mid });
+        const end = kind === TIME_EVENT_DEADLINE ? '' : splitEventAt(endAt).at;
+        list.push({ id: cryptoId(), type: kind, at: value.at, endAt: end, allDay: value.allDay, sourceId: src, mailId: mid });
         rec.events = sanitizeEvents(list);
       }
       // 「日期 + 可选时刻」两个控件 → 事件里的 at。时刻留空即全天（只有日期）。
@@ -170,7 +171,7 @@
           const noteText = mileNoteText(mile.note, s.summary);
           fields.push({ key: 'milestone', label: '推进里程碑', editor: `<select class="control mail-ed" data-mail-edit="milestone.stage">${mailStageOptions(ed('milestone.stage', mile.stage))}</select><input class="control mail-ed" type="date" data-mail-edit="milestone.at" value="${escapeHtml(ed('milestone.at', mile.at))}"><span class="mail-ed-src ${src.cls}" title="${escapeHtml(src.tip)}">${src.text}</span><input class="control mail-ed mail-ed-wide" type="text" maxlength="48" data-mail-edit="milestone.note" value="${escapeHtml(ed('milestone.note', noteText))}" placeholder="里程碑备注（永久写进时间线）">` });
         }
-        // v4.19.0：邮件里的两个时间字段（AI 契约仍是 scheduleAt / deadline，跨仓库契约不动）
+        // 邮件里的开始 / 结束 / 完成期限三个时间字段。
         // 在网页端被归到「关键时间」的对应类型——scheduleAt 按邮件类型判面试还是笔试测评。
         // v4.24.0：两个字段都改成「日期 + 可用时刻留空」两个控件（与关键时间编辑器同构），
         // 因为「截止」不再被硬编码成全天，而邮件里两种情况都常见（"9/17 18:00 前" / "9/17 前"）。
@@ -185,7 +186,7 @@
         };
         if (p.scheduleAt) {
           const sv = splitEventAt(ed('scheduleAt', p.scheduleAt));
-          fields.push({ key: 'scheduleAt', label: `开始时间（${schedType}）`, editor: `<input class="control mail-ed" type="date" data-mail-edit="scheduleAt" value="${escapeHtml(sv.at.slice(0, 10))}">${timeInput('scheduleAtTime', '时刻，留空表示只知道日期', p.scheduleAt)}` });
+          fields.push({ key: 'scheduleAt', label: `开始时间（${schedType}）`, editor: `<input class="control mail-ed" type="date" data-mail-edit="scheduleAt" value="${escapeHtml(sv.at.slice(0, 10))}">${timeInput('scheduleAtTime', '开始时刻，留空表示只知道日期', p.scheduleAt)}${p.scheduleEndAt ? timeInput('scheduleEndTime', '结束时刻', p.scheduleEndAt) : ''}` });
         }
         // 截止时间：笔试/测评邮件里最有用的那个时间（"链接 X 日失效"、"请在 X 日前完成"），
         // v4.16.0 补齐，v4.19.0 起写成一条「截止」类型的关键时间，参与倒计时与排序。
@@ -351,8 +352,14 @@
           }
           // v4.24.0：开始/截止都是「日期 + 可选时刻」两个控件，先合成 at 再写事件
           const schedAt = joinEventAt(readEd('scheduleAt'), readEd('scheduleAtTime'));
+          const schedEndAt = joinEventAt(readEd('scheduleAt'), readEd('scheduleEndTime'));
           if (checked.has('scheduleAt') && schedAt) {
-            upsertEvent(rec, mailScheduleType(s), schedAt, eventSourceId(s, mailScheduleType(s)), mailIdOf(s));
+            // 旧版可能把同一场区间的结束时刻错误写成「截止」事件；新建议明确没有 deadline 时清掉这条同邮件旧事件。
+            const staleDeadlineSource = eventSourceId(s, TIME_EVENT_DEADLINE);
+            if (!readEd('deadline') && staleDeadlineSource) {
+              rec.events = sanitizeEvents((Array.isArray(rec.events) ? rec.events : []).filter(ev => String(ev.sourceId || '') !== staleDeadlineSource));
+            }
+            upsertEvent(rec, mailScheduleType(s), schedAt, eventSourceId(s, mailScheduleType(s)), mailIdOf(s), schedEndAt);
           }
           const dlAt = joinEventAt(readEd('deadline'), readEd('deadlineTime'));
           if (checked.has('deadline') && dlAt) {
@@ -404,7 +411,7 @@
           city: '',
           applicationDate: mile.at || today,
           events: [
-            ...(p.scheduleAt ? [splitEventAt(p.scheduleAt)].map(x => ({ id: cryptoId(), type: mailScheduleType(s), at: x.at, allDay: x.allDay })) : []),
+            ...(p.scheduleAt ? [splitEventAt(p.scheduleAt)].map(x => ({ id: cryptoId(), type: mailScheduleType(s), at: x.at, endAt: p.scheduleEndAt ? splitEventAt(p.scheduleEndAt).at : '', allDay: x.allDay })) : []),
             ...(p.deadline ? [splitEventAt(p.deadline)].map(x => ({ id: cryptoId(), type: TIME_EVENT_DEADLINE, at: x.at, allDay: x.allDay })) : [])
           ],
           recentSchedule: p.recentSchedule || '',
@@ -621,12 +628,13 @@
             const who = item.record.company || '未填公司';
             const agg = item.aggregate;
             const n = agg ? agg.total : 0;
+            const eventClock = item.time ? `${item.time}${item.endTime ? `-${item.endTime}` : ''}` : '';
             const full = agg
-              ? `${who} 等 ${n} 个岗位 · ${item.type}${item.time ? ` ${item.time}` : ''}\n${agg.positions.map(p => `${p.record.company || ''} ${p.record.position || ''}${p.record.orgUnit ? `（${p.record.orgUnit}）` : ''}`).join('\n')}`
-              : `${who} · ${item.record.position || '未填岗位'} · ${item.type}${item.time ? ` ${item.time}` : ''}`;
+              ? `${who} 等 ${n} 个岗位 · ${item.type}${eventClock ? ` ${eventClock}` : ''}\n${agg.positions.map(p => `${p.record.company || ''} ${p.record.position || ''}${p.record.orgUnit ? `（${p.record.orgUnit}）` : ''}`).join('\n')}`
+              : `${who} · ${item.record.position || '未填岗位'} · ${item.type}${eventClock ? ` ${eventClock}` : ''}`;
             const state = item.overdue ? ' is-overdue' : '';
             // 两段渲染：时刻（截止类无时刻时给类型名）+ 公司名（聚合条目带「等 N 岗」）。
-            return `<button class="cal-chip kind-${item.kind}${state}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-chip-main">${escapeHtml(item.time || item.type)}</span><span class="cal-chip-who">${escapeHtml(who)}${n > 1 ? ` 等 ${n} 岗` : ''}</span></button>`;
+            return `<button class="cal-chip kind-${item.kind}${state}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-chip-main">${escapeHtml(eventClock || item.type)}</span><span class="cal-chip-who">${escapeHtml(who)}${n > 1 ? ` 等 ${n} 岗` : ''}</span></button>`;
           }).join('');
           const more = rest > 0
             ? `<span class="cal-more" title="${escapeHtml(open.slice(MAX_PER_CELL).map(i => `${i.record.company || '未填公司'} ${i.type}${i.time ? ` ${i.time}` : ''}`).join('\n'))}">+${rest}</span>`
@@ -666,8 +674,9 @@
         const state = done
           ? '<span class="cal-row-state is-settled">已完成</span>'
           : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
-        const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${item.time ? ` ${item.time}` : ''}`;
-        return `<button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(item.time || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>`;
+        const eventClock = item.time ? `${item.time}${item.endTime ? `-${item.endTime}` : ''}` : '';
+        const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${eventClock ? ` ${eventClock}` : ''}`;
+        return `<button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(eventClock || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>`;
       }
 
       // 聚合条目行：主行（公司 + 覆盖 N 岗位，点击展开/收起）；展开后是每个岗位的子行
@@ -682,7 +691,8 @@
         const key = `${agg.mailId}|${item.date}|${item.type}`;
         const expanded = calFlowExpandedKey === key;
         const posText = agg.positions.map(p => `${p.record.company || ''} ${p.record.position || ''}${p.record.orgUnit ? `（${p.record.orgUnit}）` : ''}${p.settled ? ' ✓' : ''}`).join('；');
-        const main = `<button class="cal-row kind-${item.kind} is-multi" type="button" data-flow-key="${escapeHtml(key)}" title="${escapeHtml(`${who} · ${item.type}${item.time ? ` ${item.time}` : ''} · 同一场安排覆盖 ${agg.total} 个岗位：${posText}`)}"><span class="cal-row-time">${escapeHtml(item.time || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>同一场 · 覆盖 ${agg.total} 个岗位${done ? '' : (agg.doneCount ? `（已完成 ${agg.doneCount}）` : '')}</em></span>${state}<span class="cal-row-arrow">${expanded ? '▾' : '▸'}</span></button>`;
+        const eventClock = item.time ? `${item.time}${item.endTime ? `-${item.endTime}` : ''}` : '';
+        const main = `<button class="cal-row kind-${item.kind} is-multi" type="button" data-flow-key="${escapeHtml(key)}" title="${escapeHtml(`${who} · ${item.type}${eventClock ? ` ${eventClock}` : ''} · 同一场安排覆盖 ${agg.total} 个岗位：${posText}`)}"><span class="cal-row-time">${escapeHtml(eventClock || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>同一场 · 覆盖 ${agg.total} 个岗位${done ? '' : (agg.doneCount ? `（已完成 ${agg.doneCount}）` : '')}</em></span>${state}<span class="cal-row-arrow">${expanded ? '▾' : '▸'}</span></button>`;
         if (!expanded) return `<div class="cal-flow-multi">${main}</div>`;
         const subRows = agg.positions.map(p => {
           const r = p.record;
@@ -973,6 +983,7 @@
           <select class="control ev-type">${eventTypeOptions(type)}</select>
           <input class="control ev-at" type="date" value="${escapeHtml(at.slice(0, 10))}" aria-label="日期">
           <input class="control ev-time" type="time" value="${escapeHtml(timePartOf(at))}" aria-label="时刻（可留空，留空表示只有日期）">
+          <input class="control ev-end-time" type="time" value="${escapeHtml(timePartOf(e && e.endAt))}" aria-label="结束时刻（可选）">
           <button class="tl-del" type="button" title="删除该时间" aria-label="删除该时间">✕</button>
         </div>`;
       }
@@ -990,6 +1001,7 @@
             id: row.dataset.evId || cryptoId(),
             type,
             at,
+            endAt: type === TIME_EVENT_DEADLINE ? '' : joinEventAt(row.querySelector('.ev-at').value, row.querySelector('.ev-end-time').value),
             allDay: !String(at).includes('T'),
             // 来源标识原样带回去（用户只改时间时，改期替换的依据不能丢）
             sourceId: String(row.dataset.sourceId || ''),

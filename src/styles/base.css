@@ -254,7 +254,8 @@
     .cal-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 16px 0; color: var(--muted); font-size: 11.5px; }
     .cal-legend-item { display: inline-flex; align-items: center; gap: 5px; }
     .cal-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-    .cal-dot.kind-deadline { background: var(--danger); }
+    /* 关键时间统一使用强调色；红色只表示逾期/临近等状态，不表示事件类型。 */
+    .cal-dot.kind-deadline { background: var(--accent); }
     .cal-dot.is-settled { background: var(--muted); }
     .cal-dot.is-overdue { background: var(--danger); box-shadow: 0 0 0 2px var(--danger-soft); }
     .cal-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 8px 16px 0; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; }
@@ -290,7 +291,7 @@
       background: var(--surface-soft); color: var(--ink-2); font-size: 11px; font-weight: 600; line-height: 1.5;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
     }
-    .cal-chip.kind-deadline { background: var(--danger-soft); color: var(--danger); }
+    .cal-chip.kind-deadline { background: var(--accent-soft); color: var(--accent-ink); }
     .cal-chip.kind-start { background: var(--accent-soft); color: var(--accent-ink); }
     /* v4.28.0：已完成不逐条上格，聚合成一行浅绿「N 条已完成」（绿 = 已达成的既有语义）。
        它是格子的选择器之一：点它 = 展开当日明细，在那里看是哪些。 */
@@ -324,7 +325,7 @@
     }
     .cal-row-time { flex: 0 0 46px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
     .cal-row-type { flex: 0 0 auto; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 650; background: var(--surface-soft); color: var(--ink-2); }
-    .cal-row.kind-deadline .cal-row-type { background: var(--danger-soft); color: var(--danger); }
+    .cal-row.kind-deadline .cal-row-type { background: var(--accent-soft); color: var(--accent-ink); }
     .cal-row.kind-start .cal-row-type { background: var(--accent-soft); color: var(--accent-ink); }
     .cal-row-who { flex: 1 1 auto; min-width: 0; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cal-row-who em { font-style: normal; margin-left: 6px; color: var(--muted); font-weight: 500; font-size: 12px; }

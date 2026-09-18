@@ -29,7 +29,10 @@
           const r = ev.record || {};
           const start = ev.at instanceof Date ? ev.at : (ev.allDay ? parseDay(ev.at) : parseLocal(ev.at));
           if (!start) continue;
-          const end = new Date(start.getTime() + (ev.allDay ? 86400000 : 3600000));
+          const explicitEnd = !ev.allDay && ev.event && ev.event.endAt ? parseLocal(ev.event.endAt) : null;
+          const end = explicitEnd && explicitEnd > start
+            ? explicitEnd
+            : new Date(start.getTime() + (ev.allDay ? 86400000 : 3600000));
           // 机构进标题（v4.11.0）：不进的话日历上会出现三个一模一样的「招商银行 · 客户经理」，
           // 分不清哪个是杭州分行、哪个是成都分行 —— 而日历正是靠标题扫读的。
           const companyBit = [r.company || '投递', r.orgUnit].filter(Boolean).join(' ');
@@ -45,7 +48,7 @@
           const deadlineText = ev.allDay ? deadlineAt.slice(0, 10) : `${deadlineAt.slice(0, 10)} ${deadlineAt.slice(11, 16)}`.trim();
           const desc = [
             `岗位：${r.position || '—'}`, `机构：${r.orgUnit || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
-            isDeadline ? `截止时间：${deadlineText}` : `${ev.type}时间：${formatDateTime(ev.at)}`,
+            isDeadline ? `截止时间：${deadlineText}` : `${ev.type}时间：${formatDateTime(ev.at)}${ev.event && ev.event.endAt ? `-${String(ev.event.endAt).slice(11, 16)}` : ''}`,
             r.nextAction ? `下一步：${r.nextAction}` : '',
             // v4.31.0：同一封邮件写给多个岗位的同一场安排聚合为一条事件，这里列出全部岗位
             Array.isArray(ev._positions) && ev._positions.length > 1 ? `涉及岗位：${ev._positions.join('、')}` : ''
@@ -106,4 +109,3 @@
         if (current) parts.push(current);
         return parts.join('\r\n');
       }
-
