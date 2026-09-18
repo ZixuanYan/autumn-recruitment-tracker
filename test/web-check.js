@@ -3189,13 +3189,17 @@ check('IMAP 主机与凭据不得在 workflow 里写死（能力在 config.js，
   // 面向用户的错误提示不该再假定是 QQ
   const y = fs.readFileSync(path.join(WF_DIR, 'mail-sync.yml'), 'utf8');
   assert.ok(!/MAIL_SYNC_ERROR:.*QQ 授权码/.test(y), 'MAIL_SYNC_ERROR 文案不该再写死"QQ 授权码"');
+  // 调度粒度必须真的是每小时；网页里的 minIntervalHours 只是门禁，不会自己创建触发器。
+  // 这条防止 workflow 被改回 */3 后，网页仍允许填 1 / 2，形成“保存成功但频率没变化”的静默失效。
+  assert.ok(/^\s*- cron: '23 \* \* \* \*'\s*$/m.test(y),
+    'mail-sync 应在每小时第 23 分钟尝试一次，实际频率再由 minIntervalHours 控制');
 });
 
 check('用户文档与当前行为一致（看板横带 / 邮箱多服务商 / 邮件多选与就地编辑）', () => {
   // 为什么要这条：文档漂移不会让任何测试变红，也不会报错，用户照着做却会撞墙。
   // 本次就抓到三处——安装教程仍写着「看板列只生成 当前有记录的阶段 + Offer / 已结束」
   // （v4.17.0 已改成横带）、Secrets 仍只列 QQ_EMAIL/QQ_AUTHCODE、拉取频率仍写「默认每 12 小时一次」
-  // （v4.15.0 起 cron 是每 3 小时触发、实际间隔由 minIntervalHours 决定）。
+  // （当前 cron 每小时尝试、实际间隔由 minIntervalHours 决定）。
   // 只断言"必须出现的新口径"，不做长黑名单：黑名单会随文案改写而失效，正向断言更耐改。
   const read = f => fs.readFileSync(path.resolve(__dirname, '..', f), 'utf8');
   const tut = read('docs/安装与使用教程.md');
@@ -3224,7 +3228,9 @@ check('用户文档与当前行为一致（看板横带 / 邮箱多服务商 / �
   assert.ok(/QQ_EMAIL[^。]*仍然可用|旧名字 `QQ_EMAIL`/.test(tut),
     '应说明旧 Secret 名仍可用，否则已部署的人会以为自己配错了');
   assert.ok(!/默认每 12 小时一次/.test(tut),
-    '拉取频率口径已过时：cron 每 3 小时触发，实际间隔由 minIntervalHours 决定（默认 12）');
+    '拉取频率口径已过时：cron 每小时尝试，实际间隔由 minIntervalHours 决定（默认 12）');
+  assert.ok(tut.includes('每小时尝试一次') && tut.includes('1 / 2 / 6 小时'),
+    '安装教程应说明每小时触发粒度，以及网页端可设置 1 / 2 小时最小间隔');
 
   // ③ 邮件复核：多选、就地编辑、来源标注
   assert.ok(tut.includes('可勾选多条一起应用'), '安装教程应说明候选可多选（v4.15.0，此前是单选下拉）');

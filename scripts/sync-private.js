@@ -6,7 +6,7 @@
  * 与 sync-template.js 的映射与改写完全相同（共用 scripts/lib/sync-core.js），差别只有：
  *   - README 顶部的 banner 文案（说明这是运行实例而非供人 fork 的模板）
  *   - 输出目录 staging-private/
- *   - 本脚本会额外提醒你「这是生产环境」：它按 cron 每 3 小时触发一次真实邮件同步
+ *   - 本脚本会额外提醒你「这是生产环境」：它按 cron 每小时尝试一次真实邮件同步
  *     （实际拉取频率由 minIntervalHours 决定，默认 12 小时；见 workflow 顶部注释），
  *     同步后必须手动 dispatch 一次验证，别等下一次定时任务才发现崩了
  *
@@ -55,7 +55,7 @@ try {
     console.log(`\n✓ 已全量替换 ${path.resolve(repoDir)}（${changes.length} 项变更）`);
     for (const c of changes.slice(0, 30)) console.log(`    ${c}`);
     if (changes.length > 30) console.log(`    …另有 ${changes.length - 30} 项`);
-    console.log('\n🔴 这是**生产环境**（cron 每 3 小时触发一次真实邮件同步；实际拉取频率由 minIntervalHours 决定，默认 12 小时），推送后请务必：');
+    console.log('\n🔴 这是**生产环境**（cron 每小时尝试一次真实邮件同步；实际拉取频率由 minIntervalHours 决定，默认 12 小时），推送后请务必：');
     console.log('   1. git commit + git push');
     console.log('   2. 立刻手动 dispatch 一次 mail-sync 验证：');
     console.log('      gh workflow run mail-sync.yml -R ZixuanYan/autumn-mail-sync');

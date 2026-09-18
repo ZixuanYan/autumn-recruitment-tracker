@@ -1001,8 +1001,8 @@ test('gateReason：禁用→跳过（手动触发也拦）；enabled 是关闭�
 });
 
 test('gateReason：minIntervalHours=0 / 未设置 → 用默认 12 小时，不是「每次定时都跑」', () => {
-  // v4.15.0 把 cron 从每 12 小时改细到每 3 小时。若 0 仍按旧语义解释（每次定时都跑），
-  // 所有没显式设置过这一项的部署会从每 12 小时**静默**变成每 3 小时 —— AI 调用量 4 倍，
+  // cron 从每 12 小时改细到每小时尝试。若 0 仍按旧语义解释（每次定时都跑），
+  // 所有没显式设置过这一项的部署会从每 12 小时**静默**变成每小时 —— AI 调用量最多 12 倍，
   // 而用户什么都没做。这条测试钉住的就是"默认档的实际频率与改 cron 之前一致"。
   const base = config.buildConfig();
   const ago = h => ({ lastRunAt: new Date(Date.now() - h * 3600e3).toISOString() });
@@ -1012,10 +1012,12 @@ test('gateReason：minIntervalHours=0 / 未设置 → 用默认 12 小时，不�
   assert.ok(config.gateReason(base, ago(11)), '默认档下 11 小时前跑过应跳过');
   assert.strictEqual(config.gateReason(base, ago(13)), null, '默认档下 13 小时前跑过应放行');
   assert.strictEqual(config.gateReason(base, {}), null, '没有 lastRunAt（首次运行）必须放行');
-  // 显式填 3 才真的每 3 小时
-  const c3 = config.applyMailConfigOverrides(base, { minIntervalHours: 3 });
-  assert.strictEqual(config.gateReason(c3, ago(3.5)), null, '填 3 时 3.5 小时前跑过应放行');
-  assert.ok(config.gateReason(c3, ago(1)), '填 3 时 1 小时前跑过应跳过');
+  // 显式填 1 / 2 才分别允许约每 1 / 2 小时运行
+  const c1 = config.applyMailConfigOverrides(base, { minIntervalHours: 1 });
+  const c2 = config.applyMailConfigOverrides(base, { minIntervalHours: 2 });
+  assert.strictEqual(config.gateReason(c1, ago(1.5)), null, '填 1 时 1.5 小时前跑过应放行');
+  assert.strictEqual(config.gateReason(c2, ago(2.5)), null, '填 2 时 2.5 小时前跑过应放行');
+  assert.ok(config.gateReason(c2, ago(1)), '填 2 时 1 小时前跑过应跳过');
 });
 
 test('gateReason：手动触发绕过间隔门禁（否则点「Run workflow」只会看到「不足 12 小时」）', () => {
@@ -1030,15 +1032,15 @@ test('gateReason：手动触发绕过间隔门禁（否则点「Run workflow」�
 test('gateReason：间隔与 cron 周期相同时不得被上一轮耗时坑掉（容差）', () => {
   // lastRunAt 记的是上一次运行**结束**的时刻（state.js 的 buildMeta 在收尾时写），
   // cron 记的是本次**触发**时刻，两者相差上一轮耗时（连 IMAP + 调 AI，约 1–2 分钟）。
-  // 没有容差的话：填 3 小时 + cron 每 3 小时 → elapsed = 3h − 2min < 3h → 跳过
-  // → 实际变成每 6 小时一次，而且完全静默（日志只说"不足 3 小时"，像配置没生效）。
-  const c3 = config.applyMailConfigOverrides(config.buildConfig(), { minIntervalHours: 3 });
-  const justUnder = { lastRunAt: new Date(Date.now() - (3 * 3600e3 - 2 * 60e3)).toISOString() };
-  assert.strictEqual(config.gateReason(c3, justUnder), null,
-    '距上次「3 小时差 2 分钟」（= 上一轮耗时）应放行，否则每 3 小时会退化成每 6 小时');
+  // 没有容差的话：填 1 小时 + cron 每小时 → elapsed = 1h − 2min < 1h → 跳过
+  // → 实际变成每 2 小时一次，而且完全静默（日志只说"不足 1 小时"，像配置没生效）。
+  const c1 = config.applyMailConfigOverrides(config.buildConfig(), { minIntervalHours: 1 });
+  const justUnder = { lastRunAt: new Date(Date.now() - (3600e3 - 2 * 60e3)).toISOString() };
+  assert.strictEqual(config.gateReason(c1, justUnder), null,
+    '距上次「1 小时差 2 分钟」（= 上一轮耗时）应放行，否则每小时会退化成每 2 小时');
   assert.ok(config.MIN_INTERVAL_GRACE_MS >= 2 * 60e3, '容差至少要覆盖单轮耗时（实测 1–2 分钟）');
-  assert.ok(config.MIN_INTERVAL_GRACE_MS <= 15 * 60e3, '容差不该大到把「每 3 小时」实质缩短成「每 2.8 小时」');
-  assert.ok(config.gateReason(c3, { lastRunAt: new Date().toISOString() }), '刚跑完立刻又触发仍应跳过');
+  assert.ok(config.MIN_INTERVAL_GRACE_MS <= 15 * 60e3, '容差不该大到把「每小时」实质缩短太多');
+  assert.ok(config.gateReason(c1, { lastRunAt: new Date().toISOString() }), '刚跑完立刻又触发仍应跳过');
 });
 
 runAll();
