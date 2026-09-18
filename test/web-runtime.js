@@ -1304,6 +1304,8 @@ check('renderCalendarView：月格行数自适应、未完成的才上格、溢�
   const rows = Math.ceil((lead + new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()) / 7);
   assert.strictEqual((grid.match(/class="cal-day[" ]/g) || []).length, rows * 7, `本月应为 ${rows} 行 × 7 格`);
   assert.ok(grid.includes('cal-day is-today'), '今天要有高亮格');
+  assert.ok(grid.includes('cal-today-mark">今天') && grid.includes('aria-current="date"'), '今天格要有明确文字标记与 aria-current');
+  assert.ok(/role="button" tabindex="0"/.test(grid), '日期格可聚焦，支持键盘选择');
   assert.strictEqual(sandbox2.$('#calMonthTitle').textContent, `${now.getFullYear()}年${now.getMonth() + 1}月`, '标题显示当前年月');
   // 汇总只统计当前显示月：月初/月末跑测试时 ymd(2)/ymd(3) 可能落到下个月，期望值按实际日期算。
   // r1 是 3 条截止 + 1 条其他，截止计数只算前 3 条
@@ -1329,16 +1331,18 @@ check('renderCalendarView：月格行数自适应、未完成的才上格、溢�
   sandbox2.records[0].events = []; sandbox2.records[1].events = [];
 });
 
-check('renderCalendarView：已完成聚合为浅绿行，点选日期在日程流展开全量明细（v4.30.0）', () => {
+check('renderCalendarView：默认只看今天（含已完成），点选后只看对应日期（v4.32.0）', () => {
   seedRecords();
+  const now = new Date();
   const ymd = off => {
     const d = new Date(Date.now() + off * 86400000);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
-  // r1：规则③完成态，同日 2 条截止 → 该格只有绿行；r2：未来面试 → chip；r3（Offer 终态）截止 → 绿行
+  // r1：今天已完成的 2 条截止；r2：未来面试；r3（Offer 终态）未来截止。
+  // 默认右栏必须只列 r1，证明“今天含已完成”，不得把未来两条混进来。
   sandbox2.records[0].events = [
-    { id: 'ev-d1', type: '截止', at: ymd(-1), allDay: true },
-    { id: 'ev-d2', type: '截止', at: ymd(-1), allDay: true }
+    { id: 'ev-d1', type: '截止', at: ymd(0), allDay: true },
+    { id: 'ev-d2', type: '截止', at: ymd(0), allDay: true }
   ];
   sandbox2.records[0].timeline = [{ stage: '网申投递', at: ymd(-5), note: '', done: true, doneAt: ymd(-5) }];
   sandbox2.records[1].events = [{ id: 'ev-itv', type: '面试', at: `${ymd(3)}T14:00`, allDay: false }];
@@ -1350,28 +1354,35 @@ check('renderCalendarView：已完成聚合为浅绿行，点选日期在日程�
   assert.ok(grid.includes('2 条已完成') && grid.includes('1 条已完成'), 'r1 的 2 条 / r3 的 1 条各自聚合成绿行');
   assert.ok(!grid.includes('data-id="r1"') && !grid.includes('data-id="r3"'), '已完成条目不占 chip 的 data-id');
   assert.ok(/class="cal-day[^"]*" data-date="/.test(grid), '月格带 data-date（整格可点的前提）');
-  // 未选中任何日期：日程流 = 未来 7 天按日分组（r2 在 +3 天、r3 终态不进流）
+  // 未选中任何日期：空串语义就是今天，且今天完整展示（包括已完成）。
   const flowHtml = sandbox2.$('#calFlowList').innerHTML;
-  assert.ok(/cal-flow-group/.test(flowHtml), '日程流按日分组渲染');
-  assert.ok(/cal-row[^>]*data-id="r2"/.test(flowHtml), '未来 7 天含未完成的面试');
-  assert.ok(!flowHtml.includes('data-id="r3"'), '终态条目不进前瞻日程流');
-  // 选中 r2 面试那天 → 格高亮 + 日程流顶部插队该日全量明细
-  vm.runInContext(`calSelectedDate = '${ymd(3)}';`, sandbox2);
-  sandbox2.renderCalendarView();
+  assert.ok(flowHtml.includes('is-today-group') && flowHtml.includes('今天 ·'), '默认固定显示“今天”单日组');
+  assert.strictEqual(sandbox2.$('#calFlowTitle').textContent, '今日安排');
+  assert.ok(/cal-row[^>]*data-id="r1"/.test(flowHtml) && flowHtml.includes('已完成'), '今天已完成的事项也在右栏');
+  assert.ok(flowHtml.includes('全天') && !flowHtml.includes('>截止</span><span class="cal-row-type">截止'), '全天截止显示“全天 + 截止”，不重复“截止/截止”');
+  assert.ok(!flowHtml.includes('data-id="r2"') && !flowHtml.includes('data-id="r3"'), '默认不混入未来日期');
+  // 选中 r2 面试那天 → 右栏切成该日单日详情，不再展示今天。
+  sandbox2.calSelectDay(ymd(3));
   assert.ok(new RegExp(`class="cal-day[^"]*is-selected[^"]*" data-date="${ymd(3)}"`).test(sandbox2.$('#calendarGrid').innerHTML), '选中格带 is-selected');
   const flowSel = sandbox2.$('#calFlowList').innerHTML;
-  assert.ok(flowSel.indexOf('已选 ·') > -1 && flowSel.indexOf('已选 ·') < flowSel.indexOf('cal-row'), '已选日期组插队到日程流最前');
+  assert.strictEqual(sandbox2.$('#calFlowTitle').textContent, '当日安排');
+  assert.ok(flowSel.includes(ymd(3).slice(5, 7).replace(/^0/, '') + '月'), '组选中日期标题正确');
   assert.ok(/cal-row[^>]*data-id="r2"/.test(flowSel), '选中日明细行带记录 id（点行直达抽屉）');
+  assert.ok(!flowSel.includes('data-id="r1"') && !flowSel.includes('今天 ·'), '点击其他日期后不再展示今天');
   assert.ok(flowSel.includes('14:00'), '明细行带时刻');
   // 空日：组内如实提示，不给假信息
   vm.runInContext(`calSelectedDate = '${ymd(9)}';`, sandbox2);
   sandbox2.renderCalendarView();
   assert.ok(sandbox2.$('#calFlowList').innerHTML.includes('当天没有安排'), '空选中日提示「当天没有安排」');
-  // 再点同一天 = 取消选中 → 已选组消失；翻月同样取消
+  // 再点同一天保持单日详情；右栏没有“无选择”状态。
   vm.runInContext(`calSelectDay('${ymd(9)}')`, sandbox2);
-  assert.ok(!sandbox2.$('#calFlowList').innerHTML.includes('已选 ·'), '再点同一天取消选中');
-  vm.runInContext(`calSelectedDate = '${ymd(3)}'; calendarShiftMonth(1)`, sandbox2);
-  assert.ok(!sandbox2.$('#calFlowList').innerHTML.includes('已选 ·'), '翻月取消选中');
+  assert.ok(sandbox2.$('#calFlowList').innerHTML.includes('当天没有安排'), '再点同一天仍保持该日');
+  // 选择跨月日期会自动切换月份；这就是点击灰色补位格所走的同一函数。
+  const cross = new Date(now.getFullYear(), now.getMonth() + 1, 2);
+  const crossIso = `${cross.getFullYear()}-${String(cross.getMonth() + 1).padStart(2, '0')}-02`;
+  sandbox2.calSelectDay(crossIso);
+  assert.strictEqual(sandbox2.$('#calMonthTitle').textContent, `${cross.getFullYear()}年${cross.getMonth() + 1}月`, '跨月日期自动切到对应月份');
+  assert.ok(new RegExp(`is-selected[^"]*" data-date="${crossIso}"`).test(sandbox2.$('#calendarGrid').innerHTML), '跨月目标日期保持选中');
   sandbox2.records[0].events = []; sandbox2.records[1].events = []; sandbox2.records[2].events = [];
 });
 
@@ -1385,7 +1396,7 @@ check('renderCalFlow：邮件聚合行（覆盖 N 岗位）与展开子行（v4.
   for (const [idx, rid] of [['0', 'r1'], ['1', 'r2']]) {
     sandbox2.records[Number(idx)].events = [{ id: `ev-${rid}`, type: '笔试测评', at: `${ymd(2)}T19:00`, allDay: false, mailId: 'mid:exam' }];
   }
-  vm.runInContext('calViewYear = 0; calViewMonth = 0; calSelectedDate = \'\'; calFlowExpandedKey = \'\';', sandbox2);
+  vm.runInContext(`calViewYear = 0; calViewMonth = 0; calSelectedDate = '${ymd(2)}'; calFlowExpandedKey = '';`, sandbox2);
   sandbox2.renderCalendarView();
   const grid = sandbox2.$('#calendarGrid').innerHTML;
   assert.strictEqual((grid.match(/cal-chip kind-start/g) || []).length, 1, '月历上两条同场笔试聚合成一颗 chip');

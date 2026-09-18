@@ -151,9 +151,9 @@
     </section>
     </div>
 <div class="view" data-view="calendar" hidden>
-    <!-- 日历（v4.27.0；v4.30.0 重构）：月历降级为**定位器**——格子只排日期与事件圆点，
-         阅读职责全部交给「日程」流（未来 7 天按日分组、逾期置顶，点选的日期以全量明细插队到最前，
-         含已完成）。此前「未来安排」与「当日明细」两份面板合一；42→行数自适应的月格由
+    <!-- 日历（v4.27.0；v4.32.0 单日详情）：月历是日期定位器，右栏始终只显示一个日期。
+         默认固定今天（含已完成），点其他日期后只显示该日；跨月补位格会切换到对应月份。
+         此前混合「逾期 + 未来 7 天 + 已选日」的长流已移除；42→行数自适应的月格由
          renderCalendarView() 生成。图例只列四种视觉态，不按事件类型再细分——格子里空间太小，
          颜色一多就变成猜色游戏。 -->
     <div class="cal-layout">
@@ -168,7 +168,7 @@
               <button class="btn btn-small" id="calNextBtn" type="button" title="下一个月">›</button>
             </div>
           </div>
-          <div class="panel-caption"><span id="calMonthSummary"></span>点日期在日程里看当天全部安排 · 已完成的聚合为绿行</div>
+          <div class="panel-caption"><span id="calMonthSummary"></span>点日期切换右侧单日详情 · 已完成的聚合为绿行</div>
         </div>
         <button class="btn btn-small" id="calExportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出 .ics</button>
       </div>
@@ -181,11 +181,10 @@
       <div class="cal-weekdays" aria-hidden="true"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
       <div class="cal-grid" id="calendarGrid"></div>
     </section>
-    <!-- 日程流：未来的阅读区。列表行由 renderCalFlow 生成，点行直达详情抽屉；
-         点月历日期后该日的全量明细（含已完成）插队到最前。 -->
+    <!-- 单日详情：默认今天，点月历日期后只显示该日全量明细（含已完成）。 -->
     <aside class="panel cal-flow" id="calFlow" aria-labelledby="calFlowTitle">
       <div class="panel-head">
-        <div><h2 class="panel-title" id="calFlowTitle">日程</h2><div class="panel-caption" id="calFlowCaption">未来 7 天按日分组，逾期未处理置顶 · 点条目直达详情</div></div>
+        <div><h2 class="panel-title" id="calFlowTitle">今日安排</h2><div class="panel-caption" id="calFlowCaption">所选日期的全部安排（含已完成）· 点条目直达详情</div></div>
       </div>
       <div class="cal-flow-list" id="calFlowList"></div>
     </aside>

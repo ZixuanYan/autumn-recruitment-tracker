@@ -63,7 +63,7 @@
 
 ## 版本
 
-- 网页：v4.31.1
+- 网页：v4.32.0
 - 浏览器插件：v5.7.1
 - 数据存储标识：`autumnRecruitmentTracker.records.v1`
 

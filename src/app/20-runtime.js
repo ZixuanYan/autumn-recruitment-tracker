@@ -534,7 +534,7 @@
       // ================= 视图路由：#/view 形式，旧锚点 #view 自动重定向 =================
       const VIEW_META = {
         overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计与洞察——从银十到金九，每一步都在这里' },
-        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '未来 7 天日程与月历——哪天要赶、哪天要去，一眼看清' },
+        calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '月历定位日期，右侧专注查看当天全部安排' },
         records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
@@ -549,21 +549,32 @@
       // 这只是浏览状态而非值得跨设备记住的偏好，不进 uiPrefs。
       let calViewYear = 0;
       let calViewMonth = 0; // 0-11
-      // 当日明细的选中日（ISO YYYY-MM-DD）：点月格展开下方明细面板；空串 = 未选中。
-      // 切月 / 点「今天」取消——选中的是浏览状态，跟着当前视图走才可预期。
+      // 单日日程的选中日（ISO YYYY-MM-DD）：空串 = 今天（默认态）；非空 = 用户选中的日期。
+      // 右栏始终只展示这一天的全部安排（含已完成），不再混入未来 7 天与全局逾期组。
       let calSelectedDate = '';
 
       function calendarShiftMonth(delta) {
+        const now = new Date();
+        const active = (calSelectedDate && parseDay(calSelectedDate)) || now;
         const d = new Date(calViewYear, calViewMonth + delta, 1);
         calViewYear = d.getFullYear();
         calViewMonth = d.getMonth();
-        calSelectedDate = '';
+        // 翻月后选中目标月的同一日；遇到 31→2 月则夹到当月最后一天。
+        // 否则月历已翻到别处、右栏却突然回到今天，会出现两个互不相关的日期上下并排。
+        const day = Math.min(active.getDate(), new Date(calViewYear, calViewMonth + 1, 0).getDate());
+        const iso = localDateInput(new Date(calViewYear, calViewMonth, day));
+        calSelectedDate = iso === localDateInput(now) ? '' : iso;
         renderCalendarView();
       }
 
-      // 点格切换选中（再点同一天 = 收起）；chip 点击不是切换而是强制选中（同时开抽屉）
+      // 点任意日期都切换为该日的单日详情；跨月补位格会同时切到对应月份。
+      // 再点同一天不收起——右栏没有“无选择”状态，默认态就是今天。
       function calSelectDay(iso) {
-        calSelectedDate = calSelectedDate === iso ? '' : iso;
+        const d = parseDay(iso);
+        if (!d) return;
+        calViewYear = d.getFullYear();
+        calViewMonth = d.getMonth();
+        calSelectedDate = iso === localDateInput(new Date()) ? '' : iso;
         renderCalendarView();
       }
 
@@ -599,6 +610,7 @@
         //（CSS 按断点切换显示）。每格最多 3 条「要行动」的条目，溢出收进「+N」的 title。
         // 已完成的（settled / 终态）不逐条上格：聚合成一行浅绿「N 条已完成」+ 一颗绿点。
         const MAX_PER_CELL = 3;
+        const activeDate = calSelectedDate || localDateInput(now);
         grid.innerHTML = buildMonthGrid(calViewYear, calViewMonth, now).map(cell => {
           const items = byDate.get(cell.iso) || [];
           const open = items.filter(i => !i.settled && !i.terminal);
@@ -622,18 +634,20 @@
           const doneLine = doneCount > 0
             ? `<button class="cal-done" type="button" title="${escapeHtml(`当天有 ${doneCount} 条已完成，点开看明细`)}">${doneCount} 条已完成</button>`
             : '';
+          const dotMore = open.length > 4 ? `<span class="cal-dot-more">+${open.length - 4}</span>` : '';
           const dots = open.slice(0, 4).map(i => `<i class="cal-dot kind-${i.kind}"></i>`).join('')
+            + dotMore
             + (doneCount > 0 ? '<i class="cal-dot is-settled"></i>' : '');
           const hasOverdue = open.some(i => i.overdue);
-          const selected = calSelectedDate === cell.iso;
-          return `<div class="cal-day${cell.inMonth ? '' : ' is-outside'}${cell.isToday ? ' is-today' : ''}${selected ? ' is-selected' : ''}${hasOverdue ? ' has-overdue' : ''}" data-date="${cell.iso}"><span class="cal-dayno">${cell.day}</span><div class="cal-dots" aria-hidden="true">${dots}</div><div class="cal-items">${chips}${more}${doneLine}</div></div>`;
+          const selected = activeDate === cell.iso;
+          const label = `${cell.iso}${cell.isToday ? '，今天' : ''}，${items.length ? `${items.length} 项安排` : '没有安排'}`;
+          return `<div class="cal-day${cell.inMonth ? '' : ' is-outside'}${cell.isToday ? ' is-today' : ''}${selected ? ' is-selected' : ''}${hasOverdue ? ' has-overdue' : ''}" data-date="${cell.iso}" role="button" tabindex="0" aria-label="${escapeHtml(label)}"${cell.isToday ? ' aria-current="date"' : ''}><span class="cal-day-head"><span class="cal-dayno">${cell.day}</span>${cell.isToday ? '<span class="cal-today-mark">今天</span>' : ''}</span><div class="cal-dots" aria-hidden="true">${dots}</div><div class="cal-items">${chips}${more}${doneLine}</div></div>`;
         }).join('');
         renderCalFlow(byDate);
       }
 
-      // 日程流（v4.30.0，v4.31.0 增加邮件聚合）：月历负责定位，这里负责阅读。
-      // 分组：① 逾期未处理置顶（与未来安排同一口径，已了结的不算）；② 点选日期的全量明细插队
-      //（含已完成，日历是事实视图）；③ 未来 7 天按日分组（只列未完成的，空日跳过）。
+      // 单日日程（v4.32.0）：默认固定显示今天；点日期后只显示该日，不混入今天、未来日期或全局逾期。
+      // 选中日始终展示全量事实（含已完成 / 终态 / 当日逾期），月历负责切换日期。
       // v4.31.0：聚合条目（同一封邮件的多岗位同场安排）单行显示 + 可展开子行 + 批量完成/推进。
       let calFlowExpandedKey = '';
 
@@ -653,7 +667,7 @@
           ? '<span class="cal-row-state is-settled">已完成</span>'
           : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
         const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${item.time ? ` ${item.time}` : ''}`;
-        return `<button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(item.time || item.type)}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>`;
+        return `<button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(item.time || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>`;
       }
 
       // 聚合条目行：主行（公司 + 覆盖 N 岗位，点击展开/收起）；展开后是每个岗位的子行
@@ -668,7 +682,7 @@
         const key = `${agg.mailId}|${item.date}|${item.type}`;
         const expanded = calFlowExpandedKey === key;
         const posText = agg.positions.map(p => `${p.record.company || ''} ${p.record.position || ''}${p.record.orgUnit ? `（${p.record.orgUnit}）` : ''}${p.settled ? ' ✓' : ''}`).join('；');
-        const main = `<button class="cal-row kind-${item.kind} is-multi" type="button" data-flow-key="${escapeHtml(key)}" title="${escapeHtml(`${who} · ${item.type}${item.time ? ` ${item.time}` : ''} · 同一场安排覆盖 ${agg.total} 个岗位：${posText}`)}"><span class="cal-row-time">${escapeHtml(item.time || item.type)}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>同一场 · 覆盖 ${agg.total} 个岗位${done ? '' : (agg.doneCount ? `（已完成 ${agg.doneCount}）` : '')}</em></span>${state}<span class="cal-row-arrow">${expanded ? '▾' : '▸'}</span></button>`;
+        const main = `<button class="cal-row kind-${item.kind} is-multi" type="button" data-flow-key="${escapeHtml(key)}" title="${escapeHtml(`${who} · ${item.type}${item.time ? ` ${item.time}` : ''} · 同一场安排覆盖 ${agg.total} 个岗位：${posText}`)}"><span class="cal-row-time">${escapeHtml(item.time || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>同一场 · 覆盖 ${agg.total} 个岗位${done ? '' : (agg.doneCount ? `（已完成 ${agg.doneCount}）` : '')}</em></span>${state}<span class="cal-row-arrow">${expanded ? '▾' : '▸'}</span></button>`;
         if (!expanded) return `<div class="cal-flow-multi">${main}</div>`;
         const subRows = agg.positions.map(p => {
           const r = p.record;
@@ -685,24 +699,15 @@
         const list = $('#calFlowList');
         if (!list) return;
         const now = new Date();
-        const items = aggregateCalendarItems(collectCalendarEvents(records, now));
-        const groups = [];
-        const overdue = items.filter(i => i.overdue);
-        if (overdue.length) groups.push({ title: '逾期未处理', items: overdue, mod: ' is-overdue-group' });
-        if (calSelectedDate) {
-          const sel = byDate.get(calSelectedDate) || [];
-          groups.push({ title: `已选 · ${flowDayTitle(calSelectedDate)}`, items: sel, mod: ' is-selected-group', empty: !sel.length });
-        }
-        for (let off = 0; off < 7; off += 1) {
-          const iso = localDateInput(new Date(now.getFullYear(), now.getMonth(), now.getDate() + off));
-          if (iso === calSelectedDate) continue; // 已在②里全量展示，不重复
-          const dayItems = (byDate.get(iso) || []).filter(i => !i.settled && !i.terminal);
-          if (!dayItems.length) continue;
-          groups.push({ title: flowDayTitle(iso), items: dayItems, mod: '' });
-        }
-        list.innerHTML = groups.length
-          ? groups.map(g => `<div class="cal-flow-group${g.mod}"><div class="cal-flow-day">${escapeHtml(g.title)}<span class="cal-flow-count">${g.items.length ? `${g.items.length} 项` : ''}</span></div>${g.items.length ? g.items.map(item => (item.aggregate ? calFlowAggregateRow(item) : calFlowRow(item))).join('') : (g.empty ? '<div class="cal-detail-empty">当天没有安排</div>' : '')}</div>`).join('')
-          : '<div class="cal-detail-empty">未来 7 天没有安排；点月历上的日期可查看当天全部条目</div>';
+        const today = localDateInput(now);
+        const activeDate = calSelectedDate || today;
+        const dayItems = byDate.get(activeDate) || [];
+        const title = $('#calFlowTitle');
+        if (title) title.textContent = activeDate === today ? '今日安排' : '当日安排';
+        const caption = $('#calFlowCaption');
+        if (caption) caption.textContent = '所选日期的全部安排（含已完成）· 点条目直达详情';
+        const mod = activeDate === today ? ' is-today-group' : ' is-selected-group';
+        list.innerHTML = `<div class="cal-flow-group${mod}"><div class="cal-flow-day">${escapeHtml(flowDayTitle(activeDate))}<span class="cal-flow-count">${dayItems.length ? `${dayItems.length} 项` : ''}</span></div>${dayItems.length ? dayItems.map(item => (item.aggregate ? calFlowAggregateRow(item) : calFlowRow(item))).join('') : '<div class="cal-detail-empty">当天没有安排</div>'}</div>`;
       }
 
       // ================= v4.31.0 邮件关联安排的批量操作 =================
@@ -1850,13 +1855,20 @@
         const chip = event.target.closest('.cal-chip[data-id]');
         if (chip) {
           const cell = chip.closest('.cal-day[data-date]');
-          calSelectedDate = cell ? cell.dataset.date : '';
-          renderCalendarView();
+          if (cell) calSelectDay(cell.dataset.date);
           openRecordFocus(chip.dataset.id);
           return;
         }
         const cell = event.target.closest('.cal-day[data-date]');
         if (cell) calSelectDay(cell.dataset.date);
+      });
+      $('#calendarGrid').addEventListener('keydown', event => {
+        if (!['Enter', ' '].includes(event.key)) return;
+        if (event.target.closest('.cal-chip, .cal-done')) return;
+        const cell = event.target.closest('.cal-day[data-date]');
+        if (!cell) return;
+        event.preventDefault();
+        calSelectDay(cell.dataset.date);
       });
       $('#calFlowList').addEventListener('click', event => {
         const doneBtn = event.target.closest('[data-batch-done]');

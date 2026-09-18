@@ -276,7 +276,9 @@
     /* v4.28.0：整格可点（点开下方当日明细），hover 反馈在 apple 层 */
     .cal-day { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
     .cal-day.is-outside { background: transparent; cursor: default; }
+    .cal-day-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; }
     .cal-dayno { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+    .cal-today-mark { padding: 1px 5px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 9px; font-weight: 700; line-height: 1.45; }
     .cal-day.is-today { border-color: var(--accent); }
     .cal-day.is-today .cal-dayno { color: var(--accent-ink); font-weight: 700; }
     .cal-day.is-selected { border-color: var(--accent); }
@@ -304,6 +306,7 @@
     .cal-chip-who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     /* v4.30.0 圆点定位行：窄断点下月格只排这行圆点，文字条目整体退场 */
     .cal-dots { display: none; flex-wrap: wrap; gap: 3px; align-content: flex-start; min-height: 8px; }
+    .cal-dot-more { color: var(--muted); font-size: 9px; font-weight: 650; line-height: 8px; font-variant-numeric: tabular-nums; }
     /* ===== 日程流（v4.30.0）：合并「未来安排」与「当日明细」为一份阅读区 =====
        逾期组置顶、点选日期全量插队、未来 7 天按日分组。行样式与 v4.28 的明细行同款。 */
     .cal-flow-list { display: grid; gap: 14px; padding: 4px 14px 14px; }
@@ -311,6 +314,8 @@
     .cal-flow-day { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; font-weight: 720; color: var(--ink-2); }
     .cal-flow-group.is-overdue-group .cal-flow-day { color: var(--danger); }
     .cal-flow-group.is-selected-group .cal-flow-day { color: var(--accent-ink); }
+    .cal-flow-group.is-today-group { padding: 10px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
+    .cal-flow-group.is-today-group .cal-flow-day { color: var(--accent-ink); font-size: 14px; }
     .cal-flow-count { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .cal-row {
       display: flex; align-items: center; gap: 10px; min-width: 0; text-align: left;

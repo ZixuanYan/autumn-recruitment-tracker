@@ -347,7 +347,7 @@
     .cal-day.is-outside { background: transparent; }
     .cal-day:hover { border-color: var(--line-strong); }
     .cal-day.is-selected { box-shadow: 0 0 0 2px var(--accent); background: var(--accent-soft); }
-    .cal-day.is-today.is-selected { box-shadow: 0 0 0 2px var(--accent); }
+    .cal-day.is-today.is-selected { box-shadow: 0 0 0 2px var(--accent), inset 0 0 0 1px var(--surface); }
     .cal-done { transition: filter .15s var(--ease); }
     .cal-done:hover { filter: brightness(.96); }
     .cal-row { transition: background .15s var(--ease); }
