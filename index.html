@@ -361,6 +361,7 @@
     .cal-row-sub { margin-left: 14px; padding: 6px 9px; font-size: 12.5px; background: var(--surface-2); }
     .cal-row-sub .cal-row-time { visibility: hidden; }
     .cal-flow-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cal-flow-actions .cal-batch-btn { min-height: 32px; padding: 0 12px; font-size: 12px; }
     .batch-targets { display: flex; flex-wrap: wrap; gap: 6px; }
     .batch-target-chip {
       max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1524,6 +1525,9 @@
 <symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="12" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8.5 6H12a3.5 3.5 0 0 1 3.5 3.5V12M15.5 12H12a3.5 3.5 0 0 0-3.5 3.5V18"/></symbol>
 <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M7.5 14h3M13.5 14h3M7.5 17.5h3"/></symbol>
 <symbol id="i-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5H5.5v1.5A3.5 3.5 0 0 0 9 10M16 5h2.5v1.5A3.5 3.5 0 0 1 15 10"/><path d="M12 13v4M9 20h6M10 17h4"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19 13.5 1.2 1-.9 1.6-1.5-.5a7.4 7.4 0 0 1-1.7 1l-.2 1.6h-1.9l-.3-1.6a7.4 7.4 0 0 1-1.9-1l-1.5.5-.9-1.6 1.2-1a6.8 6.8 0 0 1 0-2.1l-1.2-1 .9-1.6 1.5.5a7.4 7.4 0 0 1 1.9-1l.3-1.6h1.9l.2 1.6a7.4 7.4 0 0 1 1.7 1l1.5-.5.9 1.6-1.2 1a6.8 6.8 0 0 1 0 2.1Z"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.6-4L4 9"/><path d="M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.6 4L20 15"/><path d="M20 19v-4h-4"/></symbol>
+<symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5h5v5"/><path d="m19 5-8 8"/><path d="M19 13v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"/></symbol>
 </defs></svg>
   <div class="app-layout">
     <aside class="app-sidebar" aria-label="主导航">
@@ -1801,8 +1805,8 @@
           <div class="panel-caption">招聘邮件解析结果，逐项复核后并入台账——所有更新都需你手动勾选确认，绝不自动写入。邮件建议随云同步从你的私有 Gist 读取。</div>
         </div>
         <div class="mail-head-actions">
-          <button class="btn btn-small" id="mailSettingsBtn" type="button"><span class="icon">⚙</span>设置</button>
-          <button class="btn btn-small" id="mailRefreshBtn" type="button"><span class="icon">↻</span>重新读取</button>
+          <button class="btn btn-small" id="mailSettingsBtn" type="button"><span class="icon"><svg><use href="#i-settings"/></svg></span>设置</button>
+          <button class="btn btn-small" id="mailRefreshBtn" type="button"><span class="icon"><svg><use href="#i-refresh"/></svg></span>重新读取</button>
         </div>
       </div>
       <div class="mail-statusbar" id="mailStatusBar" role="status" aria-live="polite"></div>
@@ -6561,7 +6565,7 @@
         }
         if (mailMeta && mailMeta.lastStatus === 'error') {
           bar.className = 'mail-statusbar error';
-          bar.innerHTML = `<strong>上次邮件同步失败</strong>${escapeHtml(mailMeta.lastError || '未知错误')} <a class="btn btn-small" href="https://github.com/ZixuanYan/autumn-mail-sync/actions/workflows/mail-sync.yml" target="_blank" rel="noopener"><span class="icon">↻</span>打开重试 Action</a><details class="mail-help"><summary>怎么修复？</summary><ol><li>最常见：改过 QQ 密码后 <strong>16 位授权码失效</strong> → 到 QQ 邮箱重新生成，更新私有仓库 autumn-mail-sync 的 QQ_AUTHCODE Secret。</li><li>AI 超额/密钥无效 → 检查 AI_API_KEY / AI_BASE_URL / AI_MODEL。</li><li>被 QQ 风控（Unsafe Login）→ 需把定时任务迁到国内宿主。</li><li>修复后打开上面的 Action，勾选 <code>RETRY_FAILED</code> 后运行；完成后回本页点「重新读取」。</li></ol></details>`;
+          bar.innerHTML = `<strong>上次邮件同步失败</strong>${escapeHtml(mailMeta.lastError || '未知错误')} <a class="btn btn-small btn-soft mail-retry-link" href="https://github.com/ZixuanYan/autumn-mail-sync/actions/workflows/mail-sync.yml" target="_blank" rel="noopener"><span class="icon"><svg><use href="#i-external"/></svg></span>打开重试 Action</a><details class="mail-help"><summary>怎么修复？</summary><ol><li>最常见：改过 QQ 密码后 <strong>16 位授权码失效</strong> → 到 QQ 邮箱重新生成，更新私有仓库 autumn-mail-sync 的 QQ_AUTHCODE Secret。</li><li>AI 超额/密钥无效 → 检查 AI_API_KEY / AI_BASE_URL / AI_MODEL。</li><li>被 QQ 风控（Unsafe Login）→ 需把定时任务迁到国内宿主。</li><li>修复后打开上面的 Action，勾选 <code>RETRY_FAILED</code> 后运行；完成后回本页点「重新读取」。</li></ol></details>`;
         } else if (mailMeta) {
           bar.className = 'mail-statusbar ok';
           // 丢弃统计（v4.6.1）：老 Gist 文件没有 lastDropped、或本次一封没丢时 normalizeDropStats 返回 null，
@@ -6991,7 +6995,7 @@
             : (p.overdue ? '<span class="cal-row-state is-overdue">逾期</span>' : '');
           return `<button class="cal-row cal-row-sub kind-${item.kind}" type="button" data-id="${escapeHtml(r.id)}" title="${escapeHtml(`${r.company || ''} · ${r.position || '未填岗位'} · 查看详情`)}"><span class="cal-row-time"></span><span class="cal-row-type">${escapeHtml(r.orgUnit || '—')}</span><span class="cal-row-who">${escapeHtml(r.company || '未填公司')}<em>${escapeHtml(r.position || '未填岗位')}</em></span>${subState}</button>`;
         }).join('');
-        const actions = done ? '' : `<div class="cal-flow-actions"><button class="p-mini-btn" type="button" data-batch-done="${escapeHtml(key)}">全部标记完成</button><button class="p-mini-btn" type="button" data-batch-advance="${escapeHtml(key)}">批量推进</button></div>`;
+        const actions = done ? '' : `<div class="cal-flow-actions"><button class="btn btn-small cal-batch-btn" type="button" data-batch-done="${escapeHtml(key)}">全部标记完成</button><button class="btn btn-small btn-soft cal-batch-btn" type="button" data-batch-advance="${escapeHtml(key)}">批量推进</button></div>`;
         return `<div class="cal-flow-multi is-open">${main}${subRows}${actions}</div>`;
       }
 

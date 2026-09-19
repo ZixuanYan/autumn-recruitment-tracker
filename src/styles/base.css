@@ -340,6 +340,7 @@
     .cal-row-sub { margin-left: 14px; padding: 6px 9px; font-size: 12.5px; background: var(--surface-2); }
     .cal-row-sub .cal-row-time { visibility: hidden; }
     .cal-flow-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cal-flow-actions .cal-batch-btn { min-height: 32px; padding: 0 12px; font-size: 12px; }
     .batch-targets { display: flex; flex-wrap: wrap; gap: 6px; }
     .batch-target-chip {
       max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
