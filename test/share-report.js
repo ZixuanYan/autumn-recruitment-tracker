@@ -5,7 +5,17 @@ const path = require('path');
 const vm = require('vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'src/core/share-report.js'), 'utf8');
-const context = { AJA: require('../shared/stages'), console };
+const context = {
+  AJA: require('../shared/stages'), console,
+  groupRecordsByCompany(list) {
+    return [
+      { label: '腾讯', records: list.filter(record => String(record.company).startsWith('腾讯')) },
+      { label: '甲公司', records: list.filter(record => record.company === '甲公司') }
+    ].filter(group => group.records.length);
+  },
+  computeCityStats() { return [{ city: '深圳', total: 1, offers: 0 }, { city: '广州', total: 1, offers: 0 }, { city: '北京', total: 1, offers: 0 }, { city: '', total: 1, offers: 1 }]; },
+  computeCompanyTypeStats() { return [{ label: '央国企', total: 0 }, { label: '私企', total: 2 }, { label: '外企', total: 0 }, { label: '未设置', total: 1 }]; }
+};
 vm.createContext(context);
 vm.runInContext(source, context);
 const buildShareReport = context.buildShareReport;
@@ -21,6 +31,10 @@ assert.ok(html.includes('覆盖公司'));
 assert.ok(html.includes('深圳'));
 assert.ok(html.includes('未填写'));
 assert.ok(html.includes('Offer'));
+assert.ok(html.includes('按企业收纳'));
+assert.ok(html.includes('2 个岗位'));
+assert.ok(html.includes('city-bar'));
+assert.ok(html.includes('type-bar'));
 assert.ok(html.includes('&lt;工程师&gt;'));
 assert.ok(!html.includes('不应导出'));
 assert.ok(!html.includes('secret.example'));
