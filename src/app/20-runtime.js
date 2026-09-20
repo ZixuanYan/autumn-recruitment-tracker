@@ -1372,6 +1372,22 @@
         showToast(`已导出 ${records.length} 条记录，原数据未改变`);
       }
 
+      function exportShareReport() {
+        if (!records.length) { showToast('暂无可导出的投递记录'); return; }
+        const proceed = sampleDataMode
+          ? confirmInApp(`当前台账是首次打开时的示例数据，共 ${records.length} 条。确定要导出这份示例报告吗？`, { title: '导出示例报告', confirmText: '继续导出' })
+          : Promise.resolve(true);
+        proceed.then(ok => {
+          if (!ok) return;
+          const exportedAt = new Date().toISOString();
+          const html = buildShareReport(records, { exportedAt, appVersion: APP_VERSION });
+          const now = new Date();
+          const stamp = `${localDateInput(now)}-${now.toTimeString().slice(0, 5).replace(':', '')}`;
+          downloadText(html, `秋招投递进展报告-${stamp}.html`, 'text/html;charset=utf-8');
+          showToast(`已导出 ${records.length} 条投递记录的分享报告`);
+        });
+      }
+
       // 通用文本文件下载（.ics 等非 JSON 产物）；downloadPayload 仅用于 JSON
       function downloadText(text, filename, mime) {
         const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
@@ -1654,6 +1670,7 @@
       $('#toolSafetyBtn').addEventListener('click', openSafetyDialog);
       $('#toolIcsBtn').addEventListener('click', () => exportIcs());
       $('#exportRecordsBtn').addEventListener('click', exportData);
+      $('#exportShareReportBtn').addEventListener('click', exportShareReport);
       $('#exportResumeBtn').addEventListener('click', exportResume);
       // v4.29.0：未来安排面板的「导出日历」按钮随面板迁入日历页时去重（日历头部已有
       // 「导出 .ics」，工具页还有一个），这里的旧绑定一并拆除——面板里没有这个元素了，

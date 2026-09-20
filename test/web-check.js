@@ -340,8 +340,8 @@ function extractFunction(src, name) {
 
 console.log('v4.4.0 核心纯函数单测（截止日 / 日程事件 / ICS / 公司分组 / 漏斗 / 停留 / 卡点 / 查重）');
 const coreSrc = loadSrc.coreSrc;
-check('CORE 纯函数模块已按清单加载（8 个文件）', () => {
-  assert.strictEqual(loadSrc.moduleFiles('core').length, 8, 'src/core/ 应为 8 个文件（v4.27.0 加了 calendar.js）');
+check('CORE 纯函数模块已按清单加载（9 个文件）', () => {
+  assert.strictEqual(loadSrc.moduleFiles('core').length, 9, 'src/core/ 应为 9 个文件（v4.33.0 加入分享报告）');
   assert.ok(coreSrc.length > 500, `CORE 块过短或未读到：${coreSrc.length}`);
 });
 
