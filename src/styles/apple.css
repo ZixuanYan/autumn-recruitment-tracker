@@ -817,6 +817,7 @@
     .mail-match { margin-top: 10px; padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
     .mail-match.single { box-shadow: inset 3px 0 0 var(--ok-bright); }
     .mail-match.none { box-shadow: inset 3px 0 0 var(--warn-bright); color: var(--warn); }
+    .mail-match.manual { box-shadow: inset 3px 0 0 var(--accent); color: var(--accent-ink); }
     /* 多目标勾选列表（v4.15.0）。底色 / 边框 / hover 柔底一律走令牌，深色模式自动跟随；
        列表限高滚动：同公司多岗位实测能到 7 条，不限高会把邮件卡片撑得比正文还长。 */
     .mail-match-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -884,6 +885,14 @@
     .mail-fields-note { color: var(--muted); font-size: 11.5px; }
     .mail-fields-empty { color: var(--muted); font-size: 13px; }
     .mail-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .mail-link-list { display: grid; gap: 4px; max-height: 330px; overflow-y: auto; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); }
+    .mail-link-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px 10px; border-radius: var(--r-md); cursor: pointer; background: var(--surface); }
+    .mail-link-item:hover { background: var(--wash-3); }
+    .mail-link-item input { flex: 0 0 auto; margin-top: 3px; accent-color: var(--accent); }
+    .mail-link-item span { min-width: 0; display: grid; gap: 3px; }
+    .mail-link-item strong { overflow-wrap: anywhere; font-size: 13px; color: var(--ink-2); }
+    .mail-link-item small { color: var(--muted); font-size: 11.5px; }
+    .mail-link-empty { padding: 24px 12px; text-align: center; color: var(--muted); font-size: 13px; }
     .mail-key-row { display: flex; gap: 8px; align-items: center; }
     .mail-key-row .control { flex: 1 1 auto; min-width: 0; }
 

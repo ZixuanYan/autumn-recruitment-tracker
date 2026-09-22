@@ -1347,6 +1347,7 @@
     .mail-match { margin-top: 10px; padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
     .mail-match.single { box-shadow: inset 3px 0 0 var(--ok-bright); }
     .mail-match.none { box-shadow: inset 3px 0 0 var(--warn-bright); color: var(--warn); }
+    .mail-match.manual { box-shadow: inset 3px 0 0 var(--accent); color: var(--accent-ink); }
     /* 多目标勾选列表（v4.15.0）。底色 / 边框 / hover 柔底一律走令牌，深色模式自动跟随；
        列表限高滚动：同公司多岗位实测能到 7 条，不限高会把邮件卡片撑得比正文还长。 */
     .mail-match-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -1414,6 +1415,14 @@
     .mail-fields-note { color: var(--muted); font-size: 11.5px; }
     .mail-fields-empty { color: var(--muted); font-size: 13px; }
     .mail-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .mail-link-list { display: grid; gap: 4px; max-height: 330px; overflow-y: auto; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); }
+    .mail-link-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px 10px; border-radius: var(--r-md); cursor: pointer; background: var(--surface); }
+    .mail-link-item:hover { background: var(--wash-3); }
+    .mail-link-item input { flex: 0 0 auto; margin-top: 3px; accent-color: var(--accent); }
+    .mail-link-item span { min-width: 0; display: grid; gap: 3px; }
+    .mail-link-item strong { overflow-wrap: anywhere; font-size: 13px; color: var(--ink-2); }
+    .mail-link-item small { color: var(--muted); font-size: 11.5px; }
+    .mail-link-empty { padding: 24px 12px; text-align: center; color: var(--muted); font-size: 13px; }
     .mail-key-row { display: flex; gap: 8px; align-items: center; }
     .mail-key-row .control { flex: 1 1 auto; min-width: 0; }
 
@@ -2058,6 +2067,16 @@
       <div class="capture-status" id="mailCfgStatus" role="status" aria-live="polite"></div>
     </div>
     <div class="modal-actions"><button class="btn" id="cancelMailSettingsDialog" type="button">取消</button><button class="btn btn-primary" id="saveMailSettingsBtn" type="button">保存设置</button></div>
+  </dialog>
+
+  <dialog id="mailLinkDialog" aria-labelledby="mailLinkTitle">
+    <div class="modal-head"><h2 id="mailLinkTitle">选择已有投递记录</h2><button class="close-btn" id="closeMailLinkDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note" id="mailLinkHint">这封邮件没有自动匹配到台账。请选择要关联的已有记录；可同时选择多个岗位。</p>
+      <div class="field"><label for="mailLinkSearch">搜索台账</label><input class="control" id="mailLinkSearch" type="search" autocomplete="off" placeholder="公司、机构、岗位或城市"></div>
+      <div class="mail-link-list" id="mailLinkList" role="group" aria-label="可关联的投递记录"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelMailLinkBtn" type="button">取消</button><button class="btn" id="mailLinkOnlyBtn" type="button">仅关联邮件</button><button class="btn btn-primary" id="mailLinkApplyBtn" type="button">关联并应用字段</button></div>
   </dialog>
 
   <dialog id="installDialog">
@@ -6273,16 +6292,32 @@
         if (isShortCjkSlug(na) && isShortCjkSlug(nb) && na[0] !== nb[0]) return 0;
         return diceCoefficient(na, nb);
       }
-      // 公司名模糊匹配台账：阈值 ≥0.6，按分数（再按岗位命中）降序；返回 0/1/多 候选
+      // 公司名模糊匹配台账：阈值 ≥0.6，按分数（再按岗位命中）降序；返回 0/1/多 候选。
+      // 机构 / 子公司是台账中 company 的补充维度：邮件里常出现「招银网络科技」这类
+      // 机构名，而台账规范录法是 company=「招商银行」、orgUnit=「招银网络科技」。
+      // 这里把三种名称都作为候选：公司名、机构名、公司+机构组合；仍只返回候选，最终
+      // 是否应用由用户复核，避免把相似机构静默写进错误记录。
       function matchRecordsByCompany(company, position, list) {
         const arr = Array.isArray(list) ? list : [];
         if (!normalizeCompanySlug(company)) return [];
         const pos = String(position || '').trim().toLowerCase();
-        const posHit = rec => (pos && String(rec.position || '').toLowerCase().includes(pos)) ? 1 : 0;
+        const posHit = rec => {
+          if (!pos) return 0;
+          const recordPosition = String(rec.position || '').trim().toLowerCase();
+          if (recordPosition === pos) return 2;
+          return recordPosition.includes(pos) || pos.includes(recordPosition) ? 1 : 0;
+        };
         return arr
-          .map(rec => ({ rec, score: companyMatchScore(company, rec.company) }))
+          .map(rec => {
+            const companyName = String(rec.company || '').trim();
+            const orgUnit = String(rec.orgUnit || '').trim();
+            const names = [companyName, orgUnit, [companyName, orgUnit].filter(Boolean).join(' · ')];
+            const score = Math.max(...names.filter(Boolean).map(name => companyMatchScore(company, name)), 0);
+            return { rec, score };
+          })
           .filter(x => x.score >= 0.6)
-          .sort((a, b) => (b.score - a.score) || (posHit(b.rec) - posHit(a.rec)))
+          .sort((a, b) => (b.score - a.score) || (posHit(b.rec) - posHit(a.rec))
+            || (Number(b.rec.updatedAt) || 0) - (Number(a.rec.updatedAt) || 0))
           .map(x => x.rec);
       }
       // 过滤掉本机已应用/已忽略的建议（按 id）
@@ -6418,6 +6453,10 @@
       // 刻意**不**持久化到 localStorage：重载后还留着上次的草稿更容易 confusing，
       // 而"这次会话里改的"才是用户的心智模型。apply / dismiss 后清掉对应条目。
       const mailDrafts = new Map();
+      // 手动关联只保存在当前会话：真正的关联结果会写入目标记录的 mailRefs。
+      // 不把 target id 写回 mail-suggestions.json，避免下一次 Action 运行覆盖网页端选择。
+      const mailManualTargets = new Map();
+      let mailLinkDialogId = '';
 
       // 阶段下拉的选项：预设 + 当前值。自定义阶段不在 STAGE_PRESETS 里也必须保留，
       // 否则一编辑就被冲成预设里的某一项（静默改数据）。
@@ -6508,7 +6547,10 @@
           const boxOn = sameGroup ? ' checked' : '';
           matchHtml = `<div class="mail-match multi"><div class="mail-match-head"><span>匹配到 ${orderedMatches.length} 条台账（同公司多岗位），<strong>可多选</strong>：</span><button class="text-button" type="button" data-mail-action="toggle-all" data-mail-id="${escapeHtml(s.id)}">全选 / 全不选</button></div><div class="mail-target-list">${orderedMatches.map(r => `<label class="mail-target-item"><input type="checkbox" class="mail-target-check" value="${escapeHtml(r.id)}"${boxOn}><span>${escapeHtml(r.company)} · ${escapeHtml(positionWithUnit(r.position, r.orgUnit, true))} · ${escapeHtml(r.stage)}</span></label>`).join('')}</div>${sameGroup ? '' : '<div class="mail-match-warn">候选跨了不同公司，已默认全不勾——请逐条确认再应用。</div>'}</div>`;
         } else {
-          matchHtml = '<div class="mail-match none">未匹配到台账记录——可「新建记录」并预填邮件信息（走人工补全），或忽略。</div>';
+          const manualIds = mailManualTargets.get(String(s.id)) || [];
+          matchHtml = manualIds.length
+            ? `<div class="mail-match manual"><strong>已手动选择 ${manualIds.length} 条台账记录</strong>，可继续应用邮件字段；也可以重新选择。</div>`
+            : '<div class="mail-match none">未自动匹配到台账记录——可以选择已有记录，或新建记录。</div>';
         }
 
         // 字段值可**就地编辑**（v4.16.0）。此前只有「要 / 不要」两个选择，
@@ -6593,8 +6635,9 @@
           ? `<div class="mail-fields">${fields.map(f => `<div class="mail-field" data-field="${f.key}"><label class="mail-field-check"><input type="checkbox" data-mail-field="${f.key}" ${checked ? 'checked' : ''}><span>${escapeHtml(f.label)}</span></label><div class="mail-field-edit">${f.editor}</div></div>`).join('')}<div class="mail-fields-foot"><span class="mail-fields-note">改动会写入<strong>已勾选的全部目标台账</strong>；只在本次会话内保留。</span><button class="text-button" type="button" data-mail-action="reset-fields" data-mail-id="${escapeHtml(s.id)}">还原 AI 原值</button></div></div>`
           : '<div class="mail-fields mail-fields-empty">这封邮件没有可直接应用的字段。</div>';
 
-        const primaryBtn = matches.length === 0
-          ? `<button class="btn btn-small btn-primary" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`
+        const manualTargetIds = mailManualTargets.get(String(s.id)) || [];
+        const primaryBtn = matches.length === 0 && !manualTargetIds.length
+          ? `<button class="btn btn-small btn-primary" data-mail-action="select-target" data-mail-id="${escapeHtml(s.id)}" type="button">选择已有记录</button><button class="btn btn-small" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`
           : `<button class="btn btn-small btn-primary" data-mail-action="apply" data-mail-id="${escapeHtml(s.id)}" type="button">应用所选</button>`;
 
         return `<article class="mail-card${lowConf ? ' low-conf' : ''}" data-mail-id="${escapeHtml(s.id)}">
@@ -6699,7 +6742,10 @@
         const card = document.querySelector(`.mail-card[data-mail-id="${CSS.escape(String(id))}"]`);
         if (!card) return;
         // 目标可以是多条（多选）。单命中那一支仍走 .mail-match.single 的 data-target-id。
-        const targetIds = [...card.querySelectorAll('.mail-target-check:checked')].map(i => i.value);
+        const manualTargetIds = mailManualTargets.get(String(id)) || [];
+        const targetIds = manualTargetIds.length
+          ? manualTargetIds.slice()
+          : [...card.querySelectorAll('.mail-target-check:checked')].map(i => i.value);
         if (!targetIds.length) {
           const single = card.querySelector('.mail-match.single');
           if (single && single.dataset.targetId) targetIds.push(single.dataset.targetId);
@@ -6769,12 +6815,86 @@
         // v4.22.0：把邮件正文归档（同一封只存一份，多目标共享）。v4.23.0 起无条件归档正文。
         mailArchive = archiveSuggestionMail(mailArchive, s);
         markMailApplied(id);
+        mailManualTargets.delete(String(id));
         mailDrafts.delete(String(id));   // 已应用，草稿作废（否则下次这封邮件再出现会带着旧改动）
         render();
         for (const rec of targets) flashRow(rec.id);
         renderMailView();
         updateMailBadge();
         if (milestoneApplied && offerHit) playOfferStamp();
+      }
+
+      function mailLinkCandidates(query) {
+        const q = String(query || '').trim().toLocaleLowerCase('zh-CN');
+        return (Array.isArray(records) ? records : [])
+          .filter(record => {
+            if (!q) return true;
+            const haystack = [record.company, record.orgUnit, record.position, record.city, record.stage]
+              .map(value => String(value || '').toLocaleLowerCase('zh-CN')).join(' ');
+            return haystack.includes(q);
+          })
+          .slice()
+          .sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0));
+      }
+
+      function renderMailLinkCandidates() {
+        const list = $('#mailLinkList');
+        if (!list) return;
+        const selected = new Set(mailManualTargets.get(String(mailLinkDialogId)) || []);
+        const rows = mailLinkCandidates($('#mailLinkSearch')?.value);
+        list.innerHTML = rows.length
+          ? rows.map(record => {
+            const label = `${record.company || '未填写公司'} · ${positionWithUnit(record.position || '未填写岗位', record.orgUnit, true)}`;
+            const detail = [record.city, record.stage, record.applicationDate].filter(Boolean).join(' · ');
+            return `<label class="mail-link-item"><input type="checkbox" value="${escapeHtml(record.id)}"${selected.has(String(record.id)) ? ' checked' : ''}><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail || '暂无城市、阶段或投递日期')}</small></span></label>`;
+          }).join('')
+          : '<div class="mail-link-empty">没有找到匹配的投递记录</div>';
+      }
+
+      function openMailLinkDialog(id) {
+        const s = mailSuggestions.find(x => String(x.id) === String(id));
+        if (!s) return;
+        mailLinkDialogId = String(id);
+        if (!mailManualTargets.has(mailLinkDialogId)) mailManualTargets.set(mailLinkDialogId, []);
+        $('#mailLinkSearch').value = '';
+        $('#mailLinkHint').textContent = `邮件识别为「${s.company || '未填写公司'}${s.position ? ` · ${s.position}` : ''}」。请选择要关联的已有投递记录，可同时选择多个岗位。`;
+        renderMailLinkCandidates();
+        $('#mailLinkDialog').showModal();
+      }
+
+      function selectedMailLinkIds() {
+        return [...$('#mailLinkList').querySelectorAll('input[type="checkbox"]:checked')].map(input => input.value);
+      }
+
+      function closeMailLinkDialog() {
+        if ($('#mailLinkDialog').open) $('#mailLinkDialog').close();
+        mailLinkDialogId = '';
+      }
+
+      function finishManualMailLink(mode) {
+        const id = String(mailLinkDialogId || '');
+        const s = mailSuggestions.find(x => String(x.id) === id);
+        const ids = selectedMailLinkIds();
+        if (!s || !ids.length) { showToast('请至少选择一条投递记录'); return; }
+        mailManualTargets.set(id, ids);
+        closeMailLinkDialog();
+        if (mode === 'apply') {
+          renderMailView();
+          applyMailSuggestion(id);
+          return;
+        }
+        const targets = ids.map(targetId => records.find(record => String(record.id) === String(targetId))).filter(Boolean);
+        for (const record of targets) {
+          linkMailToRecord(record, s);
+          record.updatedAt = Date.now();
+        }
+        saveRecords(targets.length > 1 ? `已关联邮件到 ${targets.length} 条投递记录` : `已关联邮件到：${targets[0].company}`);
+        mailArchive = archiveSuggestionMail(mailArchive, s);
+        markMailApplied(id);
+        mailManualTargets.delete(id);
+        renderMailView();
+        updateMailBadge();
+        showToast(targets.length > 1 ? `已关联 ${targets.length} 条投递记录` : '已关联投递记录');
       }
 
       function dismissMailSuggestion(id) {
@@ -8413,6 +8533,7 @@
         const id = btn.dataset.mailId;
         const action = btn.dataset.mailAction;
         if (action === 'apply') applyMailSuggestion(id);
+        else if (action === 'select-target') openMailLinkDialog(id);
         else if (action === 'new') openMailSeedDialog(id);
         else if (action === 'dismiss') dismissMailSuggestion(id);
         else if (action === 'reset-fields') {
@@ -8449,6 +8570,12 @@
         syncNow('manual');
       });
       $('#mailSettingsBtn').addEventListener('click', openMailSettings);
+      $('#mailLinkSearch').addEventListener('input', renderMailLinkCandidates);
+      $('#mailLinkOnlyBtn').addEventListener('click', () => finishManualMailLink('link'));
+      $('#mailLinkApplyBtn').addEventListener('click', () => finishManualMailLink('apply'));
+      $('#closeMailLinkDialog').addEventListener('click', closeMailLinkDialog);
+      $('#cancelMailLinkBtn').addEventListener('click', closeMailLinkDialog);
+      $('#mailLinkDialog').addEventListener('click', event => { if (event.target === $('#mailLinkDialog')) closeMailLinkDialog(); });
       $('#syncMailKeyGenBtn').addEventListener('click', generateMailEncKey);
       $('#saveMailSettingsBtn').addEventListener('click', saveMailSettings);
       $('#closeMailSettingsDialog').addEventListener('click', () => $('#mailSettingsDialog').close());

@@ -574,6 +574,16 @@
     <div class="modal-actions"><button class="btn" id="cancelMailSettingsDialog" type="button">取消</button><button class="btn btn-primary" id="saveMailSettingsBtn" type="button">保存设置</button></div>
   </dialog>
 
+  <dialog id="mailLinkDialog" aria-labelledby="mailLinkTitle">
+    <div class="modal-head"><h2 id="mailLinkTitle">选择已有投递记录</h2><button class="close-btn" id="closeMailLinkDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note" id="mailLinkHint">这封邮件没有自动匹配到台账。请选择要关联的已有记录；可同时选择多个岗位。</p>
+      <div class="field"><label for="mailLinkSearch">搜索台账</label><input class="control" id="mailLinkSearch" type="search" autocomplete="off" placeholder="公司、机构、岗位或城市"></div>
+      <div class="mail-link-list" id="mailLinkList" role="group" aria-label="可关联的投递记录"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelMailLinkBtn" type="button">取消</button><button class="btn" id="mailLinkOnlyBtn" type="button">仅关联邮件</button><button class="btn btn-primary" id="mailLinkApplyBtn" type="button">关联并应用字段</button></div>
+  </dialog>
+
   <dialog id="installDialog">
     <div class="modal-head"><h2>安装到手机桌面</h2><button class="close-btn" id="closeInstallDialog" type="button" aria-label="关闭">×</button></div>
     <div class="form-body">

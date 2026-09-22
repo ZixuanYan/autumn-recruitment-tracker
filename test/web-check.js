@@ -147,6 +147,14 @@ check('matchRecordsByCompany 多命中（同名不同岗位）', () => {
   assert.ok(hits.length >= 2, `期望多命中，实际 ${hits.length}`);
 });
 
+check('matchRecordsByCompany 可用机构/子公司名命中台账', () => {
+  const { matchRecordsByCompany } = helpers;
+  const records = [{ id: 'unit-1', company: '招商银行', orgUnit: '招银网络科技', position: '产品经理' }];
+  const hits = matchRecordsByCompany('招银网络科技', '产品经理', records);
+  assert.strictEqual(hits.length, 1);
+  assert.strictEqual(hits[0].id, 'unit-1');
+});
+
 check('matchRecordsByCompany 0 命中', () => {
   const { matchRecordsByCompany } = helpers;
   const records = [{ id: 'x', company: '美团', position: '产品' }];

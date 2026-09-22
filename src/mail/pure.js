@@ -63,16 +63,32 @@
         if (isShortCjkSlug(na) && isShortCjkSlug(nb) && na[0] !== nb[0]) return 0;
         return diceCoefficient(na, nb);
       }
-      // 公司名模糊匹配台账：阈值 ≥0.6，按分数（再按岗位命中）降序；返回 0/1/多 候选
+      // 公司名模糊匹配台账：阈值 ≥0.6，按分数（再按岗位命中）降序；返回 0/1/多 候选。
+      // 机构 / 子公司是台账中 company 的补充维度：邮件里常出现「招银网络科技」这类
+      // 机构名，而台账规范录法是 company=「招商银行」、orgUnit=「招银网络科技」。
+      // 这里把三种名称都作为候选：公司名、机构名、公司+机构组合；仍只返回候选，最终
+      // 是否应用由用户复核，避免把相似机构静默写进错误记录。
       function matchRecordsByCompany(company, position, list) {
         const arr = Array.isArray(list) ? list : [];
         if (!normalizeCompanySlug(company)) return [];
         const pos = String(position || '').trim().toLowerCase();
-        const posHit = rec => (pos && String(rec.position || '').toLowerCase().includes(pos)) ? 1 : 0;
+        const posHit = rec => {
+          if (!pos) return 0;
+          const recordPosition = String(rec.position || '').trim().toLowerCase();
+          if (recordPosition === pos) return 2;
+          return recordPosition.includes(pos) || pos.includes(recordPosition) ? 1 : 0;
+        };
         return arr
-          .map(rec => ({ rec, score: companyMatchScore(company, rec.company) }))
+          .map(rec => {
+            const companyName = String(rec.company || '').trim();
+            const orgUnit = String(rec.orgUnit || '').trim();
+            const names = [companyName, orgUnit, [companyName, orgUnit].filter(Boolean).join(' · ')];
+            const score = Math.max(...names.filter(Boolean).map(name => companyMatchScore(company, name)), 0);
+            return { rec, score };
+          })
           .filter(x => x.score >= 0.6)
-          .sort((a, b) => (b.score - a.score) || (posHit(b.rec) - posHit(a.rec)))
+          .sort((a, b) => (b.score - a.score) || (posHit(b.rec) - posHit(a.rec))
+            || (Number(b.rec.updatedAt) || 0) - (Number(a.rec.updatedAt) || 0))
           .map(x => x.rec);
       }
       // 过滤掉本机已应用/已忽略的建议（按 id）
