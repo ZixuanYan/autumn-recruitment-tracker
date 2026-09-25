@@ -364,7 +364,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.33.0';
+      const APP_VERSION = '4.34.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -440,6 +440,7 @@
       let mailConfig = null;       // Gist 里的 mail-config.json（内存态，供设置面板回填）
       let mailNeedKey = false;     // 邮件文件已加密但本机未填解密密钥
       let pendingMailSeedId = null; // 「新建记录」交接到弹窗，保存成功后才标记该建议为已应用
+      let pendingRecordImport = null; // 追加导入预览：只在确认前保存在内存，不写入本地
       // 邮件正文归档（v4.22.0）：按 mailId 索引、随加密信封同步，供记录详情回看邮件原文
       let mailArchive = {};
 
@@ -1734,6 +1735,176 @@
         } catch (error) {
           alert(`导入失败：${error.message || '这不是有效的秋招投递备份文件。'}`);
         }
+      }
+
+      // 追加导入投递记录：与「导入备份」严格分开，永远不替换现有台账。
+      // 输入可以是简单 records 数组，也可以是现有 JSON 备份信封；只取 records，避免把对方的
+      // 简历、同步配置、邮件归档和删除墓碑带进来。新记录重新生成本地 ID，跨用户导入不会污染主键。
+      function importRecordSource(parsed) {
+        const list = Array.isArray(parsed) ? parsed : parsed && parsed.records;
+        if (!Array.isArray(list) || list.some(item => !item || typeof item !== 'object')) throw new Error('文件中没有有效投递记录');
+        if (list.length > 2000) throw new Error('单次最多导入 2000 条记录');
+        return list;
+      }
+
+      // 外部台账常用字段名不完全一致，导入时做一层保守别名映射；未知字段仍交给
+      // normalizeRecord 丢弃，避免把任意 JSON 字段写进本地 schema。
+      function normalizeImportedShape(item) {
+        const source = item && typeof item === 'object' ? item : {};
+        const pick = (...keys) => {
+          for (const key of keys) {
+            if (source[key] !== undefined && source[key] !== null && String(source[key]).trim() !== '') return source[key];
+          }
+          return '';
+        };
+        return {
+          ...source,
+          company: pick('company', 'companyName', 'employer', 'organization', '公司', '企业', '单位'),
+          orgUnit: pick('orgUnit', 'org', 'subsidiary', 'institution', 'department', '机构', '子公司', '事业部'),
+          position: pick('position', 'job', 'jobTitle', 'role', '岗位', '职位'),
+          city: pick('city', 'location', 'workCity', '地点', '城市'),
+          applicationDate: pick('applicationDate', 'applyDate', 'appliedAt', 'date', '投递日期', '申请日期'),
+          stage: pick('stage', 'status', 'progress', '阶段', '状态'),
+          companyType: pick('companyType', 'employerType', 'type', '企业性质'),
+          applicationUrl: pick('applicationUrl', 'url', 'link', '投递网址'),
+          recentSchedule: pick('recentSchedule', 'schedule', 'recentEvent', '最近安排'),
+          nextAction: pick('nextAction', 'action', 'nextStep', '下一步'),
+          referral: pick('referral', 'referrer', '内推人', '推荐人'),
+          salary: pick('salary', 'compensation', '薪资'),
+          timeline: Array.isArray(source.timeline) ? source.timeline : (Array.isArray(source.milestones) ? source.milestones : source.timeline),
+          events: Array.isArray(source.events) ? source.events : (Array.isArray(source.scheduleEvents) ? source.scheduleEvents : source.events)
+        };
+      }
+
+      function mergeImportedRecord(existing, incoming) {
+        const scalarFields = ['company', 'orgUnit', 'position', 'city', 'applicationDate', 'applicationUrl', 'recentSchedule', 'nextAction', 'referral', 'salary', 'companyType'];
+        const merged = { ...existing };
+        scalarFields.forEach(key => {
+          const value = String(incoming[key] || '').trim();
+          if (value) merged[key] = value;
+        });
+        merged.intent = Math.max(Number(existing.intent) || 0, Number(incoming.intent) || 0);
+        merged.updatedAt = Math.max(Number(existing.updatedAt) || 0, Number(incoming.updatedAt) || 0, Date.now());
+        merged.timeline = sanitizeTimeline([...(existing.timeline || []), ...(incoming.timeline || [])]);
+        merged.events = sanitizeEvents([...(existing.events || []), ...(incoming.events || [])]);
+        const notes = [...(existing.notes || []), ...(incoming.notes || [])];
+        const noteSeen = new Set();
+        merged.notes = notes.filter(note => {
+          const key = `${note.at || ''}|${note.text || ''}`;
+          if (!note.text || noteSeen.has(key)) return false;
+          noteSeen.add(key);
+          return true;
+        }).slice(-200);
+        merged.mailRefs = unionMailRefs(existing.mailRefs, incoming.mailRefs);
+        return normalizeRecord(merged);
+      }
+
+      function classifyImportedRecords(source) {
+        const classified = [];
+        const comparison = records.slice();
+        for (const raw of source) {
+          const candidate = normalizeRecord(normalizeImportedShape(raw));
+          const missing = !candidate.company.trim() || !candidate.position.trim() || !candidate.applicationDate.trim();
+          const hit = findDuplicateRecord(comparison, candidate);
+          const currentHit = findDuplicateRecord(records, candidate);
+          const exact = hit && hit.mode === 'duplicate';
+          const review = !!hit && !exact;
+          const decision = exact ? 'skip' : 'new';
+          const item = {
+            candidate,
+            match: currentHit && currentHit.matches && currentHit.matches[0] ? currentHit.matches[0] : null,
+            kind: missing ? 'incomplete' : (exact ? 'duplicate' : (review ? 'review' : 'new')),
+            decision
+          };
+          classified.push(item);
+          // 将本轮已看到的记录加入比较集，避免同一文件里的重复记录全部被当作新增。
+          comparison.push(candidate);
+        }
+        return classified;
+      }
+
+      function importDecisionOptions(item) {
+        if (item.kind === 'duplicate') {
+          return item.match
+            ? `<option value="skip">跳过重复</option><option value="merge">合并到已有记录</option><option value="new">仍作为新记录</option>`
+            : `<option value="skip">跳过文件内重复</option><option value="new">仍作为新记录</option>`;
+        }
+        if (item.kind === 'review') {
+          return `<option value="new">作为新记录</option><option value="merge">合并到疑似记录</option><option value="skip">跳过</option>`;
+        }
+        return `<option value="new">导入新记录</option><option value="skip">跳过</option>`;
+      }
+
+      function renderRecordImportPreview() {
+        const state = pendingRecordImport;
+        if (!state) return;
+        const counts = { new: 0, duplicate: 0, review: 0, incomplete: 0 };
+        state.items.forEach(item => { counts[item.kind] += 1; });
+        $('#recordImportSummary').textContent = `文件共 ${state.items.length} 条：${counts.new} 条可新增，${counts.duplicate} 条完全重复，${counts.review} 条疑似已有记录，${counts.incomplete} 条字段不完整。确认后只追加到当前台账，不会覆盖现有记录。`;
+        $('#recordImportLegend').innerHTML = `<span><b>${counts.new}</b> 可新增</span><span><b>${counts.duplicate}</b> 重复（默认跳过）</span><span><b>${counts.review}</b> 疑似冲突（请确认）</span><span><b>${counts.incomplete}</b> 缺字段（可导入）</span>`;
+        $('#recordImportList').innerHTML = state.items.map((item, index) => {
+          const record = item.candidate;
+          const match = item.match;
+          const kindText = item.kind === 'duplicate' ? '完全重复' : item.kind === 'review' ? '疑似已有记录' : item.kind === 'incomplete' ? '字段不完整' : '可新增';
+          const detail = [record.city || '未填写城市', record.applicationDate || '未填写日期', record.stage || '待投递'].join(' · ');
+          const matchText = match ? `当前已有：${match.company || '未填写'} · ${match.position || '未填写'}${match.orgUnit ? ` · ${match.orgUnit}` : ''}` : '';
+          return `<div class="record-import-row is-${item.kind}" data-import-index="${index}">
+            <div class="record-import-main"><div class="record-import-title"><span>${escapeHtml(record.company || '未填写公司')} · ${escapeHtml(record.position || '未填写岗位')}</span><small>${kindText}</small></div><div class="record-import-meta">${escapeHtml(detail)}${record.orgUnit ? ` · ${escapeHtml(record.orgUnit)}` : ''}${matchText ? `<br>${escapeHtml(matchText)}` : ''}</div></div>
+            <select class="control record-import-decision" data-import-decision="${index}" aria-label="导入处理方式">${importDecisionOptions(item)}</select>
+          </div>`;
+        }).join('');
+        $('#recordImportList').querySelectorAll('[data-import-decision]').forEach(select => {
+          select.value = state.items[Number(select.dataset.importDecision)]?.decision || 'new';
+        });
+      }
+
+      async function importRecordsFile(event) {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+          const parsed = JSON.parse(await file.text());
+          pendingRecordImport = { items: classifyImportedRecords(importRecordSource(parsed)), fileName: file.name };
+          renderRecordImportPreview();
+          $('#recordImportDialog').showModal();
+        } catch (error) {
+          alert(`导入失败：${error.message || '这不是有效的投递记录 JSON 文件。'}`);
+        }
+      }
+
+      function closeRecordImportDialog() {
+        pendingRecordImport = null;
+        const dialog = $('#recordImportDialog');
+        if (dialog.open) dialog.close();
+      }
+
+      async function confirmRecordImport() {
+        const state = pendingRecordImport;
+        if (!state) return;
+        $('#recordImportList').querySelectorAll('[data-import-decision]').forEach(select => {
+          const item = state.items[Number(select.dataset.importDecision)];
+          if (item) item.decision = select.value;
+        });
+        const selected = state.items.filter(item => item.decision !== 'skip');
+        if (!selected.length) { closeRecordImportDialog(); return showToast('没有选择要导入的记录'); }
+        if (!await confirmInApp(`将追加 ${selected.length} 条记录，完全跳过当前数据，不会导入对方的简历或邮件归档。是否继续？`, { title: '确认追加导入', confirmText: '追加导入' })) return;
+        downloadPayload(createEnvelope(records), `秋招投递-导入前备份-${localDateInput(new Date())}.json`);
+        let added = 0, merged = 0, skipped = 0;
+        for (const item of state.items) {
+          if (item.decision === 'skip') { skipped += 1; continue; }
+          if (item.decision === 'merge' && item.match) {
+            records = records.map(record => record.id === item.match.id ? mergeImportedRecord(record, item.candidate) : record);
+            merged += 1;
+            continue;
+          }
+          records.unshift(normalizeRecord({ ...item.candidate, id: cryptoId() }));
+          added += 1;
+        }
+        setSampleMode(false);
+        saveRecords(`已追加导入 ${added} 条，合并 ${merged} 条，跳过 ${skipped} 条`);
+        closeRecordImportDialog();
+        render();
+        updateSafetyStatus();
       }
 
       async function restorePreviousSnapshot() {

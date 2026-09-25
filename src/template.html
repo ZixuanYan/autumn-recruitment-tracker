@@ -501,12 +501,27 @@
         <button class="btn btn-primary" id="setupBackupBtn" type="button">设置自动备份文件</button>
         <button class="btn" id="backupNowBtn" type="button">立即同步备份</button>
         <button class="btn" id="importBtn" type="button">导入备份文件</button>
+        <button class="btn" id="importRecordsBtn" type="button">导入投递记录</button>
         <button class="btn" id="restoreSnapshotBtn" type="button">恢复上一个快照</button>
       </div>
       <input id="importFileInput" type="file" accept="application/json,.json" hidden>
+      <input id="importRecordsFileInput" type="file" accept="application/json,.json" hidden>
       <p class="safety-footnote">本地备份不上传网络。若电脑和备份文件同时损坏，仍无法恢复；重要数据建议把备份文件另存到你信任的移动硬盘或个人云盘。</p>
     </div>
     <div class="modal-actions"><button class="btn" id="doneSafetyDialog" type="button">完成</button></div>
+  </dialog>
+
+  <dialog id="recordImportDialog">
+    <div class="modal-head"><h2>导入投递记录</h2><button class="close-btn" id="closeRecordImportDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body record-import-body">
+      <p class="capture-note" id="recordImportSummary">正在读取文件…</p>
+      <div class="record-import-legend" id="recordImportLegend"></div>
+      <div class="record-import-list" id="recordImportList"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="cancelRecordImportBtn" type="button">取消</button>
+      <button class="btn btn-primary" id="confirmRecordImportBtn" type="button">确认追加导入</button>
+    </div>
   </dialog>
 
   <dialog id="syncDialog">

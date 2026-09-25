@@ -2097,6 +2097,12 @@
       $('#backupNowBtn').addEventListener('click', backupNow);
       $('#importBtn').addEventListener('click', () => $('#importFileInput').click());
       $('#importFileInput').addEventListener('change', importBackupFile);
+      $('#importRecordsBtn').addEventListener('click', () => $('#importRecordsFileInput').click());
+      $('#importRecordsFileInput').addEventListener('change', importRecordsFile);
+      $('#closeRecordImportDialog').addEventListener('click', closeRecordImportDialog);
+      $('#cancelRecordImportBtn').addEventListener('click', closeRecordImportDialog);
+      $('#confirmRecordImportBtn').addEventListener('click', confirmRecordImport);
+      $('#recordImportDialog').addEventListener('click', event => { if (event.target === $('#recordImportDialog')) closeRecordImportDialog(); });
       $('#restoreSnapshotBtn').addEventListener('click', restorePreviousSnapshot);
       $('#toolSyncBtn').addEventListener('click', openSyncDialog);
       $('#closeSyncDialog').addEventListener('click', () => $('#syncDialog').close());

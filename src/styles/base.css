@@ -209,6 +209,23 @@
     .safety-state.warning { color: var(--amber); }
     .safety-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .safety-actions .btn { width: 100%; }
+    .record-import-body { padding-bottom: 14px; }
+    .record-import-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+    .record-import-legend span { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); }
+    .record-import-legend b { color: var(--ink); }
+    .record-import-list { display: grid; gap: 8px; max-height: min(52vh, 480px); overflow: auto; }
+    .record-import-row { display: grid; grid-template-columns: minmax(0, 1fr) 138px; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .record-import-row.is-duplicate { background: color-mix(in srgb, var(--surface-2) 82%, var(--muted) 18%); }
+    .record-import-row.is-review { border-color: color-mix(in srgb, var(--warn) 42%, var(--line)); background: color-mix(in srgb, var(--warn-soft) 55%, var(--surface)); }
+    .record-import-row.is-incomplete { border-color: color-mix(in srgb, var(--warn) 32%, var(--line)); }
+    .record-import-main { min-width: 0; }
+    .record-import-title { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-weight: 600; }
+    .record-import-title small { color: var(--muted); font-weight: 400; }
+    .record-import-meta { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+    .record-import-decision { width: 100%; min-width: 0; }
+    @media (max-width: 620px) {
+      .record-import-row { grid-template-columns: 1fr; gap: 8px; }
+    }
     .safety-footnote { margin: 15px 0 0; color: var(--muted); font-size: 12px; }
 
     .sync-fallback { margin-top: 17px; padding-top: 17px; border-top: 1px solid var(--line); }
