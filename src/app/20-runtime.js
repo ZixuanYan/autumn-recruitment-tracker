@@ -214,9 +214,13 @@
           : '<div class="mail-fields mail-fields-empty">这封邮件没有可直接应用的字段。</div>';
 
         const manualTargetIds = mailManualTargets.get(String(s.id)) || [];
+        // 自动匹配只是候选，不应阻断用户新建记录：机构名、子公司名或相似企业名
+        // 都可能让候选算法命中错误台账。已有候选时提供「应用 / 重新选择 / 新建」
+        // 三条路径；没有候选时提供「选择 / 新建」。手动关联后仍保留重新选择和新建，
+        // 避免一次误选把邮件卡片锁死在「应用所选」状态。
         const primaryBtn = matches.length === 0 && !manualTargetIds.length
           ? `<button class="btn btn-small btn-primary" data-mail-action="select-target" data-mail-id="${escapeHtml(s.id)}" type="button">选择已有记录</button><button class="btn btn-small" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`
-          : `<button class="btn btn-small btn-primary" data-mail-action="apply" data-mail-id="${escapeHtml(s.id)}" type="button">应用所选</button>`;
+          : `<button class="btn btn-small btn-primary" data-mail-action="apply" data-mail-id="${escapeHtml(s.id)}" type="button">应用所选</button><button class="btn btn-small" data-mail-action="select-target" data-mail-id="${escapeHtml(s.id)}" type="button">重新选择记录</button><button class="btn btn-small" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`;
 
         return `<article class="mail-card${lowConf ? ' low-conf' : ''}" data-mail-id="${escapeHtml(s.id)}">
           <div class="mail-card-top">

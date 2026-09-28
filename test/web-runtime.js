@@ -418,6 +418,22 @@ check('0 命中 → none + 新建记录按钮', () => {
   assert.ok(h.includes('mail-match none'));
   assert.ok(h.includes('data-mail-action="new"'));
 });
+check('自动命中也保留重新选择与新建记录入口', () => {
+  sandbox.records = [{ id: 'r1', company: '腾讯', position: '后端', stage: '一面' }];
+  const h = sandbox.mailCardHtml({ ...baseSug, company: '腾讯', position: '后端' });
+  assert.ok(h.includes('data-mail-action="apply"'), '自动命中应保留应用入口');
+  assert.ok(h.includes('data-mail-action="select-target"'), '自动命中应允许重新选择记录');
+  assert.ok(h.includes('data-mail-action="new"'), '自动命中也必须允许新建记录');
+});
+check('多条自动命中仍允许新建记录', () => {
+  sandbox.records = [
+    { id: 'r1', company: '腾讯', position: '后端', stage: '一面', updatedAt: 2 },
+    { id: 'r2', company: '腾讯', position: '产品', stage: '已投递', updatedAt: 1 }
+  ];
+  const h = sandbox.mailCardHtml({ ...baseSug, company: '腾讯', position: '' });
+  assert.ok(h.includes('mail-match multi'));
+  assert.ok(h.includes('data-mail-action="new"'), '多命中也必须允许新建记录');
+});
 check('低置信 → low-conf 且默认不勾选', () => {
   sandbox.records = [{ id: 'r1', company: '腾讯', position: '后端', stage: '一面' }];
   const h = sandbox.mailCardHtml({ ...baseSug, confidence: 0.4 });
