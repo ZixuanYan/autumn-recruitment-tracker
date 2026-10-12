@@ -33,9 +33,9 @@
     const exportedAt = String(options.exportedAt || new Date().toISOString());
     const appVersion = String(options.appVersion || '');
     const groups = groupsOf(list);
-    const stageCounts = new Map();
-    list.forEach(r => stageCounts.set(currentStage(r), (stageCounts.get(currentStage(r)) || 0) + 1));
-    const stages = [...stageCounts.entries()].sort((a, b) => stageRank(a[0]) - stageRank(b[0]) || a[0].localeCompare(b[0], 'zh-CN'));
+    const stageGroups = typeof computeStageDistribution === 'function'
+      ? computeStageDistribution(list)
+      : [...new Set(list.map(currentStage))].sort((a, b) => stageRank(a) - stageRank(b)).map(group => ({ group, count: list.filter(r => currentStage(r) === group).length, details: [] }));
     const funnel = [
       ['投递', r => true],
       ['笔试 / 测评', r => timelineStages(r).some(s => ['测评', '笔试', '机试'].includes(s))],
@@ -58,7 +58,10 @@
     const sortedGroups = groupsOf(sorted, true);
     const rowNumbers = new Map(sorted.map((record, index) => [record, index + 1]));
     const metric = (label, value) => `<div class="metric"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;
-    const bars = stages.length ? stages.map(([name, count]) => `<div class="bar-row"><span>${esc(name)}</span><b>${count}</b><i><em style="width:${Math.round(count / Math.max(1, list.length) * 100)}%"></em></i></div>`).join('') : '<p class="muted">暂无阶段数据</p>';
+    const bars = stageGroups.length ? stageGroups.map(row => {
+      const detail = (row.details || []).map(item => `${item.label} ${item.count}`).join(' · ');
+      return `<div class="bar-row" title="${esc(`${row.group}：${row.count} 条${detail ? ` · ${detail}` : ''}`)}"><span>${esc(row.group)}</span><b>${row.count}</b><i><em style="width:${Math.round(row.count / Math.max(1, list.length) * 100)}%"></em></i></div>`;
+    }).join('') : '<p class="muted">暂无阶段数据</p>';
     const funnelHtml = funnel.map(([name, count], i) => `<div class="funnel"><span>${esc(name)}</span><strong>${count}</strong><small>${i ? `${Math.round(count / Math.max(1, list.length) * 100)}%` : '基准'}</small></div>`).join('');
     const cityMax = Math.max(1, ...namedCities.map(row => row.count));
     const cityHtml = namedCities.length ? namedCities.map(row => `<li class="city-row"><span class="city-name">${esc(row.name)}</span><span class="city-bar"><i style="width:${Math.round(row.count / cityMax * 100)}%"></i><em style="width:${Math.round(row.offers / cityMax * 100)}%"></em></span><b>${row.count}</b><small>${row.offers ? `Offer ${row.offers}` : '—'}</small></li>`).join('') : '<li>未填写 <b>0</b></li>';
@@ -67,9 +70,8 @@
     const typeLegend = companyTypes.map(type => `<li><span><i class="type-dot type-${esc(type)}"></i>${esc(type)}</span><b>${typeCounts[type]} 条</b></li>`).join('');
     const typeHtml = `<div class="type-bar">${typeBar}</div><ul class="type-list">${typeLegend}</ul>`;
     const rows = sortedGroups.map(group => {
-      const stageSummary = [...group.records.reduce((map, record) => map.set(currentStage(record), (map.get(currentStage(record)) || 0) + 1), new Map())]
-        .sort((a, b) => stageRank(a[0]) - stageRank(b[0]))
-        .map(([stage, count]) => `<small class="stage company-stage">${esc(stage)}${count > 1 ? ` × ${count}` : ''}</small>`).join('');
+      const stageSummary = (typeof computeStageDistribution === 'function' ? computeStageDistribution(group.records) : [])
+        .map(row => `<small class="stage company-stage" title="${esc((row.details || []).map(item => `${item.label} ${item.count}`).join(' · '))}">${esc(row.group)}${row.count > 1 ? ` × ${row.count}` : ''}</small>`).join('');
       const companyType = group.records.map(record => String(record.companyType || '').trim()).find(Boolean);
       const head = `<summary class="company-head"><div class="company-title"><span>${esc(group.label || '未填写公司')}${companyType ? ` <small class="tag">${esc(companyType)}</small>` : ''}</span><span class="company-meta">${group.records.length} 个岗位</span></div><div class="company-stages">${stageSummary}</div></summary>`;
       const body = group.records.map(r => {

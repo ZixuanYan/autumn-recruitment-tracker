@@ -113,6 +113,7 @@
             positions: g.members.map(i => ({
               record: i.record,
               settled: !!(i.settled || i.terminal),
+              terminal: !!i.terminal,
               overdue: !!i.overdue
             }))
           };

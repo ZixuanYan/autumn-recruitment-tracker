@@ -389,7 +389,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.34.0';
+      const APP_VERSION = '4.35.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2042,34 +2042,17 @@
       }
 
       function renderDistribution() {
-        const counts = {}, details = {};
-        const groupOf = stage => {
-          const s = String(stage || '待投递');
-          if (['测评', '笔试', '机试'].includes(s)) return '测评 / 笔试';
-          if (s.includes('面') || ['复试', '终面'].includes(s)) return '面试';
-          if (s === '已结束') return '已结束';
-          return s;
-        };
-        records.forEach(r => {
-          const group = groupOf(r.stage);
-          counts[group] = (counts[group] || 0) + 1;
-          if (!details[group]) details[group] = {};
-          const rawOutcome = String(r.timeline && r.timeline.length ? r.timeline[r.timeline.length - 1].outcome || '' : '').trim();
-          const outcome = ['rejected', 'withdrawn'].includes(rawOutcome) ? rawOutcome : '';
-          const detail = group === '已结束' ? (outcome ? (TERMINAL_OUTCOME_LABELS[outcome] || '未分类') : '未分类') : (r.stage || '待投递');
-          details[group][detail] = (details[group][detail] || 0) + 1;
-        });
-        let stages = Object.keys(counts).sort((a, b) => {
-          const rank = s => s === '测评 / 笔试' ? 2 : s === '面试' ? 5 : s === 'Offer' ? 13 : s === '已结束' ? 14 : stageOrder(s);
-          return rank(a) - rank(b) || a.localeCompare(b, 'zh-CN');
-        });
-        if (!stages.length) stages = ['待投递', '已投递', '一面', 'Offer', '已结束'];
-        const max = Math.max(1, ...stages.map(s => counts[s] || 0));
-        els.stageGrid.innerHTML = stages.map(stage => `
-          <div class="stage-cell" data-stage="${escapeHtml(stage)}" title="${escapeHtml(`${stage}：${counts[stage] || 0} 条 · ${Object.entries(details[stage] || {}).map(([k, v]) => `${k} ${v}`).join(' · ')}`)}">
-            <div class="stage-meta"><span>${escapeHtml(stage)}</span><strong>${counts[stage] || 0}</strong></div>
-            <div class="bar"><div class="bar-fill" data-stage="${escapeHtml(stage)}" style="width:${(counts[stage] || 0) / max * 100}%"></div></div>
-          </div>`).join('');
+        const distribution = typeof computeStageDistribution === 'function' ? computeStageDistribution(records) : [];
+        const fallback = ['待投递', '已投递', '面试', 'Offer', '已结束'].map(group => ({ group, count: 0, details: [] }));
+        const rows = distribution.length ? distribution : fallback;
+        const max = Math.max(1, ...rows.map(row => row.count));
+        els.stageGrid.innerHTML = rows.map(row => {
+          const detail = row.details.map(item => `${item.label} ${item.count}`).join(' · ');
+          return `<div class="stage-cell" data-stage="${escapeHtml(row.group)}" title="${escapeHtml(`${row.group}：${row.count} 条${detail ? ` · ${detail}` : ''}`)}">
+            <div class="stage-meta"><span>${escapeHtml(row.group)}</span><strong>${row.count}</strong></div>
+            <div class="bar"><div class="bar-fill" data-stage="${escapeHtml(row.group)}" style="width:${row.count / max * 100}%"></div></div>
+          </div>`;
+        }).join('');
       }
 
       // ===== 洞察面板（v4.4.0）：漏斗 / 节奏 / 停留 / 指标 / 卡点，全部由 records+timeline 派生 =====

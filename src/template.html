@@ -500,6 +500,19 @@
     <div class="modal-actions"><button class="btn" id="cancelBatchAdvanceDialog" type="button">取消</button><button class="btn btn-primary" id="confirmBatchAdvanceBtn" type="button">确认批量推进</button></div>
   </dialog>
 
+  <dialog id="batchCloseOutcomeDialog">
+    <div class="modal-head"><h2 id="batchCloseOutcomeTitle">批量结束流程</h2><button class="close-btn" id="closeBatchCloseOutcomeDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">以下记录会保留原有时间线，并统一归入“已结束”。请确认影响范围和结束原因。</p>
+      <div class="batch-targets" id="batchCloseOutcomeTargets"></div>
+      <div class="outcome-options" role="radiogroup" aria-label="批量结束原因">
+        <label><input type="radio" name="batchCloseOutcome" value="rejected" checked><span><strong>被拒</strong><small>招聘方结束流程</small></span></label>
+        <label><input type="radio" name="batchCloseOutcome" value="withdrawn"><span><strong>已放弃</strong><small>主动停止跟进</small></span></label>
+      </div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelBatchCloseOutcomeBtn" type="button">取消</button><button class="btn btn-primary" id="confirmBatchCloseOutcomeBtn" type="button">确认批量结束</button></div>
+  </dialog>
+
   <dialog id="safetyDialog">
     <div class="modal-head"><h2>数据安全与恢复</h2><button class="close-btn" id="closeSafetyDialog" type="button" aria-label="关闭">×</button></div>
     <div class="form-body">

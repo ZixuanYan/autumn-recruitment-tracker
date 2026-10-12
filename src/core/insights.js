@@ -1,3 +1,42 @@
+      // ----- 当前阶段统一分组（洞察 / 分享报告共用）-----
+      const INSIGHT_STAGE_ORDER = ['待投递', '已投递', '测评 / 笔试', '面试', 'Offer', '已结束'];
+      function insightStageDetail(record) {
+        const r = record || {};
+        const raw = String(r.stage || '待投递').trim() || '待投递';
+        const tl = Array.isArray(r.timeline) ? r.timeline : [];
+        const last = tl.length ? tl[tl.length - 1] : null;
+        const outcome = ['rejected', 'withdrawn'].includes(String(last && last.outcome || '')) ? String(last.outcome) : '';
+        if (raw === '已结束') {
+          const labels = (typeof TERMINAL_OUTCOME_LABELS === 'object' && TERMINAL_OUTCOME_LABELS) || { rejected: '被拒', withdrawn: '已放弃' };
+          return { group: '已结束', detail: outcome ? (labels[outcome] || '未分类') : '未分类', raw, outcome };
+        }
+        if (['测评', '笔试', '机试'].includes(raw)) return { group: '测评 / 笔试', detail: raw, raw, outcome: '' };
+        if (raw.includes('面') || ['复试', '终面'].includes(raw)) return { group: '面试', detail: raw, raw, outcome: '' };
+        return { group: raw, detail: raw, raw, outcome: '' };
+      }
+      function insightStageRank(group) {
+        const i = INSIGHT_STAGE_ORDER.indexOf(String(group || ''));
+        if (i >= 0) return i;
+        return typeof stageOrder === 'function' ? stageOrder(group) : 9000;
+      }
+      function computeStageDistribution(records) {
+        const counts = new Map();
+        const details = new Map();
+        for (const record of (Array.isArray(records) ? records : [])) {
+          const item = insightStageDetail(record);
+          counts.set(item.group, (counts.get(item.group) || 0) + 1);
+          if (!details.has(item.group)) details.set(item.group, new Map());
+          const dm = details.get(item.group);
+          dm.set(item.detail, (dm.get(item.detail) || 0) + 1);
+        }
+        return [...counts.keys()].sort((a, b) => insightStageRank(a) - insightStageRank(b) || a.localeCompare(b, 'zh-CN'))
+          .map(group => ({
+            group,
+            count: counts.get(group) || 0,
+            details: [...(details.get(group) || new Map())].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN')).map(([label, count]) => ({ label, count }))
+          }));
+      }
+
       // ----- 漏斗转化率 -----
       // 语义：记录的 timeline 里**出现过**该组里程碑即计入（不是只看当前阶段），
       // 因此后来「已结束」的记录仍算进面试转化，符合漏斗口径。

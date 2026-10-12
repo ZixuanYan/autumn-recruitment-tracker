@@ -222,6 +222,9 @@
           ? `<button class="btn btn-small btn-primary" data-mail-action="select-target" data-mail-id="${escapeHtml(s.id)}" type="button">选择已有记录</button><button class="btn btn-small" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`
           : `<button class="btn btn-small btn-primary" data-mail-action="apply" data-mail-id="${escapeHtml(s.id)}" type="button">应用所选</button><button class="btn btn-small" data-mail-action="select-target" data-mail-id="${escapeHtml(s.id)}" type="button">重新选择记录</button><button class="btn btn-small" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`;
 
+        const endActions = (matches.length || manualTargetIds.length)
+          ? `<button class="btn btn-small btn-soft" data-mail-action="close-rejected" data-mail-id="${escapeHtml(s.id)}" type="button">标记被拒</button><button class="btn btn-small btn-soft" data-mail-action="close-withdrawn" data-mail-id="${escapeHtml(s.id)}" type="button">标记已放弃</button>`
+          : '';
         return `<article class="mail-card${lowConf ? ' low-conf' : ''}" data-mail-id="${escapeHtml(s.id)}">
           <div class="mail-card-top">
             <span class="mail-type" data-type="${escapeHtml(s.emailType || '其它')}">${escapeHtml(s.emailType || '其它')}</span>
@@ -235,7 +238,7 @@
           <div class="mail-meta">${escapeHtml(s.from || '')}${s.receivedAt ? ` · ${escapeHtml(formatClock(s.receivedAt) || '')}` : ''}</div>
           ${matchHtml}
           ${fieldsHtml}
-          <div class="mail-actions">${primaryBtn}<button class="btn btn-small" data-mail-action="dismiss" data-mail-id="${escapeHtml(s.id)}" type="button">忽略</button></div>
+          <div class="mail-actions">${primaryBtn}${endActions}<button class="btn btn-small" data-mail-action="dismiss" data-mail-id="${escapeHtml(s.id)}" type="button">忽略</button></div>
         </article>`;
       }
 
@@ -404,6 +407,38 @@
         renderMailView();
         updateMailBadge();
         if (milestoneApplied && offerHit) playOfferStamp();
+      }
+
+      function mailTargetRecords(id) {
+        const sid = String(id);
+        const s = mailSuggestions.find(x => String(x.id) === sid);
+        const card = document.querySelector(`.mail-card[data-mail-id="${CSS.escape(sid)}"]`);
+        if (!s || !card) return { suggestion: s, targets: [] };
+        const manual = mailManualTargets.get(sid) || [];
+        const ids = manual.length ? manual : [...card.querySelectorAll('.mail-target-check:checked')].map(i => i.value);
+        if (!ids.length) {
+          const single = card.querySelector('.mail-match.single');
+          if (single && single.dataset.targetId) ids.push(single.dataset.targetId);
+        }
+        return { suggestion: s, targets: ids.map(id => records.find(r => r.id === id)).filter(Boolean) };
+      }
+
+      async function closeMailSuggestion(id, outcome) {
+        const label = TERMINAL_OUTCOME_LABELS[outcome] || '';
+        const { suggestion, targets } = mailTargetRecords(id);
+        if (!suggestion || !targets.length) { showToast('请先选择或关联至少一条投递记录'); return; }
+        const names = targets.map(r => `${r.company || '未填公司'} · ${r.position || '未填岗位'}`).join('、');
+        const confirmed = await confirmInApp(`将 ${label}以下 ${targets.length} 条记录？\n${names}`, { title: '确认结束流程', confirmText: `确认${label}`, danger: true });
+        if (!confirmed) return;
+        const at = localDateInput(new Date());
+        targets.forEach(record => { closeRecordWithOutcome(record, outcome, at); linkMailToRecord(record, suggestion); record.updatedAt = Date.now(); });
+        saveRecords(`邮件标记 ${label}：${targets.length} 条记录`);
+        mailArchive = archiveSuggestionMail(mailArchive, suggestion);
+        markMailApplied(id);
+        mailManualTargets.delete(String(id));
+        renderMailView();
+        updateMailBadge();
+        showToast(`已${label} ${targets.length} 条记录`);
       }
 
       function mailLinkCandidates(query) {
@@ -761,7 +796,7 @@
         const who = item.record.company || '未填公司';
         const done = item.settled || item.terminal;
         const state = done
-          ? '<span class="cal-row-state is-settled">已完成</span>'
+          ? `<span class="cal-row-state is-settled">${item.terminal ? '已结束' : '已完成'}</span>`
           : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
         const eventClock = item.time ? `${item.time}${item.endTime ? `-${item.endTime}` : ''}` : '';
         const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${eventClock ? ` ${eventClock}` : ''}`;
@@ -776,7 +811,7 @@
         const who = item.record.company || '未填公司';
         const done = item.settled;
         const state = done
-          ? '<span class="cal-row-state is-settled">已完成</span>'
+          ? `<span class="cal-row-state is-settled">${agg.positions.every(p => p.terminal) ? '已结束' : '已完成'}</span>`
           : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
         const key = `${agg.mailId}|${item.date}|${item.type}`;
         const expanded = calFlowExpandedKey === key;
@@ -787,11 +822,11 @@
         const subRows = agg.positions.map(p => {
           const r = p.record;
           const subState = p.settled
-            ? '<span class="cal-row-state is-settled">已完成</span>'
+            ? `<span class="cal-row-state is-settled">${p.terminal ? '已结束' : '已完成'}</span>`
             : (p.overdue ? '<span class="cal-row-state is-overdue">逾期</span>' : '');
           return `<button class="cal-row cal-row-sub kind-${item.kind}" type="button" data-id="${escapeHtml(r.id)}" title="${escapeHtml(`${r.company || ''} · ${r.position || '未填岗位'} · 查看详情`)}"><span class="cal-row-time"></span><span class="cal-row-type">${escapeHtml(r.orgUnit || '—')}</span><span class="cal-row-who">${escapeHtml(r.company || '未填公司')}<em>${escapeHtml(r.position || '未填岗位')}</em></span>${subState}</button>`;
         }).join('');
-        const actions = done ? '' : `<div class="cal-flow-actions"><button class="btn btn-small cal-batch-btn" type="button" data-batch-done="${escapeHtml(key)}">全部标记完成</button><button class="btn btn-small btn-soft cal-batch-btn" type="button" data-batch-advance="${escapeHtml(key)}">批量推进</button></div>`;
+        const actions = done ? '' : `<div class="cal-flow-actions"><button class="btn btn-small cal-batch-btn" type="button" data-batch-done="${escapeHtml(key)}">全部标记完成</button><button class="btn btn-small btn-soft cal-batch-btn" type="button" data-batch-advance="${escapeHtml(key)}">批量推进</button><button class="btn btn-small btn-soft cal-batch-btn" type="button" data-batch-close="${escapeHtml(key)}">批量结束</button></div>`;
         return `<div class="cal-flow-multi is-open">${main}${subRows}${actions}</div>`;
       }
 
@@ -839,6 +874,35 @@
         if (n) saveRecords(`已把 ${n} 条记录的当前阶段标记完成`);
         else showToast('关联记录都已完成，无需重复标记');
         render();
+      }
+
+      let batchCloseKey = '';
+      function openBatchCloseOutcomeDialog(key) {
+        const targets = recordsForMailEvent(key).filter(r => !['Offer', '已结束'].includes(r.stage));
+        if (!targets.length) { showToast('没有可结束的关联记录'); return; }
+        batchCloseKey = key;
+        $('#batchCloseOutcomeTitle').textContent = `批量结束流程 · ${targets.length} 条记录`;
+        $('#batchCloseOutcomeTargets').innerHTML = targets.map(r =>
+          `<span class="batch-target-chip" title="${escapeHtml(`${r.company || ''} ${r.orgUnit || ''} ${r.position || ''}`)}">${escapeHtml(r.company || '未填公司')}${r.orgUnit ? ` · ${escapeHtml(r.orgUnit)}` : ''} · ${escapeHtml(r.position || '未填岗位')}（${escapeHtml(r.stage || '待投递')}）</span>`).join('');
+        const rejected = document.querySelector('input[name="batchCloseOutcome"][value="rejected"]');
+        if (rejected) rejected.checked = true;
+        $('#batchCloseOutcomeDialog').showModal();
+      }
+      function closeBatchCloseOutcomeDialog() {
+        batchCloseKey = '';
+        const dlg = $('#batchCloseOutcomeDialog');
+        if (dlg && dlg.open) dlg.close();
+      }
+      function applyBatchCloseOutcome(outcome) {
+        const label = TERMINAL_OUTCOME_LABELS[outcome] || '';
+        const targets = recordsForMailEvent(batchCloseKey).filter(r => !['Offer', '已结束'].includes(r.stage));
+        if (!label || !targets.length) { showToast('没有可结束的关联记录'); return; }
+        const at = localDateInput(new Date());
+        targets.forEach(r => closeRecordWithOutcome(r, outcome, at));
+        saveRecords(`已批量结束 ${targets.length} 条记录：${label}`);
+        closeBatchCloseOutcomeDialog();
+        render();
+        showToast(`已批量结束 ${targets.length} 条记录：${label}`);
       }
 
       let batchAdvanceKey = '';
@@ -1998,6 +2062,8 @@
         if (doneBtn) { batchMarkMailDone(doneBtn.dataset.batchDone); return; }
         const advanceBtn = event.target.closest('[data-batch-advance]');
         if (advanceBtn) { openBatchAdvanceDialog(advanceBtn.dataset.batchAdvance); return; }
+        const closeBatchBtn = event.target.closest('[data-batch-close]');
+        if (closeBatchBtn) { openBatchCloseOutcomeDialog(closeBatchBtn.dataset.batchClose); return; }
         const sub = event.target.closest('.cal-row-sub[data-id]');
         if (sub) { openRecordFocus(sub.dataset.id); return; }
         const multi = event.target.closest('.cal-row.is-multi[data-flow-key]');
@@ -2105,6 +2171,13 @@
       $('#closeBatchAdvanceDialog').addEventListener('click', closeBatchAdvanceDialog);
       $('#cancelBatchAdvanceDialog').addEventListener('click', closeBatchAdvanceDialog);
       $('#batchAdvanceDialog').addEventListener('click', event => { if (event.target === $('#batchAdvanceDialog')) closeBatchAdvanceDialog(); });
+      $('#confirmBatchCloseOutcomeBtn').addEventListener('click', () => {
+        const selected = document.querySelector('input[name="batchCloseOutcome"]:checked');
+        applyBatchCloseOutcome(selected && selected.value);
+      });
+      $('#closeBatchCloseOutcomeDialog').addEventListener('click', closeBatchCloseOutcomeDialog);
+      $('#cancelBatchCloseOutcomeBtn').addEventListener('click', closeBatchCloseOutcomeDialog);
+      $('#batchCloseOutcomeDialog').addEventListener('click', event => { if (event.target === $('#batchCloseOutcomeDialog')) closeBatchCloseOutcomeDialog(); });
       window.addEventListener('message', handleCaptureMessage);
       $('#closeSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());
       $('#doneSafetyDialog').addEventListener('click', () => $('#safetyDialog').close());
@@ -2132,7 +2205,9 @@
         if (!btn) return;
         const id = btn.dataset.mailId;
         const action = btn.dataset.mailAction;
-        if (action === 'apply') applyMailSuggestion(id);
+        if (action === 'close-rejected') closeMailSuggestion(id, 'rejected');
+        else if (action === 'close-withdrawn') closeMailSuggestion(id, 'withdrawn');
+        else if (action === 'apply') applyMailSuggestion(id);
         else if (action === 'select-target') openMailLinkDialog(id);
         else if (action === 'new') openMailSeedDialog(id);
         else if (action === 'dismiss') dismissMailSuggestion(id);
