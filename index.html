@@ -914,17 +914,17 @@
     .cal-flow-day { padding-bottom: 5px; border-bottom: 1px solid var(--line); }
     /* 图例「已完成」点从灰改绿：缩略图里已完成已是浅绿行，图例跟着对齐 */
     .cal-dot.is-settled { background: var(--ok); }
-    .cal-dot.is-withdrawn { background: var(--accent-ink); }
-    .cal-dot.is-rejected { background: var(--danger); }
-    .cal-chip.is-withdrawn { background: var(--surface-soft); color: var(--accent-ink); box-shadow: inset 2px 0 0 var(--accent-ink); }
-    .cal-chip.is-rejected { background: var(--danger-soft); color: var(--danger); box-shadow: inset 2px 0 0 var(--danger); }
-    .cal-row-state.is-withdrawn { color: var(--accent-ink); }
-    .cal-row-state.is-rejected { color: var(--danger); }
-    .cal-done.is-withdrawn { color: var(--accent-ink); }
-    .cal-done.is-rejected { color: var(--danger); }
+    .cal-dot.is-withdrawn { background: var(--muted); }
+    .cal-dot.is-rejected { background: var(--warn); }
+    .cal-chip.is-withdrawn { background: var(--surface-soft); color: var(--muted); box-shadow: inset 2px 0 0 var(--muted); }
+    .cal-chip.is-rejected { background: var(--warn-soft); color: var(--warn); box-shadow: inset 2px 0 0 var(--warn); }
+    .cal-row-state.is-withdrawn { color: var(--muted); }
+    .cal-row-state.is-rejected { color: var(--warn); }
+    .cal-done.is-withdrawn { color: var(--muted); }
+    .cal-done.is-rejected { color: var(--warn); }
     .cal-done.is-settled { background: var(--ok-soft); color: var(--ok); }
-    .cal-done.is-withdrawn { background: var(--surface-soft); box-shadow: inset 2px 0 0 var(--accent-ink); }
-    .cal-done.is-rejected { background: var(--danger-soft); box-shadow: inset 2px 0 0 var(--danger); }
+    .cal-done.is-withdrawn { background: var(--surface-soft); box-shadow: inset 2px 0 0 var(--muted); }
+    .cal-done.is-rejected { background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--warn); }
     .cal-done.is-ended { background: var(--surface-soft); color: var(--muted); box-shadow: inset 2px 0 0 var(--muted); }
 
     /* ===== v4.4.0：洞察面板（漏斗 / sparkline / 停留 / 指标 / 卡点 / Offer 对比）===== */
@@ -1237,8 +1237,8 @@
     .sibling-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px; border: 0; border-radius: var(--r-md); background: var(--surface-2); box-shadow: none; font-size: 12.5px; text-align: left; }
     .sibling-item:hover { background: var(--accent-soft); }
     .sibling-item .badge { margin-left: auto; flex: 0 0 auto; }
-    .drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 13px 20px; border-top: 1px solid var(--line); background: var(--surface-2); }
-    .drawer-actions .spacer { flex: 1 1 auto; }
+    .drawer-actions { display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; padding: 13px 20px; border-top: 1px solid var(--line); background: var(--surface-2); }
+    .drawer-actions > .btn { flex: 0 0 auto; }
     @media (max-width: 620px) { .drawer { width: 100vw; } }
 
     /* ===== v4.4.0：⌘K 命令面板 ===== */
@@ -6409,8 +6409,6 @@
             ${!['Offer', '已结束'].includes(record.stage) ? '<button class="btn btn-small" type="button" data-drawer="close-outcome">结束流程</button>' : ''}
             <button class="btn btn-small btn-primary" type="button" data-drawer="advance">推进阶段</button>
             <button class="btn btn-small" type="button" data-drawer="edit">编辑</button>
-            <button class="btn btn-small" type="button" data-drawer="ics">导出到日历</button>
-            <span class="spacer"></span>
             <button class="btn btn-small btn-danger" type="button" data-drawer="delete">删除</button>`;
         }
       }
@@ -7580,8 +7578,7 @@
           : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
         const eventClock = item.time ? `${item.time}${item.endTime ? `-${item.endTime}` : ''}` : '';
         const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${eventClock ? ` ${eventClock}` : ''}`;
-        const action = !done && !['Offer', '已结束'].includes(item.record.stage) ? `<button class="cal-row-action" type="button" data-close-record="${escapeHtml(item.record.id)}">放弃该安排</button>` : '';
-        return `<div class="cal-flow-entry"><button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(eventClock || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>${action}</div>`;
+        return `<div class="cal-flow-entry"><button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(eventClock || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button></div>`;
       }
 
       // 聚合条目行：主行（公司 + 覆盖 N 岗位，点击展开/收起）；展开后是每个岗位的子行
@@ -8839,8 +8836,6 @@
         calSelectDay(cell.dataset.date);
       });
       $('#calFlowList').addEventListener('click', event => {
-        const closeBtn = event.target.closest('[data-close-record]');
-        if (closeBtn) { event.stopPropagation(); const record = records.find(r => r.id === closeBtn.dataset.closeRecord); if (record) openCloseOutcomeDialog(record, 'withdrawn'); return; }
         const doneBtn = event.target.closest('[data-batch-done]');
         if (doneBtn) { batchMarkMailDone(doneBtn.dataset.batchDone); return; }
         const advanceBtn = event.target.closest('[data-batch-advance]');

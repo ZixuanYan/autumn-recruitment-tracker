@@ -781,8 +781,7 @@
           : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
         const eventClock = item.time ? `${item.time}${item.endTime ? `-${item.endTime}` : ''}` : '';
         const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${eventClock ? ` ${eventClock}` : ''}`;
-        const action = !done && !['Offer', '已结束'].includes(item.record.stage) ? `<button class="cal-row-action" type="button" data-close-record="${escapeHtml(item.record.id)}">放弃该安排</button>` : '';
-        return `<div class="cal-flow-entry"><button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(eventClock || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>${action}</div>`;
+        return `<div class="cal-flow-entry"><button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(eventClock || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button></div>`;
       }
 
       // 聚合条目行：主行（公司 + 覆盖 N 岗位，点击展开/收起）；展开后是每个岗位的子行
@@ -2040,8 +2039,6 @@
         calSelectDay(cell.dataset.date);
       });
       $('#calFlowList').addEventListener('click', event => {
-        const closeBtn = event.target.closest('[data-close-record]');
-        if (closeBtn) { event.stopPropagation(); const record = records.find(r => r.id === closeBtn.dataset.closeRecord); if (record) openCloseOutcomeDialog(record, 'withdrawn'); return; }
         const doneBtn = event.target.closest('[data-batch-done]');
         if (doneBtn) { batchMarkMailDone(doneBtn.dataset.batchDone); return; }
         const advanceBtn = event.target.closest('[data-batch-advance]');

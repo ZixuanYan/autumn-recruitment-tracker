@@ -613,8 +613,6 @@
             ${!['Offer', '已结束'].includes(record.stage) ? '<button class="btn btn-small" type="button" data-drawer="close-outcome">结束流程</button>' : ''}
             <button class="btn btn-small btn-primary" type="button" data-drawer="advance">推进阶段</button>
             <button class="btn btn-small" type="button" data-drawer="edit">编辑</button>
-            <button class="btn btn-small" type="button" data-drawer="ics">导出到日历</button>
-            <span class="spacer"></span>
             <button class="btn btn-small btn-danger" type="button" data-drawer="delete">删除</button>`;
         }
       }
