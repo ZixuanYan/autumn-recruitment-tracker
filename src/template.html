@@ -473,6 +473,18 @@
     <div class="modal-actions"><button class="btn" id="cancelAdvanceDialog" type="button">取消</button><button class="btn btn-primary" id="confirmAdvanceBtn" type="button">确认推进</button></div>
   </dialog>
 
+  <dialog id="closeOutcomeDialog">
+    <div class="modal-head"><h2 id="closeOutcomeTitle">结束流程</h2><button class="close-btn" id="closeCloseOutcomeDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note" id="closeOutcomeHint">当前阶段会保留在时间线中，结束后记录归入“已结束”。</p>
+      <div class="outcome-options" role="radiogroup" aria-label="结束原因">
+        <label><input type="radio" name="closeOutcome" value="rejected" checked><span><strong>被拒</strong><small>招聘方结束流程</small></span></label>
+        <label><input type="radio" name="closeOutcome" value="withdrawn"><span><strong>已放弃</strong><small>主动停止跟进</small></span></label>
+      </div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelCloseOutcomeBtn" type="button">取消</button><button class="btn btn-primary" id="confirmCloseOutcomeBtn" type="button">确认结束</button></div>
+  </dialog>
+
   <!-- v4.31.0 批量推进：同一场安排（同一封邮件）覆盖的多个岗位一起推进到同一阶段。
        每个岗位的时间线各自追加一条新里程碑（记录不合并，只是操作批量）。 -->
   <dialog id="batchAdvanceDialog">

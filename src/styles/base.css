@@ -98,6 +98,12 @@
     .stage-meta span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .bar { height: 5px; background: var(--surface-soft); border-radius: 999px; overflow: hidden; }
     .bar-fill { height: 100%; min-width: 0; border-radius: inherit; background: var(--stage-color, var(--accent)); transition: width .25s ease; }
+    .stage-outcome-chip { display: inline-block; margin-left: 5px; padding: 1px 6px; border-radius: 999px; background: var(--surface-soft); color: var(--muted); font-size: 11px; }
+    .outcome-options { display: grid; gap: 8px; }
+    .outcome-options label { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+    .outcome-options label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+    .outcome-options span { display: grid; gap: 1px; }
+    .outcome-options small { color: var(--muted); font-size: 12px; }
 
     /* 第 4 列是「同企业收纳」开关（v4.11.0）：auto 让它按文字宽度取值，不挤占搜索框。
        窄屏的两处覆盖（1fr 1fr / 1fr）不需要跟着改——4 个项在 2 列下正好两行、1 列下四行。 */
@@ -358,6 +364,9 @@
     .cal-row-sub .cal-row-time { visibility: hidden; }
     .cal-flow-actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .cal-flow-actions .cal-batch-btn { min-height: 32px; padding: 0 12px; font-size: 12px; }
+    .cal-flow-entry { display: flex; gap: 6px; align-items: center; }
+    .cal-flow-entry .cal-row { flex: 1 1 auto; }
+    .cal-row-action { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; background: var(--surface); color: var(--muted); cursor: pointer; }
     .batch-targets { display: flex; flex-wrap: wrap; gap: 6px; }
     .batch-target-chip {
       max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

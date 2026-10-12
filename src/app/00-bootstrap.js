@@ -24,6 +24,7 @@
       const TIME_EVENT_DEADLINE = AJA.TIME_EVENT_DEADLINE;
       const timeEventKind = AJA.timeEventKind;
       const normalizeTimeEventType = AJA.normalizeTimeEventType;
+      const TERMINAL_OUTCOME_LABELS = AJA.TERMINAL_OUTCOME_LABELS;
       // 阶段排序：预设返回索引；自定义/未知返回大值（视为“更靠后”），用 9000 规避 2^53 精度问题
       function stageOrder(stage) {
         const i = STAGE_PRESETS.indexOf(stage);
@@ -40,6 +41,8 @@
             // 用 `!!value` 判会把 "false" 判成 true —— 手改过 JSON 或第三方写入时最容易踩。
             const done = (m && m.done) === true;
             const rawDoneAt = String(m && m.doneAt || '').trim();
+            const rawOutcome = String(m && m.outcome || '').trim();
+            const outcome = ['rejected', 'withdrawn'].includes(rawOutcome) ? rawOutcome : '';
             return {
               stage: String(m && m.stage || '').trim(),
               at: String(m && m.at || '').trim(),
@@ -48,7 +51,9 @@
               // doneAt 必须是合法 YYYY-MM-DD，否则清空（非法值绝不进持久化）。
               // 只清日期、不清 done：「完成了但日期脏」保留"已完成"这个事实更安全
               // （isEventSettled 的规则①会回落到里程碑日期起算），否则用户的完成记录会被静默抹掉。
-              doneAt: done && /^\d{4}-\d{2}-\d{2}$/.test(rawDoneAt) ? rawDoneAt : ''
+              doneAt: done && /^\d{4}-\d{2}-\d{2}$/.test(rawDoneAt) ? rawDoneAt : '',
+              outcome,
+              fromStage: outcome ? String(m && m.fromStage || '').trim().slice(0, 20) : ''
             };
           })
           .filter(m => m.stage)
@@ -60,6 +65,13 @@
       function deriveStage(rec) {
         const tl = rec && Array.isArray(rec.timeline) ? rec.timeline : [];
         return tl.length ? tl[tl.length - 1].stage : (String(rec && rec.stage || '').trim() || '待投递');
+      }
+      function terminalOutcome(record) {
+        if (!record || record.stage !== '已结束') return '';
+        const tl = Array.isArray(record.timeline) ? record.timeline : [];
+        const last = tl[tl.length - 1];
+        const raw = String(last && last.outcome || '').trim();
+        return ['rejected', 'withdrawn'].includes(raw) ? raw : '';
       }
       // 统一写时间线并同步派生 stage/updatedAt——所有时间线改动都走这里，保证 stage 一致
       function setTimeline(rec, timeline) {
@@ -90,6 +102,19 @@
           doneAt: done ? (at || localDateInput(new Date())) : ''
         });
         return setTimeline(rec, tl);
+      }
+      // 结束是终态结果，不伪装成一个可继续推进的阶段。追加终态里程碑保留结束前阶段。
+      function closeRecordWithOutcome(rec, outcome, at) {
+        if (!rec || rec.stage === 'Offer' || rec.stage === '已结束') return false;
+        const candidate = String(outcome || '').trim();
+        const normalized = ['rejected', 'withdrawn'].includes(candidate) ? candidate : '';
+        if (!normalized) return false;
+        const fromStage = String(rec.stage || '待投递');
+        setTimeline(rec, [...(rec.timeline || []), {
+          stage: '已结束', at: at || localDateInput(new Date()), note: '',
+          outcome: normalized, fromStage
+        }]);
+        return true;
       }
       // ===== 关键时间（v4.19.0）：events[] 是唯一事实源 =====
       // 一个事件 = { id, type, at, allDay }。type 由 shared 的白名单收敛（非法值 → 其他）；
@@ -2017,14 +2042,31 @@
       }
 
       function renderDistribution() {
-        const counts = {};
-        records.forEach(r => { const s = r.stage || '待投递'; counts[s] = (counts[s] || 0) + 1; });
-        // 动态阶段集：仅展示有记录的阶段（含自定义），按 stageOrder 排序；空态回退到核心预设占位
-        let stages = Object.keys(counts).sort((a, b) => stageOrder(a) - stageOrder(b) || a.localeCompare(b, 'zh-CN'));
+        const counts = {}, details = {};
+        const groupOf = stage => {
+          const s = String(stage || '待投递');
+          if (['测评', '笔试', '机试'].includes(s)) return '测评 / 笔试';
+          if (s.includes('面') || ['复试', '终面'].includes(s)) return '面试';
+          if (s === '已结束') return '已结束';
+          return s;
+        };
+        records.forEach(r => {
+          const group = groupOf(r.stage);
+          counts[group] = (counts[group] || 0) + 1;
+          if (!details[group]) details[group] = {};
+          const rawOutcome = String(r.timeline && r.timeline.length ? r.timeline[r.timeline.length - 1].outcome || '' : '').trim();
+          const outcome = ['rejected', 'withdrawn'].includes(rawOutcome) ? rawOutcome : '';
+          const detail = group === '已结束' ? (outcome ? (TERMINAL_OUTCOME_LABELS[outcome] || '未分类') : '未分类') : (r.stage || '待投递');
+          details[group][detail] = (details[group][detail] || 0) + 1;
+        });
+        let stages = Object.keys(counts).sort((a, b) => {
+          const rank = s => s === '测评 / 笔试' ? 2 : s === '面试' ? 5 : s === 'Offer' ? 13 : s === '已结束' ? 14 : stageOrder(s);
+          return rank(a) - rank(b) || a.localeCompare(b, 'zh-CN');
+        });
         if (!stages.length) stages = ['待投递', '已投递', '一面', 'Offer', '已结束'];
         const max = Math.max(1, ...stages.map(s => counts[s] || 0));
         els.stageGrid.innerHTML = stages.map(stage => `
-          <div class="stage-cell" data-stage="${escapeHtml(stage)}" title="${escapeHtml(stage)}：${counts[stage] || 0} 条">
+          <div class="stage-cell" data-stage="${escapeHtml(stage)}" title="${escapeHtml(`${stage}：${counts[stage] || 0} 条 · ${Object.entries(details[stage] || {}).map(([k, v]) => `${k} ${v}`).join(' · ')}`)}">
             <div class="stage-meta"><span>${escapeHtml(stage)}</span><strong>${counts[stage] || 0}</strong></div>
             <div class="bar"><div class="bar-fill" data-stage="${escapeHtml(stage)}" style="width:${(counts[stage] || 0) / max * 100}%"></div></div>
           </div>`).join('');
@@ -2370,6 +2412,8 @@
         const curMilestone = (Array.isArray(record.timeline) && record.timeline.length) ? record.timeline[record.timeline.length - 1] : null;
         const curDone = !!(curMilestone && curMilestone.done);
         const canMarkDone = !terminal || curDone;
+        const rawOutcome = String(curMilestone && curMilestone.outcome || '').trim();
+        const outcome = ['rejected', 'withdrawn'].includes(rawOutcome) ? rawOutcome : '';
         const dlHit = nearestDeadlineEvent(record.events, now);
         // v4.24.0：传完整 at —— 带时刻的截止（`2026-09-17T18:00`）截成 10 位就丢掉小时级倒计时
         const dl = dlHit ? deadlineInfo(dlHit.event.at, now) : null;
@@ -2396,12 +2440,13 @@
           <td data-label="公司 / 岗位"><div class="company">${companyHtml}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${chipHtml}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position)}</div></td>
           <td data-label="城市">${escapeHtml(record.city)}</td>
           <td data-label="投递日期">${escapeHtml(formatDate(record.applicationDate))}</td>
-          <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.done ? '（已完成）' : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span>${curDone ? '<span class="stage-done-chip" title="当前阶段已标记完成，尚未推进">已完成</span>' : ''}</td>
+          <td data-label="当前阶段"><span class="badge" data-stage="${escapeHtml(record.stage)}" title="${escapeHtml((record.timeline || []).map(m => `${m.stage}${m.at ? ' · ' + m.at : ''}${m.outcome ? ' · ' + (TERMINAL_OUTCOME_LABELS[m.outcome] || '') : ''}${m.done ? '（已完成）' : ''}${m.note ? '（' + m.note + '）' : ''}`).join('  →  ') || record.stage)}">${escapeHtml(record.stage)}</span>${outcome ? `<span class="stage-outcome-chip">${escapeHtml(TERMINAL_OUTCOME_LABELS[outcome] || '未分类')}</span>` : ''}${curDone ? '<span class="stage-done-chip" title="当前阶段已标记完成，尚未推进">已完成</span>' : ''}</td>
           <td class="schedule" data-label="最近时间"><div class="schedule-time ${overdue ? 'overdue' : ''}${settledShown ? ' is-settled' : ''}">${escapeHtml(nextEv ? `${nextEv.event.type} · ${nextEv.event.allDay ? formatDate(String(nextEv.event.at).slice(0, 10)) : formatDateTime(nextEv.event.at)}` : '暂未安排')}${overdue ? ' · 已过期' : ''}${settledChipHtml}</div><div class="schedule-text">${escapeHtml(record.recentSchedule || '—')}</div>${dlHtml}</td>
           <td data-label="下一步行动"><div class="next-action">${escapeHtml(record.nextAction || '—')}</div></td>
           <td data-label="操作"><div class="row-actions">
             ${canAdvance ? `<button class="btn btn-soft btn-small" data-action="advance" data-id="${escapeHtml(record.id)}" type="button">推进</button>` : ''}
             ${canMarkDone ? `<button class="text-button${curDone ? ' is-on' : ''}" data-action="toggle-done" data-id="${escapeHtml(record.id)}" type="button" title="${curDone ? '取消完成标记（不改变当前阶段）' : '只标记这一步完成，不推进到下一阶段'}">${curDone ? '取消完成' : '标记完成'}</button>` : ''}
+            ${!terminal ? `<button class="text-button" data-action="close-outcome" data-id="${escapeHtml(record.id)}" type="button">结束流程</button>` : ''}
             <button class="text-button" data-action="edit" data-id="${escapeHtml(record.id)}" type="button">编辑</button>
             <button class="text-button danger" data-action="delete" data-id="${escapeHtml(record.id)}" type="button">删除</button>
           </div></td>

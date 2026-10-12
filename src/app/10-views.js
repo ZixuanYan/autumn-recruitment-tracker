@@ -143,6 +143,32 @@
           onAction: () => apply(!next)
         });
       }
+      let closingRecordId = null;
+      function openCloseOutcomeDialog(record) {
+        if (!record || ['Offer', '已结束'].includes(record.stage)) return;
+        closingRecordId = record.id;
+        $('#closeOutcomeTitle').textContent = `结束流程 · ${record.company || ''}`.trim();
+        $('#closeOutcomeHint').textContent = `当前阶段「${record.stage || '未设置'}」会保留在时间线中，结束后记录归入“已结束”。`;
+        const rejected = document.querySelector('input[name="closeOutcome"][value="rejected"]');
+        if (rejected) rejected.checked = true;
+        $('#closeOutcomeDialog').showModal();
+      }
+      function closeCloseOutcomeDialog() {
+        closingRecordId = null;
+        const dlg = $('#closeOutcomeDialog');
+        if (dlg && dlg.open) dlg.close();
+      }
+      function applyCloseOutcome(outcome) {
+        const record = records.find(item => item.id === closingRecordId);
+        const label = TERMINAL_OUTCOME_LABELS[outcome] || '';
+        if (!record || !label || !closeRecordWithOutcome(record, outcome)) return;
+        saveRecords(`已结束「${record.company} · ${record.position}」：${label}`);
+        closeCloseOutcomeDialog();
+        render();
+        flashRow(record.id);
+        if (drawerRecordId === record.id) renderDrawer();
+        showToast(`已结束：${label}`);
+      }
 
       // ---- 表格 / 看板 切换 ----
       function setRecordsView(mode) {
@@ -378,7 +404,7 @@
         // 拖到「已结束」列：改为打开推进弹窗并预填结束原因引导（拒信 / 主动放弃 / 超期未响应，对复盘有价值），
         // 而不是像其它列那样一键直达；不新增字段、不改 schema，note 仍是既有里程碑字段。
         if (col.dataset.stage === '已结束') {
-          openAdvanceDialog(record, { note: '结束原因（拒信 / 主动放弃 / 超期未响应）：' });
+          openCloseOutcomeDialog(record);
           return;
         }
         await advanceRecordTo(record, col.dataset.stage);
@@ -577,6 +603,7 @@
           const drawerCanDone = !['Offer', '已结束'].includes(record.stage) || drawerDone;
           actions.innerHTML = `
             ${drawerCanDone ? `<button class="btn btn-small${drawerDone ? ' is-on' : ''}" type="button" data-drawer="toggle-done">${drawerDone ? '取消完成' : '标记本阶段完成'}</button>` : ''}
+            ${!['Offer', '已结束'].includes(record.stage) ? '<button class="btn btn-small" type="button" data-drawer="close-outcome">结束流程</button>' : ''}
             <button class="btn btn-small btn-primary" type="button" data-drawer="advance">推进阶段</button>
             <button class="btn btn-small" type="button" data-drawer="edit">编辑</button>
             <button class="btn btn-small" type="button" data-drawer="ics">导出到日历</button>

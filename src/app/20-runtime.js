@@ -765,7 +765,8 @@
           : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
         const eventClock = item.time ? `${item.time}${item.endTime ? `-${item.endTime}` : ''}` : '';
         const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${eventClock ? ` ${eventClock}` : ''}`;
-        return `<button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(eventClock || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>`;
+        const action = !done && !['Offer', '已结束'].includes(item.record.stage) ? `<button class="cal-row-action" type="button" data-close-record="${escapeHtml(item.record.id)}">结束</button>` : '';
+        return `<div class="cal-flow-entry"><button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(eventClock || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>${action}</div>`;
       }
 
       // 聚合条目行：主行（公司 + 覆盖 N 岗位，点击展开/收起）；展开后是每个岗位的子行
@@ -1370,6 +1371,7 @@
         if (button.dataset.action === 'edit') return openDialog(record);
         if (button.dataset.action === 'delete') return requestDeleteRecord(record);
         if (button.dataset.action === 'toggle-done') return toggleStageDone(record);
+        if (button.dataset.action === 'close-outcome') return openCloseOutcomeDialog(record);
         if (button.dataset.action === 'advance') {
           openAdvanceDialog(record);
         }
@@ -1908,6 +1910,7 @@
         const action = button.dataset.drawer;
         if (action === 'advance') return openAdvanceDialog(record);
         if (action === 'toggle-done') return toggleStageDone(record);
+        if (action === 'close-outcome') return openCloseOutcomeDialog(record);
         if (action === 'edit') { closeRecordDrawer(); return openDialog(record); }
         if (action === 'ics') return exportIcs(record.id);
         if (action === 'delete') return requestDeleteRecord(record);
@@ -1989,6 +1992,8 @@
         calSelectDay(cell.dataset.date);
       });
       $('#calFlowList').addEventListener('click', event => {
+        const closeBtn = event.target.closest('[data-close-record]');
+        if (closeBtn) { event.stopPropagation(); const record = records.find(r => r.id === closeBtn.dataset.closeRecord); if (record) openCloseOutcomeDialog(record); return; }
         const doneBtn = event.target.closest('[data-batch-done]');
         if (doneBtn) { batchMarkMailDone(doneBtn.dataset.batchDone); return; }
         const advanceBtn = event.target.closest('[data-batch-advance]');
@@ -2084,6 +2089,13 @@
       $('#closeAdvanceDialog').addEventListener('click', closeAdvanceDialog);
       $('#cancelAdvanceDialog').addEventListener('click', closeAdvanceDialog);
       $('#advanceDialog').addEventListener('click', event => { if (event.target === $('#advanceDialog')) closeAdvanceDialog(); });
+      $('#confirmCloseOutcomeBtn').addEventListener('click', () => {
+        const selected = document.querySelector('input[name="closeOutcome"]:checked');
+        applyCloseOutcome(selected && selected.value);
+      });
+      $('#closeCloseOutcomeDialog').addEventListener('click', closeCloseOutcomeDialog);
+      $('#cancelCloseOutcomeBtn').addEventListener('click', closeCloseOutcomeDialog);
+      $('#closeOutcomeDialog').addEventListener('click', event => { if (event.target === $('#closeOutcomeDialog')) closeCloseOutcomeDialog(); });
       // 批量推进弹窗（v4.31.0）：与单条推进同款交互——点预设阶段直接应用，自定义填框后确认
       $('#batchAdvanceStageGrid').addEventListener('click', event => {
         const btn = event.target.closest('.advance-pick');

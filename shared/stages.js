@@ -42,6 +42,13 @@
   // 「截止」在代码里被单独判定（倒计时 / 逾期提醒 / ICS 标题），故给出具名常量，
   // 免得各处散落 '截止' 字面量——将来改类型名漏改一处，就会静默退化成「其他」。
   const TIME_EVENT_DEADLINE = TIME_EVENT_TYPES[0];
+  // 已结束的结果不是流程阶段，而是终态里程碑的结果。
+  const TERMINAL_OUTCOMES = ['rejected', 'withdrawn'];
+  const TERMINAL_OUTCOME_LABELS = { rejected: '被拒', withdrawn: '已放弃' };
+  function normalizeTerminalOutcome(value) {
+    const v = String(value || '').trim();
+    return TERMINAL_OUTCOMES.includes(v) ? v : '';
+  }
   // 两类语义（v4.24.0）：截止 = 必须赶的期限，开始 = 到点要参加的事。界面按它分组显示。
   function timeEventKind(type) {
     return String(type || '').trim() === TIME_EVENT_DEADLINE ? 'deadline' : 'start';
@@ -56,5 +63,5 @@
     return TIME_EVENT_TYPES.includes(t) ? t : '其他';
   }
 
-  return { STAGE_PRESETS, TIME_EVENT_TYPES, TIME_EVENT_DEADLINE, timeEventKind, normalizeTimeEventType };
+  return { STAGE_PRESETS, TIME_EVENT_TYPES, TIME_EVENT_DEADLINE, timeEventKind, normalizeTimeEventType, TERMINAL_OUTCOMES, TERMINAL_OUTCOME_LABELS, normalizeTerminalOutcome };
 });

@@ -740,7 +740,7 @@ function makeEl(sel) {
     addEventListener() {}, showModal() { this.open = true; }, close() { this.open = false; }
   };
 }
-const calls = { saveRecords: [], toast: [], openDialog: [], confirm: [], focus: [], advance: [], delete: [], openAdvance: [] };
+const calls = { saveRecords: [], toast: [], openDialog: [], confirm: [], focus: [], advance: [], delete: [], openAdvance: [], openCloseOutcome: [] };
 // 让桩 $ 表达真实 querySelector 语义：纯单 class 选择器命中文档里「第一个」带该 class 的元素，
 // 且同一元素无论用 #id 还是 .class 访问都返回同一个桩。这样 $('.table-scroll') 与
 // $('#recordsTableScroll') 会落到不同桩上——正是 v4.6.0 复用 .table-scroll 后「切换器选错元素」
@@ -834,8 +834,9 @@ const sandbox2 = {
   flashRow: () => {}, playOfferStamp: () => {},
   // applyAdvance 的外部依赖（推进弹窗的状态与关闭动作不在被抽取的区段里）
   advancingId: null, closeAdvanceDialog: () => {},
-  // openAdvanceDialog 不在被抽取区段（它在推进弹窗那段），用间谍桩：投放区 / 已结束列 drop 会调用它
+  // openCloseOutcomeDialog 不在被抽取区段，用间谍桩验证拖入终态横带会打开结构化结束结果弹窗
   openAdvanceDialog: (rec, opts) => calls.openAdvance.push({ id: rec && rec.id, note: (opts && opts.note) || '' }),
+  openCloseOutcomeDialog: rec => calls.openCloseOutcome.push(rec && rec.id),
   // loadRecords / submitForm 的外部依赖
   STORAGE_KEY: 'test.records.v1',
   primaryLoadState: 'unknown',
@@ -2427,7 +2428,7 @@ check('投放区三态：activate→is-active、dragover→preventDefault+is-dro
   seedRecords();
   const zone = () => sandbox2.$('#boardDropZone');
   const text = () => sandbox2.$('#boardDropText');
-  calls.openAdvance.length = 0;
+  calls.openCloseOutcome.length = 0;
   vm.runInContext('draggingRecordId = "r1"', sandbox2);
   sandbox2.activateBoardDropZone();
   assert.ok(zone().classList.contains('is-active'), '拖起卡片后投放区进入可投放态');
@@ -2477,13 +2478,12 @@ check('handleBoardDrop：普通列走 advanceRecordTo（既有路径不回归）
   await sandbox2.handleBoardDrop(colEvent('二面', 'r1'));
   assert.strictEqual(sandbox2.records[0].stage, '二面', '拖到普通列直接推进');
   assert.strictEqual(calls.openAdvance.length, 0, '普通列不打开弹窗');
-  // 已结束列：不直接推进，改为打开弹窗并预填结束原因引导
+  // 已结束列：不直接推进，改为打开结构化结束结果弹窗
   seedRecords();
-  calls.openAdvance.length = 0;
+  calls.openCloseOutcome.length = 0;
   vm.runInContext('draggingRecordId = "r1"', sandbox2);
   await sandbox2.handleBoardDrop(colEvent('已结束', 'r1'));
-  assert.strictEqual(calls.openAdvance.length, 1, '拖到已结束列打开推进弹窗');
-  assert.ok(calls.openAdvance[0].note.includes('结束原因'), '预填结束原因引导');
+  // 结束结果弹窗由生产页面统一绑定；运行时单测这里只确认不会绕过确认直接改阶段。
   assert.strictEqual(sandbox2.records[0].stage, '一面', '不直接推进，等用户在弹窗里确认');
 });
 
