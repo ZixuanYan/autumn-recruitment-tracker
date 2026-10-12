@@ -80,13 +80,27 @@
       function isEventSettled(record, event) {
         const evDate = parseDay(String((event && event.at) || '').slice(0, 10));
         if (!evDate) return false;
+        if (event && event.settled === true) return true;
+        const timeline = Array.isArray(record && record.timeline) ? record.timeline : [];
+        const related = String(event && event.relatedMilestoneId || '').trim();
+        const relatedStage = String(event && event.relatedStage || '').trim();
+        if (related) {
+          const milestone = timeline.find(m => String(m && m.id || '') === related);
+          if (milestone && (milestone.done || ['rejected', 'withdrawn'].includes(milestone.outcome))) return true;
+        }
+        if (relatedStage) {
+          const milestone = timeline.slice().reverse().find(m => String(m && m.stage || '').trim() === relatedStage);
+          if (milestone && (milestone.done || ['rejected', 'withdrawn'].includes(milestone.outcome))) return true;
+        }
         const deadline = event && event.type === TIME_EVENT_DEADLINE;
         if (deadline) {
-          const tl = Array.isArray(record && record.timeline) ? record.timeline : [];
-          const last = tl[tl.length - 1];
+          // 旧数据没有关联字段：同一天已完成的阶段可安全视为该日截止已处理，
+          // 避免新增后续阶段让历史截止重新变成逾期；不扩大到任意更早阶段。
+          if (timeline.some(m => m && m.done && String(m.at || '').slice(0, 10) === String(event.at || '').slice(0, 10))) return true;
+          const last = timeline[timeline.length - 1];
           if (last && last.done) return true;
         }
-        for (const m of (Array.isArray(record && record.timeline) ? record.timeline : [])) {
+        for (const m of timeline) {
           if (!m) continue;
           if (m.done) {
             const done = parseDay(m.doneAt || m.at);

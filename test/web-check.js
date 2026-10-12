@@ -1583,6 +1583,8 @@ check('isEventSettled：完成动作 / 更晚的里程碑 / 当前阶段完成�
   // ③ 只看**末条**：更早的里程碑完成不代表当前阶段的截止无效（一面完成、笔试截止仍然要赶）
   assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '已投递', at: dayOffset(-9, NOW), done: true, doneAt: dayOffset(-9, NOW) }, { stage: '笔试', at: dayOffset(-2, NOW) }] }, evt(DL, dayOffset(2, NOW))), false,
     '只有末条完成才静音：推进到下一阶段后截止自动恢复');
+  assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '测评', at: dayOffset(-3, NOW), done: true, doneAt: dayOffset(-3, NOW) }, { stage: '笔试', at: dayOffset(-1, NOW) }] }, evt(DL, dayOffset(-3, NOW))), true,
+    '历史同日阶段已完成时，新增后续未完成阶段不得让旧截止重新逾期');
   // ③ 只对截止生效：未来的面试安排不因当前阶段完成而消失（它仍是日历上的事实）
   assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '测评', at: dayOffset(-5, NOW), done: true, doneAt: dayOffset(-5, NOW) }] }, evt('面试', `${dayOffset(1, NOW)}T09:00`)), false,
     '规则③不吞未来的面试安排');

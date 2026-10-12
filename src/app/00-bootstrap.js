@@ -44,6 +44,8 @@
             const rawOutcome = String(m && m.outcome || '').trim();
             const outcome = ['rejected', 'withdrawn'].includes(rawOutcome) ? rawOutcome : '';
             return {
+              // 旧数据可能没有 ID；不在纯规范化路径调用随机生成器，保持无 DOM/无 crypto 的测试与导入环境可用。
+              id: String(m && m.id || '').trim().slice(0, 120),
               stage: String(m && m.stage || '').trim(),
               at: String(m && m.at || '').trim(),
               note: String(m && m.note || '').trim(),
@@ -149,7 +151,11 @@
             // v4.22.0 来源标识：sourceId 让「同一封邮件改期」能**替换**旧事件而不是并排留两条；
             // mailId 指向邮件归档，详情里可以从事件回看邮件。
             sourceId: String(e.sourceId || '').trim().slice(0, 120),
-            mailId: String(e.mailId || '').trim().slice(0, 120)
+            mailId: String(e.mailId || '').trim().slice(0, 120),
+            relatedMilestoneId: String(e.relatedMilestoneId || '').trim().slice(0, 120),
+            relatedStage: String(e.relatedStage || '').trim().slice(0, 80),
+            settled: e.settled === true,
+            settledAt: e.settled === true && /^\d{4}-\d{2}-\d{2}$/.test(String(e.settledAt || '').trim()) ? String(e.settledAt).trim() : ''
           };
         }).filter(Boolean);
       }

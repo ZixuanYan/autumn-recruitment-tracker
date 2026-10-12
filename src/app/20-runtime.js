@@ -62,7 +62,7 @@
       //   · 有 sourceId（来自邮件）→ 按 sourceId **替换**：改期后重投同一封邮件时旧时间必须消失，
       //     否则记录会同时挂着"旧面试时间"和"新面试时间"。
       //   · 无 sourceId（手工添加）→ 按「类型 + 时间」去重，重复点不会堆叠。
-      function upsertEvent(rec, type, at, sourceId, mailId, endAt) {
+      function upsertEvent(rec, type, at, sourceId, mailId, endAt, relatedMilestoneId, relatedStage) {
         const kind = normalizeTimeEventType(type);
         // v4.24.0：全天与否按 at 自身判定（含 'T' = 定时），不再看类型 —— 截止也能有具体时刻
         const value = splitEventAt(at);
@@ -75,7 +75,8 @@
           return !(!src && ev.type === kind && ev.at === value.at);
         });
         const end = kind === TIME_EVENT_DEADLINE ? '' : splitEventAt(endAt).at;
-        list.push({ id: cryptoId(), type: kind, at: value.at, endAt: end, allDay: value.allDay, sourceId: src, mailId: mid });
+        list.push({ id: cryptoId(), type: kind, at: value.at, endAt: end, allDay: value.allDay, sourceId: src, mailId: mid,
+          relatedMilestoneId: String(relatedMilestoneId || ''), relatedStage: String(relatedStage || '') });
         rec.events = sanitizeEvents(list);
       }
       // 「日期 + 可选时刻」两个控件 → 事件里的 at。时刻留空即全天（只有日期）。
@@ -374,11 +375,13 @@
             if (!readEd('deadline') && staleDeadlineSource) {
               rec.events = sanitizeEvents((Array.isArray(rec.events) ? rec.events : []).filter(ev => String(ev.sourceId || '') !== staleDeadlineSource));
             }
-            upsertEvent(rec, mailScheduleType(s), schedAt, eventSourceId(s, mailScheduleType(s)), mailIdOf(s), schedEndAt);
+            const related = rec.timeline.slice().reverse().find(m => m.stage === edStage) || null;
+            upsertEvent(rec, mailScheduleType(s), schedAt, eventSourceId(s, mailScheduleType(s)), mailIdOf(s), schedEndAt, related && related.id, related && related.stage);
           }
           const dlAt = joinEventAt(readEd('deadline'), readEd('deadlineTime'));
           if (checked.has('deadline') && dlAt) {
-            upsertEvent(rec, TIME_EVENT_DEADLINE, dlAt, eventSourceId(s, TIME_EVENT_DEADLINE), mailIdOf(s));
+            const related = rec.timeline.slice().reverse().find(m => m.stage === edStage) || null;
+            upsertEvent(rec, TIME_EVENT_DEADLINE, dlAt, eventSourceId(s, TIME_EVENT_DEADLINE), mailIdOf(s), '', related && related.id, related && related.stage);
           }
           if (checked.has('recentSchedule') && readEd('recentSchedule')) rec.recentSchedule = readEd('recentSchedule');
           if (checked.has('nextAction') && readEd('nextAction')) rec.nextAction = readEd('nextAction');
@@ -1116,7 +1119,7 @@
         const at = String(e && e.at || '');
         // data-source-id / data-mail-id：把来源标识带在行上，用户手工改时间后不会丢掉
         // 「这条来自哪封邮件」——否则改期替换就再也认不出旧事件（v4.22.0）。
-        return `<div class="ev-row" data-ev-id="${escapeHtml(String(e && e.id || ''))}" data-source-id="${escapeHtml(String(e && e.sourceId || ''))}" data-mail-id="${escapeHtml(String(e && e.mailId || ''))}">
+        return `<div class="ev-row" data-ev-id="${escapeHtml(String(e && e.id || ''))}" data-source-id="${escapeHtml(String(e && e.sourceId || ''))}" data-mail-id="${escapeHtml(String(e && e.mailId || ''))}" data-related-milestone-id="${escapeHtml(String(e && e.relatedMilestoneId || ''))}" data-related-stage="${escapeHtml(String(e && e.relatedStage || ''))}">
           <select class="control ev-type">${eventTypeOptions(type)}</select>
           <input class="control ev-at" type="date" value="${escapeHtml(at.slice(0, 10))}" aria-label="日期">
           <input class="control ev-time" type="time" value="${escapeHtml(timePartOf(at))}" aria-label="时刻（可留空，留空表示只有日期）">
@@ -1142,7 +1145,9 @@
             allDay: !String(at).includes('T'),
             // 来源标识原样带回去（用户只改时间时，改期替换的依据不能丢）
             sourceId: String(row.dataset.sourceId || ''),
-            mailId: String(row.dataset.mailId || '')
+            mailId: String(row.dataset.mailId || ''),
+            relatedMilestoneId: String(row.dataset.relatedMilestoneId || ''),
+            relatedStage: String(row.dataset.relatedStage || '')
           };
         }).filter(e => e.at);
       }
