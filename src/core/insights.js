@@ -2,7 +2,7 @@
       const INSIGHT_STAGE_ORDER = ['待投递', '已投递', '测评 / 笔试', '面试', 'Offer', '已结束'];
       function insightStageDetail(record) {
         const r = record || {};
-        const raw = String(r.stage || '待投递').trim() || '待投递';
+        const raw = String(r.stage || '待投递').replace(/[\u3000\s]+/g, '').trim() || '待投递';
         const tl = Array.isArray(r.timeline) ? r.timeline : [];
         const last = tl.length ? tl[tl.length - 1] : null;
         const outcome = ['rejected', 'withdrawn'].includes(String(last && last.outcome || '')) ? String(last.outcome) : '';
@@ -11,7 +11,7 @@
           return { group: '已结束', detail: outcome ? (labels[outcome] || '未分类') : '未分类', raw, outcome };
         }
         if (['测评', '笔试', '机试'].includes(raw)) return { group: '测评 / 笔试', detail: raw, raw, outcome: '' };
-        if (raw.includes('面') || ['复试', '终面'].includes(raw)) return { group: '面试', detail: raw, raw, outcome: '' };
+        if (/(面试|面|复试|终面|群面|视频面|电话面)/i.test(raw) || /interview/i.test(raw)) return { group: '面试', detail: raw, raw, outcome: '' };
         return { group: raw, detail: raw, raw, outcome: '' };
       }
       function insightStageRank(group) {

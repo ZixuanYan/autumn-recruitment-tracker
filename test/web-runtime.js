@@ -1368,7 +1368,7 @@ check('renderCalendarView：默认只看今天（含已完成），点选后只�
   sandbox2.renderCalendarView();
   const grid = sandbox2.$('#calendarGrid').innerHTML;
   assert.ok(!grid.includes('cal-chip kind-deadline is-settled'), '已完成的不再逐条排灰 chip');
-  assert.ok(grid.includes('2 条已完成') && grid.includes('1 条已完成'), 'r1 的 2 条 / r3 的 1 条各自聚合成绿行');
+  assert.ok(grid.includes('2 条已完成') && grid.includes('1 条已结束'), '已完成安排与 Offer 终态分别显示状态汇总');
   assert.ok(!grid.includes('data-id="r1"') && !grid.includes('data-id="r3"'), '已完成条目不占 chip 的 data-id');
   assert.ok(/class="cal-day[^"]*" data-date="/.test(grid), '月格带 data-date（整格可点的前提）');
   // 未选中任何日期：空串语义就是今天，且今天完整展示（包括已完成）。

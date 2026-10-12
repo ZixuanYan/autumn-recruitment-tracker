@@ -58,7 +58,12 @@
           })
           .filter(m => m.stage)
           .map((m, i) => ({ m, i }))
-          .sort((a, b) => (a.m.at || '9999-99-99').localeCompare(b.m.at || '9999-99-99') || a.i - b.i)
+          .sort((a, b) => {
+            const aTerminal = a.m.stage === '已结束';
+            const bTerminal = b.m.stage === '已结束';
+            if (aTerminal !== bTerminal) return aTerminal ? 1 : -1;
+            return (a.m.at || '9999-99-99').localeCompare(b.m.at || '9999-99-99') || a.i - b.i;
+          })
           .map(x => x.m);
       }
       // 当前阶段 = 时间线末项（派生）；无时间线则回退到 stage 字段
@@ -389,7 +394,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.35.0';
+      const APP_VERSION = '4.36.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2048,7 +2053,7 @@
         const max = Math.max(1, ...rows.map(row => row.count));
         els.stageGrid.innerHTML = rows.map(row => {
           const detail = row.details.map(item => `${item.label} ${item.count}`).join(' · ');
-          return `<div class="stage-cell" data-stage="${escapeHtml(row.group)}" title="${escapeHtml(`${row.group}：${row.count} 条${detail ? ` · ${detail}` : ''}`)}">
+          return `<div class="stage-cell" data-stage="${escapeHtml(row.group)}" data-tip-kind="stage" data-tip-key="${escapeHtml(row.group)}" tabindex="0" role="button" aria-label="${escapeHtml(`${row.group} ${row.count} 条，查看详细阶段`)}">
             <div class="stage-meta"><span>${escapeHtml(row.group)}</span><strong>${row.count}</strong></div>
             <div class="bar"><div class="bar-fill" data-stage="${escapeHtml(row.group)}" style="width:${row.count / max * 100}%"></div></div>
           </div>`;

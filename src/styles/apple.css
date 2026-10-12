@@ -217,6 +217,8 @@
     .badge[data-stage="Offer"] { color: #fff; background: #1f7a35; border: 0; box-shadow: none; }
     .badge[data-stage="Offer"]::before { background: #fff; }
     .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"], .step[data-stage="已结束"] { --stage-color: #86868b; --stage-soft: #f5f5f7; --stage-border: #dbdbdc; }
+    .stage-cell[data-stage="测评 / 笔试"] { --stage-color: var(--accent-ink); --stage-soft: var(--accent-soft); --stage-border: var(--line); }
+    .stage-cell[data-stage="面试"] { --stage-color: var(--accent-ink); --stage-soft: var(--surface-soft); --stage-border: var(--line); }
     .badge[data-stage="已结束"] { opacity: .62; }
     /* 表头恢复 base-200 灰带 + tracking .16em（规范）。安全性已核实：所有表格上方都有
        panel-head / filters / 块头，灰带不会顶出 panel 圆角；≤560px 卡片化时 thead 整体隐藏。
@@ -356,6 +358,14 @@
     .cal-flow-day { padding-bottom: 5px; border-bottom: 1px solid var(--line); }
     /* 图例「已完成」点从灰改绿：缩略图里已完成已是浅绿行，图例跟着对齐 */
     .cal-dot.is-settled { background: var(--ok); }
+    .cal-dot.is-withdrawn { background: var(--accent-ink); }
+    .cal-dot.is-rejected { background: var(--danger); }
+    .cal-chip.is-withdrawn { background: var(--surface-soft); color: var(--accent-ink); box-shadow: inset 2px 0 0 var(--accent-ink); }
+    .cal-chip.is-rejected { background: var(--danger-soft); color: var(--danger); box-shadow: inset 2px 0 0 var(--danger); }
+    .cal-row-state.is-withdrawn { color: var(--accent-ink); }
+    .cal-row-state.is-rejected { color: var(--danger); }
+    .cal-done.is-withdrawn { color: var(--accent-ink); }
+    .cal-done.is-rejected { color: var(--danger); }
 
     /* ===== v4.4.0：洞察面板（漏斗 / sparkline / 停留 / 指标 / 卡点 / Offer 对比）===== */
     .insights { margin-bottom: 16px; }

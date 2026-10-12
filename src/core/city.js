@@ -102,7 +102,7 @@
       };
       const TIP_MAX_ROWS = 12;
       // 返回 HTML 字符串（内部所有用户数据都经 escapeHtml）；无内容时返回 ''，调用方据此不显示浮层。
-      // kind: 'city' 某城市的投递清单 | 'ctype' 某档企业性质的公司清单 | 'metric' 指标口径 | 'record' 单条记录摘要
+      // kind: 'city' 某城市的投递清单 | 'ctype' 某档企业性质的公司清单 | 'stage' 阶段细分 | 'metric' 指标口径 | 'record' 单条记录摘要
       function tipContentFor(records, kind, key) {
         const list = Array.isArray(records) ? records : [];
         const value = String(key == null ? '' : key);
@@ -124,6 +124,12 @@
           ].filter(([, text]) => String(text || '').trim());
           return `<div class="tip-head">${escapeHtml(record.company || '未填公司')}</div>
             <div class="tip-list">${rows.map(([label, text]) => `<div class="tip-row"><span class="tip-k">${escapeHtml(label)}</span><span class="tip-v">${escapeHtml(text)}</span></div>`).join('')}</div>`;
+        }
+        if (kind === 'stage') {
+          const bucket = typeof computeStageDistribution === 'function' ? computeStageDistribution(list).find(row => row.group === value) : null;
+          if (!bucket || !bucket.count) return '';
+          const items = bucket.details.map(item => `<div class="tip-row"><span class="tip-v">${escapeHtml(item.label)}</span><span class="tip-count">${item.count} 条</span></div>`).join('');
+          return `<div class="tip-head">${escapeHtml(bucket.group)} · ${bucket.count} 条投递</div><div class="tip-list">${items}</div><div class="tip-more">按当前阶段统计，历史经历请查看转化漏斗</div>`;
         }
         if (kind === 'city') {
           const bucket = computeCityStats(list).find(row => row.city === value);

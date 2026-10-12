@@ -179,7 +179,7 @@
       <div class="cal-legend" aria-hidden="true">
         <span class="cal-legend-item"><i class="cal-dot kind-deadline"></i>截止</span>
         <span class="cal-legend-item"><i class="cal-dot kind-start"></i>面试 / 笔试 / 其他</span>
-        <span class="cal-legend-item"><i class="cal-dot is-settled"></i>已完成</span>
+        <span class="cal-legend-item"><i class="cal-dot is-settled"></i>已完成</span><span class="cal-legend-item"><i class="cal-dot is-withdrawn"></i>已放弃</span>
         <span class="cal-legend-item"><i class="cal-dot is-overdue"></i>逾期未处理</span>
       </div>
       <div class="cal-weekdays" aria-hidden="true"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
@@ -505,10 +505,7 @@
     <div class="form-body">
       <p class="capture-note">以下记录会保留原有时间线，并统一归入“已结束”。请确认影响范围和结束原因。</p>
       <div class="batch-targets" id="batchCloseOutcomeTargets"></div>
-      <div class="outcome-options" role="radiogroup" aria-label="批量结束原因">
-        <label><input type="radio" name="batchCloseOutcome" value="rejected" checked><span><strong>被拒</strong><small>招聘方结束流程</small></span></label>
-        <label><input type="radio" name="batchCloseOutcome" value="withdrawn"><span><strong>已放弃</strong><small>主动停止跟进</small></span></label>
-      </div>
+      <div class="outcome-options" role="radiogroup" aria-label="批量结束原因"><label><input type="radio" name="batchCloseOutcome" value="withdrawn" checked><span><strong>已放弃</strong><small>主动停止跟进</small></span></label></div>
     </div>
     <div class="modal-actions"><button class="btn" id="cancelBatchCloseOutcomeBtn" type="button">取消</button><button class="btn btn-primary" id="confirmBatchCloseOutcomeBtn" type="button">确认批量结束</button></div>
   </dialog>

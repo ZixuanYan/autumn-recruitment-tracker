@@ -144,19 +144,26 @@
         });
       }
       let closingRecordId = null;
-      function openCloseOutcomeDialog(record) {
+      function openCloseOutcomeDialog(record, forcedOutcome = '') {
         if (!record || ['Offer', '已结束'].includes(record.stage)) return;
         closingRecordId = record.id;
         $('#closeOutcomeTitle').textContent = `结束流程 · ${record.company || ''}`.trim();
         $('#closeOutcomeHint').textContent = `当前阶段「${record.stage || '未设置'}」会保留在时间线中，结束后记录归入“已结束”。`;
         const rejected = document.querySelector('input[name="closeOutcome"][value="rejected"]');
+        const withdrawn = document.querySelector('input[name="closeOutcome"][value="withdrawn"]');
         if (rejected) rejected.checked = true;
+        if (forcedOutcome === 'withdrawn' && withdrawn) {
+          withdrawn.checked = true;
+          if (rejected) rejected.closest('label').hidden = true;
+        } else if (rejected) rejected.closest('label').hidden = false;
         $('#closeOutcomeDialog').showModal();
       }
       function closeCloseOutcomeDialog() {
         closingRecordId = null;
         const dlg = $('#closeOutcomeDialog');
         if (dlg && dlg.open) dlg.close();
+        const rejected = document.querySelector('input[name="closeOutcome"][value="rejected"]');
+        if (rejected) rejected.closest('label').hidden = false;
       }
       function applyCloseOutcome(outcome) {
         const record = records.find(item => item.id === closingRecordId);

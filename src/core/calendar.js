@@ -39,6 +39,8 @@
         for (const r of (Array.isArray(records) ? records : [])) {
           if (!r) continue;
           const terminal = ['Offer', '已结束'].includes(r.stage);
+          const lastMilestone = Array.isArray(r.timeline) && r.timeline.length ? r.timeline[r.timeline.length - 1] : null;
+          const outcome = terminal && lastMilestone && ['rejected', 'withdrawn'].includes(lastMilestone.outcome) ? lastMilestone.outcome : '';
           for (const ev of (Array.isArray(r.events) ? r.events : [])) {
             if (!ev) continue;
             const allDay = !!ev.allDay;
@@ -60,6 +62,7 @@
               past,
               overdue: past && !settled && !terminal,
               terminal
+              , outcome
             });
           }
         }
@@ -114,11 +117,20 @@
               record: i.record,
               settled: !!(i.settled || i.terminal),
               terminal: !!i.terminal,
+              outcome: i.outcome || '',
               overdue: !!i.overdue
             }))
           };
+          g.entry.aggregate.statusCounts = g.entry.aggregate.positions.reduce((acc, pos) => {
+            const key = pos.outcome === 'withdrawn' ? 'withdrawn' : pos.outcome === 'rejected' ? 'rejected' : pos.settled ? 'completed' : 'pending';
+            acc[key] += 1;
+            return acc;
+          }, { pending: 0, completed: 0, withdrawn: 0, rejected: 0 });
           // 聚合后的状态语义：全部完成才算完成；只要还有未处理的逾期就仍算逾期
           g.entry.settled = doneCount === g.members.length;
+          g.entry.terminal = g.entry.aggregate.positions.every(pos => pos.terminal);
+          const outcomes = new Set(g.entry.aggregate.positions.map(pos => pos.outcome).filter(Boolean));
+          g.entry.outcome = outcomes.size === 1 ? [...outcomes][0] : '';
           g.entry.past = g.members.some(i => i.past);
           g.entry.overdue = !g.entry.settled && g.members.some(i => i.overdue);
         }

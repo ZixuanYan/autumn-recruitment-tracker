@@ -1970,7 +1970,7 @@ check('日历视图接线：路由钩子 / 中央重渲 / 点格选中 / 日程�
   assert.ok(!renderFn.includes('renderUpcoming'), 'render() 不得再调 renderUpcoming（v4.30.0 起并入日程流）');
   // 月格带 data-date、已完成聚合成 .cal-done 绿行、chip 两段式
   assert.ok(/data-date="\$\{cell\.iso\}"/.test(html), '月格要带 data-date（整格可点的前提）');
-  assert.ok(html.includes('class="cal-done"'), '已完成聚合绿行由渲染层生成');
+  assert.ok(html.includes('class="cal-done ${cls}"'), '月历按已完成 / 已放弃 / 被拒分别聚合状态');
   assert.ok(html.includes('class="cal-dots"') && html.includes('cal-chip-main') && html.includes('cal-chip-who'), '月格渲染圆点定位行与两段式 chip');
   assert.ok(/calSelectedDate = iso === localDateInput\(new Date\(\)\) \? '' : iso/.test(html), '今天用空串表示默认态，其他日期保持单日选择');
   assert.ok(/calViewYear = d\.getFullYear\(\);[\s\S]*?calViewMonth = d\.getMonth\(\);/.test(extractFunction(html, 'calSelectDay')), '点跨月补位日期要同步切换年月');

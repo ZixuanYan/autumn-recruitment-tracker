@@ -222,9 +222,6 @@
           ? `<button class="btn btn-small btn-primary" data-mail-action="select-target" data-mail-id="${escapeHtml(s.id)}" type="button">选择已有记录</button><button class="btn btn-small" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`
           : `<button class="btn btn-small btn-primary" data-mail-action="apply" data-mail-id="${escapeHtml(s.id)}" type="button">应用所选</button><button class="btn btn-small" data-mail-action="select-target" data-mail-id="${escapeHtml(s.id)}" type="button">重新选择记录</button><button class="btn btn-small" data-mail-action="new" data-mail-id="${escapeHtml(s.id)}" type="button">新建记录</button>`;
 
-        const endActions = (matches.length || manualTargetIds.length)
-          ? `<button class="btn btn-small btn-soft" data-mail-action="close-rejected" data-mail-id="${escapeHtml(s.id)}" type="button">标记被拒</button><button class="btn btn-small btn-soft" data-mail-action="close-withdrawn" data-mail-id="${escapeHtml(s.id)}" type="button">标记已放弃</button>`
-          : '';
         return `<article class="mail-card${lowConf ? ' low-conf' : ''}" data-mail-id="${escapeHtml(s.id)}">
           <div class="mail-card-top">
             <span class="mail-type" data-type="${escapeHtml(s.emailType || '其它')}">${escapeHtml(s.emailType || '其它')}</span>
@@ -238,7 +235,7 @@
           <div class="mail-meta">${escapeHtml(s.from || '')}${s.receivedAt ? ` · ${escapeHtml(formatClock(s.receivedAt) || '')}` : ''}</div>
           ${matchHtml}
           ${fieldsHtml}
-          <div class="mail-actions">${primaryBtn}${endActions}<button class="btn btn-small" data-mail-action="dismiss" data-mail-id="${escapeHtml(s.id)}" type="button">忽略</button></div>
+          <div class="mail-actions">${primaryBtn}<button class="btn btn-small" data-mail-action="dismiss" data-mail-id="${escapeHtml(s.id)}" type="button">忽略</button></div>
         </article>`;
       }
 
@@ -421,24 +418,6 @@
           if (single && single.dataset.targetId) ids.push(single.dataset.targetId);
         }
         return { suggestion: s, targets: ids.map(id => records.find(r => r.id === id)).filter(Boolean) };
-      }
-
-      async function closeMailSuggestion(id, outcome) {
-        const label = TERMINAL_OUTCOME_LABELS[outcome] || '';
-        const { suggestion, targets } = mailTargetRecords(id);
-        if (!suggestion || !targets.length) { showToast('请先选择或关联至少一条投递记录'); return; }
-        const names = targets.map(r => `${r.company || '未填公司'} · ${r.position || '未填岗位'}`).join('、');
-        const confirmed = await confirmInApp(`将 ${label}以下 ${targets.length} 条记录？\n${names}`, { title: '确认结束流程', confirmText: `确认${label}`, danger: true });
-        if (!confirmed) return;
-        const at = localDateInput(new Date());
-        targets.forEach(record => { closeRecordWithOutcome(record, outcome, at); linkMailToRecord(record, suggestion); record.updatedAt = Date.now(); });
-        saveRecords(`邮件标记 ${label}：${targets.length} 条记录`);
-        mailArchive = archiveSuggestionMail(mailArchive, suggestion);
-        markMailApplied(id);
-        mailManualTargets.delete(String(id));
-        renderMailView();
-        updateMailBadge();
-        showToast(`已${label} ${targets.length} 条记录`);
       }
 
       function mailLinkCandidates(query) {
@@ -745,7 +724,10 @@
         grid.innerHTML = buildMonthGrid(calViewYear, calViewMonth, now).map(cell => {
           const items = byDate.get(cell.iso) || [];
           const open = items.filter(i => !i.settled && !i.terminal);
-          const doneCount = items.length - open.length;
+          const completedCount = items.filter(i => i.settled && !i.terminal).length;
+          const withdrawnCount = items.filter(i => i.terminal && i.outcome === 'withdrawn').length;
+          const rejectedCount = items.filter(i => i.terminal && i.outcome === 'rejected').length;
+          const endedCount = items.filter(i => i.terminal && !i.outcome).length;
           const shown = open.slice(0, MAX_PER_CELL);
           const rest = open.length - shown.length;
           const chips = shown.map(item => {
@@ -758,18 +740,17 @@
               : `${who} · ${item.record.position || '未填岗位'} · ${item.type}${eventClock ? ` ${eventClock}` : ''}`;
             const state = item.overdue ? ' is-overdue' : '';
             // 两段渲染：时刻（截止类无时刻时给类型名）+ 公司名（聚合条目带「等 N 岗」）。
-            return `<button class="cal-chip kind-${item.kind}${state}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-chip-main">${escapeHtml(eventClock || item.type)}</span><span class="cal-chip-who">${escapeHtml(who)}${n > 1 ? ` 等 ${n} 岗` : ''}</span></button>`;
+            return `<button class="cal-chip kind-${item.kind}${state}${item.terminal ? ` is-${item.outcome || 'ended'}` : ''}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-chip-main">${escapeHtml(eventClock || item.type)}</span><span class="cal-chip-who">${escapeHtml(who)}${n > 1 ? ` 等 ${n} 岗` : ''}</span></button>`;
           }).join('');
           const more = rest > 0
             ? `<span class="cal-more" title="${escapeHtml(open.slice(MAX_PER_CELL).map(i => `${i.record.company || '未填公司'} ${i.type}${i.time ? ` ${i.time}` : ''}`).join('\n'))}">+${rest}</span>`
             : '';
-          const doneLine = doneCount > 0
-            ? `<button class="cal-done" type="button" title="${escapeHtml(`当天有 ${doneCount} 条已完成，点开看明细`)}">${doneCount} 条已完成</button>`
-            : '';
+          const stateParts = [[completedCount, '已完成', 'is-settled'], [withdrawnCount, '已放弃', 'is-withdrawn'], [rejectedCount, '被拒', 'is-rejected'], [endedCount, '已结束', 'is-ended']].filter(([count]) => count > 0);
+          const doneLine = stateParts.map(([count, label, cls]) => `<button class="cal-done ${cls}" type="button" title="${escapeHtml(`当天有 ${count} 条${label}，点开看明细`)}">${count} 条${label}</button>`).join('');
           const dotMore = open.length > 4 ? `<span class="cal-dot-more">+${open.length - 4}</span>` : '';
-          const dots = open.slice(0, 4).map(i => `<i class="cal-dot kind-${i.kind}"></i>`).join('')
+          const dots = open.slice(0, 4).map(i => `<i class="cal-dot kind-${i.kind}${i.terminal ? ` is-${i.outcome || 'ended'}` : ''}"></i>`).join('')
             + dotMore
-            + (doneCount > 0 ? '<i class="cal-dot is-settled"></i>' : '');
+            + stateParts.map(([, , cls]) => `<i class="cal-dot ${cls}"></i>`).join('');
           const hasOverdue = open.some(i => i.overdue);
           const selected = activeDate === cell.iso;
           const label = `${cell.iso}${cell.isToday ? '，今天' : ''}，${items.length ? `${items.length} 项安排` : '没有安排'}`;
@@ -796,11 +777,11 @@
         const who = item.record.company || '未填公司';
         const done = item.settled || item.terminal;
         const state = done
-          ? `<span class="cal-row-state is-settled">${item.terminal ? '已结束' : '已完成'}</span>`
+          ? `<span class="cal-row-state ${item.terminal ? `is-${item.outcome || 'ended'}` : 'is-settled'}">${item.terminal ? (item.outcome === 'withdrawn' ? '已放弃' : item.outcome === 'rejected' ? '被拒' : '已结束') : '已完成'}</span>`
           : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
         const eventClock = item.time ? `${item.time}${item.endTime ? `-${item.endTime}` : ''}` : '';
         const full = `${who} · ${item.record.position || '未填岗位'} · ${item.type}${eventClock ? ` ${eventClock}` : ''}`;
-        const action = !done && !['Offer', '已结束'].includes(item.record.stage) ? `<button class="cal-row-action" type="button" data-close-record="${escapeHtml(item.record.id)}">结束</button>` : '';
+        const action = !done && !['Offer', '已结束'].includes(item.record.stage) ? `<button class="cal-row-action" type="button" data-close-record="${escapeHtml(item.record.id)}">放弃该安排</button>` : '';
         return `<div class="cal-flow-entry"><button class="cal-row kind-${item.kind}" type="button" data-id="${escapeHtml(item.record.id)}" title="${escapeHtml(full)}"><span class="cal-row-time">${escapeHtml(eventClock || '全天')}</span><span class="cal-row-type">${escapeHtml(item.type)}</span><span class="cal-row-who">${escapeHtml(who)}<em>${escapeHtml(item.record.position || '未填岗位')}</em></span>${state}</button>${action}</div>`;
       }
 
@@ -810,8 +791,10 @@
         const agg = item.aggregate;
         const who = item.record.company || '未填公司';
         const done = item.settled;
+        const counts = agg.statusCounts || { pending: 0, completed: agg.doneCount || 0, withdrawn: 0, rejected: 0 };
+        const statusText = [[counts.completed, '已完成'], [counts.withdrawn, '已放弃'], [counts.rejected, '被拒']].filter(([count]) => count).map(([count, label]) => `${count} 个${label}`).join(' · ');
         const state = done
-          ? `<span class="cal-row-state is-settled">${agg.positions.every(p => p.terminal) ? '已结束' : '已完成'}</span>`
+          ? `<span class="cal-row-state ${counts.withdrawn && !counts.completed && !counts.rejected ? 'is-withdrawn' : counts.rejected && !counts.completed && !counts.withdrawn ? 'is-rejected' : 'is-settled'}">${statusText || '已结束'}</span>`
           : (item.overdue ? '<span class="cal-row-state is-overdue">逾期未处理</span>' : '');
         const key = `${agg.mailId}|${item.date}|${item.type}`;
         const expanded = calFlowExpandedKey === key;
@@ -822,7 +805,7 @@
         const subRows = agg.positions.map(p => {
           const r = p.record;
           const subState = p.settled
-            ? `<span class="cal-row-state is-settled">${p.terminal ? '已结束' : '已完成'}</span>`
+            ? `<span class="cal-row-state ${p.terminal ? `is-${p.outcome || 'ended'}` : 'is-settled'}">${p.terminal ? (p.outcome === 'withdrawn' ? '已放弃' : p.outcome === 'rejected' ? '被拒' : '已结束') : '已完成'}</span>`
             : (p.overdue ? '<span class="cal-row-state is-overdue">逾期</span>' : '');
           return `<button class="cal-row cal-row-sub kind-${item.kind}" type="button" data-id="${escapeHtml(r.id)}" title="${escapeHtml(`${r.company || ''} · ${r.position || '未填岗位'} · 查看详情`)}"><span class="cal-row-time"></span><span class="cal-row-type">${escapeHtml(r.orgUnit || '—')}</span><span class="cal-row-who">${escapeHtml(r.company || '未填公司')}<em>${escapeHtml(r.position || '未填岗位')}</em></span>${subState}</button>`;
         }).join('');
@@ -894,6 +877,7 @@
         if (dlg && dlg.open) dlg.close();
       }
       function applyBatchCloseOutcome(outcome) {
+        outcome = 'withdrawn';
         const label = TERMINAL_OUTCOME_LABELS[outcome] || '';
         const targets = recordsForMailEvent(batchCloseKey).filter(r => !['Offer', '已结束'].includes(r.stage));
         if (!label || !targets.length) { showToast('没有可结束的关联记录'); return; }
@@ -2057,7 +2041,7 @@
       });
       $('#calFlowList').addEventListener('click', event => {
         const closeBtn = event.target.closest('[data-close-record]');
-        if (closeBtn) { event.stopPropagation(); const record = records.find(r => r.id === closeBtn.dataset.closeRecord); if (record) openCloseOutcomeDialog(record); return; }
+        if (closeBtn) { event.stopPropagation(); const record = records.find(r => r.id === closeBtn.dataset.closeRecord); if (record) openCloseOutcomeDialog(record, 'withdrawn'); return; }
         const doneBtn = event.target.closest('[data-batch-done]');
         if (doneBtn) { batchMarkMailDone(doneBtn.dataset.batchDone); return; }
         const advanceBtn = event.target.closest('[data-batch-advance]');
@@ -2205,9 +2189,7 @@
         if (!btn) return;
         const id = btn.dataset.mailId;
         const action = btn.dataset.mailAction;
-        if (action === 'close-rejected') closeMailSuggestion(id, 'rejected');
-        else if (action === 'close-withdrawn') closeMailSuggestion(id, 'withdrawn');
-        else if (action === 'apply') applyMailSuggestion(id);
+        if (action === 'apply') applyMailSuggestion(id);
         else if (action === 'select-target') openMailLinkDialog(id);
         else if (action === 'new') openMailSeedDialog(id);
         else if (action === 'dismiss') dismissMailSuggestion(id);
