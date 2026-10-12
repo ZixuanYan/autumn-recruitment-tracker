@@ -217,8 +217,8 @@
     .badge[data-stage="Offer"] { color: #fff; background: #1f7a35; border: 0; box-shadow: none; }
     .badge[data-stage="Offer"]::before { background: #fff; }
     .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"], .step[data-stage="已结束"] { --stage-color: #86868b; --stage-soft: #f5f5f7; --stage-border: #dbdbdc; }
-    .stage-cell[data-stage="测评 / 笔试"] { --stage-color: var(--accent-ink); --stage-soft: var(--accent-soft); --stage-border: var(--line); }
-    .stage-cell[data-stage="面试"] { --stage-color: var(--accent-ink); --stage-soft: var(--surface-soft); --stage-border: var(--line); }
+    .stage-cell[data-stage="测评 / 笔试"] { --stage-color: #3f6fa8; --stage-soft: #edf3fa; --stage-border: #c6d8ed; }
+    .stage-cell[data-stage="面试"] { --stage-color: #6352a8; --stage-soft: #f0eefb; --stage-border: #d5cff0; }
     .badge[data-stage="已结束"] { opacity: .62; }
     /* 表头恢复 base-200 灰带 + tracking .16em（规范）。安全性已核实：所有表格上方都有
        panel-head / filters / 块头，灰带不会顶出 panel 圆角；≤560px 卡片化时 thead 整体隐藏。
@@ -366,6 +366,10 @@
     .cal-row-state.is-rejected { color: var(--danger); }
     .cal-done.is-withdrawn { color: var(--accent-ink); }
     .cal-done.is-rejected { color: var(--danger); }
+    .cal-done.is-settled { background: var(--ok-soft); color: var(--ok); }
+    .cal-done.is-withdrawn { background: var(--surface-soft); box-shadow: inset 2px 0 0 var(--accent-ink); }
+    .cal-done.is-rejected { background: var(--danger-soft); box-shadow: inset 2px 0 0 var(--danger); }
+    .cal-done.is-ended { background: var(--surface-soft); color: var(--muted); box-shadow: inset 2px 0 0 var(--muted); }
 
     /* ===== v4.4.0：洞察面板（漏斗 / sparkline / 停留 / 指标 / 卡点 / Offer 对比）===== */
     .insights { margin-bottom: 16px; }
@@ -994,4 +998,6 @@
     .stage-cell[data-stage="HR面"], .badge[data-stage="HR面"], .step[data-stage="HR面"] { --stage-color: #ac8ee0; --stage-soft: rgba(172, 142, 224, .18); --stage-border: rgba(172, 142, 224, .40); }
     .stage-cell[data-stage="Offer"], .badge[data-stage="Offer"], .step[data-stage="Offer"] { --stage-color: #a3e8b4; --stage-soft: rgba(163, 232, 180, .18); --stage-border: rgba(163, 232, 180, .40); }
     .stage-cell[data-stage="已结束"], .badge[data-stage="已结束"], .step[data-stage="已结束"] { --stage-color: #9c9ca0; --stage-soft: rgba(156, 156, 160, .18); --stage-border: rgba(156, 156, 160, .40); }
+    .stage-cell[data-stage="测评 / 笔试"] { --stage-color: #76a0cf; --stage-soft: rgba(118, 160, 207, .18); --stage-border: rgba(118, 160, 207, .40); }
+    .stage-cell[data-stage="面试"] { --stage-color: #a99be8; --stage-soft: rgba(169, 155, 232, .18); --stage-border: rgba(169, 155, 232, .40); }
     }

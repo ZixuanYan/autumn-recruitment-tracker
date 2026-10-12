@@ -128,7 +128,7 @@
         if (kind === 'stage') {
           const bucket = typeof computeStageDistribution === 'function' ? computeStageDistribution(list).find(row => row.group === value) : null;
           if (!bucket || !bucket.count) return '';
-          const items = bucket.details.map(item => `<div class="tip-row"><span class="tip-v">${escapeHtml(item.label)}</span><span class="tip-count">${item.count} 条</span></div>`).join('');
+          const items = bucket.details.map(item => `<div class="tip-row"><span class="tip-v"><span class="badge badge-sm" data-stage="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span></span><span class="tip-count">${item.count} 条</span></div>`).join('');
           return `<div class="tip-head">${escapeHtml(bucket.group)} · ${bucket.count} 条投递</div><div class="tip-list">${items}</div><div class="tip-more">按当前阶段统计，历史经历请查看转化漏斗</div>`;
         }
         if (kind === 'city') {
