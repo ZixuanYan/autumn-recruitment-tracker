@@ -160,7 +160,8 @@ async function runIndexOnce({ mails = [], prevGist = null, ai = 'ok', uidFrom = 
 
 const mail = (uid, from, subject, text) => ({
   uid,
-  parsed: { from, subject, text: text || '', date: '2026-09-06T10:00:00Z' }
+  // 建议状态会按 30 天窗口清理；测试样例使用当前时间，避免日期推进后被正常 prune 掉。
+  parsed: { from, subject, text: text || '', date: new Date().toISOString() }
 });
 const gistWith = (suggestions, meta) => ({
   files: {
@@ -173,7 +174,7 @@ const gistWith = (suggestions, meta) => ({
   }
 });
 const sug = (uid, company, subject) => ({
-  id: `uid-${uid}`, sourceUid: uid, receivedAt: '2026-09-06T10:00:00Z',
+  id: `uid-${uid}`, sourceUid: uid, receivedAt: new Date().toISOString(),
   from: 'x@y.com', subject: subject || `subj-${uid}`, emailType: '其它',
   company: company || `c${uid}`, position: 'p', stage: '已投递', scheduleAt: '',
   location: '', round: '', summary: '', confidence: 0.9, proposed: {}
