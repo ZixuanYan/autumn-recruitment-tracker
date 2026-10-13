@@ -36,7 +36,7 @@
       function sanitizeTimeline(list) {
         if (!Array.isArray(list)) return [];
         return list
-          .map(m => {
+          .map((m, sourceIndex) => {
             // done 只接受布尔 true（v4.21.0）：字符串 "false"、数字 1 这类脏值一律按未完成。
             // 用 `!!value` 判会把 "false" 判成 true —— 手改过 JSON 或第三方写入时最容易踩。
             const done = (m && m.done) === true;
@@ -44,8 +44,8 @@
             const rawOutcome = String(m && m.outcome || '').trim();
             const outcome = ['rejected', 'withdrawn'].includes(rawOutcome) ? rawOutcome : '';
             return {
-              // 旧数据可能没有 ID；不在纯规范化路径调用随机生成器，保持无 DOM/无 crypto 的测试与导入环境可用。
-              id: String(m && m.id || '').trim().slice(0, 120),
+              // 旧数据补确定性 ID；首次保存后即持久化，之后排序/编辑仍保持稳定。
+              id: String(m && m.id || `milestone-${sourceIndex + 1}-${String(m && m.at || '').slice(0, 10)}`).trim().slice(0, 120),
               stage: String(m && m.stage || '').trim(),
               at: String(m && m.at || '').trim(),
               note: String(m && m.note || '').trim(),

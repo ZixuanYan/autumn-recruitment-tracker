@@ -83,11 +83,42 @@
         if (event && event.settled === true) return true;
         const timeline = Array.isArray(record && record.timeline) ? record.timeline : [];
         const related = String(event && event.relatedMilestoneId || '').trim();
-        const relatedStage = String(event && event.relatedStage || '').trim();
+        let relatedStage = String(event && event.relatedStage || '').trim();
+        let inferredMilestone = null;
+        // 旧数据的事件没有 relatedStage：用同一封已归档邮件的类型回推阶段。
+        // 邮件应用前就已写入的记录因此也能享受“阶段完成 → 关联截止完成”的规则。
+        if (!relatedStage && event && event.mailId && Array.isArray(record && record.mailRefs)) {
+          const ref = record.mailRefs.find(item => String(item && item.mailId || '') === String(event.mailId));
+          const signal = String((ref && ref.emailType) || event.type || '');
+          const candidates = timeline.filter(m => m && String(m.stage || '').trim());
+          const refDate = parseDay(String((ref && ref.receivedAt) || '').slice(0, 10));
+          const nearest = list => list.slice().sort((a, b) => {
+            if (!refDate) return timeline.indexOf(b) - timeline.indexOf(a);
+            const ad = parseDay(String(a.at || '').slice(0, 10));
+            const bd = parseDay(String(b.at || '').slice(0, 10));
+            const ag = ad ? Math.abs(daysUntil(ad, refDate)) : 99999;
+            const bg = bd ? Math.abs(daysUntil(bd, refDate)) : 99999;
+            return ag - bg || timeline.indexOf(b) - timeline.indexOf(a);
+          })[0];
+          if (/面试|面/.test(signal)) {
+            const interview = nearest(candidates.filter(m => /面/.test(m.stage)));
+            inferredMilestone = interview || null;
+            relatedStage = interview ? String(interview.stage).trim() : '';
+          } else if (/测评/.test(signal)) {
+            const assessment = nearest(candidates.filter(m => /测评|机试/.test(m.stage)));
+            inferredMilestone = assessment || null;
+            relatedStage = assessment ? String(assessment.stage).trim() : '';
+          } else if (/笔试/.test(signal)) {
+            const written = nearest(candidates.filter(m => /笔试/.test(m.stage)));
+            inferredMilestone = written || null;
+            relatedStage = written ? String(written.stage).trim() : '';
+          }
+        }
         if (related) {
           const milestone = timeline.find(m => String(m && m.id || '') === related);
           if (milestone && (milestone.done || ['rejected', 'withdrawn'].includes(milestone.outcome))) return true;
         }
+        if (inferredMilestone && (inferredMilestone.done || ['rejected', 'withdrawn'].includes(inferredMilestone.outcome))) return true;
         if (relatedStage) {
           const milestone = timeline.slice().reverse().find(m => String(m && m.stage || '').trim() === relatedStage);
           if (milestone && (milestone.done || ['rejected', 'withdrawn'].includes(milestone.outcome))) return true;
