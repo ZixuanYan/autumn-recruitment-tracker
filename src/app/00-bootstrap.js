@@ -48,6 +48,7 @@
               id: String(m && m.id || `milestone-${sourceIndex + 1}-${String(m && m.at || '').slice(0, 10)}`).trim().slice(0, 120),
               stage: String(m && m.stage || '').trim(),
               at: String(m && m.at || '').trim(),
+              atSource: ['email', 'received', 'manual'].includes(String(m && m.atSource || '').trim()) ? String(m.atSource).trim() : '',
               note: String(m && m.note || '').trim(),
               done,
               // doneAt 必须是合法 YYYY-MM-DD，否则清空（非法值绝不进持久化）。
@@ -1822,7 +1823,22 @@
         merged.intent = Math.max(Number(existing.intent) || 0, Number(incoming.intent) || 0);
         merged.updatedAt = Math.max(Number(existing.updatedAt) || 0, Number(incoming.updatedAt) || 0, Date.now());
         merged.timeline = sanitizeTimeline([...(existing.timeline || []), ...(incoming.timeline || [])]);
-        merged.events = sanitizeEvents([...(existing.events || []), ...(incoming.events || [])]);
+        const eventMap = new Map();
+        [...(existing.events || []), ...(incoming.events || [])].forEach(event => {
+          const item = event && typeof event === 'object' ? event : null;
+          if (!item) return;
+          const key = String(item.sourceId || item.id || `${item.type || ''}|${item.at || ''}`);
+          const prev = eventMap.get(key);
+          eventMap.set(key, prev ? {
+            ...prev,
+            ...item,
+            relatedMilestoneId: item.relatedMilestoneId || prev.relatedMilestoneId || '',
+            relatedStage: item.relatedStage || prev.relatedStage || '',
+            settled: item.settled === true || prev.settled === true,
+            settledAt: item.settledAt || prev.settledAt || ''
+          } : item);
+        });
+        merged.events = sanitizeEvents([...eventMap.values()]);
         const notes = [...(existing.notes || []), ...(incoming.notes || [])];
         const noteSeen = new Set();
         merged.notes = notes.filter(note => {

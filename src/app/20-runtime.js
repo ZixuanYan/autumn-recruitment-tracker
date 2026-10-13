@@ -363,7 +363,7 @@
             // `n.scheduleDate || receivedDate(mail)` 构成**两处**静默兜底，
             // 只修 Action 那一处的话，网页端会继续用"今天"顶替。现在不猜：
             // 缺日期已被上面的校验拦下。
-            setTimeline(rec, [...(rec.timeline || []), { stage: edStage, at: edAt, note: readEd('milestone.note') || mile.note || '邮件' }]);
+          setTimeline(rec, [...(rec.timeline || []), { stage: edStage, at: edAt, atSource: mile.atSource || 'email', note: readEd('milestone.note') || mile.note || '邮件' }]);
             milestoneApplied = true;
           }
           // v4.24.0：开始/截止都是「日期 + 可选时刻」两个控件，先合成 at 再写事件
@@ -1054,7 +1054,7 @@
         // 完成勾选（v4.18.0）：一个阶段是否已做完，与它是不是当前阶段无关。
         // 类名刻意不叫 tl-row-*，否则会污染测试里按 "tl-row" 计数行的断言。
         // data-done-at（v4.21.0）：把已有的完成日期带在行上，改阶段发生日期时不会把它冲掉。
-        return `<div class="tl-row" data-done-at="${escapeHtml(m && m.doneAt || '')}">
+        return `<div class="tl-row" data-milestone-id="${escapeHtml(m && m.id || '')}" data-done-at="${escapeHtml(m && m.doneAt || '')}" data-at-source="${escapeHtml(m && m.atSource || '')}">
           <input class="control tl-stage" list="stagePresets" maxlength="20" placeholder="阶段" value="${escapeHtml(m && m.stage || '')}">
           <input class="control tl-date" type="date" value="${escapeHtml(m && m.at || '')}" aria-label="阶段日期">
           <input class="control tl-note" maxlength="60" placeholder="备注（可选）" value="${escapeHtml(m && m.note || '')}">
@@ -1089,6 +1089,8 @@
             stage: row.querySelector('.tl-stage').value.trim(),
             at,
             note: row.querySelector('.tl-note').value.trim(),
+            id: String(row.dataset.milestoneId || ''),
+            atSource: ['email', 'received', 'manual'].includes(row.dataset.atSource) ? row.dataset.atSource : 'manual',
             done,
             doneAt: done ? (prevDoneAt || localDateInput(new Date())) : ''
           };

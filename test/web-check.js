@@ -1595,6 +1595,15 @@ check('isEventSettled：完成动作 / 更晚的里程碑 / 当前阶段完成�
     timeline: [{ stage: '测评', at: dayOffset(-5, NOW), done: true, doneAt: dayOffset(-4, NOW) }, { stage: '笔试', at: dayOffset(-1, NOW) }]
   }, { type: DL, at: dayOffset(-3, NOW), mailId: 'mail-assessment' }), true,
     '旧测评截止应映射到已完成的测评阶段，而不是后续未完成的笔试');
+  assert.strictEqual(core.isEventSettled({
+    mailRefs: [{ mailId: 'mail-hr', emailType: '面试邀请', receivedAt: '2026-10-10T07:00:00Z' }],
+    timeline: [
+      { id: 'm1', stage: '一面', at: '2026-09-29', done: true, doneAt: '2026-09-29' },
+      { id: 'm2', stage: '二面', at: '2026-10-08', done: true, doneAt: '2026-10-08' },
+      { id: 'm3', stage: 'HR面', at: '2026-10-14', done: false, doneAt: '' }
+    ]
+  }, { type: '面试', at: '2026-10-14T15:30', mailId: 'mail-hr' }), false,
+    'HR 面事件必须按事件日期匹配 HR 面，不能被已完成二面覆盖');
   // ③ 只对截止生效：未来的面试安排不因当前阶段完成而消失（它仍是日历上的事实）
   assert.strictEqual(core.isEventSettled({ timeline: [{ stage: '测评', at: dayOffset(-5, NOW), done: true, doneAt: dayOffset(-5, NOW) }] }, evt('面试', `${dayOffset(1, NOW)}T09:00`)), false,
     '规则③不吞未来的面试安排');

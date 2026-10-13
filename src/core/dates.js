@@ -77,52 +77,52 @@
       // 之前只认①，完成日早于截止日就照样倒计时，与"已完成网申投递"并排出现（用户实测反馈）。
       // 只看末条：更早的里程碑完成不代表当前阶段的截止无效（一面完成、笔试截止仍然要赶）；
       // 推进到下一阶段后末条不再是 done，截止自动恢复倒计时。
+      function resolveEventMilestone(record, event) {
+        const timeline = Array.isArray(record && record.timeline) ? record.timeline : [];
+        const relatedId = String(event && event.relatedMilestoneId || '').trim();
+        if (relatedId) {
+          const byId = timeline.find(m => String(m && m.id || '').trim() === relatedId);
+          if (byId) return { milestone: byId, source: 'id', confidence: 'high' };
+        }
+        const relatedStage = String(event && event.relatedStage || '').trim();
+        if (relatedStage) {
+          const byStage = timeline.slice().reverse().find(m => String(m && m.stage || '').trim() === relatedStage);
+          if (byStage) return { milestone: byStage, source: 'stage', confidence: 'high' };
+        }
+        const mailId = String(event && event.mailId || '').trim();
+        const refs = Array.isArray(record && record.mailRefs) ? record.mailRefs : [];
+        const ref = mailId ? refs.find(item => String(item && item.mailId || '').trim() === mailId) : null;
+        if (!ref) return { milestone: null, source: 'none', confidence: 'none' };
+        const signal = String(ref.emailType || event.type || '');
+        const pattern = /面试|面/.test(signal) ? /面/ : /测评/.test(signal) ? /测评|机试/ : /笔试/.test(signal) ? /笔试/ : null;
+        if (!pattern) return { milestone: null, source: 'none', confidence: 'none' };
+        const candidates = timeline.filter(m => m && pattern.test(String(m.stage || '')));
+        if (!candidates.length) return { milestone: null, source: 'none', confidence: 'none' };
+        const eventDate = parseDay(String(event.at || '').slice(0, 10));
+        const receivedDate = parseDay(String(ref.receivedAt || '').slice(0, 10));
+        const score = m => {
+          const date = parseDay(String(m.at || '').slice(0, 10));
+          const exact = eventDate && date && date.getTime() === eventDate.getTime() ? 0 : 1;
+          const eventGap = eventDate && date ? Math.abs(daysUntil(date, eventDate)) : 99999;
+          const receivedGap = receivedDate && date ? Math.abs(daysUntil(date, receivedDate)) : 99999;
+          return [exact, eventGap, receivedGap, -timeline.indexOf(m)];
+        };
+        candidates.sort((a, b) => {
+          const sa = score(a); const sb = score(b);
+          for (let i = 0; i < sa.length; i += 1) if (sa[i] !== sb[i]) return sa[i] - sb[i];
+          return 0;
+        });
+        return { milestone: candidates[0], source: 'mail-date', confidence: score(candidates[0])[0] === 0 ? 'high' : 'medium' };
+      }
+
       function isEventSettled(record, event) {
         const evDate = parseDay(String((event && event.at) || '').slice(0, 10));
         if (!evDate) return false;
         if (event && event.settled === true) return true;
+        const resolved = resolveEventMilestone(record, event);
+        // 一旦找到了明确归属，只使用这一个阶段的状态，不能再被其它历史阶段覆盖。
+        if (resolved.milestone) return !!(resolved.milestone.done || ['rejected', 'withdrawn'].includes(resolved.milestone.outcome));
         const timeline = Array.isArray(record && record.timeline) ? record.timeline : [];
-        const related = String(event && event.relatedMilestoneId || '').trim();
-        let relatedStage = String(event && event.relatedStage || '').trim();
-        let inferredMilestone = null;
-        // 旧数据的事件没有 relatedStage：用同一封已归档邮件的类型回推阶段。
-        // 邮件应用前就已写入的记录因此也能享受“阶段完成 → 关联截止完成”的规则。
-        if (!relatedStage && event && event.mailId && Array.isArray(record && record.mailRefs)) {
-          const ref = record.mailRefs.find(item => String(item && item.mailId || '') === String(event.mailId));
-          const signal = String((ref && ref.emailType) || event.type || '');
-          const candidates = timeline.filter(m => m && String(m.stage || '').trim());
-          const refDate = parseDay(String((ref && ref.receivedAt) || '').slice(0, 10));
-          const nearest = list => list.slice().sort((a, b) => {
-            if (!refDate) return timeline.indexOf(b) - timeline.indexOf(a);
-            const ad = parseDay(String(a.at || '').slice(0, 10));
-            const bd = parseDay(String(b.at || '').slice(0, 10));
-            const ag = ad ? Math.abs(daysUntil(ad, refDate)) : 99999;
-            const bg = bd ? Math.abs(daysUntil(bd, refDate)) : 99999;
-            return ag - bg || timeline.indexOf(b) - timeline.indexOf(a);
-          })[0];
-          if (/面试|面/.test(signal)) {
-            const interview = nearest(candidates.filter(m => /面/.test(m.stage)));
-            inferredMilestone = interview || null;
-            relatedStage = interview ? String(interview.stage).trim() : '';
-          } else if (/测评/.test(signal)) {
-            const assessment = nearest(candidates.filter(m => /测评|机试/.test(m.stage)));
-            inferredMilestone = assessment || null;
-            relatedStage = assessment ? String(assessment.stage).trim() : '';
-          } else if (/笔试/.test(signal)) {
-            const written = nearest(candidates.filter(m => /笔试/.test(m.stage)));
-            inferredMilestone = written || null;
-            relatedStage = written ? String(written.stage).trim() : '';
-          }
-        }
-        if (related) {
-          const milestone = timeline.find(m => String(m && m.id || '') === related);
-          if (milestone && (milestone.done || ['rejected', 'withdrawn'].includes(milestone.outcome))) return true;
-        }
-        if (inferredMilestone && (inferredMilestone.done || ['rejected', 'withdrawn'].includes(inferredMilestone.outcome))) return true;
-        if (relatedStage) {
-          const milestone = timeline.slice().reverse().find(m => String(m && m.stage || '').trim() === relatedStage);
-          if (milestone && (milestone.done || ['rejected', 'withdrawn'].includes(milestone.outcome))) return true;
-        }
         const deadline = event && event.type === TIME_EVENT_DEADLINE;
         if (deadline) {
           // 旧数据没有关联字段：同一天已完成的阶段可安全视为该日截止已处理，
