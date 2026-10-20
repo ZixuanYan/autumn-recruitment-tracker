@@ -13,7 +13,19 @@ const context = {
       { label: '甲公司', records: list.filter(record => record.company === '甲公司') }
     ].filter(group => group.records.length);
   },
-  computeCityStats() { return [{ city: '深圳', total: 1, offers: 0 }, { city: '广州', total: 1, offers: 0 }, { city: '北京', total: 1, offers: 0 }, { city: '', total: 1, offers: 1 }]; },
+  computeCityStats(list) {
+    const buckets = new Map();
+    for (const record of list) {
+      const parts = String(record.city || '').split(/[\/、,，|;；]+/).map(value => value.trim()).filter(value => value && !/^(待确认|待定|待补充|待完善|未知|不限|无|none|n\/a|-)$/i.test(value));
+      for (const city of [...new Set(parts.length ? parts.map(value => value.replace(/市$/, '')) : [''])]) {
+        if (!buckets.has(city)) buckets.set(city, { city, total: 0, offers: 0 });
+        const bucket = buckets.get(city);
+        bucket.total += 1;
+        if (record.stage === 'Offer') bucket.offers += 1;
+      }
+    }
+    return [...buckets.values()];
+  },
   computeCompanyTypeStats() { return [{ label: '央国企', total: 0 }, { label: '私企', total: 2 }, { label: '外企', total: 0 }, { label: '未设置', total: 1 }]; }
 };
 vm.createContext(context);
@@ -46,4 +58,19 @@ assert.ok(html.includes('nonce=\"share-report-controls-v1\"'));
 assert.ok(html.includes('</script>'));
 assert.ok(!/https?:\/\//i.test(html));
 assert.ok(html.includes('Content-Security-Policy'));
+const cityOptions = context.getShareReportCityOptions(records);
+assert.ok(cityOptions.some(option => option.label === '深圳'));
+const shenzhen = context.filterShareReportRecords(records, '深圳市');
+assert.strictEqual(shenzhen.length, 1, '多城市记录匹配归一化后的城市，并仅出现一次');
+assert.strictEqual(context.filterShareReportRecords(records, '').length, 1, '空城市键筛选未填写/占位城市');
+const cityHtml = context.buildShareReport(records, { exportedAt: '2026-09-20T12:00:00.000Z', cityFilter: '深圳', scopeLabel: '深圳' });
+assert.ok(cityHtml.includes('筛选范围：深圳'));
+assert.ok(cityHtml.includes('投递记录'));
+assert.ok(!cityHtml.includes('广州</span>'), '单城市报告分布只显示所选城市');
+assert.ok(cityHtml.includes('深圳'));
+assert.ok(cityHtml.includes('深圳报告') === false);
+const unknownHtml = context.buildShareReport(records, { exportedAt: '2026-09-20T12:00:00.000Z', cityFilter: '', scopeLabel: '未填写城市' });
+assert.ok(unknownHtml.includes('筛选范围：未填写城市'));
+assert.ok(unknownHtml.includes('1 条'));
+assert.ok(context.filterShareReportRecords(records, null).length === records.length, 'null 表示全部城市');
 console.log('分享报告纯函数检查通过');
