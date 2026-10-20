@@ -5854,7 +5854,7 @@
     const cities = cityStats.map(row => ({ name: row.city || '未填写', count: row.total, offers: row.offers || 0 }));
     const scopedCities = cityFilter == null ? cities : cities.filter(row => (cityFilter ? row.name === cityFilter : row.name === '未填写'));
     const namedCities = scopedCities.filter(row => row.name !== '未填写').slice(0, 8);
-    const otherRows = cities.filter(row => row.name !== '未填写').slice(8);
+    const otherRows = scopedCities.filter(row => row.name !== '未填写').slice(8);
     const otherCount = otherRows.reduce((sum, row) => sum + row.count, 0);
     const otherOffers = otherRows.reduce((sum, row) => sum + row.offers, 0);
     if (otherCount) namedCities.push({ name: '其他', count: otherCount, offers: otherOffers });
@@ -8428,7 +8428,7 @@
         const select = $('#shareReportCity');
         if (!select) return;
         const options = [{ key: '__all__', label: '全部城市', count: records.length }, ...(typeof getShareReportCityOptions === 'function' ? getShareReportCityOptions(records) : [])];
-        select.innerHTML = options.map(option => `<option value="${escapeHtml(option.key === '' ? '__unknown__' : option.key)}">${escapeHtml(option.label)}（${option.count} 条）</option>`).join('');
+        select.innerHTML = options.map(option => `<option value="${escapeHtml(option.key === '' ? '__unknown__' : option.key)}" data-label="${escapeHtml(option.label)}">${escapeHtml(option.label)}（${option.count} 条）</option>`).join('');
         select.value = '__all__';
         $('#shareReportDialog').showModal();
       }
@@ -8445,7 +8445,7 @@
         const selectedValue = select.value;
         const cityFilter = selectedValue === '__all__' ? null : selectedValue === '__unknown__' ? '' : selectedValue;
         const option = select.options[select.selectedIndex];
-        const scopeLabel = option ? option.textContent.replace(/（\d+ 条）$/, '') : '全部城市';
+        const scopeLabel = option ? option.dataset.label : '全部城市';
         closeShareReportDialog();
         const proceed = sampleDataMode
           ? confirmInApp(`当前台账是首次打开时的示例数据，共 ${records.length} 条。确定要导出${scopeLabel}的示例报告吗？`, { title: '导出示例报告', confirmText: '继续导出' })
