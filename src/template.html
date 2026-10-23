@@ -174,7 +174,7 @@
           </div>
           <div class="panel-caption"><span id="calMonthSummary"></span>点日期切换右侧单日详情 · 已完成的聚合为绿行</div>
         </div>
-        <button class="btn btn-small" id="calExportIcsBtn" type="button" title="把安排与截止导出成 .ics，双击即可加入系统日历"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出 .ics</button>
+        <button class="btn btn-small" id="calExportIcsBtn" type="button" title="导出全部、当前月份、当日或仅未完成日程；不包含下一步行动和投递网址"><span class="icon"><svg><use href="#i-calendar"/></svg></span>导出 .ics</button>
       </div>
       <div class="cal-legend" aria-hidden="true">
         <span class="cal-legend-item"><i class="cal-dot kind-deadline"></i>截止</span>
@@ -294,7 +294,7 @@
         <article class="tool-card">
           <div class="tool-card-top"><span class="tool-icon"><svg><use href="#i-calendar"/></svg></span><span class="tool-status" id="toolIcsBadge">—</span></div>
           <h3>日程导出到日历</h3>
-          <p>把面试安排与截止日期生成 <code>.ics</code> 文件，双击即可加入系统日历（本机生成，不联网、不上传）。</p>
+          <p>可导出全部、当前月份、当日或仅未完成日程；包含历史与已完成状态，不含下一步行动和投递网址。生成的 <code>.ics</code> 文件可加入系统日历（本机生成，不联网、不上传）。</p>
           <button class="btn" id="toolIcsBtn" type="button">导出 .ics 日程</button>
         </article>
         <article class="tool-card">
@@ -429,6 +429,21 @@
     <div class="modal-head"><h2 id="confirmTitle">请确认</h2></div>
     <div class="form-body"><p class="capture-note" id="confirmMessage"></p></div>
     <div class="modal-actions"><button class="btn" id="confirmCancelBtn" type="button">取消</button><button class="btn btn-primary" id="confirmOkBtn" type="button">确定</button></div>
+  </dialog>
+
+  <dialog id="icsExportDialog" aria-labelledby="icsExportTitle">
+    <div class="modal-head"><h2 id="icsExportTitle">导出日程到系统日历</h2><button class="close-btn" id="closeIcsExportDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body">
+      <p class="capture-note">默认导出全部日程，包括历史、已完成和已结束事项。导出的日程不含下一步行动和投递网址。</p>
+      <fieldset class="section-type-set" id="icsExportModes" aria-label="导出范围">
+        <legend>导出范围</legend>
+        <label class="section-type-opt"><input type="radio" name="icsExportMode" value="all" checked><span class="section-type-body"><strong>全部日程</strong><span id="icsCountAll">—</span></span></label>
+        <label class="section-type-opt"><input type="radio" name="icsExportMode" value="month"><span class="section-type-body"><strong>当前月份</strong><span id="icsCountMonth">—</span></span></label>
+        <label class="section-type-opt"><input type="radio" name="icsExportMode" value="day"><span class="section-type-body"><strong>当前选中日期</strong><span id="icsCountDay">—</span></span></label>
+        <label class="section-type-opt"><input type="radio" name="icsExportMode" value="open"><span class="section-type-body"><strong>仅未完成日程</strong><span id="icsCountOpen">—</span></span></label>
+      </fieldset>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelIcsExportBtn" type="button">取消</button><button class="btn btn-primary" id="confirmIcsExportBtn" type="button">导出 .ics</button></div>
   </dialog>
 
   <dialog id="shareReportDialog" aria-labelledby="shareReportTitle">

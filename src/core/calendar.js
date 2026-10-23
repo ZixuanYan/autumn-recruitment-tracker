@@ -50,6 +50,7 @@
             const past = isEventPast(at, allDay, now);
             const end = (!allDay && ev.endAt) ? parseLocal(ev.endAt) : null;
             out.push({
+              at,
               date: localDateInput(at),
               time: allDay ? '' : clockOf(at),
               endTime: end && end > at ? clockOf(end) : '',
@@ -135,4 +136,25 @@
           g.entry.overdue = !g.entry.settled && g.members.some(i => i.overdue);
         }
         return out;
+      }
+      // ICS 导出使用日历事实流，不使用面向提醒的前瞻清单。
+      function collectCalendarExportEvents(records, options = {}) {
+        const requestedMode = String(options.mode || 'all');
+        const mode = ['all', 'month', 'day', 'open'].includes(requestedMode) ? requestedMode : 'all';
+        const now = options.now instanceof Date ? options.now : new Date();
+        const items = aggregateCalendarItems(collectCalendarEvents(records, now));
+        const year = Number(options.year);
+        const month = Number(options.month);
+        const date = String(options.date || '');
+        return items.filter(item => {
+          if (mode === 'open' && (item.settled || item.terminal)) return false;
+          if (mode === 'month') return Number.isFinite(year) && Number.isFinite(month) && item.date.startsWith(`${year}-${String(month + 1).padStart(2, '0')}`);
+          if (mode === 'day') return /^\d{4}-\d{2}-\d{2}$/.test(date) && item.date === date;
+          return true;
+        }).map(item => item.aggregate ? Object.assign({}, item, {
+          _positions: item.aggregate.positions.map(position => {
+            const record = position.record || {};
+            return `${record.company || ''} ${record.position || ''}`.trim() + (record.orgUnit ? `（${record.orgUnit}）` : '');
+          })
+        }) : item);
       }

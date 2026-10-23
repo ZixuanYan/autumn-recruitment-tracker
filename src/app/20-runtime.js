@@ -936,8 +936,8 @@
       async function renderToolCards() {
         const icsBadge = $('#toolIcsBadge');
         if (icsBadge) {
-          const count = collectScheduleEvents(records, new Date(), 500).length;
-          icsBadge.textContent = count ? `${count} 项可导出` : '暂无日程';
+          const count = collectCalendarExportEvents(records, { mode: 'all', now: new Date() }).length;
+          icsBadge.textContent = count ? `共 ${count} 项日程` : '暂无日程';
           icsBadge.className = count ? 'tool-status ok' : 'tool-status';
         }
         const syncBadge = $('#toolSyncBadge');
@@ -1570,19 +1570,66 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
 
-      // 导出日程到系统日历：把「安排时间 + 截止日期」写成 .ics（纯本机生成，不联网）
-      function exportIcs(recordId) {
+      // 导出日程到系统日历：日历入口默认导出全部事实事件，前瞻提醒仍由 collectScheduleEvents 独立负责。
+      function icsExportContext(origin = 'calendar') {
+        const now = new Date();
+        const useCalendarView = origin === 'calendar';
+        const year = useCalendarView && calViewYear ? calViewYear : now.getFullYear();
+        const month = useCalendarView && calViewYear ? calViewMonth : now.getMonth();
+        return { now, year, month, date: useCalendarView ? (calSelectedDate || localDateInput(now)) : localDateInput(now) };
+      }
+      function icsExportEvents(source, mode, context) {
+        return collectCalendarExportEvents(source, { mode, now: context.now, year: context.year, month: context.month, date: context.date });
+      }
+      function updateIcsExportCounts(source, context) {
+        for (const mode of ['all', 'month', 'day', 'open']) {
+          const target = $(`#icsCount${mode[0].toUpperCase()}${mode.slice(1)}`);
+          if (!target) continue;
+          target.textContent = `${icsExportEvents(source, mode, context).length} 项`;
+        }
+      }
+      function openIcsExportDialog(origin = 'calendar') {
+        if (!records.length || !collectCalendarExportEvents(records, { mode: 'all', now: new Date() }).length) { showToast('暂无日程'); return; }
+        const context = icsExportContext(origin);
+        icsDialogContext = context;
+        const allRadio = document.querySelector('input[name="icsExportMode"][value="all"]');
+        if (allRadio) allRadio.checked = true;
+        updateIcsExportCounts(records, context);
+        const dialog = $('#icsExportDialog');
+        if (dialog) dialog.showModal();
+      }
+      function closeIcsExportDialog() {
+        const dialog = $('#icsExportDialog');
+        if (dialog && dialog.open) dialog.close();
+        icsDialogContext = null;
+      }
+      let icsDialogContext = null;
+      function exportIcs(recordId, origin = 'calendar') {
         const source = recordId ? records.filter(r => r.id === recordId) : records;
-        const events = collectScheduleEvents(source, new Date(), 500);
-        if (!events.length) {
-          showToast(recordId ? '这条记录还没有安排时间或截止日期' : '还没有可导出的安排或截止日期');
+        if (recordId) {
+          const events = collectCalendarExportEvents(source, { mode: 'all', now: new Date() });
+          if (!events.length) { showToast('这条记录还没有日程'); return; }
+          const safeCompany = String((source[0] && source[0].company) || '投递').replace(/[\\/:*?"<>|]/g, '-');
+          downloadText(buildIcs(events, `${safeCompany}日程`), `${safeCompany}-全部日程-${localDateInput(new Date())}.ics`, 'text/calendar;charset=utf-8');
+          showToast(`已导出 ${events.length} 项日程`);
           return;
         }
-        const name = recordId
-          ? `${(source[0] && source[0].company) || '投递'}-日程.ics`
-          : `秋招日程-${localDateInput(new Date())}.ics`;
-        downloadText(buildIcs(events), name, 'text/calendar;charset=utf-8');
-        showToast(`已导出 ${events.length} 项日程，双击 .ics 文件即可加入系统日历`);
+        openIcsExportDialog(origin);
+      }
+      function confirmIcsExport() {
+        const selected = document.querySelector('input[name="icsExportMode"]:checked');
+        const mode = selected ? selected.value : 'all';
+        const context = icsDialogContext || icsExportContext();
+        const events = icsExportEvents(records, mode, context);
+        if (!events.length) { showToast('所选范围暂无日程'); return; }
+        const labels = { all: '全部', month: '本月', day: '当日', open: '仅未完成' };
+        const label = labels[mode] || '全部';
+        const safeLabel = label.replace(/[\\/:*?"<>|]/g, '-');
+        const stamp = mode === 'month' ? `${context.year}-${String(context.month + 1).padStart(2, '0')}` : mode === 'day' ? context.date : localDateInput(new Date());
+        downloadText(buildIcs(events, `秋招日程-${label}`), `秋招日程-${safeLabel}-${stamp}.ics`, 'text/calendar;charset=utf-8');
+        closeIcsExportDialog();
+        icsDialogContext = null;
+        showToast(`已导出 ${events.length} 项日程`);
       }
 
       // 导出简历 JSON（顶栏「导出简历」与简历页「导出 JSON」共用）
@@ -1837,7 +1884,7 @@
       $('#addBtn').addEventListener('click', () => openDialog());
       $('#installAppBtn').addEventListener('click', requestAppInstall);
       $('#toolSafetyBtn').addEventListener('click', openSafetyDialog);
-      $('#toolIcsBtn').addEventListener('click', () => exportIcs());
+      $('#toolIcsBtn').addEventListener('click', () => exportIcs(null, 'tools'));
       $('#exportRecordsBtn').addEventListener('click', exportData);
       $('#exportShareReportBtn').addEventListener('click', openShareReportDialog);
       $('#confirmShareReportBtn').addEventListener('click', exportShareReport);
@@ -2100,7 +2147,11 @@
         calSelectedDate = '';
         renderCalendarView();
       });
-      $('#calExportIcsBtn').addEventListener('click', () => exportIcs());
+      $('#calExportIcsBtn').addEventListener('click', () => exportIcs(null, 'calendar'));
+      $('#confirmIcsExportBtn').addEventListener('click', confirmIcsExport);
+      $('#cancelIcsExportBtn').addEventListener('click', closeIcsExportDialog);
+      $('#closeIcsExportDialog').addEventListener('click', closeIcsExportDialog);
+      $('#icsExportDialog').addEventListener('click', event => { if (event.target === $('#icsExportDialog')) closeIcsExportDialog(); });
       $('#topSyncBtn').addEventListener('click', openSyncDialog);
       // 视图路由由 initializeRouter 接管（hashchange 驱动，支持 #/view 与旧锚点重定向）
       $('#closeDialog').addEventListener('click', closeDialog);

@@ -453,7 +453,7 @@ const core = new Function(
      companyGroupKey, sameCompanyGroup, groupRecordsByCompany, companyGroupIndex, companyColor, positionWithUnit, computeFunnel, computeStageDwell,
      computeDailyApplications, sparklinePath, findStalled, findUpcomingDeadlines, collectAlerts,
      nextTimeEvent, nearestDeadlineEvent, isEventPast, isEventSettled,
-     buildMonthGrid, collectCalendarEvents, aggregateCalendarItems,
+     buildMonthGrid, collectCalendarEvents, aggregateCalendarItems, collectCalendarExportEvents,
      sanitizeMailRef, sanitizeMailRefs, linkMailToRecord, unionMailRefs, mailIdOf,
      sanitizeMailArchive, unionMailArchive, pruneMailArchive, referencedMailIds, archiveSuggestionMail, backfillMailArchive,
      sanitizeMailArchiveEntry, sanitizeMailLinks, mailArchiveEntrySize,
@@ -582,9 +582,9 @@ check('collectScheduleEvents 逾期置顶 + 已结束不计截止 + limit 生效
 });
 
 check('buildIcs 结构、CRLF、UID 与文本转义', () => {
-  const events = core.collectScheduleEvents([
-    { id: 'r1', company: '腾讯,深圳', position: '后端;基础平台', stage: '一面', events: [evt('面试', '2026-09-20T10:00', 'ev1')], recentSchedule: '线上一面\n腾讯会议', applicationUrl: 'https://x.example/a' }
-  ], NOW, 10);
+  const events = core.collectCalendarExportEvents([
+    { id: 'r1', company: '腾讯,深圳', position: '后端;基础平台', stage: '一面', nextAction: '不应导出行动', events: [evt('面试', '2026-09-20T10:00', 'ev1')], recentSchedule: '线上一面\n腾讯会议', applicationUrl: 'https://x.example/a' }
+  ], { mode: 'all', now: NOW });
   const ics = core.buildIcs(events);
   assert.ok(ics.startsWith('BEGIN:VCALENDAR\r\n'));
   assert.ok(ics.endsWith('END:VCALENDAR\r\n'));
@@ -596,7 +596,23 @@ check('buildIcs 结构、CRLF、UID 与文本转义', () => {
   assert.ok(ics.includes('腾讯\\,深圳'), '逗号需转义');
   assert.ok(ics.includes('后端\\;基础平台'), '分号需转义');
   assert.ok(ics.includes('线上一面\\n腾讯会议'), '换行需转义成 \\n');
-  assert.ok(ics.includes('URL:https://x.example/a'));
+  assert.ok(ics.includes('岗位：后端\\;基础平台'));
+  assert.ok(ics.includes('城市：'));
+  assert.ok(!ics.includes('URL:') && !ics.includes('https://x.example/a'), 'ICS 不导出投递网址');
+  assert.ok(!ics.includes('下一步') && !ics.includes('不应导出行动'), 'ICS 不导出下一步行动');
+});
+
+check('buildIcs：状态显示在标题和描述，终态类型优先于完成和逾期', () => {
+  const events = [
+    { ...core.collectCalendarExportEvents([{ id: 'done', company: 'A', stage: '一面', events: [evt('面试', '2026-09-01T10:00')] , timeline: [{ stage: '一面', at: '2026-09-01', done: true }] }], { mode: 'all', now: NOW })[0] },
+    { type: '面试', at: NOW, allDay: false, event: { id: 'wd', at: '2026-09-01T10:00' }, record: { id: 'wd', company: 'B' }, outcome: 'withdrawn', terminal: true, settled: true, overdue: true },
+    { type: '面试', at: NOW, allDay: false, event: { id: 'rej', at: '2026-09-01T10:00' }, record: { id: 'rej', company: 'C' }, outcome: 'rejected', terminal: true, settled: true }
+  ];
+  const ics = core.buildIcs(events);
+  assert.ok(ics.includes('[已完成] A · 面试'));
+  assert.ok(ics.includes('[已放弃] B · 面试'));
+  assert.ok(ics.includes('[被拒] C · 面试'));
+  assert.ok(ics.includes('日程状态：已放弃'));
 });
 
 // ---- RFC 5545 严格校验器：结构 + 75 octets 折行 + 展开还原 ----
@@ -634,18 +650,19 @@ function validateIcs(ics) {
 
 check('buildIcs 通过严格 RFC 5545 校验（长中文描述按 UTF-8 字节折叠，可无损展开还原）', () => {
   const longChinese = '梳理项目经历，准备三分钟自我介绍；提前测试摄像头、麦克风与网络，备好作品集与岗位 JD 的关键要求逐条对照，并复习上一轮面试官提到的系统设计题目';
-  const events = core.collectScheduleEvents([
-    { id: 'cjk1', company: '星海科技', position: '产品经理校招生', city: '上海', stage: '一面', events: [evt('面试', '2026-09-20T10:00')], recentSchedule: '线上一面（腾讯会议）', nextAction: longChinese, applicationUrl: '' },
+  const events = core.collectCalendarExportEvents([
+    { id: 'cjk1', company: '星海科技', position: longChinese, city: '上海', stage: '一面', events: [evt('面试', '2026-09-20T10:00')], recentSchedule: '线上一面（腾讯会议）', nextAction: longChinese, applicationUrl: 'https://secret.example' },
     { id: 'cjk2', company: '山岚智能', position: '算法工程师', city: '北京', stage: '笔试', events: [evt(DL, '2026-09-25')], nextAction: '', applicationUrl: '' }
-  ], NOW, 10);
+  ], { mode: 'all', now: NOW });
   const ics = core.buildIcs(events);
   const { problems, logical, events: n } = validateIcs(ics);
   assert.deepStrictEqual(problems, [], `RFC 5545 校验失败：${problems.join('；')}`);
   assert.strictEqual(n, 2);
   // 展开还原：折叠只是物理换行，逻辑值必须与原始内容逐字一致（含转义后的中文与标点）
-  const desc = logical.find(l => l.startsWith('DESCRIPTION:') && l.includes('星海科技') === false && l.includes('产品经理校招生'));
+  const desc = logical.find(l => l.startsWith('DESCRIPTION:') && l.includes('星海科技') === false && l.includes('梳理项目经历'));
   assert.ok(desc, '应能找到含长中文的 DESCRIPTION');
-  assert.ok(desc.includes(core.icsEscape(longChinese)), '展开后必须无损还原长中文下一步行动');
+  assert.ok(desc.includes(core.icsEscape(longChinese)), '展开后必须无损还原长中文岗位内容');
+  assert.ok(!ics.includes('secret.example') && !ics.includes('下一步'), '长文本导出仍不泄露链接和下一步行动');
   assert.ok(!/\r|\n/.test(desc), '逻辑行内不得再有真实换行');
 });
 
@@ -1718,6 +1735,7 @@ check('collectCalendarEvents：全量条目含已了结（日历是事实视图�
   assert.strictEqual(items.length, 4, '三条记录四个事件全量返回（settled 也在内）');
   const r1dl = items.find(i => i.record.id === 'r1' && i.kind === 'deadline');
   assert.strictEqual(r1dl.date, '2026-09-17');
+  assert.strictEqual(r1dl.at instanceof Date, true, '日历条目提供本地 Date 供 ICS 使用');
   assert.strictEqual(r1dl.time, '', '全天事件 time 为空串');
   assert.strictEqual(r1dl.settled, true, '规则③：当前阶段完成 → 截止 settled');
   assert.strictEqual(r1dl.overdue, false, 'settled 不算逾期');
@@ -1790,6 +1808,21 @@ check('aggregateCalendarItems：同邮件同日同类型聚合，其余透传（
   assert.strictEqual(mixed.length, 2, '聚合后 3 条变 2 条');
   assert.strictEqual(mixed[0].date, '2026-09-17', '无邮件条目保持在 9/17 的位置');
   assert.strictEqual(mixed[1].aggregate.total, 2, '聚合条目保持在首次出现的 9/18');
+});
+
+check('collectCalendarExportEvents：全量 / 本月 / 当日 / 未完成范围复用日历事实事件', () => {
+  const now = new Date('2026-09-15T12:00:00');
+  const recs = [
+    { id: 'done', company: 'A', position: '岗位A', stage: '一面', events: [evt('面试', '2026-09-10T10:00')], timeline: [{ stage: '一面', at: '2026-09-10', done: true, doneAt: '2026-09-10' }] },
+    { id: 'open', company: 'B', position: '岗位B', stage: '二面', events: [evt('面试', '2026-09-20T10:00')], timeline: [{ stage: '二面', at: '2026-09-01' }] },
+    { id: 'ended', company: 'C', position: '岗位C', stage: '已结束', events: [evt(DL, '2026-10-02')], timeline: [{ stage: '已结束', at: '2026-09-01', outcome: 'withdrawn' }] }
+  ];
+  const all = core.collectCalendarExportEvents(recs, { mode: 'all', now });
+  assert.strictEqual(all.length, 3, '全量保留历史完成、未来未完成及已结束事件');
+  assert.strictEqual(core.collectCalendarExportEvents(recs, { mode: 'month', year: 2026, month: 8, now }).length, 2, '本月按事件本地日期筛选');
+  assert.deepStrictEqual(core.collectCalendarExportEvents(recs, { mode: 'day', date: '2026-09-10', now }).map(item => item.record.id), ['done']);
+  assert.deepStrictEqual(core.collectCalendarExportEvents(recs, { mode: 'open', now }).map(item => item.record.id), ['open'], '仅未完成排除完成及终态');
+  assert.strictEqual(core.collectCalendarExportEvents(recs, { mode: 'bad', now }).length, 3, '未知模式安全回退为全部');
 });
 
 check('backfillMailArchive：只用建议里的正文补空归档，绝不覆盖已有正文（v4.23.1）', () => {
@@ -2009,7 +2042,7 @@ check('日历视图接线：路由钩子 / 中央重渲 / 点格选中 / 日程�
   assert.ok(/addEventListener\('keydown'[\s\S]*?\['Enter', ' '\]/.test(html), '日期格支持 Enter / Space 键盘选择');
   assert.ok(/\$\('#calPrevBtn'\)/.test(html) && /\$\('#calNextBtn'\)\.addEventListener/.test(html), '翻月按钮已接线');
   assert.ok(/\$\('#calTodayBtn'\)/.test(html), '「今天」按钮已接线');
-  assert.ok(/\$\('#calExportIcsBtn'\)\.addEventListener\('click', \(\) => exportIcs\(\)\)/.test(html), '导出 .ics 复用工具页同一条流程，不得另写一份');
+  assert.ok(/\$\('#calExportIcsBtn'\)\.addEventListener\('click', \(\) => exportIcs\(null, 'calendar'\)\)/.test(html), '日历导出打开共用范围选择流程并传入当前浏览状态');
   // v4.29.0：旧「导出日历」按钮去重；v4.30.0：未来安排并入日程流，旧骨架整体退役
   assert.ok(!html.includes('id="exportIcsBtn"') && !/^\s*\$\('#exportIcsBtn'\)/m.test(html), '旧「导出日历」按钮与绑定必须整体拆除（半截复活 = 死绑定或重复入口）');
   assert.ok(!html.includes('id="upcoming"') && !html.includes('renderUpcoming'), '#upcoming 面板与 renderUpcoming 不得残留（已并入日程流）');

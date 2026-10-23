@@ -14,6 +14,14 @@
         const p = (n) => String(n).padStart(2, '0');
         return `${date.getUTCFullYear()}${p(date.getUTCMonth() + 1)}${p(date.getUTCDate())}T${p(date.getUTCHours())}${p(date.getUTCMinutes())}${p(date.getUTCSeconds())}Z`;
       }
+      function icsStateLabel(ev) {
+        if (ev && ev.outcome === 'withdrawn') return '已放弃';
+        if (ev && ev.outcome === 'rejected') return '被拒';
+        if (ev && ev.terminal) return '已结束';
+        if (ev && ev.settled) return '已完成';
+        if (ev && ev.overdue) return '逾期未处理';
+        return '';
+      }
       // 生成 .ics 日历文件内容（VCALENDAR + 每事件一个 VEVENT），CRLF 换行
       function buildIcs(events, calName = '秋招投递日程') {
         const now = new Date();
@@ -39,9 +47,11 @@
           // v4.19.0：事件自带类型（截止 / 面试 / 笔试测评 / 其他），标题直接用它——
           // 此前所有安排都写成「最近安排」，日历上分不清哪个是笔试、哪个是面试。
           const isDeadline = ev.type === TIME_EVENT_DEADLINE;
-          const title = isDeadline
+          const baseTitle = isDeadline
             ? `${companyBit} · 截止（${r.position || '岗位'}）`
             : `${companyBit} · ${ev.type}${r.recentSchedule ? `（${r.recentSchedule}）` : ''}`;
+          const stateLabel = icsStateLabel(ev);
+          const title = stateLabel ? `[${stateLabel}] ${baseTitle}` : baseTitle;
           // v4.24.0：截止也可能带时刻（`2026-09-17T18:00`），带时刻时写成「日期 时:分」，
           // 只给日期的仍写日期——把 18:00 截掉会让日历里的截止时间凭空消失。
           const deadlineAt = String((ev.event && ev.event.at) || '—');
@@ -49,7 +59,7 @@
           const desc = [
             `岗位：${r.position || '—'}`, `机构：${r.orgUnit || '—'}`, `城市：${r.city || '—'}`, `当前阶段：${r.stage || '—'}`,
             isDeadline ? `截止时间：${deadlineText}` : `${ev.type}时间：${formatDateTime(ev.at)}${ev.event && ev.event.endAt ? `-${String(ev.event.endAt).slice(11, 16)}` : ''}`,
-            r.nextAction ? `下一步：${r.nextAction}` : '',
+            stateLabel ? `日程状态：${stateLabel}` : '',
             // v4.31.0：同一封邮件写给多个岗位的同一场安排聚合为一条事件，这里列出全部岗位
             Array.isArray(ev._positions) && ev._positions.length > 1 ? `涉及岗位：${ev._positions.join('、')}` : ''
           ].filter(Boolean).join('\n');
@@ -57,13 +67,14 @@
             'BEGIN:VEVENT',
             // UID 用事件 id 而不是类型：同一条记录可以有多个同类型事件（两次面试），
             // 用类型做后缀会生成重复 UID，严格日历会合并或丢弃其中一个。
-            `UID:${icsEscape(r.id || 'unknown')}-${icsEscape((ev.event && ev.event.id) || ev.type)}@autumn-recruitment-tracker`,
+            `UID:${icsEscape(ev.aggregate
+              ? `mail-${ev.aggregate.mailId}-${ev.date}-${ev.type}`
+              : `${r.id || 'unknown'}-${(ev.event && ev.event.id) || `${ev.type}-${ev.date || deadlineAt.slice(0, 10)}`}`)}@autumn-recruitment-tracker`,
             `DTSTAMP:${icsUtc(now)}`,
             ev.allDay ? `DTSTART;VALUE=DATE:${icsLocal(start, true)}` : `DTSTART:${icsLocal(start, false)}`,
             ev.allDay ? `DTEND;VALUE=DATE:${icsLocal(end, true)}` : `DTEND:${icsLocal(end, false)}`,
             `SUMMARY:${icsEscape(title)}`,
             `DESCRIPTION:${icsEscape(desc)}`,
-            r.applicationUrl ? `URL:${icsEscape(r.applicationUrl)}` : null,
             'END:VEVENT'
           );
         }
