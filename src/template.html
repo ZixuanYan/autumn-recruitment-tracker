@@ -53,6 +53,7 @@
         <a class="nav-item is-active" data-route="overview" href="#/overview"><span class="nav-icon"><svg><use href="#i-grid"/></svg></span><span>总览</span></a>
         <a class="nav-item" data-route="calendar" href="#/calendar"><span class="nav-icon"><svg><use href="#i-calendar"/></svg></span><span>日历</span></a>
         <a class="nav-item" data-route="records" href="#/records"><span class="nav-icon"><svg><use href="#i-stack"/></svg></span><span>投递记录</span></a>
+        <a class="nav-item" data-route="offers" href="#/offers"><span class="nav-icon"><svg><use href="#i-trophy"/></svg></span><span>Offer</span></a>
         <a class="nav-item" data-route="mail" href="#/mail"><span class="nav-icon"><svg><use href="#i-mail"/></svg></span><span>邮件提醒</span><span class="nav-badge" id="mailNavBadge" hidden></span></a>
         <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon"><svg><use href="#i-file"/></svg></span><span>我的简历</span></a>
         <a class="nav-item" data-route="tools" href="#/tools"><span class="nav-icon"><svg><use href="#i-tool"/></svg></span><span>工具</span></a>
@@ -147,7 +148,7 @@
             </div>
           </div>
           <div class="insight-block" id="offerMatrixWrap" hidden>
-            <div class="insight-block-head"><h3>Offer 对比</h3><span class="insight-note">按意向度排序</span></div>
+            <div class="insight-block-head"><h3>Offer 对比</h3><span class="insight-note">按综合分排序 · 查看 Offer 页管理</span></div>
             <div class="table-scroll"><table class="offer-matrix" id="offerMatrix"></table></div>
           </div>
         </div>
@@ -251,6 +252,34 @@
       <div class="empty" id="emptyState" hidden></div>
     </section>
     </div>
+<div class="view" data-view="offers" hidden>
+    <section class="panel offer-page" id="offers" aria-labelledby="offersTitle">
+      <div class="panel-head offer-page-head">
+        <div><h2 class="panel-title" id="offersTitle">Offer 对比</h2><div class="panel-caption">独立维护 Offer 状态、薪资和评分，不会修改投递记录阶段</div></div>
+        <div class="offer-head-actions"><button class="btn btn-small" id="offerRulesBtn" type="button">评分规则</button><span class="offer-compare-hint" id="offerCompareHint">勾选 2～4 个 Offer 可重点对比</span></div>
+      </div>
+      <div class="offer-summary-grid">
+        <div class="offer-stat"><span>Offer 总数</span><strong id="offerTotal">0</strong></div>
+        <div class="offer-stat"><span>待决定</span><strong id="offerPending">0</strong></div>
+        <div class="offer-stat"><span>意向已签</span><strong id="offerIntentSigned">0</strong></div>
+        <div class="offer-stat"><span>合同协议已签</span><strong id="offerContractSigned">0</strong></div>
+        <div class="offer-stat"><span>已拒绝</span><strong id="offerRejected">0</strong></div>
+        <div class="offer-stat"><span>已评分</span><strong id="offerRated">0</strong></div>
+        <div class="offer-stat offer-stat-best"><span>最高综合分</span><strong id="offerBestScore">—</strong></div>
+      </div>
+      <div class="filters offer-filters">
+        <select class="control" id="offerStatusFilter" aria-label="按 Offer 状态筛选"><option value="all">全部状态</option><option value="pending">待决定</option><option value="intent_signed">意向已签</option><option value="contract_signed">合同协议已签</option><option value="rejected">已拒绝</option></select>
+        <select class="control" id="offerCityFilter" aria-label="按城市筛选"><option value="all">全部城市</option></select>
+        <select class="control" id="offerTypeFilter" aria-label="按企业性质筛选"><option value="all">全部企业性质</option></select>
+        <select class="control" id="offerSortSelect" aria-label="Offer 排序"><option value="score">综合分优先</option><option value="salary">薪资估算优先</option><option value="status">状态排序</option><option value="updated">最近更新</option><option value="company">公司名称</option></select>
+      </div>
+      <div id="offerList"></div>
+      <section class="offer-compare-panel" id="offerComparePanel" hidden aria-labelledby="offerCompareTitle">
+        <div class="offer-compare-head"><h3 id="offerCompareTitle">重点对比</h3><span class="muted-text">最多选择 4 个 Offer</span></div>
+        <div id="offerCompareList"></div>
+      </section>
+    </section>
+</div>
 <div class="view" data-view="resume" hidden>
     <section class="panel" id="resume" aria-labelledby="resumeTitle">
       <div class="panel-head">
@@ -453,6 +482,31 @@
       <div class="field"><label for="shareReportCity">城市范围</label><select class="control" id="shareReportCity"></select></div>
     </div>
     <div class="modal-actions"><button class="btn" id="cancelShareReportBtn" type="button">取消</button><button class="btn btn-primary" id="confirmShareReportBtn" type="button">导出报告</button></div>
+  </dialog>
+
+  <dialog id="offerDialog" aria-labelledby="offerDialogTitle">
+    <form id="offerForm">
+      <div class="modal-head"><h2 id="offerDialogTitle">编辑 Offer</h2><button class="close-btn" id="closeOfferDialog" type="button" aria-label="关闭">×</button></div>
+      <div class="form-body">
+        <p class="capture-note" id="offerSourceFacts">—</p>
+        <div class="form-grid">
+          <div class="field"><label for="offerStatusInput">Offer 状态</label><select class="control" id="offerStatusInput"><option value="pending">待决定</option><option value="intent_signed">意向已签</option><option value="contract_signed">合同协议已签</option><option value="rejected">已拒绝</option></select></div>
+          <div class="field"><label for="offerCompensationMode">薪资记录方式</label><select class="control" id="offerCompensationMode"><option value="monthly">月薪 × 薪资月数</option><option value="total">总包</option><option value="confidential">密薪</option></select></div>
+          <div class="field" id="offerMonthlyFields"><label for="offerMonthlySalary">月薪（元 / 月）</label><input class="control" id="offerMonthlySalary" inputmode="decimal" placeholder="例如：25000"></div>
+          <div class="field" id="offerSalaryMonthsFields"><label for="offerSalaryMonths">薪资月数</label><input class="control" id="offerSalaryMonths" inputmode="decimal" placeholder="例如：16"></div>
+          <div class="field" id="offerTotalFields" hidden><label for="offerTotalPackage">总包（元 / 年）</label><input class="control" id="offerTotalPackage" inputmode="decimal" placeholder="例如：400000"></div>
+          <div class="field full"><label for="offerNoteInput">Offer 备注</label><textarea class="control" id="offerNoteInput" maxlength="1000" placeholder="奖金、补贴、股票、福利、试用期等补充信息"></textarea></div>
+          <div class="field full"><label>评分 <span class="hint-inline">1～10 分，留空不参与综合分</span></label><div class="offer-rating-grid" id="offerRatingGrid"></div><div class="offer-score-display">综合分：<strong id="offerDialogScore">暂未评分</strong></div></div>
+        </div>
+      </div>
+      <div class="modal-actions"><button class="btn" id="cancelOfferDialog" type="button">取消</button><button class="btn btn-primary" id="saveOfferBtn" type="submit">保存 Offer</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="offerRulesDialog" aria-labelledby="offerRulesTitle">
+    <div class="modal-head"><h2 id="offerRulesTitle">评分规则</h2><button class="close-btn" id="closeOfferRulesDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body"><p class="capture-note">修改权重后会立即重新计算所有 Offer。停用评分项不会删除已有分数。</p><div class="offer-rules-head"><span>评分项</span><span>权重</span><span>状态</span><span></span></div><div id="offerRulesList"></div><button class="btn btn-small" id="addOfferRuleBtn" type="button">＋ 添加评分项</button></div>
+    <div class="modal-actions"><button class="btn" id="resetOfferRulesBtn" type="button">恢复默认</button><button class="btn" id="cancelOfferRulesBtn" type="button">取消</button><button class="btn btn-primary" id="saveOfferRulesBtn" type="button">保存并重新计算</button></div>
   </dialog>
 
   <!-- 新增简历区块（v4.11.0）：区块名 + 类型二选一。

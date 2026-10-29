@@ -18,11 +18,12 @@ module.exports = {
   app: [
     'app/00-bootstrap.js',
     { module: 'core', files: [
-      'core/dates.js', 'core/ics.js', 'core/company.js',
+      'core/dates.js', 'core/ics.js', 'core/company.js', 'core/offers.js',
       'core/insights.js', 'core/calendar.js', 'core/dedupe.js', 'core/city.js', 'core/text.js', 'core/share-report.js'
     ] },
     'app/10-views.js',
     { module: 'mail', files: ['mail/pure.js'] },
-    'app/20-runtime.js'
+    'app/20-runtime.js',
+    'app/offers.js'
   ]
 };

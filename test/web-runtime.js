@@ -812,6 +812,10 @@ const sandbox2 = {
   COMPANY_TYPE_ALIASES: COMPANY_TYPE_ALIASES_LIVE,
   syncConfig: { token: 'tok' },
   records: [],
+  // Offer 页面新增的全局评分规则：总览矩阵复用同一套排序/评分函数。
+  offerRules: {
+    criteria: [{ id: 'compensation', label: '薪资待遇', weight: 1, enabled: true }]
+  },
   sampleDataMode: false,
   // v4.22.0：邮件正文归档（renderDrawer 的「相关邮件」按 mailId 从这里取正文）
   mailArchive: {},
@@ -1299,7 +1303,13 @@ check('renderCalendarView：月格行数自适应、未完成的才上格、溢�
   );
   seedRecords();
   const ymd = off => {
-    const d = new Date(Date.now() + off * 86400000);
+    // 月末时“今天 + N 天”会跨到下月，但本用例渲染当前月；夹回月内可稳定覆盖网格。
+    const base = new Date();
+    const last = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    const wanted = base.getDate() + off;
+    const overflow = off > 0 ? Math.max(0, wanted - last) : 0;
+    const day = overflow ? Math.max(1, base.getDate() - overflow) : Math.max(1, Math.min(last, wanted));
+    const d = new Date(base.getFullYear(), base.getMonth(), day);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
   // r1：未完成的 4 条同日截止 → 3 条 chip + 「+1」
@@ -1335,7 +1345,7 @@ check('renderCalendarView：月格行数自适应、未完成的才上格、溢�
     '标题行有本月汇总'
   );
   assert.ok(!grid.includes('is-settled'), '已完成不再以 chip 形态上格');
-  assert.ok(grid.includes('cal-chip kind-deadline') && grid.includes('cal-chip kind-start"'), '截止 / 面试 chip 配色区分');
+  assert.ok(grid.includes('cal-chip kind-deadline') && /cal-chip kind-start(?:[ "']|$)/.test(grid), '截止 / 面试 chip 配色区分');
   assert.ok(grid.includes('cal-chip-who') && grid.includes('cal-chip-main'), 'chip 两段式：时刻/类型 + 公司名');
   assert.ok(/data-id="r1"/.test(grid) && /data-id="r2"/.test(grid), '每个 chip 都带记录 id（点击直达详情）');
   assert.ok(grid.includes('+1'), '同格第 4 条溢出收进「+N」');
@@ -1352,7 +1362,12 @@ check('renderCalendarView：默认只看今天（含已完成），点选后只�
   seedRecords();
   const now = new Date();
   const ymd = off => {
-    const d = new Date(Date.now() + off * 86400000);
+    const base = new Date();
+    const last = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    const wanted = base.getDate() + off;
+    const overflow = off > 0 ? Math.max(0, wanted - last) : 0;
+    const day = overflow ? Math.max(1, base.getDate() - overflow) : Math.max(1, Math.min(last, wanted));
+    const d = new Date(base.getFullYear(), base.getMonth(), day);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
   // r1：今天已完成的 2 条截止；r2：未来面试；r3（Offer 终态）未来截止。

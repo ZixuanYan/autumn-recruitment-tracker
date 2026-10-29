@@ -348,8 +348,8 @@ function extractFunction(src, name) {
 
 console.log('v4.4.0 核心纯函数单测（截止日 / 日程事件 / ICS / 公司分组 / 漏斗 / 停留 / 卡点 / 查重）');
 const coreSrc = loadSrc.coreSrc;
-check('CORE 纯函数模块已按清单加载（9 个文件）', () => {
-  assert.strictEqual(loadSrc.moduleFiles('core').length, 9, 'src/core/ 应为 9 个文件（v4.33.0 加入分享报告）');
+check('CORE 纯函数模块已按清单加载（10 个文件）', () => {
+  assert.strictEqual(loadSrc.moduleFiles('core').length, 10, 'src/core/ 应为 10 个文件（v4.37.0 加入 Offer 评分）');
   assert.ok(coreSrc.length > 500, `CORE 块过短或未读到：${coreSrc.length}`);
 });
 
@@ -460,9 +460,37 @@ const core = new Function(
      MAIL_ARCHIVE_MAX_CHARS, MAIL_LINK_MAX,
      linkifyText, trimLinkTail,
      normalizeCityKey, cityKeysOf, computeCityStats, computeCompanyTypeStats, tipContentFor,
-     normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord
+     normalizePositionSlug, loosePositionSlug, findDuplicateRecord, normalizeRecord,
+     normalizeOffer, normalizeOfferRules, getOfferRecords, computeOfferScore, computeOfferSalaryValue, sortOfferRecords
    };`
 )(globalThis, AJA_SHARED);
+
+check('Offer 数据归一化与旧阶段兼容', () => {
+  const pending = core.normalizeOffer(null, true);
+  assert.strictEqual(pending.status, 'pending');
+  assert.strictEqual(core.normalizeOffer(null, false), null);
+  const record = core.normalizeRecord({ id: 'offer-old', company: '甲', position: '产品', stage: 'Offer', applicationDate: '2026-01-01' });
+  assert.strictEqual(record.offer.status, 'pending');
+});
+check('Offer 三种薪资方式与月薪估算', () => {
+  assert.strictEqual(core.computeOfferSalaryValue({ compensation: { mode: 'monthly', monthlySalary: '25000', salaryMonths: '16' } }), 400000);
+  assert.strictEqual(core.computeOfferSalaryValue({ compensation: { mode: 'total', totalPackage: '380000' } }), 380000);
+  assert.strictEqual(core.computeOfferSalaryValue({ compensation: { mode: 'confidential' } }), null);
+});
+check('Offer 评分按已评分权重归一化且限制 1～10', () => {
+  const rules = { criteria: [{ id: 'a', label: 'A', weight: 1, enabled: true }, { id: 'b', label: 'B', weight: 3, enabled: true }] };
+  const result = core.computeOfferScore({ ratings: { a: 10, b: 6, c: 99 } }, rules);
+  assert.strictEqual(result.rated, 2);
+  assert.strictEqual(result.total, 2);
+  assert.strictEqual(result.score, 7);
+  assert.strictEqual(core.computeOfferScore({ ratings: { a: 11 } }, rules).score, null);
+});
+check('Offer 记录来源包含历史 Offer，且默认排序把已拒绝放最后', () => {
+  const records = [{ id: '1', stage: '已结束', offer: { status: 'rejected', ratings: { a: 9 } } }, { id: '2', stage: 'Offer', offer: { status: 'pending', ratings: { a: 6 } } }];
+  const rules = { criteria: [{ id: 'a', label: 'A', weight: 1, enabled: true }] };
+  assert.strictEqual(core.getOfferRecords(records).length, 2);
+  assert.deepStrictEqual(core.sortOfferRecords(records, 'score', rules).map(item => item.id), ['2', '1']);
+});
 
 // 注入的 AJA 必须真的被用上了：core 里的这四个符号应与 shared 的实现是同一引用。
 // 这条断言把「沙箱注入了 AJA」与「index.html 的别名确实转发」两件事绑在一起验证，
@@ -1999,7 +2027,7 @@ check('ROUTE_ALIASES：records 恢复为独立视图，upcoming 随面板迁去�
   assert.strictEqual(aliases.overview, 'overview');
 });
 
-check('导航 6 项且顺序为 总览 / 日历 / 投递记录 / 邮件提醒 / 我的简历 / 工具', () => {
+check('导航 7 项且顺序为 总览 / 日历 / 投递记录 / Offer / 邮件提醒 / 我的简历 / 工具', () => {
   const navStart = html.indexOf('<nav class="sidebar-nav">');
   const navEnd = html.indexOf('</nav>', navStart);
   const nav = html.slice(navStart, navEnd);
@@ -2007,11 +2035,12 @@ check('导航 6 项且顺序为 总览 / 日历 / 投递记录 / 邮件提醒 / 
   const labels = [...nav.matchAll(/<span>([^<]+)<\/span>/g)].map(m => m[1]);
   // v4.12.0：岗位库整页删除（它是截图识别与腾讯文档同步的唯一落点，那两个入口已随之移除）
   // v4.27.0：新增「日历」入口，排在总览之后（它本质是总览「未来安排」的空间化视图）
-  assert.deepStrictEqual(routes, ['overview', 'calendar', 'records', 'mail', 'resume', 'tools']);
-  assert.deepStrictEqual(labels, ['总览', '日历', '投递记录', '邮件提醒', '我的简历', '工具']);
+  assert.deepStrictEqual(routes, ['overview', 'calendar', 'records', 'offers', 'mail', 'resume', 'tools']);
+  assert.deepStrictEqual(labels, ['总览', '日历', '投递记录', 'Offer', '邮件提醒', '我的简历', '工具']);
   // 投递记录复用既有 #i-stack sprite，不新增 symbol
   assert.ok(/data-route="records"[^>]*>[\s\S]*?#i-stack/.test(nav), 'records 导航项应复用 #i-stack 图标');
   assert.ok(/data-route="calendar"[^>]*>[\s\S]*?#i-calendar/.test(nav), 'calendar 导航项应复用 #i-calendar 图标');
+  assert.ok(/data-route="offers"[^>]*>[\s\S]*?#i-trophy/.test(nav), 'offers 导航项应复用 #i-trophy 图标');
 });
 
 check('日历视图接线：路由钩子 / 中央重渲 / 点格选中 / 日程流与 chip 直达抽屉（v4.27.0 ~ v4.30.0）', () => {
@@ -2481,7 +2510,7 @@ check('岗位库与截图识别已整体删除，不得半截复活（v4.12.0）
   assert.ok(dirs, 'build.js 里找不到 DIRS 白名单');
   assert.ok(!dirs[0].includes('ocr'), `build.js 的 DIRS 不应再有 ocr：${dirs[0]}`);
   // 导航与视图数量：v4.27.0 起是 6 个视图（新增日历），多一个少一个都说明结构被动过
-  assert.strictEqual((html.match(/<div class="view" data-view=/g) || []).length, 6, '应有 6 个视图容器');
+  assert.strictEqual((html.match(/<div class="view" data-view=/g) || []).length, 7, '应有 7 个视图容器');
 });
 
 // ─────────────────────────────────────────────

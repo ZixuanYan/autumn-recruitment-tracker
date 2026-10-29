@@ -112,6 +112,7 @@
         }
         const at = options.at || localDateInput(new Date());
         setTimeline(record, [...(record.timeline || []), { stage: target, at, note: String(options.note || '') }]);
+        if (target === 'Offer' && !record.offer) record.offer = normalizeOffer(null, true);
         saveRecords(target === 'Offer' ? '已盖章：Offer' : `已推进到「${target}」并自动保存`);
         render();
         flashRow(record.id);
@@ -611,6 +612,7 @@
           actions.innerHTML = `
             ${drawerCanDone ? `<button class="btn btn-small${drawerDone ? ' is-on' : ''}" type="button" data-drawer="toggle-done">${drawerDone ? '取消完成' : '标记本阶段完成'}</button>` : ''}
             ${!['Offer', '已结束'].includes(record.stage) ? '<button class="btn btn-small" type="button" data-drawer="close-outcome">结束流程</button>' : ''}
+            ${record.offer ? '<button class="btn btn-small" type="button" data-drawer="offer">查看 Offer</button>' : ''}
             <button class="btn btn-small btn-primary" type="button" data-drawer="advance">推进阶段</button>
             <button class="btn btn-small" type="button" data-drawer="edit">编辑</button>
             <button class="btn btn-small btn-danger" type="button" data-drawer="delete">删除</button>`;
@@ -678,7 +680,7 @@
           });
         }
         const views = [
-          { label: '总览', hash: '#/overview' }, { label: '投递记录', hash: '#/records' }, { label: '邮件提醒', hash: '#/mail' },
+          { label: '总览', hash: '#/overview' }, { label: '投递记录', hash: '#/records' }, { label: 'Offer', hash: '#/offers' }, { label: '邮件提醒', hash: '#/mail' },
           { label: '我的简历', hash: '#/resume' }, { label: '工具', hash: '#/tools' }
         ];
         for (const view of views) {

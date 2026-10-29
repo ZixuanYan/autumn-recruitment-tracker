@@ -649,13 +649,14 @@
         overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计与洞察——从银十到金九，每一步都在这里' },
         calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '月历定位日期，右侧专注查看当天全部安排' },
         records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
+        offers: { kicker: 'OFFERS', title: 'Offer 对比', subtitle: '集中维护 Offer 状态、薪资与评分，辅助做出选择' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
         mail: { kicker: 'INBOX', title: '邮件提醒', subtitle: '招聘邮件解析结果，逐项复核后并入台账' }
       };
       // records 恢复为独立视图（更早版本本就是，v4.4.0 曾并入总览并重定向，v4.8.0 拆回）；
       // upcoming（未来安排）v4.29.0 起随面板搬到日历页，旧书签重定向过去。
-      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'calendar' };
+      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', offers: 'offers', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'calendar' };
 
       // ================= 日历视图（v4.27.0，v4.28.0 扩展）：关键时间按日落格 =================
       // 浏览位置（停在哪个月）存模块变量：切走再切回不丢；刷新页面回当月——
@@ -1016,6 +1017,7 @@
         // 从别的视图切回投递记录时重渲台账/看板：数据可能在别处变更过（如邮件应用、抽屉推进），
         // 隐藏视图多渲染一次无副作用，换取各视图始终一致。
         if (route === 'records') renderRecordsView();
+        if (route === 'offers') renderOffersView();
         window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
       }
 
@@ -1892,6 +1894,58 @@
       $('#closeShareReportDialog').addEventListener('click', closeShareReportDialog);
       $('#shareReportDialog').addEventListener('click', event => { if (event.target === $('#shareReportDialog')) closeShareReportDialog(); });
       $('#exportResumeBtn').addEventListener('click', exportResume);
+      $('#offerStatusFilter').addEventListener('change', event => { offerFilterStatus = event.target.value; renderOffersView(); });
+      $('#offerCityFilter').addEventListener('change', event => { offerFilterCity = event.target.value; renderOffersView(); });
+      $('#offerTypeFilter').addEventListener('change', event => { offerFilterType = event.target.value; renderOffersView(); });
+      $('#offerSortSelect').addEventListener('change', event => { offerSortMode = event.target.value; renderOffersView(); });
+      $('#offerRulesBtn').addEventListener('click', openOfferRulesDialog);
+      $('#closeOfferRulesDialog').addEventListener('click', () => $('#offerRulesDialog').close());
+      $('#cancelOfferRulesBtn').addEventListener('click', () => $('#offerRulesDialog').close());
+      $('#saveOfferRulesBtn').addEventListener('click', saveOfferRulesFromDialog);
+      $('#resetOfferRulesBtn').addEventListener('click', resetOfferRules);
+      $('#addOfferRuleBtn').addEventListener('click', () => {
+        const host = $('#offerRulesList');
+        if (!host) return;
+        const index = host.querySelectorAll('.offer-rule-row').length;
+        const id = `criterion-${Date.now()}-${index}`;
+        host.insertAdjacentHTML('beforeend', `<div class="offer-rule-row" data-rule-index="${index}" data-rule-id="${id}"><input class="control" data-rule-label value="新评分项" maxlength="30"><input class="control offer-rule-weight" data-rule-weight type="number" min="0.1" max="100" step="0.1" value="1"><label class="offer-rule-enabled"><input type="checkbox" data-rule-enabled checked>启用</label><span class="offer-rule-actions"><button class="text-button" type="button" data-rule-up aria-label="上移评分项">上移</button><button class="text-button" type="button" data-rule-down aria-label="下移评分项">下移</button><button class="text-button danger" type="button" data-rule-delete>删除</button></span></div>`);
+      });
+      $('#offerRulesList').addEventListener('click', event => {
+        const row = event.target.closest('.offer-rule-row');
+        if (!row) return;
+        if (event.target.closest('[data-rule-delete]')) { row.remove(); return; }
+        if (event.target.closest('[data-rule-up]') && row.previousElementSibling) row.parentElement.insertBefore(row, row.previousElementSibling);
+        if (event.target.closest('[data-rule-down]') && row.nextElementSibling) row.parentElement.insertBefore(row.nextElementSibling, row);
+      });
+      $('#offerCompensationMode').addEventListener('change', renderOfferCompensationFields);
+      $('#offerForm').addEventListener('submit', event => { event.preventDefault(); saveOfferDialog(); });
+      $('#closeOfferDialog').addEventListener('click', () => $('#offerDialog').close());
+      $('#cancelOfferDialog').addEventListener('click', () => $('#offerDialog').close());
+      $('#offerSourceFacts').addEventListener('click', event => {
+        const button = event.target.closest('[data-offer-view-record]');
+        if (!button) return;
+        const id = button.dataset.offerViewRecord;
+        $('#offerDialog').close();
+        switchView('records');
+        openRecordDrawer(id);
+      });
+      $('#offerList').addEventListener('click', event => {
+        const button = event.target.closest('[data-offer-action="edit"]');
+        if (button) { openOfferDialog(button.dataset.offerId); return; }
+        const row = event.target.closest('tr[data-offer-id]');
+        if (row && !event.target.closest('input,button')) openOfferDialog(row.dataset.offerId);
+      });
+      $('#offerList').addEventListener('change', event => {
+        const input = event.target.closest('[data-offer-select]');
+        if (!input) return;
+        if (input.checked && selectedOfferIds.size >= 4) {
+          input.checked = false;
+          showToast('重点对比最多选择 4 个 Offer');
+          return;
+        }
+        if (input.checked) selectedOfferIds.add(input.dataset.offerSelect); else selectedOfferIds.delete(input.dataset.offerSelect);
+        renderOffersView();
+      });
       // v4.29.0：未来安排面板的「导出日历」按钮随面板迁入日历页时去重（日历头部已有
       // 「导出 .ics」，工具页还有一个），这里的旧绑定一并拆除——面板里没有这个元素了，
       // 保留绑定会在启动时对 null 调 addEventListener 直接崩。
@@ -2040,6 +2094,7 @@
         if (action === 'advance') return openAdvanceDialog(record);
         if (action === 'toggle-done') return toggleStageDone(record);
         if (action === 'close-outcome') return openCloseOutcomeDialog(record);
+        if (action === 'offer') return openOfferDialog(record.id);
         if (action === 'edit') { closeRecordDrawer(); return openDialog(record); }
         if (action === 'ics') return exportIcs(record.id);
         if (action === 'delete') return requestDeleteRecord(record);

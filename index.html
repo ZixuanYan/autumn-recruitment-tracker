@@ -195,6 +195,78 @@
     .empty { padding: 54px 20px; text-align: center; color: var(--muted); }
     .empty-icon { font-size: 30px; margin-bottom: 8px; }
 
+    /* ================= Offer 页面（v4.37.0）================= */
+    .offer-page-head { align-items: center; }
+    .offer-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .offer-compare-hint { color: var(--muted); font-size: 12px; }
+    .offer-summary-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; padding: 15px 20px 4px; }
+    .offer-stat { min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+    .offer-stat span { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .offer-stat strong { display: block; margin-top: 3px; font-size: 18px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .offer-stat-best strong { color: var(--accent-ink); font-size: 13px; }
+    .offer-filters { margin: 12px 20px 0; }
+    .offer-table-scroll { margin: 14px 20px 20px; }
+    .offer-table { min-width: 980px; }
+    .offer-table th, .offer-table td { vertical-align: top; }
+    .offer-compare-panel { margin: 0 20px 20px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+    .offer-compare-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .offer-compare-head h3 { margin: 0; font-size: 15px; }
+    .offer-compare-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+    .offer-compare-card { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+    .offer-compare-company { display: grid; gap: 3px; margin-bottom: 8px; }
+    .offer-compare-company span, .offer-compare-note { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .offer-compare-line { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 12px; }
+    .offer-compare-line span { color: var(--muted); }
+    .offer-compare-line b { text-align: right; overflow-wrap: anywhere; }
+    .offer-compare-note { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+    .offer-source-meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .offer-source-timeline { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+    .offer-source-milestone { display: inline-flex; align-items: baseline; gap: 5px; padding: 3px 7px; border-radius: 999px; background: var(--surface-soft); color: var(--ink-2); font-size: 11px; }
+    .offer-source-milestone small { color: var(--muted); }
+    .offer-source-link { margin-top: 10px; }
+    .offer-row { cursor: pointer; }
+    .offer-row.is-selected { background: var(--accent-soft); }
+    .offer-unit { color: var(--muted); font-size: 12px; font-weight: 500; }
+    .offer-position { margin-top: 3px; color: var(--muted); font-size: 12px; }
+    .offer-score-meta { display: block; color: var(--muted); font-size: 10px; }
+    .offer-status { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .offer-status-pending { background: var(--amber-soft); color: var(--amber); }
+    .offer-status-intent-signed { background: var(--primary-soft); color: var(--primary-dark); }
+    .offer-status-contract-signed { background: var(--ok-soft); color: var(--ok); }
+    .offer-status-rejected { background: var(--surface-soft); color: var(--muted); }
+    .offer-rating-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .offer-rating-field { display: grid; grid-template-columns: minmax(0, 1fr) 76px; align-items: center; gap: 8px; margin: 0; font-size: 12px; font-weight: 600; }
+    .offer-rating-field .control { min-height: 34px; }
+    .hint-inline { color: var(--muted); font-weight: 400; }
+    .offer-score-display { margin-top: 10px; color: var(--muted); font-size: 13px; }
+    .offer-score-display strong { color: var(--accent-ink); }
+    .offer-rules-head, .offer-rule-row { display: grid; grid-template-columns: minmax(0, 1fr) 92px 70px 112px; gap: 8px; align-items: center; }
+    .offer-rules-head { margin: 0 0 6px; color: var(--muted); font-size: 11px; }
+    #offerRulesList { display: grid; gap: 7px; margin-bottom: 10px; }
+    .offer-rule-row .control { min-height: 34px; }
+    .offer-rule-enabled { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--muted); font-size: 11px; font-weight: 500; }
+    .offer-rule-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .offer-rule-actions .text-button { padding: 2px 0; font-size: 11px; }
+    @media (max-width: 900px) { .offer-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (max-width: 620px) {
+      .offer-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: 14px; }
+      .offer-filters, .offer-table-scroll, .offer-compare-panel { margin-inline: 14px; }
+      .offer-head-actions { justify-content: flex-start; }
+      .offer-rating-grid { grid-template-columns: 1fr; }
+      .offer-rules-head { display: none; }
+      .offer-rule-row { grid-template-columns: minmax(0, 1fr) 72px auto; }
+      .offer-rule-row .offer-rule-enabled { grid-column: 1 / 2; }
+      .offer-table-scroll { overflow: visible; }
+      .offer-table { display: block; min-width: 0; }
+      .offer-table thead { display: none; }
+      .offer-table tbody, .offer-table tr, .offer-table td { display: block; width: 100%; }
+      .offer-table tr { margin-bottom: 10px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+      .offer-table td { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 5px 0; border: 0; }
+      .offer-table td::before { flex: 0 0 auto; color: var(--muted); font-size: 11px; content: attr(data-label); }
+      .offer-table td:first-child { padding-top: 0; }
+      .offer-table td:last-child { padding-bottom: 0; }
+    }
+
     .side-panel { position: static; }
     .schedule-list { padding: 4px 20px 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px 22px; }
     .schedule-item { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 13px; padding: 16px 0; border-bottom: 1px solid var(--line); }
@@ -1590,6 +1662,7 @@
         <a class="nav-item is-active" data-route="overview" href="#/overview"><span class="nav-icon"><svg><use href="#i-grid"/></svg></span><span>总览</span></a>
         <a class="nav-item" data-route="calendar" href="#/calendar"><span class="nav-icon"><svg><use href="#i-calendar"/></svg></span><span>日历</span></a>
         <a class="nav-item" data-route="records" href="#/records"><span class="nav-icon"><svg><use href="#i-stack"/></svg></span><span>投递记录</span></a>
+        <a class="nav-item" data-route="offers" href="#/offers"><span class="nav-icon"><svg><use href="#i-trophy"/></svg></span><span>Offer</span></a>
         <a class="nav-item" data-route="mail" href="#/mail"><span class="nav-icon"><svg><use href="#i-mail"/></svg></span><span>邮件提醒</span><span class="nav-badge" id="mailNavBadge" hidden></span></a>
         <a class="nav-item" data-route="resume" href="#/resume"><span class="nav-icon"><svg><use href="#i-file"/></svg></span><span>我的简历</span></a>
         <a class="nav-item" data-route="tools" href="#/tools"><span class="nav-icon"><svg><use href="#i-tool"/></svg></span><span>工具</span></a>
@@ -1684,7 +1757,7 @@
             </div>
           </div>
           <div class="insight-block" id="offerMatrixWrap" hidden>
-            <div class="insight-block-head"><h3>Offer 对比</h3><span class="insight-note">按意向度排序</span></div>
+            <div class="insight-block-head"><h3>Offer 对比</h3><span class="insight-note">按综合分排序 · 查看 Offer 页管理</span></div>
             <div class="table-scroll"><table class="offer-matrix" id="offerMatrix"></table></div>
           </div>
         </div>
@@ -1788,6 +1861,34 @@
       <div class="empty" id="emptyState" hidden></div>
     </section>
     </div>
+<div class="view" data-view="offers" hidden>
+    <section class="panel offer-page" id="offers" aria-labelledby="offersTitle">
+      <div class="panel-head offer-page-head">
+        <div><h2 class="panel-title" id="offersTitle">Offer 对比</h2><div class="panel-caption">独立维护 Offer 状态、薪资和评分，不会修改投递记录阶段</div></div>
+        <div class="offer-head-actions"><button class="btn btn-small" id="offerRulesBtn" type="button">评分规则</button><span class="offer-compare-hint" id="offerCompareHint">勾选 2～4 个 Offer 可重点对比</span></div>
+      </div>
+      <div class="offer-summary-grid">
+        <div class="offer-stat"><span>Offer 总数</span><strong id="offerTotal">0</strong></div>
+        <div class="offer-stat"><span>待决定</span><strong id="offerPending">0</strong></div>
+        <div class="offer-stat"><span>意向已签</span><strong id="offerIntentSigned">0</strong></div>
+        <div class="offer-stat"><span>合同协议已签</span><strong id="offerContractSigned">0</strong></div>
+        <div class="offer-stat"><span>已拒绝</span><strong id="offerRejected">0</strong></div>
+        <div class="offer-stat"><span>已评分</span><strong id="offerRated">0</strong></div>
+        <div class="offer-stat offer-stat-best"><span>最高综合分</span><strong id="offerBestScore">—</strong></div>
+      </div>
+      <div class="filters offer-filters">
+        <select class="control" id="offerStatusFilter" aria-label="按 Offer 状态筛选"><option value="all">全部状态</option><option value="pending">待决定</option><option value="intent_signed">意向已签</option><option value="contract_signed">合同协议已签</option><option value="rejected">已拒绝</option></select>
+        <select class="control" id="offerCityFilter" aria-label="按城市筛选"><option value="all">全部城市</option></select>
+        <select class="control" id="offerTypeFilter" aria-label="按企业性质筛选"><option value="all">全部企业性质</option></select>
+        <select class="control" id="offerSortSelect" aria-label="Offer 排序"><option value="score">综合分优先</option><option value="salary">薪资估算优先</option><option value="status">状态排序</option><option value="updated">最近更新</option><option value="company">公司名称</option></select>
+      </div>
+      <div id="offerList"></div>
+      <section class="offer-compare-panel" id="offerComparePanel" hidden aria-labelledby="offerCompareTitle">
+        <div class="offer-compare-head"><h3 id="offerCompareTitle">重点对比</h3><span class="muted-text">最多选择 4 个 Offer</span></div>
+        <div id="offerCompareList"></div>
+      </section>
+    </section>
+</div>
 <div class="view" data-view="resume" hidden>
     <section class="panel" id="resume" aria-labelledby="resumeTitle">
       <div class="panel-head">
@@ -1990,6 +2091,31 @@
       <div class="field"><label for="shareReportCity">城市范围</label><select class="control" id="shareReportCity"></select></div>
     </div>
     <div class="modal-actions"><button class="btn" id="cancelShareReportBtn" type="button">取消</button><button class="btn btn-primary" id="confirmShareReportBtn" type="button">导出报告</button></div>
+  </dialog>
+
+  <dialog id="offerDialog" aria-labelledby="offerDialogTitle">
+    <form id="offerForm">
+      <div class="modal-head"><h2 id="offerDialogTitle">编辑 Offer</h2><button class="close-btn" id="closeOfferDialog" type="button" aria-label="关闭">×</button></div>
+      <div class="form-body">
+        <p class="capture-note" id="offerSourceFacts">—</p>
+        <div class="form-grid">
+          <div class="field"><label for="offerStatusInput">Offer 状态</label><select class="control" id="offerStatusInput"><option value="pending">待决定</option><option value="intent_signed">意向已签</option><option value="contract_signed">合同协议已签</option><option value="rejected">已拒绝</option></select></div>
+          <div class="field"><label for="offerCompensationMode">薪资记录方式</label><select class="control" id="offerCompensationMode"><option value="monthly">月薪 × 薪资月数</option><option value="total">总包</option><option value="confidential">密薪</option></select></div>
+          <div class="field" id="offerMonthlyFields"><label for="offerMonthlySalary">月薪（元 / 月）</label><input class="control" id="offerMonthlySalary" inputmode="decimal" placeholder="例如：25000"></div>
+          <div class="field" id="offerSalaryMonthsFields"><label for="offerSalaryMonths">薪资月数</label><input class="control" id="offerSalaryMonths" inputmode="decimal" placeholder="例如：16"></div>
+          <div class="field" id="offerTotalFields" hidden><label for="offerTotalPackage">总包（元 / 年）</label><input class="control" id="offerTotalPackage" inputmode="decimal" placeholder="例如：400000"></div>
+          <div class="field full"><label for="offerNoteInput">Offer 备注</label><textarea class="control" id="offerNoteInput" maxlength="1000" placeholder="奖金、补贴、股票、福利、试用期等补充信息"></textarea></div>
+          <div class="field full"><label>评分 <span class="hint-inline">1～10 分，留空不参与综合分</span></label><div class="offer-rating-grid" id="offerRatingGrid"></div><div class="offer-score-display">综合分：<strong id="offerDialogScore">暂未评分</strong></div></div>
+        </div>
+      </div>
+      <div class="modal-actions"><button class="btn" id="cancelOfferDialog" type="button">取消</button><button class="btn btn-primary" id="saveOfferBtn" type="submit">保存 Offer</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="offerRulesDialog" aria-labelledby="offerRulesTitle">
+    <div class="modal-head"><h2 id="offerRulesTitle">评分规则</h2><button class="close-btn" id="closeOfferRulesDialog" type="button" aria-label="关闭">×</button></div>
+    <div class="form-body"><p class="capture-note">修改权重后会立即重新计算所有 Offer。停用评分项不会删除已有分数。</p><div class="offer-rules-head"><span>评分项</span><span>权重</span><span>状态</span><span></span></div><div id="offerRulesList"></div><button class="btn btn-small" id="addOfferRuleBtn" type="button">＋ 添加评分项</button></div>
+    <div class="modal-actions"><button class="btn" id="resetOfferRulesBtn" type="button">恢复默认</button><button class="btn" id="cancelOfferRulesBtn" type="button">取消</button><button class="btn btn-primary" id="saveOfferRulesBtn" type="button">保存并重新计算</button></div>
   </dialog>
 
   <!-- 新增简历区块（v4.11.0）：区块名 + 类型二选一。
@@ -2309,6 +2435,7 @@
       function setTimeline(rec, timeline) {
         rec.timeline = sanitizeTimeline(timeline);
         rec.stage = deriveStage(rec);
+        if (rec.stage === 'Offer' && !rec.offer) rec.offer = normalizeOffer(null, true);
         rec.updatedAt = Date.now();
         return rec;
       }
@@ -2625,7 +2752,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.36.0';
+      const APP_VERSION = '4.37.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2637,6 +2764,7 @@
       // UI 偏好（v4.4.0）：台账视图模式（表格/看板）、公司分组折叠态、首启引导是否已关闭。
       // 纯本机、不进 envelope、不跨设备同步——这是显示偏好而非数据。
       const UI_STORAGE_KEY = 'autumnRecruitmentTracker.ui.v1';
+      const OFFER_RULES_STORAGE_KEY = 'autumnRecruitmentTracker.offerRules.v1';
       // 网页写、Action 读的配置文件（明文，不含任何密钥）；默认值与 Action src/config.js 保持一致
       const MAIL_CONFIG_FILENAME = 'mail-config.json';
       const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 12, promptExtra: '', promptOverride: '' };
@@ -2648,6 +2776,16 @@
         search: $('#searchInput'), filter: $('#stageFilter'), sort: $('#sortSelect'),
         dialog: $('#recordDialog'), form: $('#recordForm'), dialogTitle: $('#dialogTitle'), toast: $('#toast')
       };
+      function loadOfferRules() {
+        try { return normalizeOfferRules(JSON.parse(localStorage.getItem(OFFER_RULES_STORAGE_KEY) || 'null')); }
+        catch (_) { return normalizeOfferRules(null); }
+      }
+      function saveOfferRules() {
+        offerRules.updatedAt = new Date().toISOString();
+        try { localStorage.setItem(OFFER_RULES_STORAGE_KEY, JSON.stringify(offerRules)); } catch (_) {}
+      }
+      // core/offers.js 在本段之后拼入；评分规则需等其纯函数初始化后再从本机读取。
+      let offerRules = null;
       let primaryLoadState = 'unknown';
       // 当前台账是否为「首次打开自动塞入的示例数据」（必须在 loadRecords 调用前声明，否则赋值触发 TDZ）
       let sampleDataMode = false;
@@ -2766,6 +2904,8 @@
           primaryLoadState = 'corrupt';
           console.warn('无法读取本地记录', error);
         }
+        // core/offers.js 与 dates.js 在本文件之后拼入；首启播种不能提前调用依赖 core 的归一化。
+        // runtime 首次 render 时会再走 normalizeRecord，确保示例数据与真实数据使用同一结构。
         const initial = exampleRecords();
         // 标记「当前台账是示例数据」：首启引导会明确告知并提供一键清空，避免用户误把示例当成自己的投递
         setSampleMode(true);
@@ -2824,7 +2964,11 @@
             .filter(n => n && String(n.text || '').trim())
             .map(n => ({ id: String(n.id || cryptoId()), at: Number(n.at) || Date.now(), text: String(n.text).trim() }))
             .slice(-200),                                   // 面经/跟进笔记，上限 200 条防膨胀
-          timeline
+          timeline,
+          // Offer 是投递记录进入 Offer 后的独立决策信息；一旦生成即保留，阶段后续变化也不清除。
+          offer: typeof normalizeOffer === 'function'
+            ? normalizeOffer(item.offer, timeline.some(milestone => milestone && milestone.stage === 'Offer'))
+            : (item.offer && typeof item.offer === 'object' ? item.offer : null)
         };
         rec.stage = deriveStage(rec); // 当前阶段 = 时间线末项（派生缓存，兼容分布/筛选/排序/徽章/桥接/同步）
         return rec;
@@ -3192,8 +3336,14 @@
             renderResumeEditor();
             pushResumeToPlugin();
           }
+          let offerRulesChanged = false;
+          if (remote && remote.offerRules && String(remote.offerRules.updatedAt || '') > String(offerRules.updatedAt || '')) {
+            offerRules = normalizeOfferRules(remote.offerRules);
+            try { localStorage.setItem(OFFER_RULES_STORAGE_KEY, JSON.stringify(offerRules)); } catch (_) {}
+            offerRulesChanged = true;
+          }
           const localChanged = !sameRecordSet(mergedRecords, records) || !sameTombstoneSet(mergedTombstones, tombstones);
-          if (localChanged) {
+          if (localChanged || offerRulesChanged) {
             records = mergedRecords;
             tombstones = mergedTombstones;
             saveTombstones();
@@ -3215,7 +3365,8 @@
           // 否则仅改 mailState（忽略/应用）时 remoteChanged 恒为 false → 永不上传 → 别的设备看不到（同"只推不拉"陷阱）
           const remoteMail = remote && remote.mailState ? remote.mailState : null;
           const mailStateNeedsPush = !sameIdSet(mailState.appliedIds, remoteMail && remoteMail.appliedIds) || !sameIdSet(mailState.dismissedIds, remoteMail && remoteMail.dismissedIds);
-          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones) || resumeNeedsPush || mailStateNeedsPush || archiveChanged;
+          const localRulesNewer = !remote || String(offerRules.updatedAt || '') > String(remote.offerRules?.updatedAt || '');
+          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones) || resumeNeedsPush || mailStateNeedsPush || archiveChanged || localRulesNewer;
           if (remoteChanged) await pushSyncState(migrateLegacy);
           syncConfig.lastSyncAt = new Date().toISOString();
           saveSyncConfig();
@@ -3747,6 +3898,7 @@
           savedAt: new Date().toISOString(),
           recordCount: sourceRecords.length,
           records: sourceRecords.map(record => ({ ...record })),
+          offerRules: normalizeOfferRules(offerRules),
           resume: JSON.parse(JSON.stringify(resume)),
           resumeSavedAt,
           // 邮件已应用/已忽略状态跨设备同步（只同步这两个 ID 列表；encKey/lastReadAt 仅本机，不上传）
@@ -3977,6 +4129,7 @@
           const importedIds = new Set(incoming.map(item => String(item.id || '')));
           markDeleted(records.filter(item => !importedIds.has(item.id)).map(item => item.id));
           records = incoming.map(normalizeRecord);
+          if (parsed && parsed.offerRules) { offerRules = normalizeOfferRules(parsed.offerRules); saveOfferRules(); }
           // 备份携带简历时一并导入（整体替换，随云同步上传并下发插件）
           if (parsed && parsed.resume && typeof parsed.resume === 'object' && !Array.isArray(parsed.resume)) {
             resume = parsed.resume;
@@ -4072,6 +4225,7 @@
           return true;
         }).slice(-200);
         merged.mailRefs = unionMailRefs(existing.mailRefs, incoming.mailRefs);
+        if (incoming.offer || existing.offer) merged.offer = normalizeOffer(incoming.offer || existing.offer, true);
         return normalizeRecord(merged);
       }
 
@@ -4270,6 +4424,7 @@
         renderDistribution();
         renderInsights();
         renderRecordsView();
+        if (typeof renderOffersView === 'function') renderOffersView();
         // 日历视图（v4.27.0）跟着全量重渲：与 records 同理，隐藏时多渲一次无副作用，
         // 换取从抽屉推进 / 邮件应用等任何数据变更路径回来时格子与日程流都反映最新台账。
         // v4.30.0 起「未来安排」面板并入日程流（renderCalFlow 由 renderCalendarView 带出）。
@@ -4547,7 +4702,7 @@
       function renderOfferMatrix() {
         const wrap = $('#offerMatrixWrap'), table = $('#offerMatrix');
         if (!wrap || !table) return;
-        const offers = records.filter(record => record.stage === 'Offer');
+        const offers = typeof getOfferRecords === 'function' ? getOfferRecords(records) : records.filter(record => record.stage === 'Offer');
         if (offers.length < 2) { wrap.hidden = true; table.innerHTML = ''; return; }
         // v4.19.0：签约截止改为「取最近的截止事件」——一条记录可能有多条截止（测评截止 / 签约截止）
         // v4.24.0：返回**完整** at（可能带时刻），排序时再截成日期比较
@@ -4555,10 +4710,11 @@
           const hit = nearestDeadlineEvent(rec.events);
           return hit ? hit.event.at : '';
         };
-        const sorted = offers.slice().sort((a, b) => (Number(b.intent) || 0) - (Number(a.intent) || 0)
-          || String(deadlineOf(a) || '9999-12-31').localeCompare(String(deadlineOf(b) || '9999-12-31')));
+        const sorted = typeof sortOfferRecords === 'function'
+          ? sortOfferRecords(offers, 'score', offerRules)
+          : offers.slice().sort((a, b) => (Number(b.intent) || 0) - (Number(a.intent) || 0));
         wrap.hidden = false;
-        table.innerHTML = `<thead><tr><th>公司 / 岗位</th><th>城市</th><th>薪资 / 待遇</th><th>意向度</th><th>签约截止</th><th>最新备注</th></tr></thead>
+        table.innerHTML = `<thead><tr><th>公司 / 岗位</th><th>城市</th><th>薪资 / 待遇</th><th>综合分</th><th>状态</th><th>最新备注</th></tr></thead>
           <tbody>${sorted.map(record => {
             const dlAt = deadlineOf(record);
             const dl = dlAt ? deadlineInfo(dlAt) : null;
@@ -4572,8 +4728,8 @@
               <td data-label="公司 / 岗位"><div class="company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position || '—')}</div></td>
               <td data-label="城市">${escapeHtml(record.city || '—')}</td>
               <td data-label="薪资 / 待遇">${escapeHtml(record.salary || '—')}</td>
-              <td data-label="意向度">${intentDotsHtml(record.intent) || '<span class="muted-text">未设</span>'}</td>
-              <td data-label="签约截止">${dlAt ? `<span class="deadline-hint ${dl ? dl.level : ''}">${escapeHtml(dlText)}${dl ? ` · ${escapeHtml(dl.text.replace('截止 · ', ''))}` : ''}</span>` : '—'}</td>
+              <td data-label="意向度">${typeof computeOfferScore === 'function' && computeOfferScore(record.offer, offerRules).score != null ? `${computeOfferScore(record.offer, offerRules).score.toFixed(1)} / 10` : (intentDotsHtml(record.intent) || '<span class="muted-text">未评分</span>')}</td>
+              <td data-label="状态">${typeof offerStatusLabel === 'function' ? escapeHtml(offerStatusLabel(record.offer?.status)) : '待决定'}</td>
               <td data-label="最新备注"><div class="next-action">${escapeHtml(lastNote)}</div></td>
             </tr>`;
           }).join('')}</tbody>`;
@@ -5189,6 +5345,130 @@
         return parenthesized ? `${pos}（${unit}）` : `${pos} · ${unit}`;
       }
 
+      // ===== Offer 独立管理与评分（v4.37.0） =====
+      const OFFER_STATUS_VALUES = ['pending', 'intent_signed', 'contract_signed', 'rejected'];
+      const OFFER_STATUS_LABELS = {
+        pending: '待决定', intent_signed: '意向已签', contract_signed: '合同协议已签', rejected: '已拒绝'
+      };
+      const OFFER_COMPENSATION_MODES = ['monthly', 'total', 'confidential'];
+      const OFFER_COMPENSATION_LABELS = { monthly: '月薪 × 薪资月数', total: '总包', confidential: '密薪' };
+      const DEFAULT_OFFER_RULES = {
+        criteria: [
+          { id: 'compensation', label: '薪资待遇', weight: 1, enabled: true },
+          { id: 'fit', label: '岗位匹配', weight: 1, enabled: true },
+          { id: 'growth', label: '发展空间', weight: 1, enabled: true },
+          { id: 'location', label: '城市与地点', weight: 1, enabled: true },
+          { id: 'stability', label: '稳定性', weight: 1, enabled: true },
+          { id: 'workload', label: '工作强度', weight: 1, enabled: true }
+        ]
+      };
+      function defaultOffer() {
+        return { status: 'pending', compensation: { mode: 'monthly', monthlySalary: '', salaryMonths: '', totalPackage: '', note: '' }, ratings: {}, updatedAt: '' };
+      }
+      function normalizeOffer(value, shouldCreate = false) {
+        if (!value || typeof value !== 'object') return shouldCreate ? defaultOffer() : null;
+        const rawStatus = String(value.status || '').trim();
+        const status = OFFER_STATUS_VALUES.includes(rawStatus) ? rawStatus : 'pending';
+        const source = value.compensation && typeof value.compensation === 'object' ? value.compensation : {};
+        const mode = OFFER_COMPENSATION_MODES.includes(String(source.mode || '')) ? String(source.mode) : 'monthly';
+        const ratings = {};
+        const sourceRatings = value.ratings && typeof value.ratings === 'object' ? value.ratings : {};
+        Object.keys(sourceRatings).slice(0, 100).forEach(id => {
+          const n = Number(sourceRatings[id]);
+          if (Number.isFinite(n) && n >= 1 && n <= 10) ratings[String(id).slice(0, 80)] = Math.round(n * 10) / 10;
+        });
+        return {
+          status,
+          compensation: {
+            mode,
+            monthlySalary: String(source.monthlySalary ?? '').trim().slice(0, 30),
+            salaryMonths: String(source.salaryMonths ?? '').trim().slice(0, 12),
+            totalPackage: String(source.totalPackage ?? '').trim().slice(0, 30),
+            note: String(source.note ?? '').trim().slice(0, 1000)
+          },
+          ratings,
+          updatedAt: String(value.updatedAt || '').trim()
+        };
+      }
+      function normalizeOfferRules(value) {
+        const source = value && typeof value === 'object' ? value : {};
+        const list = Array.isArray(source.criteria) ? source.criteria : DEFAULT_OFFER_RULES.criteria;
+        const criteria = [];
+        const seen = new Set();
+        list.slice(0, 30).forEach((item, index) => {
+          const id = String(item && item.id || `criterion-${index + 1}`).trim().slice(0, 80);
+          const label = String(item && item.label || '').trim().slice(0, 30);
+          if (!id || !label || seen.has(id)) return;
+          seen.add(id);
+          const weight = Number(item && item.weight);
+          criteria.push({ id, label, weight: Number.isFinite(weight) && weight > 0 ? Math.min(100, weight) : 1, enabled: item.enabled !== false });
+        });
+        return {
+          criteria: criteria.length ? criteria : DEFAULT_OFFER_RULES.criteria.map(item => ({ ...item })),
+          updatedAt: String(source.updatedAt || '').trim()
+        };
+      }
+      function getOfferRecords(list) {
+        return (Array.isArray(list) ? list : []).filter(record => record && (record.offer || String(record.stage || '') === 'Offer'));
+      }
+      function computeOfferScore(offer, rules) {
+        const clean = normalizeOffer(offer, false);
+        const normalized = normalizeOfferRules(rules);
+        if (!clean) return { score: null, rated: 0, total: normalized.criteria.filter(item => item.enabled).length };
+        let weighted = 0, weight = 0, rated = 0;
+        for (const item of normalized.criteria) {
+          if (!item.enabled) continue;
+          const value = Number(clean.ratings[item.id]);
+          if (!Number.isFinite(value) || value < 1 || value > 10) continue;
+          weighted += value * item.weight;
+          weight += item.weight;
+          rated += 1;
+        }
+        return { score: weight ? weighted / weight : null, rated, total: normalized.criteria.filter(item => item.enabled).length };
+      }
+      function computeOfferSalaryValue(offer) {
+        const clean = normalizeOffer(offer, false);
+        if (!clean) return null;
+        const c = clean.compensation;
+        if (c.mode === 'monthly') {
+          const monthly = Number(c.monthlySalary), months = Number(c.salaryMonths);
+          return Number.isFinite(monthly) && monthly >= 0 && Number.isFinite(months) && months > 0 ? monthly * months : null;
+        }
+        if (c.mode === 'total') {
+          const total = Number(c.totalPackage);
+          return Number.isFinite(total) && total >= 0 ? total : null;
+        }
+        return null;
+      }
+      function sortOfferRecords(list, sortMode = 'score', rules) {
+        const normalized = normalizeOfferRules(rules);
+        const items = (Array.isArray(list) ? list : []).slice();
+        const scoreOf = record => computeOfferScore(record.offer || {}, normalized).score;
+        const statusRank = { pending: 0, intent_signed: 1, contract_signed: 2, rejected: 3 };
+        const updatedOf = record => String(record.offer?.updatedAt || record.updatedAt || '');
+        const compareUpdated = (a, b) => {
+          const av = updatedOf(a), bv = updatedOf(b);
+          const an = Number(av), bn = Number(bv);
+          if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return bn - an;
+          return bv.localeCompare(av);
+        };
+        const compareCompany = (a, b) => String(a.company || '').localeCompare(String(b.company || ''), 'zh-CN')
+          || String(a.position || '').localeCompare(String(b.position || ''), 'zh-CN');
+        return items.sort((a, b) => {
+          if (sortMode === 'salary') return (computeOfferSalaryValue(b.offer) ?? -1) - (computeOfferSalaryValue(a.offer) ?? -1)
+            || (statusRank[a.offer?.status] ?? 9) - (statusRank[b.offer?.status] ?? 9) || compareCompany(a, b);
+          if (sortMode === 'status') return (statusRank[a.offer?.status] ?? 9) - (statusRank[b.offer?.status] ?? 9) || compareCompany(a, b);
+          if (sortMode === 'updated') return compareUpdated(a, b) || compareCompany(a, b);
+          if (sortMode === 'company') return compareCompany(a, b);
+          const sa = scoreOf(a), sb = scoreOf(b);
+          const aRejected = a.offer?.status === 'rejected', bRejected = b.offer?.status === 'rejected';
+          if (aRejected !== bRejected) return aRejected ? 1 : -1;
+          if (sa == null && sb != null) return 1;
+          if (sa != null && sb == null) return -1;
+          if (sa != null && sb != null && sa !== sb) return sb - sa;
+          return compareUpdated(a, b) || compareCompany(a, b);
+        });
+      }
       // ----- 当前阶段统一分组（洞察 / 分享报告共用）-----
       const INSIGHT_STAGE_ORDER = ['待投递', '已投递', '测评 / 笔试', '面试', 'Offer', '已结束'];
       function insightStageDetail(record) {
@@ -6065,6 +6345,7 @@
         }
         const at = options.at || localDateInput(new Date());
         setTimeline(record, [...(record.timeline || []), { stage: target, at, note: String(options.note || '') }]);
+        if (target === 'Offer' && !record.offer) record.offer = normalizeOffer(null, true);
         saveRecords(target === 'Offer' ? '已盖章：Offer' : `已推进到「${target}」并自动保存`);
         render();
         flashRow(record.id);
@@ -6564,6 +6845,7 @@
           actions.innerHTML = `
             ${drawerCanDone ? `<button class="btn btn-small${drawerDone ? ' is-on' : ''}" type="button" data-drawer="toggle-done">${drawerDone ? '取消完成' : '标记本阶段完成'}</button>` : ''}
             ${!['Offer', '已结束'].includes(record.stage) ? '<button class="btn btn-small" type="button" data-drawer="close-outcome">结束流程</button>' : ''}
+            ${record.offer ? '<button class="btn btn-small" type="button" data-drawer="offer">查看 Offer</button>' : ''}
             <button class="btn btn-small btn-primary" type="button" data-drawer="advance">推进阶段</button>
             <button class="btn btn-small" type="button" data-drawer="edit">编辑</button>
             <button class="btn btn-small btn-danger" type="button" data-drawer="delete">删除</button>`;
@@ -6631,7 +6913,7 @@
           });
         }
         const views = [
-          { label: '总览', hash: '#/overview' }, { label: '投递记录', hash: '#/records' }, { label: '邮件提醒', hash: '#/mail' },
+          { label: '总览', hash: '#/overview' }, { label: '投递记录', hash: '#/records' }, { label: 'Offer', hash: '#/offers' }, { label: '邮件提醒', hash: '#/mail' },
           { label: '我的简历', hash: '#/resume' }, { label: '工具', hash: '#/tools' }
         ];
         for (const view of views) {
@@ -7603,13 +7885,14 @@
         overview: { kicker: 'DASHBOARD', title: '投递总览', subtitle: '统计与洞察——从银十到金九，每一步都在这里' },
         calendar: { kicker: 'CALENDAR', title: '日历', subtitle: '月历定位日期，右侧专注查看当天全部安排' },
         records: { kicker: 'PIPELINE', title: '投递记录', subtitle: '表格与看板双视图——搜索、筛选、排序、拖拽推进都在这里' },
+        offers: { kicker: 'OFFERS', title: 'Offer 对比', subtitle: '集中维护 Offer 状态、薪资与评分，辅助做出选择' },
         resume: { kicker: 'PROFILE', title: '我的简历', subtitle: '字段名即填表匹配名——用常用名命中率最高' },
         tools: { kicker: 'TOOLBOX', title: '工具', subtitle: '截图识别、数据安全与云同步集中在此' },
         mail: { kicker: 'INBOX', title: '邮件提醒', subtitle: '招聘邮件解析结果，逐项复核后并入台账' }
       };
       // records 恢复为独立视图（更早版本本就是，v4.4.0 曾并入总览并重定向，v4.8.0 拆回）；
       // upcoming（未来安排）v4.29.0 起随面板搬到日历页，旧书签重定向过去。
-      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'calendar' };
+      const ROUTE_ALIASES = { overview: 'overview', calendar: 'calendar', records: 'records', offers: 'offers', resume: 'resume', tools: 'tools', mail: 'mail', upcoming: 'calendar' };
 
       // ================= 日历视图（v4.27.0，v4.28.0 扩展）：关键时间按日落格 =================
       // 浏览位置（停在哪个月）存模块变量：切走再切回不丢；刷新页面回当月——
@@ -7970,6 +8253,7 @@
         // 从别的视图切回投递记录时重渲台账/看板：数据可能在别处变更过（如邮件应用、抽屉推进），
         // 隐藏视图多渲染一次无副作用，换取各视图始终一致。
         if (route === 'records') renderRecordsView();
+        if (route === 'offers') renderOffersView();
         window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
       }
 
@@ -8846,6 +9130,58 @@
       $('#closeShareReportDialog').addEventListener('click', closeShareReportDialog);
       $('#shareReportDialog').addEventListener('click', event => { if (event.target === $('#shareReportDialog')) closeShareReportDialog(); });
       $('#exportResumeBtn').addEventListener('click', exportResume);
+      $('#offerStatusFilter').addEventListener('change', event => { offerFilterStatus = event.target.value; renderOffersView(); });
+      $('#offerCityFilter').addEventListener('change', event => { offerFilterCity = event.target.value; renderOffersView(); });
+      $('#offerTypeFilter').addEventListener('change', event => { offerFilterType = event.target.value; renderOffersView(); });
+      $('#offerSortSelect').addEventListener('change', event => { offerSortMode = event.target.value; renderOffersView(); });
+      $('#offerRulesBtn').addEventListener('click', openOfferRulesDialog);
+      $('#closeOfferRulesDialog').addEventListener('click', () => $('#offerRulesDialog').close());
+      $('#cancelOfferRulesBtn').addEventListener('click', () => $('#offerRulesDialog').close());
+      $('#saveOfferRulesBtn').addEventListener('click', saveOfferRulesFromDialog);
+      $('#resetOfferRulesBtn').addEventListener('click', resetOfferRules);
+      $('#addOfferRuleBtn').addEventListener('click', () => {
+        const host = $('#offerRulesList');
+        if (!host) return;
+        const index = host.querySelectorAll('.offer-rule-row').length;
+        const id = `criterion-${Date.now()}-${index}`;
+        host.insertAdjacentHTML('beforeend', `<div class="offer-rule-row" data-rule-index="${index}" data-rule-id="${id}"><input class="control" data-rule-label value="新评分项" maxlength="30"><input class="control offer-rule-weight" data-rule-weight type="number" min="0.1" max="100" step="0.1" value="1"><label class="offer-rule-enabled"><input type="checkbox" data-rule-enabled checked>启用</label><span class="offer-rule-actions"><button class="text-button" type="button" data-rule-up aria-label="上移评分项">上移</button><button class="text-button" type="button" data-rule-down aria-label="下移评分项">下移</button><button class="text-button danger" type="button" data-rule-delete>删除</button></span></div>`);
+      });
+      $('#offerRulesList').addEventListener('click', event => {
+        const row = event.target.closest('.offer-rule-row');
+        if (!row) return;
+        if (event.target.closest('[data-rule-delete]')) { row.remove(); return; }
+        if (event.target.closest('[data-rule-up]') && row.previousElementSibling) row.parentElement.insertBefore(row, row.previousElementSibling);
+        if (event.target.closest('[data-rule-down]') && row.nextElementSibling) row.parentElement.insertBefore(row.nextElementSibling, row);
+      });
+      $('#offerCompensationMode').addEventListener('change', renderOfferCompensationFields);
+      $('#offerForm').addEventListener('submit', event => { event.preventDefault(); saveOfferDialog(); });
+      $('#closeOfferDialog').addEventListener('click', () => $('#offerDialog').close());
+      $('#cancelOfferDialog').addEventListener('click', () => $('#offerDialog').close());
+      $('#offerSourceFacts').addEventListener('click', event => {
+        const button = event.target.closest('[data-offer-view-record]');
+        if (!button) return;
+        const id = button.dataset.offerViewRecord;
+        $('#offerDialog').close();
+        switchView('records');
+        openRecordDrawer(id);
+      });
+      $('#offerList').addEventListener('click', event => {
+        const button = event.target.closest('[data-offer-action="edit"]');
+        if (button) { openOfferDialog(button.dataset.offerId); return; }
+        const row = event.target.closest('tr[data-offer-id]');
+        if (row && !event.target.closest('input,button')) openOfferDialog(row.dataset.offerId);
+      });
+      $('#offerList').addEventListener('change', event => {
+        const input = event.target.closest('[data-offer-select]');
+        if (!input) return;
+        if (input.checked && selectedOfferIds.size >= 4) {
+          input.checked = false;
+          showToast('重点对比最多选择 4 个 Offer');
+          return;
+        }
+        if (input.checked) selectedOfferIds.add(input.dataset.offerSelect); else selectedOfferIds.delete(input.dataset.offerSelect);
+        renderOffersView();
+      });
       // v4.29.0：未来安排面板的「导出日历」按钮随面板迁入日历页时去重（日历头部已有
       // 「导出 .ics」，工具页还有一个），这里的旧绑定一并拆除——面板里没有这个元素了，
       // 保留绑定会在启动时对 null 调 addEventListener 直接崩。
@@ -8994,6 +9330,7 @@
         if (action === 'advance') return openAdvanceDialog(record);
         if (action === 'toggle-done') return toggleStageDone(record);
         if (action === 'close-outcome') return openCloseOutcomeDialog(record);
+        if (action === 'offer') return openOfferDialog(record.id);
         if (action === 'edit') { closeRecordDrawer(); return openDialog(record); }
         if (action === 'ics') return exportIcs(record.id);
         if (action === 'delete') return requestDeleteRecord(record);
@@ -9285,6 +9622,194 @@
       if (!isResumeEmpty(resume)) {
         setTimeout(pushResumeToPlugin, 1000);
         setTimeout(pushResumeToPlugin, 3000);
+      }
+      // ================= Offer 页面（v4.37.0） =================
+      if (!offerRules) offerRules = loadOfferRules();
+      if (!offerRules.updatedAt) saveOfferRules();
+      // 本文件在 core 之后执行：把 bootstrap 早期载入的旧记录再过一遍 Offer 归一化，
+      // 兼容首屏启动时 core 尚未初始化的加载顺序。
+      records = records.map(normalizeRecord);
+      let offerFilterStatus = 'all';
+      let offerFilterCity = 'all';
+      let offerFilterType = 'all';
+      let offerSortMode = 'score';
+      let selectedOfferIds = new Set();
+      let editingOfferId = '';
+
+      function offerStatusLabel(status) { return OFFER_STATUS_LABELS[String(status || '')] || '待决定'; }
+      function offerStatusClass(status) { return `offer-status-${String(status || 'pending').replace(/_/g, '-')}`; }
+      function offerCompensationText(offer) {
+        const c = offer && offer.compensation ? offer.compensation : {};
+        if (c.mode === 'total') return c.totalPackage ? `${c.totalPackage} 元 / 年总包` : '总包未填写';
+        if (c.mode === 'confidential') return '密薪';
+        if (c.monthlySalary && c.salaryMonths) return `${c.monthlySalary} 元/月 × ${c.salaryMonths} 薪`;
+        if (c.monthlySalary) return `${c.monthlySalary} 元/月`;
+        return '薪资未填写';
+      }
+      function offerScoreText(record) {
+        const result = computeOfferScore(record.offer, offerRules);
+        return result.score == null ? '暂未评分' : `${result.score.toFixed(1)} / 10 · ${result.rated}/${result.total}`;
+      }
+      function offerFilteredRecords() {
+        let list = getOfferRecords(records);
+        if (offerFilterStatus !== 'all') list = list.filter(record => record.offer && record.offer.status === offerFilterStatus);
+        if (offerFilterCity !== 'all') list = list.filter(record => String(record.city || '') === offerFilterCity);
+        if (offerFilterType !== 'all') list = list.filter(record => String(record.companyType || '') === offerFilterType);
+        return sortOfferRecords(list, offerSortMode, offerRules);
+      }
+      function offerFilterOptions(list) {
+        const cities = [...new Set(list.map(record => String(record.city || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+        const types = [...new Set(list.map(record => String(record.companyType || '').trim()).filter(Boolean))];
+        const select = (id, options, value, allLabel) => {
+          const el = $(id); if (!el) return;
+          el.innerHTML = `<option value="all">${allLabel}</option>${options.map(item => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join('')}`;
+          el.value = options.includes(value) ? value : 'all';
+        };
+        select('#offerCityFilter', cities, offerFilterCity, '全部城市');
+        select('#offerTypeFilter', types, offerFilterType, '全部企业性质');
+      }
+      function renderOfferSummary(list) {
+        const stats = {
+          total: list.length,
+          pending: list.filter(r => r.offer?.status === 'pending').length,
+          intent: list.filter(r => r.offer?.status === 'intent_signed').length,
+          contract: list.filter(r => r.offer?.status === 'contract_signed').length,
+          rejected: list.filter(r => r.offer?.status === 'rejected').length,
+          rated: list.filter(r => computeOfferScore(r.offer, offerRules).score != null).length
+        };
+        for (const [id, value] of Object.entries({ offerTotal: stats.total, offerPending: stats.pending, offerIntentSigned: stats.intent, offerContractSigned: stats.contract, offerRejected: stats.rejected, offerRated: stats.rated })) {
+          const el = $(`#${id}`); if (el) el.textContent = value;
+        }
+        const best = sortOfferRecords(list, 'score', offerRules).find(record => computeOfferScore(record.offer, offerRules).score != null);
+        const bestEl = $('#offerBestScore');
+        if (bestEl) bestEl.textContent = best ? `${best.company} · ${computeOfferScore(best.offer, offerRules).score.toFixed(1)}` : '—';
+      }
+      function renderOffersView() {
+        const host = $('#offerList');
+        if (!host) return;
+        // runtime.js 会在本文件执行前完成首屏 render；这里惰性初始化，
+        // 避免带有历史 Offer 的用户首屏进入 /offers 时读到空规则或未归一化记录。
+        if (!offerRules) offerRules = loadOfferRules();
+        records = records.map(normalizeRecord);
+        const all = getOfferRecords(records);
+        offerFilterOptions(all);
+        const list = offerFilteredRecords();
+        renderOfferSummary(all);
+        const selected = [...selectedOfferIds].filter(id => list.some(record => record.id === id));
+        selectedOfferIds = new Set(selected);
+        const compare = $('#offerCompareHint');
+        if (compare) compare.textContent = selected.length ? `已选择 ${selected.length} 个 Offer${selected.length > 4 ? '（建议最多选择 4 个）' : ''}` : '勾选 2～4 个 Offer 可重点对比';
+        if (!list.length) {
+          host.innerHTML = '<div class="empty"><div class="empty-icon">🏆</div><h3>还没有 Offer</h3><p>把投递记录推进到 Offer 后，这里会自动出现对应记录。</p></div>';
+          const comparePanel = $('#offerComparePanel'); if (comparePanel) comparePanel.hidden = true;
+          return;
+        }
+        const criteria = offerRules.criteria.filter(item => item.enabled);
+        host.innerHTML = `<div class="table-scroll offer-table-scroll"><table class="offer-table"><thead><tr><th>对比</th><th>公司 / 岗位</th><th>城市</th><th>状态</th><th>薪资</th><th>综合分</th>${criteria.map(item => `<th>${escapeHtml(item.label)}</th>`).join('')}<th>操作</th></tr></thead><tbody>${list.map(record => {
+          const score = computeOfferScore(record.offer, offerRules);
+          const selectedClass = selectedOfferIds.has(record.id) ? ' is-selected' : '';
+          return `<tr class="offer-row${selectedClass}" data-offer-id="${escapeHtml(record.id)}"><td data-label="对比"><input type="checkbox" class="offer-select" data-offer-select="${escapeHtml(record.id)}"${selectedOfferIds.has(record.id) ? ' checked' : ''} aria-label="选择 ${escapeHtml(record.company)}"></td><td data-label="公司 / 岗位"><strong>${escapeHtml(record.company || '未填写公司')}</strong>${record.orgUnit ? `<span class="offer-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}<div class="offer-position">${escapeHtml(record.position || '未填写岗位')}</div></td><td data-label="城市">${escapeHtml(record.city || '未填写')}</td><td data-label="状态"><span class="offer-status ${offerStatusClass(record.offer?.status)}">${escapeHtml(offerStatusLabel(record.offer?.status))}</span></td><td data-label="薪资">${escapeHtml(offerCompensationText(record.offer))}</td><td data-label="综合分"><strong>${score.score == null ? '—' : score.score.toFixed(1)}</strong><small class="offer-score-meta">${score.rated}/${score.total}</small></td>${criteria.map(item => `<td data-label="${escapeHtml(item.label)}">${record.offer?.ratings?.[item.id] ? `${escapeHtml(record.offer.ratings[item.id])}/10` : '—'}</td>`).join('')}<td data-label="操作"><button class="btn btn-small btn-primary" type="button" data-offer-action="edit" data-offer-id="${escapeHtml(record.id)}">编辑</button></td></tr>`;
+        }).join('')}</tbody></table></div>`;
+        renderOfferCompare(list);
+      }
+      function renderOfferCompare(list) {
+        const panel = $('#offerComparePanel'), host = $('#offerCompareList');
+        if (!panel || !host) return;
+        const selected = [...selectedOfferIds].map(id => list.find(record => record.id === id)).filter(Boolean).slice(0, 4);
+        if (selected.length < 2) { panel.hidden = true; host.innerHTML = ''; return; }
+        const criteria = offerRules.criteria.filter(item => item.enabled);
+        host.innerHTML = `<div class="offer-compare-grid">${selected.map(record => {
+          const score = computeOfferScore(record.offer, offerRules);
+          const ratings = criteria.map(item => `<div class="offer-compare-line"><span>${escapeHtml(item.label)}</span><b>${record.offer?.ratings?.[item.id] ? `${escapeHtml(record.offer.ratings[item.id])}/10` : '—'}</b></div>`).join('');
+          return `<article class="offer-compare-card"><div class="offer-compare-company"><strong>${escapeHtml(record.company || '未填写公司')}</strong><span>${escapeHtml(record.position || '未填写岗位')}</span></div><div class="offer-compare-line"><span>城市 / 企业性质</span><b>${escapeHtml(record.city || '未填写')} · ${escapeHtml(record.companyType || '未设置')}</b></div><div class="offer-compare-line"><span>状态</span><b>${escapeHtml(offerStatusLabel(record.offer?.status))}</b></div><div class="offer-compare-line"><span>薪资</span><b>${escapeHtml(offerCompensationText(record.offer))}</b></div><div class="offer-compare-line"><span>综合分</span><b>${score.score == null ? '暂未评分' : `${score.score.toFixed(1)} / 10`}</b></div>${ratings}<div class="offer-compare-note">${escapeHtml(record.offer?.compensation?.note || '暂无备注')}</div></article>`;
+        }).join('')}</div>`;
+        panel.hidden = false;
+      }
+      function openOfferDialog(id) {
+        const record = records.find(item => item.id === id);
+        if (!record || !record.offer) return;
+        editingOfferId = id;
+        const offer = normalizeOffer(record.offer, true);
+        $('#offerDialogTitle').textContent = `${record.company} · ${record.position || '未填写岗位'}`;
+        $('#offerStatusInput').value = offer.status;
+        $('#offerCompensationMode').value = offer.compensation.mode;
+        $('#offerMonthlySalary').value = offer.compensation.monthlySalary;
+        $('#offerSalaryMonths').value = offer.compensation.salaryMonths;
+        $('#offerTotalPackage').value = offer.compensation.totalPackage;
+        $('#offerNoteInput').value = offer.compensation.note;
+        renderOfferCompensationFields();
+        const facts = $('#offerSourceFacts');
+        if (facts) {
+          const timeline = Array.isArray(record.timeline) ? record.timeline : [];
+          const timelineHtml = timeline.length
+            ? `<div class="offer-source-timeline">${timeline.map(item => `<span class="offer-source-milestone"><b>${escapeHtml(item.stage || '未填写阶段')}</b><small>${escapeHtml(item.at || '未填写日期')}${item.done ? ' · 已完成' : ''}</small></span>`).join('')}</div>`
+            : '<div class="offer-source-timeline muted-text">暂无阶段时间线</div>';
+          facts.innerHTML = `<div>${escapeHtml(record.company || '未填写公司')} · ${escapeHtml(record.position || '未填写岗位')} · ${escapeHtml(record.city || '未填写')} · ${escapeHtml(record.companyType || '企业性质未设置')}</div><div class="offer-source-meta">投递日期：${escapeHtml(record.applicationDate || '未填写')} · 当前阶段：${escapeHtml(record.stage || '—')}</div>${timelineHtml}<button class="btn btn-small offer-source-link" type="button" data-offer-view-record="${escapeHtml(record.id)}">查看投递记录</button>`;
+        }
+        const grid = $('#offerRatingGrid');
+        if (grid) grid.innerHTML = offerRules.criteria.filter(item => item.enabled).map(item => `<label class="offer-rating-field"><span>${escapeHtml(item.label)}</span><input class="control" type="number" min="1" max="10" step="1" data-offer-rating="${escapeHtml(item.id)}" value="${offer.ratings[item.id] || ''}" placeholder="1-10"></label>`).join('');
+        const score = computeOfferScore(offer, offerRules);
+        $('#offerDialogScore').textContent = score.score == null ? '暂未评分' : `${score.score.toFixed(1)} / 10（${score.rated}/${score.total} 项）`;
+        $('#offerDialog').showModal();
+      }
+      function renderOfferCompensationFields() {
+        const mode = $('#offerCompensationMode')?.value || 'monthly';
+        const monthly = $('#offerMonthlyFields'), months = $('#offerSalaryMonthsFields'), total = $('#offerTotalFields');
+        if (monthly) monthly.hidden = mode !== 'monthly';
+        if (months) months.hidden = mode !== 'monthly';
+        if (total) total.hidden = mode !== 'total';
+      }
+      function saveOfferDialog() {
+        const record = records.find(item => item.id === editingOfferId);
+        if (!record) return;
+        const offer = normalizeOffer(record.offer, true);
+        offer.status = $('#offerStatusInput').value;
+        offer.compensation = {
+          mode: $('#offerCompensationMode').value,
+          monthlySalary: $('#offerMonthlySalary').value.trim(), salaryMonths: $('#offerSalaryMonths').value.trim(),
+          totalPackage: $('#offerTotalPackage').value.trim(), note: $('#offerNoteInput').value.trim()
+        };
+        offer.ratings = {};
+        document.querySelectorAll('[data-offer-rating]').forEach(input => {
+          const value = Number(input.value);
+          if (Number.isFinite(value) && value >= 1 && value <= 10) offer.ratings[input.dataset.offerRating] = Math.round(value);
+        });
+        offer.updatedAt = new Date().toISOString();
+        record.offer = normalizeOffer(offer, true);
+        record.updatedAt = Date.now();
+        saveRecords('Offer 信息已保存');
+        $('#offerDialog').close();
+        editingOfferId = '';
+        renderOffersView();
+      }
+      function openOfferRulesDialog() {
+        const host = $('#offerRulesList');
+        if (!host) return;
+        host.innerHTML = offerRules.criteria.map((item, index) => `<div class="offer-rule-row" data-rule-index="${index}" data-rule-id="${escapeHtml(item.id)}"><input class="control" data-rule-label value="${escapeHtml(item.label)}" maxlength="30"><input class="control offer-rule-weight" data-rule-weight type="number" min="0.1" max="100" step="0.1" value="${item.weight}"><label class="offer-rule-enabled"><input type="checkbox" data-rule-enabled${item.enabled ? ' checked' : ''}>启用</label><span class="offer-rule-actions"><button class="text-button" type="button" data-rule-up aria-label="上移评分项">上移</button><button class="text-button" type="button" data-rule-down aria-label="下移评分项">下移</button><button class="text-button danger" type="button" data-rule-delete>删除</button></span></div>`).join('');
+        $('#offerRulesDialog').showModal();
+      }
+      function saveOfferRulesFromDialog() {
+        const criteria = [];
+        const seen = new Set();
+        document.querySelectorAll('#offerRulesList .offer-rule-row').forEach((row, index) => {
+          const label = row.querySelector('[data-rule-label]')?.value.trim();
+          const old = offerRules.criteria.find(item => item.id === row.dataset.ruleId);
+          const id = old?.id || row.dataset.ruleId || `criterion-${Date.now()}-${index}`;
+          if (!label || seen.has(id)) return;
+          seen.add(id);
+          const weight = Number(row.querySelector('[data-rule-weight]')?.value);
+          criteria.push({ id, label, weight: Number.isFinite(weight) && weight > 0 ? weight : 1, enabled: !!row.querySelector('[data-rule-enabled]')?.checked });
+        });
+        offerRules = normalizeOfferRules({ criteria, updatedAt: new Date().toISOString() });
+        saveOfferRules();
+        $('#offerRulesDialog').close();
+        renderOffersView();
+        showToast(`评分规则已更新，已重新计算 ${getOfferRecords(records).length} 个 Offer`);
+      }
+      function resetOfferRules() {
+        offerRules = normalizeOfferRules(DEFAULT_OFFER_RULES);
+        saveOfferRules();
+        openOfferRulesDialog();
       }
     })();
   </script>

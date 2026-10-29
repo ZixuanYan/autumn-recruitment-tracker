@@ -85,6 +85,7 @@
       function setTimeline(rec, timeline) {
         rec.timeline = sanitizeTimeline(timeline);
         rec.stage = deriveStage(rec);
+        if (rec.stage === 'Offer' && !rec.offer) rec.offer = normalizeOffer(null, true);
         rec.updatedAt = Date.now();
         return rec;
       }
@@ -401,7 +402,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.36.0';
+      const APP_VERSION = '4.37.0';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -413,6 +414,7 @@
       // UI 偏好（v4.4.0）：台账视图模式（表格/看板）、公司分组折叠态、首启引导是否已关闭。
       // 纯本机、不进 envelope、不跨设备同步——这是显示偏好而非数据。
       const UI_STORAGE_KEY = 'autumnRecruitmentTracker.ui.v1';
+      const OFFER_RULES_STORAGE_KEY = 'autumnRecruitmentTracker.offerRules.v1';
       // 网页写、Action 读的配置文件（明文，不含任何密钥）；默认值与 Action src/config.js 保持一致
       const MAIL_CONFIG_FILENAME = 'mail-config.json';
       const MAIL_CFG_DEFAULTS = { keywords: '面试|笔试|机试|测评|录用|应聘|招聘|校招|网申|入职|简历|interview', minConfidence: 0.3, sinceDays: 30, maxPerRun: 30, enabled: true, minIntervalHours: 12, promptExtra: '', promptOverride: '' };
@@ -424,6 +426,16 @@
         search: $('#searchInput'), filter: $('#stageFilter'), sort: $('#sortSelect'),
         dialog: $('#recordDialog'), form: $('#recordForm'), dialogTitle: $('#dialogTitle'), toast: $('#toast')
       };
+      function loadOfferRules() {
+        try { return normalizeOfferRules(JSON.parse(localStorage.getItem(OFFER_RULES_STORAGE_KEY) || 'null')); }
+        catch (_) { return normalizeOfferRules(null); }
+      }
+      function saveOfferRules() {
+        offerRules.updatedAt = new Date().toISOString();
+        try { localStorage.setItem(OFFER_RULES_STORAGE_KEY, JSON.stringify(offerRules)); } catch (_) {}
+      }
+      // core/offers.js 在本段之后拼入；评分规则需等其纯函数初始化后再从本机读取。
+      let offerRules = null;
       let primaryLoadState = 'unknown';
       // 当前台账是否为「首次打开自动塞入的示例数据」（必须在 loadRecords 调用前声明，否则赋值触发 TDZ）
       let sampleDataMode = false;
@@ -542,6 +554,8 @@
           primaryLoadState = 'corrupt';
           console.warn('无法读取本地记录', error);
         }
+        // core/offers.js 与 dates.js 在本文件之后拼入；首启播种不能提前调用依赖 core 的归一化。
+        // runtime 首次 render 时会再走 normalizeRecord，确保示例数据与真实数据使用同一结构。
         const initial = exampleRecords();
         // 标记「当前台账是示例数据」：首启引导会明确告知并提供一键清空，避免用户误把示例当成自己的投递
         setSampleMode(true);
@@ -600,7 +614,11 @@
             .filter(n => n && String(n.text || '').trim())
             .map(n => ({ id: String(n.id || cryptoId()), at: Number(n.at) || Date.now(), text: String(n.text).trim() }))
             .slice(-200),                                   // 面经/跟进笔记，上限 200 条防膨胀
-          timeline
+          timeline,
+          // Offer 是投递记录进入 Offer 后的独立决策信息；一旦生成即保留，阶段后续变化也不清除。
+          offer: typeof normalizeOffer === 'function'
+            ? normalizeOffer(item.offer, timeline.some(milestone => milestone && milestone.stage === 'Offer'))
+            : (item.offer && typeof item.offer === 'object' ? item.offer : null)
         };
         rec.stage = deriveStage(rec); // 当前阶段 = 时间线末项（派生缓存，兼容分布/筛选/排序/徽章/桥接/同步）
         return rec;
@@ -968,8 +986,14 @@
             renderResumeEditor();
             pushResumeToPlugin();
           }
+          let offerRulesChanged = false;
+          if (remote && remote.offerRules && String(remote.offerRules.updatedAt || '') > String(offerRules.updatedAt || '')) {
+            offerRules = normalizeOfferRules(remote.offerRules);
+            try { localStorage.setItem(OFFER_RULES_STORAGE_KEY, JSON.stringify(offerRules)); } catch (_) {}
+            offerRulesChanged = true;
+          }
           const localChanged = !sameRecordSet(mergedRecords, records) || !sameTombstoneSet(mergedTombstones, tombstones);
-          if (localChanged) {
+          if (localChanged || offerRulesChanged) {
             records = mergedRecords;
             tombstones = mergedTombstones;
             saveTombstones();
@@ -991,7 +1015,8 @@
           // 否则仅改 mailState（忽略/应用）时 remoteChanged 恒为 false → 永不上传 → 别的设备看不到（同"只推不拉"陷阱）
           const remoteMail = remote && remote.mailState ? remote.mailState : null;
           const mailStateNeedsPush = !sameIdSet(mailState.appliedIds, remoteMail && remoteMail.appliedIds) || !sameIdSet(mailState.dismissedIds, remoteMail && remoteMail.dismissedIds);
-          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones) || resumeNeedsPush || mailStateNeedsPush || archiveChanged;
+          const localRulesNewer = !remote || String(offerRules.updatedAt || '') > String(remote.offerRules?.updatedAt || '');
+          const remoteChanged = !remote || !sameRecordSet(mergedRecords, remote.records) || !sameTombstoneSet(mergedTombstones, remote.tombstones) || resumeNeedsPush || mailStateNeedsPush || archiveChanged || localRulesNewer;
           if (remoteChanged) await pushSyncState(migrateLegacy);
           syncConfig.lastSyncAt = new Date().toISOString();
           saveSyncConfig();
@@ -1523,6 +1548,7 @@
           savedAt: new Date().toISOString(),
           recordCount: sourceRecords.length,
           records: sourceRecords.map(record => ({ ...record })),
+          offerRules: normalizeOfferRules(offerRules),
           resume: JSON.parse(JSON.stringify(resume)),
           resumeSavedAt,
           // 邮件已应用/已忽略状态跨设备同步（只同步这两个 ID 列表；encKey/lastReadAt 仅本机，不上传）
@@ -1753,6 +1779,7 @@
           const importedIds = new Set(incoming.map(item => String(item.id || '')));
           markDeleted(records.filter(item => !importedIds.has(item.id)).map(item => item.id));
           records = incoming.map(normalizeRecord);
+          if (parsed && parsed.offerRules) { offerRules = normalizeOfferRules(parsed.offerRules); saveOfferRules(); }
           // 备份携带简历时一并导入（整体替换，随云同步上传并下发插件）
           if (parsed && parsed.resume && typeof parsed.resume === 'object' && !Array.isArray(parsed.resume)) {
             resume = parsed.resume;
@@ -1848,6 +1875,7 @@
           return true;
         }).slice(-200);
         merged.mailRefs = unionMailRefs(existing.mailRefs, incoming.mailRefs);
+        if (incoming.offer || existing.offer) merged.offer = normalizeOffer(incoming.offer || existing.offer, true);
         return normalizeRecord(merged);
       }
 
@@ -2046,6 +2074,7 @@
         renderDistribution();
         renderInsights();
         renderRecordsView();
+        if (typeof renderOffersView === 'function') renderOffersView();
         // 日历视图（v4.27.0）跟着全量重渲：与 records 同理，隐藏时多渲一次无副作用，
         // 换取从抽屉推进 / 邮件应用等任何数据变更路径回来时格子与日程流都反映最新台账。
         // v4.30.0 起「未来安排」面板并入日程流（renderCalFlow 由 renderCalendarView 带出）。
@@ -2323,7 +2352,7 @@
       function renderOfferMatrix() {
         const wrap = $('#offerMatrixWrap'), table = $('#offerMatrix');
         if (!wrap || !table) return;
-        const offers = records.filter(record => record.stage === 'Offer');
+        const offers = typeof getOfferRecords === 'function' ? getOfferRecords(records) : records.filter(record => record.stage === 'Offer');
         if (offers.length < 2) { wrap.hidden = true; table.innerHTML = ''; return; }
         // v4.19.0：签约截止改为「取最近的截止事件」——一条记录可能有多条截止（测评截止 / 签约截止）
         // v4.24.0：返回**完整** at（可能带时刻），排序时再截成日期比较
@@ -2331,10 +2360,11 @@
           const hit = nearestDeadlineEvent(rec.events);
           return hit ? hit.event.at : '';
         };
-        const sorted = offers.slice().sort((a, b) => (Number(b.intent) || 0) - (Number(a.intent) || 0)
-          || String(deadlineOf(a) || '9999-12-31').localeCompare(String(deadlineOf(b) || '9999-12-31')));
+        const sorted = typeof sortOfferRecords === 'function'
+          ? sortOfferRecords(offers, 'score', offerRules)
+          : offers.slice().sort((a, b) => (Number(b.intent) || 0) - (Number(a.intent) || 0));
         wrap.hidden = false;
-        table.innerHTML = `<thead><tr><th>公司 / 岗位</th><th>城市</th><th>薪资 / 待遇</th><th>意向度</th><th>签约截止</th><th>最新备注</th></tr></thead>
+        table.innerHTML = `<thead><tr><th>公司 / 岗位</th><th>城市</th><th>薪资 / 待遇</th><th>综合分</th><th>状态</th><th>最新备注</th></tr></thead>
           <tbody>${sorted.map(record => {
             const dlAt = deadlineOf(record);
             const dl = dlAt ? deadlineInfo(dlAt) : null;
@@ -2348,8 +2378,8 @@
               <td data-label="公司 / 岗位"><div class="company">${escapeHtml(record.company)}${record.orgUnit ? `<span class="company-unit"> · ${escapeHtml(record.orgUnit)}</span>` : ''}${companyTypeChipHtml(record.companyType)}</div><div class="position">${escapeHtml(record.position || '—')}</div></td>
               <td data-label="城市">${escapeHtml(record.city || '—')}</td>
               <td data-label="薪资 / 待遇">${escapeHtml(record.salary || '—')}</td>
-              <td data-label="意向度">${intentDotsHtml(record.intent) || '<span class="muted-text">未设</span>'}</td>
-              <td data-label="签约截止">${dlAt ? `<span class="deadline-hint ${dl ? dl.level : ''}">${escapeHtml(dlText)}${dl ? ` · ${escapeHtml(dl.text.replace('截止 · ', ''))}` : ''}</span>` : '—'}</td>
+              <td data-label="意向度">${typeof computeOfferScore === 'function' && computeOfferScore(record.offer, offerRules).score != null ? `${computeOfferScore(record.offer, offerRules).score.toFixed(1)} / 10` : (intentDotsHtml(record.intent) || '<span class="muted-text">未评分</span>')}</td>
+              <td data-label="状态">${typeof offerStatusLabel === 'function' ? escapeHtml(offerStatusLabel(record.offer?.status)) : '待决定'}</td>
               <td data-label="最新备注"><div class="next-action">${escapeHtml(lastNote)}</div></td>
             </tr>`;
           }).join('')}</tbody>`;
