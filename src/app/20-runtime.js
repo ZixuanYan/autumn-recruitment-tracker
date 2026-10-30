@@ -1017,7 +1017,7 @@
         // 从别的视图切回投递记录时重渲台账/看板：数据可能在别处变更过（如邮件应用、抽屉推进），
         // 隐藏视图多渲染一次无副作用，换取各视图始终一致。
         if (route === 'records') renderRecordsView();
-        if (route === 'offers') renderOffersView();
+        if (route === 'offers' && offerModuleReady && typeof renderOffersView === 'function') renderOffersView();
         window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
       }
 
@@ -1868,7 +1868,8 @@
           const incoming = parsed?.resume && typeof parsed.resume === 'object' ? parsed.resume : parsed;
           if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) throw new Error('格式无效');
           resume = incoming;
-          persistResume();
+          allowEmptyResumeSave = true;
+          try { persistResume(); } finally { allowEmptyResumeSave = false; }
           renderResumeEditor();
           showToast('简历导入成功，已下发插件并纳入云同步');
         } catch (error) {
@@ -1878,7 +1879,8 @@
       $('#resumeResetBtn').addEventListener('click', async () => {
         if (!await confirmInApp('确定要清空简历全部内容并恢复默认结构吗？', { title: '重置简历', danger: true, confirmText: '清空并重置' })) return;
         resume = JSON.parse(JSON.stringify(DEFAULT_RESUME));
-        persistResume();
+        allowEmptyResumeSave = true;
+        try { persistResume(); } finally { allowEmptyResumeSave = false; }
         renderResumeEditor();
         showToast('简历已重置为默认结构');
       });

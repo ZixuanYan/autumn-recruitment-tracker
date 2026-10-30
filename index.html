@@ -2752,7 +2752,7 @@
       const RESUME_KV_SECTIONS = ['优先信息', '基本信息', '竞赛与技能'];
       const RESUME_EXP_SECTIONS = ['教育经历', '实习经历', '项目经历'];
       const SCHEMA_VERSION = 1;
-      const APP_VERSION = '4.37.0';
+      const APP_VERSION = '4.37.1';
       const SAFETY_DB_NAME = 'autumnRecruitmentTracker.safety.v1';
       const SYNC_KEY = 'autumnRecruitmentTracker.sync.v1';
       const TOMBSTONE_KEY = 'autumnRecruitmentTracker.tombstones.v1';
@@ -2786,6 +2786,9 @@
       }
       // core/offers.js 在本段之后拼入；评分规则需等其纯函数初始化后再从本机读取。
       let offerRules = null;
+      // Offer 模块在本文件之后拼入。未完成初始化前不能主动渲染 Offer，
+      // 否则会在模块级 let 状态变量初始化前触发 TDZ，阻断整个页面启动。
+      let offerModuleReady = false;
       let primaryLoadState = 'unknown';
       // 当前台账是否为「首次打开自动塞入的示例数据」（必须在 loadRecords 调用前声明，否则赋值触发 TDZ）
       let sampleDataMode = false;
@@ -2807,6 +2810,9 @@
       if (!sampleDataMode) {
         try { sampleDataMode = localStorage.getItem(SAMPLE_FLAG_KEY) === '1'; } catch (_) {}
       }
+      let resumeLoadState = 'unknown';
+      let resumeEditorReady = false;
+      let allowEmptyResumeSave = false;
       let resume = loadResumeData();
       let resumeSavedAt = loadResumeMeta();
       let editingId = null;
@@ -2904,8 +2910,6 @@
           primaryLoadState = 'corrupt';
           console.warn('无法读取本地记录', error);
         }
-        // core/offers.js 与 dates.js 在本文件之后拼入；首启播种不能提前调用依赖 core 的归一化。
-        // runtime 首次 render 时会再走 normalizeRecord，确保示例数据与真实数据使用同一结构。
         const initial = exampleRecords();
         // 标记「当前台账是示例数据」：首启引导会明确告知并提供一键清空，避免用户误把示例当成自己的投递
         setSampleMode(true);
@@ -3170,6 +3174,12 @@
                 appliedIds: Array.isArray(parsed.mailState.appliedIds) ? parsed.mailState.appliedIds.map(String) : [],
                 dismissedIds: Array.isArray(parsed.mailState.dismissedIds) ? parsed.mailState.dismissedIds.map(String) : []
               }
+            : null,
+          offerRules: parsed?.offerRules && typeof parsed.offerRules === 'object' && !Array.isArray(parsed.offerRules)
+            ? parsed.offerRules
+            : null,
+          mailArchive: parsed?.mailArchive && typeof parsed.mailArchive === 'object' && !Array.isArray(parsed.mailArchive)
+            ? parsed.mailArchive
             : null
         };
       }
@@ -3514,10 +3524,15 @@
 
       function loadResumeData() {
         try {
-          const parsed = JSON.parse(localStorage.getItem(RESUME_STORAGE_KEY) || 'null');
+          const raw = localStorage.getItem(RESUME_STORAGE_KEY);
+          const parsed = JSON.parse(raw || 'null');
           // JSON 即真相：存储有合法对象则原样返回（不合并默认骨架，被删除的段保持删除）；仅空/损坏时用默认模板
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
-        } catch (error) { console.warn('简历读取失败', error); }
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length) {
+            resumeLoadState = isResumeEmpty(parsed) ? 'empty' : 'valid';
+            return parsed;
+          }
+          resumeLoadState = raw === null ? 'missing' : 'empty';
+        } catch (error) { resumeLoadState = 'corrupt'; console.warn('简历读取失败', error); }
         return JSON.parse(JSON.stringify(DEFAULT_RESUME));
       }
 
@@ -3724,6 +3739,7 @@
           }
         });
         updateResumeCompletion();
+        resumeEditorReady = true;
       }
 
       function addKvField(sec, presetKey) {
@@ -3836,7 +3852,7 @@
       function collectResumeFromDom() {
         const updated = {};
         const mount = document.getElementById('resume-sections');
-        if (!mount) return updated;
+        if (!mount || !resumeEditorReady) return null;
         mount.querySelectorAll(':scope > .resume-section-block').forEach(block => {
           const sec = block.getAttribute('data-section');
           if (!sec) return;
@@ -3870,9 +3886,17 @@
       }
 
       function persistResume() {
+        let previous = null;
+        try { previous = JSON.parse(localStorage.getItem(RESUME_STORAGE_KEY) || 'null'); } catch (_) {}
+        if (!resume || (!allowEmptyResumeSave && isResumeEmpty(resume) && !isResumeEmpty(previous))) {
+          if (previous && typeof previous === 'object' && !Array.isArray(previous)) resume = previous;
+          showToast('简历区块尚未加载，未保存以避免覆盖原内容');
+          return false;
+        }
         localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(resume));
         resumeSavedAt = Date.now();
         localStorage.setItem(RESUME_META_KEY, JSON.stringify({ savedAt: resumeSavedAt }));
+        resumeLoadState = 'valid';
         // 简历也在 envelope 里（createEnvelope 含 resume / resumeSavedAt），所以本地保存同样要写
         // 快照层：saveRecords 一直有调，这里漏了 → localStorage 一旦损坏，从 IndexedDB 恢复出来的
         // 会是**旧简历**。必须在 resumeSavedAt 更新之后再取 envelope。
@@ -3882,11 +3906,17 @@
           .catch(error => console.warn('附加备份未完成', error));
         pushResumeToPlugin();
         scheduleSyncPush();
+        return true;
       }
 
       async function collectAndSaveResume() {
-        resume = collectResumeFromDom();
-        persistResume();
+        const next = collectResumeFromDom();
+        if (next === null) {
+          showToast('简历区块尚未加载，未保存');
+          return;
+        }
+        resume = next;
+        if (!persistResume()) return;
         renderResumeEditor();
         showToast('简历已保存，已下发浏览器插件并纳入云同步');
       }
@@ -3977,7 +4007,7 @@
       async function saveBrowserSnapshot(envelope) {
         const previous = await dbGet('state', 'latest');
         await dbPut('state', envelope, 'latest');
-        if (previous && JSON.stringify(previous.records || []) === JSON.stringify(envelope.records)) return;
+        if (previous && safetySnapshotContent(previous) === safetySnapshotContent(envelope)) return;
         const snapshotKey = `${envelope.savedAt}-${cryptoId()}`;
         await dbPut('snapshots', envelope, snapshotKey);
         const db = await openSafetyDb();
@@ -4015,19 +4045,64 @@
         if (backupFileHandle) await writeBackupFile(envelope, false);
       }
 
+      // 忽略信封生成时间；简历、规则或邮件归档单独变化也必须留下可恢复的历史版本。
+      function safetySnapshotContent(envelope) {
+        return JSON.stringify({
+          records: envelope.records || [],
+          resume: envelope.resume || null,
+          offerRules: envelope.offerRules || null,
+          mailArchive: envelope.mailArchive || {}
+        });
+      }
+
       async function initializeDataSafety() {
         try {
           const latest = await dbGet('state', 'latest');
+          let recordsRecovered = false;
           if (primaryLoadState !== 'valid' && Array.isArray(latest?.records)) {
             records = latest.records.map(normalizeRecord);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
             primaryLoadState = 'valid';
             setSampleMode(false); // 恢复出来的是真实数据，不再是示例
-            render();
-            showToast(`已从安全快照恢复 ${records.length} 条记录`);
-          } else {
-            await saveBrowserSnapshot(createEnvelope(records));
+            recordsRecovered = true;
           }
+          // 简历与投递记录独立恢复，避免台账完好时漏掉被空对象覆盖的简历。
+          let resumeRecovered = false;
+          if (resumeLoadState !== 'valid') {
+            let candidates = latest ? [latest] : [];
+            const latestHasAuthoritativeEmptyResume = latest
+              && Object.prototype.hasOwnProperty.call(latest, 'resume')
+              && isResumeEmpty(latest.resume)
+              && Number(latest.resumeSavedAt || 0) >= Number(resumeSavedAt || 0);
+            if (!latestHasAuthoritativeEmptyResume && !candidates.some(item => item.resume && !isResumeEmpty(item.resume))) {
+              candidates = candidates.concat(await dbGetAll('snapshots'));
+            }
+            const source = candidates.sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)))
+              .find(item => item.resume && typeof item.resume === 'object' && !Array.isArray(item.resume) && !isResumeEmpty(item.resume));
+            if (source) {
+              resume = JSON.parse(JSON.stringify(source.resume));
+              // 保留有效简历版本，不能沿用空保存产生的新时间戳，否则会反向覆盖云端正常数据。
+              resumeSavedAt = Number(source.resumeSavedAt) || 0;
+              localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(resume));
+              localStorage.setItem(RESUME_META_KEY, JSON.stringify({ savedAt: resumeSavedAt }));
+              resumeLoadState = 'valid';
+              resumeRecovered = true;
+              renderResumeEditor();
+              pushResumeToPlugin();
+            }
+          }
+          if (latest?.offerRules && String(latest.offerRules.updatedAt || '') > String(offerRules.updatedAt || '')) {
+            offerRules = normalizeOfferRules(latest.offerRules);
+            localStorage.setItem(OFFER_RULES_STORAGE_KEY, JSON.stringify(offerRules));
+          }
+          // 邮件归档没有独立 localStorage 副本，首屏也需要从安全层读回。
+          mailArchive = unionMailArchive(mailArchive, latest?.mailArchive);
+          if (recordsRecovered) render();
+          if (recordsRecovered || resumeRecovered) {
+            const restored = [recordsRecovered ? `${records.length} 条记录` : '', resumeRecovered ? '简历内容' : ''].filter(Boolean).join('和');
+            showToast(`已从安全快照恢复 ${restored}`);
+          }
+          await saveBrowserSnapshot(createEnvelope(records));
           backupFileHandle = await dbGet('handles', 'backupFile') || null;
           if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
         } catch (error) {
@@ -4340,19 +4415,40 @@
       async function restorePreviousSnapshot() {
         try {
           const snapshots = (await dbGetAll('snapshots')).sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
-          const current = JSON.stringify(records);
-          const previous = snapshots.find(snapshot => Array.isArray(snapshot.records) && JSON.stringify(snapshot.records.map(normalizeRecord)) !== current);
+          const currentEnvelope = createEnvelope(records);
+          const current = safetySnapshotContent(currentEnvelope);
+          const previous = snapshots.find(snapshot => Array.isArray(snapshot.records) && safetySnapshotContent({
+            records: snapshot.records.map(normalizeRecord),
+            resume: Object.prototype.hasOwnProperty.call(snapshot, 'resume') ? snapshot.resume : null,
+            offerRules: Object.prototype.hasOwnProperty.call(snapshot, 'offerRules') ? snapshot.offerRules : null,
+            mailArchive: Object.prototype.hasOwnProperty.call(snapshot, 'mailArchive') ? snapshot.mailArchive : {}
+          }) !== current);
           if (!previous) {
             alert('暂时没有与当前数据不同的历史快照。');
             return;
           }
-          if (!await confirmInApp(`将恢复 ${formatClock(previous.savedAt)} 的快照，共 ${previous.records.length} 条记录。\n系统会先下载当前数据备份。是否继续？`, { title: '恢复快照', danger: true, confirmText: '恢复' })) return;
+          if (!await confirmInApp(`将恢复 ${formatClock(previous.savedAt)} 的快照，共 ${previous.records.length} 条记录，并恢复其中的简历和评分规则。\n系统会先下载当前数据备份。是否继续？`, { title: '恢复快照', danger: true, confirmText: '恢复' })) return;
           downloadPayload(createEnvelope(records), `秋招投递-恢复前备份-${localDateInput(new Date())}.json`);
           const snapshotIds = new Set(previous.records.map(item => String(item.id || '')));
           markDeleted(records.filter(item => !snapshotIds.has(item.id)).map(item => item.id));
           records = previous.records.map(normalizeRecord);
+          unmarkDeleted([...snapshotIds]);
+          if (previous.resume && typeof previous.resume === 'object' && !Array.isArray(previous.resume)) {
+            resume = previous.resume;
+            resumeSavedAt = Date.now();
+            resumeLoadState = 'valid';
+            localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(resume));
+            localStorage.setItem(RESUME_META_KEY, JSON.stringify({ savedAt: resumeSavedAt }));
+          }
+          if (previous.offerRules && typeof normalizeOfferRules === 'function') {
+            offerRules = normalizeOfferRules(previous.offerRules);
+            saveOfferRules();
+          }
+          if (previous.mailArchive && typeof previous.mailArchive === 'object') mailArchive = sanitizeMailArchive(previous.mailArchive);
           saveRecords(`已恢复 ${previous.records.length} 条记录`);
           render();
+          renderResumeEditor();
+          pushResumeToPlugin();
           updateSafetyStatus();
         } catch (error) {
           alert('暂时无法读取历史快照，请使用导入备份文件恢复。');
@@ -4424,7 +4520,7 @@
         renderDistribution();
         renderInsights();
         renderRecordsView();
-        if (typeof renderOffersView === 'function') renderOffersView();
+        if (offerModuleReady) renderOffersView();
         // 日历视图（v4.27.0）跟着全量重渲：与 records 同理，隐藏时多渲一次无副作用，
         // 换取从抽屉推进 / 邮件应用等任何数据变更路径回来时格子与日程流都反映最新台账。
         // v4.30.0 起「未来安排」面板并入日程流（renderCalFlow 由 renderCalendarView 带出）。
@@ -8253,7 +8349,7 @@
         // 从别的视图切回投递记录时重渲台账/看板：数据可能在别处变更过（如邮件应用、抽屉推进），
         // 隐藏视图多渲染一次无副作用，换取各视图始终一致。
         if (route === 'records') renderRecordsView();
-        if (route === 'offers') renderOffersView();
+        if (route === 'offers' && offerModuleReady && typeof renderOffersView === 'function') renderOffersView();
         window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
       }
 
@@ -9104,7 +9200,8 @@
           const incoming = parsed?.resume && typeof parsed.resume === 'object' ? parsed.resume : parsed;
           if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) throw new Error('格式无效');
           resume = incoming;
-          persistResume();
+          allowEmptyResumeSave = true;
+          try { persistResume(); } finally { allowEmptyResumeSave = false; }
           renderResumeEditor();
           showToast('简历导入成功，已下发插件并纳入云同步');
         } catch (error) {
@@ -9114,7 +9211,8 @@
       $('#resumeResetBtn').addEventListener('click', async () => {
         if (!await confirmInApp('确定要清空简历全部内容并恢复默认结构吗？', { title: '重置简历', danger: true, confirmText: '清空并重置' })) return;
         resume = JSON.parse(JSON.stringify(DEFAULT_RESUME));
-        persistResume();
+        allowEmptyResumeSave = true;
+        try { persistResume(); } finally { allowEmptyResumeSave = false; }
         renderResumeEditor();
         showToast('简历已重置为默认结构');
       });
@@ -9626,15 +9724,17 @@
       // ================= Offer 页面（v4.37.0） =================
       if (!offerRules) offerRules = loadOfferRules();
       if (!offerRules.updatedAt) saveOfferRules();
-      // 本文件在 core 之后执行：把 bootstrap 早期载入的旧记录再过一遍 Offer 归一化，
-      // 兼容首屏启动时 core 尚未初始化的加载顺序。
+      // core 已经在 bootstrap 末尾完成加载：把早期读取的记录统一归一化。
       records = records.map(normalizeRecord);
+      // 页面状态在 runtime 的路由和首屏渲染前完成，读取规则不改更新时间。
       let offerFilterStatus = 'all';
       let offerFilterCity = 'all';
       let offerFilterType = 'all';
       let offerSortMode = 'score';
       let selectedOfferIds = new Set();
       let editingOfferId = '';
+      offerModuleReady = true;
+      if (typeof parseRoute === 'function' && parseRoute() === 'offers') renderOffersView();
 
       function offerStatusLabel(status) { return OFFER_STATUS_LABELS[String(status || '')] || '待决定'; }
       function offerStatusClass(status) { return `offer-status-${String(status || 'pending').replace(/_/g, '-')}`; }
@@ -9687,10 +9787,6 @@
       function renderOffersView() {
         const host = $('#offerList');
         if (!host) return;
-        // runtime.js 会在本文件执行前完成首屏 render；这里惰性初始化，
-        // 避免带有历史 Offer 的用户首屏进入 /offers 时读到空规则或未归一化记录。
-        if (!offerRules) offerRules = loadOfferRules();
-        records = records.map(normalizeRecord);
         const all = getOfferRecords(records);
         offerFilterOptions(all);
         const list = offerFilteredRecords();

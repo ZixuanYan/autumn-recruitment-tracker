@@ -2225,6 +2225,15 @@ check('persistResume 必须写快照层（createEnvelope 含 resume，漏了会�
     'createEnvelope 必须在 resumeSavedAt 更新之后调用，否则快照里的 savedAt 是上一次的');
 });
 
+check('Offer 初始化不得阻断首屏、数据安全和简历渲染', () => {
+  const render = extractFunction(html, 'render');
+  const switchView = extractFunction(html, 'switchView');
+  assert.ok(/offerModuleReady\s*\)\s*renderOffersView/.test(render), '全局 render 调 Offer 必须受模块就绪状态保护');
+  assert.ok(/route === 'offers'\s*&&\s*offerModuleReady/.test(switchView), '切换 Offer 路由必须等待模块初始化');
+  assert.ok(/offerModuleReady\s*=\s*true/.test(html), 'Offer 模块必须显式标记初始化完成');
+  assert.ok(/offerRules:[\s\S]*?mailArchive:/.test(extractFunction(html, 'parseSyncPayload')), '云同步解析必须带回 Offer 规则和邮件归档');
+});
+
 check('窄屏布局守卫：.view 的列轨道与 .mail-head-actions 的换行（两处都是不报错型缺陷）', () => {
   // 缺陷 1（窄屏实测整页横向滚动 +342px）：.view 不写 grid-template-columns 时隐式列轨道由内容
   // 决定，.panel 的 min-width:auto 解析成 min-content，台账表格与看板四列会把列撑宽，

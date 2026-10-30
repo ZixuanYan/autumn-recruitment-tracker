@@ -1,15 +1,17 @@
       // ================= Offer 页面（v4.37.0） =================
       if (!offerRules) offerRules = loadOfferRules();
       if (!offerRules.updatedAt) saveOfferRules();
-      // 本文件在 core 之后执行：把 bootstrap 早期载入的旧记录再过一遍 Offer 归一化，
-      // 兼容首屏启动时 core 尚未初始化的加载顺序。
+      // core 已经在 bootstrap 末尾完成加载：把早期读取的记录统一归一化。
       records = records.map(normalizeRecord);
+      // 页面状态在 runtime 的路由和首屏渲染前完成，读取规则不改更新时间。
       let offerFilterStatus = 'all';
       let offerFilterCity = 'all';
       let offerFilterType = 'all';
       let offerSortMode = 'score';
       let selectedOfferIds = new Set();
       let editingOfferId = '';
+      offerModuleReady = true;
+      if (typeof parseRoute === 'function' && parseRoute() === 'offers') renderOffersView();
 
       function offerStatusLabel(status) { return OFFER_STATUS_LABELS[String(status || '')] || '待决定'; }
       function offerStatusClass(status) { return `offer-status-${String(status || 'pending').replace(/_/g, '-')}`; }
@@ -62,10 +64,6 @@
       function renderOffersView() {
         const host = $('#offerList');
         if (!host) return;
-        // runtime.js 会在本文件执行前完成首屏 render；这里惰性初始化，
-        // 避免带有历史 Offer 的用户首屏进入 /offers 时读到空规则或未归一化记录。
-        if (!offerRules) offerRules = loadOfferRules();
-        records = records.map(normalizeRecord);
         const all = getOfferRecords(records);
         offerFilterOptions(all);
         const list = offerFilteredRecords();
